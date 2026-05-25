@@ -1,0 +1,128 @@
+import { NavLink } from "react-router-dom";
+import { motion } from "motion/react";
+import {
+  CheckCircle2,
+  Factory,
+  LayoutDashboard,
+  LogOut,
+  MapPin,
+  Package,
+  Settings,
+  ShoppingCart,
+  Truck,
+  type LucideIcon,
+} from "lucide-react";
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/orders", label: "Orders", icon: ShoppingCart },
+  { to: "/production", label: "Production", icon: Factory },
+  { to: "/qc", label: "Quality Control", icon: CheckCircle2 },
+  { to: "/dispatch", label: "Dispatch", icon: Truck },
+  { to: "/delivery", label: "Delivery", icon: Package },
+  { to: "/tracking", label: "Tracking", icon: MapPin },
+  { to: "/settings", label: "Settings", icon: Settings },
+] as const;
+
+export interface SidebarProps {
+  userName?: string;
+  userEmail?: string;
+  onSignOut?: () => void;
+}
+
+const ITEM_BASE =
+  "flex items-center gap-3 px-4 py-2.5 rounded-full text-sm font-semibold " +
+  "font-['Hanken_Grotesk',system-ui,sans-serif] " +
+  "transition-colors duration-150 " +
+  "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FBBF24] focus-visible:ring-offset-2";
+
+const ITEM_ACTIVE = "bg-[#FBBF24] text-[#111827]";
+const ITEM_INACTIVE = "text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]";
+
+export function Sidebar({ userName, userEmail, onSignOut }: SidebarProps) {
+  return (
+    <aside
+      aria-label="Primary navigation"
+      className="hidden md:flex md:w-60 md:flex-col md:shrink-0 bg-white border-r border-[#E5E7EB] h-screen sticky top-0"
+    >
+      {/* Logo */}
+      <div className="px-6 py-6 border-b border-[#E5E7EB]">
+        <h1 className="font-['Manrope',system-ui,sans-serif] text-xl font-bold text-[#111827] tracking-tight">
+          Al-<span className="text-[#FBBF24]">Umana</span>
+        </h1>
+        <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-[#6B7280] mt-0.5">
+          Koperasi
+        </p>
+      </div>
+
+      {/* Nav items */}
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <ul className="space-y-1">
+          {SIDEBAR_NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+            <li key={to}>
+              <NavLink
+                to={to}
+                className={({ isActive }) =>
+                  `${ITEM_BASE} ${isActive ? ITEM_ACTIVE : ITEM_INACTIVE}`
+                }
+              >
+                {({ isActive }) => (
+                  <motion.span
+                    className="flex items-center gap-3 w-full"
+                    whileHover={{ x: isActive ? 0 : 2 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  >
+                    <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{label}</span>
+                  </motion.span>
+                )}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      {/* User profile + sign out */}
+      <div className="border-t border-[#E5E7EB] px-4 py-4">
+        {(userName || userEmail) && (
+          <div className="mb-3 flex items-center gap-3">
+            <div
+              className="h-9 w-9 rounded-full bg-[#FBBF24] flex items-center justify-center text-[#111827] font-semibold text-sm shrink-0"
+              aria-hidden="true"
+            >
+              {(userName ?? userEmail ?? "?").charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              {userName && (
+                <p className="text-sm font-semibold text-[#111827] truncate font-['Hanken_Grotesk',system-ui,sans-serif]">
+                  {userName}
+                </p>
+              )}
+              {userEmail && (
+                <p className="text-xs text-[#6B7280] truncate font-['Hanken_Grotesk',system-ui,sans-serif]">
+                  {userEmail}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={onSignOut}
+          className={`${ITEM_BASE} ${ITEM_INACTIVE} w-full`}
+        >
+          <LogOut className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <span>Sign out</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+export default Sidebar;
