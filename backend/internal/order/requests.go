@@ -6,6 +6,7 @@ package order
 type CreateOrderRequest struct {
 	CustomerName    string          `json:"customerName"`
 	DeliveryAddress string          `json:"deliveryAddress"`
+	DeliveryTime    string          `json:"deliveryTime"`
 	Items           []OrderLineItem `json:"items"`
 }
 

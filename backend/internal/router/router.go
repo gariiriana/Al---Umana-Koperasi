@@ -83,7 +83,7 @@ func registerProtected(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("POST /api/orders/{id}/assign-courier", oh.AssignCourier)
 	mux.HandleFunc("POST /api/orders/{id}/dispatch", oh.DispatchOrder)
 	mux.HandleFunc("POST /api/orders/{id}/deliver", oh.ConfirmDelivery)
-	mux.HandleFunc("GET /api/orders/{id}/files", oh.ListOrderFiles)
+	mux.HandleFunc("GET /api/orders/{id}/files", fh.ListByOrderHandler)
 
 	// Files
 	mux.HandleFunc("POST /api/files/{id}/assemble", fh.AssembleFile)

@@ -20,6 +20,7 @@ backend/server.exe
 *.dll
 *.so
 bin/
+*.tsbuildinfo
 
 # Node dependencies & caches
 node_modules/
@@ -50,6 +51,7 @@ coverage/
 
 # Testing
 .nyc_output/
+*.fail
 
 # Go
 backend/vendor/

@@ -15,12 +15,17 @@ import (
 	"syscall"
 	"time"
 
+	cloudfirestore "cloud.google.com/go/firestore"
+
 	"al-umana/order-fulfillment/internal/auth"
 	"al-umana/order-fulfillment/internal/dashboard"
 	"al-umana/order-fulfillment/internal/file"
+	fsclient "al-umana/order-fulfillment/internal/firestore"
+	"al-umana/order-fulfillment/internal/gps"
 	"al-umana/order-fulfillment/internal/middleware"
 	"al-umana/order-fulfillment/internal/order"
 	"al-umana/order-fulfillment/internal/router"
+	"al-umana/order-fulfillment/internal/stock"
 )
 
 const (
@@ -39,17 +44,13 @@ const (
 	envAppEnv      = "ENV"
 	envCORSOrigins = "CORS_ORIGINS"
 	envFBCreds     = "FIREBASE_CREDENTIALS_PATH"
+	envFBProjectID = "FIREBASE_PROJECT_ID"
 )
 
 func main() {
-	// Root context cancelled on SIGINT / SIGTERM. signal.NotifyContext gives
-	// us graceful shutdown wiring without an extra goroutine.
 	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Cancellable context for downstream services (handlers, repositories).
-	// Wired off rootCtx so signal-driven cancellation propagates everywhere
-	// and is exposed to handlers via http.Server.BaseContext.
 	ctx, cancel := context.WithCancel(rootCtx)
 	defer cancel()
 
@@ -57,8 +58,30 @@ func main() {
 	appEnv := getEnv(envAppEnv, defaultEnv)
 	corsOrigins := os.Getenv(envCORSOrigins)
 	credsPath := os.Getenv(envFBCreds)
+	projectID := os.Getenv(envFBProjectID)
 
 	guard := buildAuthGuard(ctx, appEnv, credsPath)
+	fsConn := buildFirestore(ctx, appEnv, projectID, credsPath)
+
+	// Build domain layers (repositories, services, handlers). When fsConn
+	// is nil (dev mode without Firestore), handlers gracefully return 501
+	// for endpoints that need persistence.
+	var (
+		orderRepo *order.Repository
+		fileRepo  *file.Repository
+		gpsRepo   *gps.Repository
+		stockSvc  *stock.Service
+		orderSvc  *order.Service
+		fileAsm   *file.Assembler
+	)
+	if fsConn != nil {
+		orderRepo = order.NewRepository(fsConn)
+		fileRepo = file.NewRepository(fsConn)
+		gpsRepo = gps.NewRepository(fsConn)
+		stockSvc = stock.NewService(stock.NewRepository(fsConn))
+		orderSvc = order.NewService(orderRepo, stockSvc)
+		fileAsm = file.NewAssembler(fileRepo)
+	}
 
 	deps := router.Dependencies{
 		AuthGuard: guard,
@@ -66,9 +89,9 @@ func main() {
 			AllowedOrigins: corsOrigins,
 			Env:            appEnv,
 		},
-		OrderHandler:     order.NewHandler(),
-		FileHandler:      file.NewHandler(),
-		DashboardHandler: dashboard.NewHandler(),
+		OrderHandler:     order.NewHandler(orderSvc, orderRepo),
+		FileHandler:      file.NewHandler(fileRepo, fileAsm),
+		DashboardHandler: dashboard.NewHandler(orderRepo, gpsRepo),
 	}
 	handler := router.NewRouter(deps)
 
@@ -81,7 +104,6 @@ func main() {
 		BaseContext:  func(_ net.Listener) context.Context { return ctx },
 	}
 
-	// Run the server; surface listen errors back to main via a channel.
 	serverErr := make(chan error, 1)
 	go func() {
 		log.Printf("server listening on :%s (env=%s)", port, appEnv)
@@ -91,7 +113,6 @@ func main() {
 		close(serverErr)
 	}()
 
-	// Wait for either a shutdown signal or a fatal listen error.
 	select {
 	case err, ok := <-serverErr:
 		if ok && err != nil {
@@ -107,16 +128,15 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("graceful shutdown failed: %v", err)
 	}
+	if fsConn != nil {
+		_ = fsConn.Close()
+	}
 	log.Println("server stopped cleanly")
 }
 
 // buildAuthGuard initialises Firebase and returns a real Guard when
 // credentials are available, or a stub guard that allows all requests in
 // development environments where credentials are missing.
-//
-// In production, missing or unreadable credentials are fatal: the server
-// must not boot with an open auth surface. In any other environment a
-// missing credentials path is logged as a warning and a stub guard is used.
 func buildAuthGuard(ctx context.Context, appEnv, credsPath string) *auth.Guard {
 	if credsPath == "" {
 		if isProduction(appEnv) {
@@ -146,8 +166,31 @@ func buildAuthGuard(ctx context.Context, appEnv, credsPath string) *auth.Guard {
 	return auth.NewGuard(client)
 }
 
+// buildFirestore constructs the Firestore Admin SDK client. In production
+// missing credentials or project ID are fatal; in development the function
+// logs a warning and returns nil so the server boots without persistence
+// (handlers gracefully degrade to 501).
+func buildFirestore(ctx context.Context, appEnv, projectID, credsPath string) *cloudfirestore.Client {
+	if projectID == "" {
+		if isProduction(appEnv) {
+			log.Fatalf("firestore: FIREBASE_PROJECT_ID is required in production")
+		}
+		log.Printf("firestore: FIREBASE_PROJECT_ID unset; running without Firestore (dev mode)")
+		return nil
+	}
+	c, err := fsclient.NewClient(ctx, projectID, credsPath)
+	if err != nil {
+		if isProduction(appEnv) {
+			log.Fatalf("firestore: %v", err)
+		}
+		log.Printf("firestore: %v; running without Firestore (dev mode)", err)
+		return nil
+	}
+	return c
+}
+
 // isProduction reports whether the supplied environment value names the
-// production environment, ignoring case and surrounding whitespace.
+// production environment.
 func isProduction(env string) bool {
 	return env == envProduction
 }

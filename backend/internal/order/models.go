@@ -46,6 +46,7 @@ type Order struct {
 	CustomerName        string          `json:"customerName" firestore:"customerName"`
 	Items               []OrderLineItem `json:"items" firestore:"items"`
 	DeliveryAddress     string          `json:"deliveryAddress" firestore:"deliveryAddress"`
+	DeliveryTime        string          `json:"deliveryTime" firestore:"deliveryTime"`
 	Status              OrderStatus     `json:"status" firestore:"status"`
 	RejectionReason     string          `json:"rejectionReason,omitempty" firestore:"rejectionReason,omitempty"`
 	OutOfStockItems     []string        `json:"outOfStockItems,omitempty" firestore:"outOfStockItems,omitempty"`

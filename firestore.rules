@@ -1,0 +1,100 @@
+// Firestore security rules for Al-Umana Order Fulfillment & Delivery
+// Tracking System.
+//
+// Security model:
+//   - Default DENY at the root.
+//   - Every named collection grants only the operations needed for its
+//     documented purpose, and only to authenticated users.
+//   - Wildcard write access is never permitted; rules are written with
+//     explicit `request.auth != null` guards per Requirement 8.3 / 10.2.
+//
+// Collections:
+//   orders             — order pipeline state
+//   inventory          — product catalogue (read-only for clients)
+//   courier_locations  — latest courier GPS positions
+//     ./location_history — append-only history per courier
+//   delivery_files     — chunked proof-of-delivery file metadata
+//     ./chunks         — per-chunk Base64 payloads
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------
+    // Default deny. Any path not matched explicitly is forbidden.
+    // -------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------
+    // Orders
+    // -------------------------------------------------------------------
+    // Authenticated users can read orders. Writes are restricted to the
+    // backend service account (which bypasses rules) so that the Go state
+    // machine remains authoritative; client-side writes are denied.
+    match /orders/{orderId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------
+    // Inventory
+    // -------------------------------------------------------------------
+    // Read-only for any authenticated client. Inventory updates are made
+    // by trusted admin tooling using the Admin SDK.
+    match /inventory/{itemId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // -------------------------------------------------------------------
+    // Courier locations
+    // -------------------------------------------------------------------
+    // Couriers write their own latest position to a doc keyed by
+    // {orderId}_{courierId}. Admins (any authenticated user) can read all
+    // positions for the live dashboard.
+    //
+    // The `courierId` field on the document MUST equal request.auth.uid;
+    // this prevents one courier from spoofing another's position.
+    match /courier_locations/{docId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+        && request.resource.data.courierId == request.auth.uid;
+      allow delete: if false;
+
+      match /location_history/{historyId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null
+          && request.resource.data.courierId == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // Delivery files (proof-of-delivery, chunked storage)
+    // -------------------------------------------------------------------
+    // Authenticated users may read/write parent metadata and per-chunk
+    // documents. The Go backend is the canonical reader (assembly +
+    // download); clients write here as part of the chunk upload flow.
+    //
+    // The status field is constrained to the three protocol values to
+    // prevent arbitrary writes.
+    match /delivery_files/{fileId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.uploadedBy == request.auth.uid
+        && request.resource.data.status in ["uploading", "completed", "failed"];
+      allow update: if request.auth != null
+        && resource.data.uploadedBy == request.auth.uid
+        && request.resource.data.status in ["uploading", "completed", "failed"];
+      allow delete: if false;
+
+      match /chunks/{chunkId} {
+        allow read: if request.auth != null;
+        allow create, update: if request.auth != null;
+        allow delete: if false;
+      }
+    }
+  }
+}
