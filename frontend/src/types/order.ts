@@ -20,6 +20,7 @@ export interface Order {
   customerName: string;
   items: OrderLineItem[];
   deliveryAddress: string;
+  deliveryTime: string;
   status: OrderStatus;
   rejectionReason?: string;
   outOfStockItems?: string[];

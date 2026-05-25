@@ -1,0 +1,198 @@
+/**
+ * Real-time Firestore subscription helpers. These wrap `onSnapshot` so
+ * components can subscribe to typed streams of domain entities without
+ * importing Firestore primitives directly.
+ *
+ * Each helper returns the unsubscribe function from Firestore so callers
+ * can clean up in a useEffect cleanup.
+ */
+
+import {
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+  type DocumentData,
+  type DocumentSnapshot,
+  type QuerySnapshot,
+  type Unsubscribe,
+  Timestamp,
+} from "firebase/firestore";
+
+import { db } from "@/lib/firebase";
+import type { Order, OrderStatus } from "@/types/order";
+import type { CourierGPS } from "@/types/courier-gps";
+import type { FileMetadata } from "@/types/file";
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function toIsoString(value: unknown): string {
+  if (value instanceof Timestamp) return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string") return value;
+  return new Date().toISOString();
+}
+
+function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
+  const data = snap.data() ?? {};
+  return {
+    id: snap.id,
+    customerId: (data.customerId as string) ?? "",
+    customerName: (data.customerName as string) ?? "",
+    items: (data.items as Order["items"]) ?? [],
+    deliveryAddress: (data.deliveryAddress as string) ?? "",
+    status: ((data.status as string) ?? "PLACING") as OrderStatus,
+    rejectionReason: data.rejectionReason as string | undefined,
+    outOfStockItems: data.outOfStockItems as string[] | undefined,
+    assignedCourierId: data.assignedCourierId as string | undefined,
+    productionStartedBy: data.productionStartedBy as string | undefined,
+    productionStartedAt: data.productionStartedAt
+      ? toIsoString(data.productionStartedAt)
+      : undefined,
+    qcReviewedBy: data.qcReviewedBy as string | undefined,
+    qcReviewedAt: data.qcReviewedAt
+      ? toIsoString(data.qcReviewedAt)
+      : undefined,
+    qcFailReason: data.qcFailReason as string | undefined,
+    deliveredAt: data.deliveredAt ? toIsoString(data.deliveredAt) : undefined,
+    proofFileIds: data.proofFileIds as string[] | undefined,
+    createdAt: toIsoString(data.createdAt),
+    updatedAt: toIsoString(data.updatedAt),
+  };
+}
+
+function snapshotToOrders(snap: QuerySnapshot<DocumentData>): Order[] {
+  return snap.docs.map(snapshotToOrder);
+}
+
+function snapshotToCourierGPS(
+  snap: DocumentSnapshot<DocumentData>
+): CourierGPS | null {
+  const data = snap.data();
+  if (!data) return null;
+  return {
+    orderId: (data.orderId as string) ?? "",
+    courierId: (data.courierId as string) ?? "",
+    latitude: typeof data.latitude === "number" ? data.latitude : 0,
+    longitude: typeof data.longitude === "number" ? data.longitude : 0,
+    timestamp: toIsoString(data.timestamp),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Subscriptions                                                      */
+/* ------------------------------------------------------------------ */
+
+/** Subscribe to all orders, ordered by creation time descending. */
+export function subscribeOrders(
+  listener: (orders: Order[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+  return onSnapshot(
+    q,
+    (snap) => listener(snapshotToOrders(snap)),
+    onError
+  );
+}
+
+/** Subscribe to orders filtered by a single status. */
+export function subscribeOrdersByStatus(
+  status: OrderStatus,
+  listener: (orders: Order[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, "orders"),
+    where("status", "==", status),
+    orderBy("createdAt", "asc")
+  );
+  return onSnapshot(
+    q,
+    (snap) => listener(snapshotToOrders(snap)),
+    onError
+  );
+}
+
+/** Subscribe to a single order document. */
+export function subscribeOrder(
+  id: string,
+  listener: (order: Order | null) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, "orders", id),
+    (snap) => listener(snap.exists() ? snapshotToOrder(snap) : null),
+    onError
+  );
+}
+
+/** Subscribe to all courier GPS locations. */
+export function subscribeCourierLocations(
+  listener: (locations: CourierGPS[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, "courier_locations"),
+    (snap) => {
+      const locations: CourierGPS[] = [];
+      snap.forEach((d) => {
+        const loc = snapshotToCourierGPS(d);
+        if (loc) locations.push(loc);
+      });
+      listener(locations);
+    },
+    onError
+  );
+}
+
+/** Subscribe to GPS updates for a specific order. */
+export function subscribeOrderLocation(
+  orderId: string,
+  courierId: string,
+  listener: (loc: CourierGPS | null) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, "courier_locations", `${orderId}_${courierId}`),
+    (snap) => listener(snap.exists() ? snapshotToCourierGPS(snap) : null),
+    onError
+  );
+}
+
+/** Subscribe to delivery files for a given order. */
+export function subscribeOrderFiles(
+  orderId: string,
+  listener: (files: FileMetadata[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, "delivery_files"),
+    where("orderId", "==", orderId)
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const files: FileMetadata[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          orderId: (data.orderId as string) ?? "",
+          fileName: (data.fileName as string) ?? "",
+          fileSize: (data.fileSize as number) ?? 0,
+          fileType: (data.fileType as string) ?? "",
+          totalChunks: (data.totalChunks as number) ?? 0,
+          status: (data.status as FileMetadata["status"]) ?? "uploading",
+          uploadedBy: (data.uploadedBy as string) ?? "",
+          createdAt: toIsoString(data.createdAt),
+        };
+      });
+      listener(files);
+    },
+    onError
+  );
+}
