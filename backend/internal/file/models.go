@@ -30,11 +30,14 @@ const (
 	BackendMaxFileSize = 10 * 1024 * 1024
 )
 
-// FileMetadata is the parent document for a proof-of-delivery file. Chunks
-// are stored as documents in the `chunks` subcollection keyed by index.
+// FileMetadata is the parent document for a chunked file. The same shape
+// is reused across the `delivery_files`, `product_images`, and
+// `payment_proofs` collections; OrderID is omitempty so collections that
+// do not link to an order (notably `product_images`) do not persist an
+// empty `orderId` field.
 type FileMetadata struct {
 	ID          string    `json:"id" firestore:"-"`
-	OrderID     string    `json:"orderId" firestore:"orderId"`
+	OrderID     string    `json:"orderId,omitempty" firestore:"orderId,omitempty"`
 	FileName    string    `json:"fileName" firestore:"fileName"`
 	FileType    string    `json:"fileType" firestore:"fileType"`
 	FileSize    int64     `json:"fileSize" firestore:"fileSize"`

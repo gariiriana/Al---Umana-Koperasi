@@ -32,7 +32,7 @@ export function RegisterPage() {
     setSubmitting(true);
     try {
       await signUp(email, password, displayName);
-      navigate("/dashboard", { replace: true });
+      navigate("/", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {

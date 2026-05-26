@@ -13,6 +13,21 @@ interface StatusStyle {
 
 const STATUS_STYLES: Record<OrderStatus, StatusStyle> = {
   PLACING: { background: "#FEF3C7", color: "#92400E", label: "Placing" },
+  AWAITING_PAYMENT_PROOF: {
+    background: "#FEF3C7",
+    color: "#92400E",
+    label: "Awaiting Payment Proof",
+  },
+  AWAITING_PAYMENT_APPROVAL: {
+    background: "#FED7AA",
+    color: "#9A3412",
+    label: "Awaiting Payment Approval",
+  },
+  PAYMENT_REJECTED: {
+    background: "#FEE2E2",
+    color: "#991B1B",
+    label: "Payment Rejected",
+  },
   CONFIRMED: { background: "#DBEAFE", color: "#1E40AF", label: "Confirmed" },
   IN_PRODUCTION: {
     background: "#E0E7FF",

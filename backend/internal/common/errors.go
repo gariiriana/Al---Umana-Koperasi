@@ -12,9 +12,11 @@ import (
 // status as described in the design's "Error Categories" table.
 const (
 	CodeValidationError        = "VALIDATION_ERROR"
+	CodeInvalidPaymentMethod   = "INVALID_PAYMENT_METHOD"
 	CodeInvalidStateTransition = "INVALID_STATE_TRANSITION"
 	CodeUnauthorized           = "UNAUTHORIZED"
 	CodeForbidden              = "FORBIDDEN"
+	CodeForbiddenAdminOnly     = "FORBIDDEN_ADMIN_ONLY"
 	CodeNotFound               = "NOT_FOUND"
 	CodeUnsupportedMediaType   = "UNSUPPORTED_MEDIA_TYPE"
 	CodePayloadTooLarge        = "PAYLOAD_TOO_LARGE"
@@ -23,6 +25,9 @@ const (
 	CodeIncompleteData         = "INCOMPLETE_DATA"
 	CodeDecodeFailure          = "DECODE_FAILURE"
 	CodeUploadFailed           = "UPLOAD_FAILED"
+	CodeImageMimeRejected      = "IMAGE_MIME_REJECTED"
+	CodeImageSizeRejected      = "IMAGE_SIZE_REJECTED"
+	CodeAssemblyFailed         = "ASSEMBLY_FAILED"
 	CodeInternalError          = "INTERNAL_ERROR"
 	CodeNotImplemented         = "NOT_IMPLEMENTED"
 )

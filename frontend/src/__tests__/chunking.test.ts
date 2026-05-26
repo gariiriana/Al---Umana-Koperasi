@@ -50,10 +50,13 @@ describe("File Chunking Protocol (Properties 11, 12, 13)", () => {
           // Verify progress callback was fired for each chunk in order
           expect(progressCallback).toHaveBeenCalledTimes(totalChunks);
           for (let idx = 0; idx < totalChunks; idx++) {
+            const uploadedChunks = idx + 1;
             expect(progressCallback).toHaveBeenNthCalledWith(idx + 1, {
               chunkIndex: idx,
+              uploadedChunks,
               totalChunks,
-              fraction: (idx + 1) / totalChunks,
+              fraction: uploadedChunks / totalChunks,
+              percent: Math.round((uploadedChunks / totalChunks) * 100),
             });
           }
         }

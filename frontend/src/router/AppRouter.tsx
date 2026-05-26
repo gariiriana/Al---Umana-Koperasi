@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppShell } from "@/components/layout/AppShell";
+import { AdminAccessDenied } from "@/components/layout/AdminAccessDenied";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
@@ -21,6 +22,27 @@ import { DispatchPage } from "@/pages/DispatchPage";
 import { DeliveryPage } from "@/pages/DeliveryPage";
 import { TrackingPage } from "@/pages/TrackingPage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { ProductsPage } from "@/admin/pages/ProductsPage";
+import { ProductFormPage } from "@/admin/pages/ProductFormPage";
+import { CategoriesPage } from "@/admin/pages/CategoriesPage";
+import { PaymentApprovalPage } from "@/admin/pages/PaymentApprovalPage";
+import {
+  ADMIN_SHELL_ROLES,
+  ROLE_DEFAULT_REDIRECT,
+} from "@/constants/roles";
+import { StorefrontLayout } from "@/storefront/layouts/StorefrontLayout";
+import { HomePage } from "@/storefront/pages/HomePage";
+import { ProductDetailPage } from "@/storefront/pages/ProductDetailPage";
+import { CartPage } from "@/storefront/pages/CartPage";
+import { CheckoutWizard } from "@/storefront/pages/checkout/CheckoutWizard";
+import { OrderConfirmationPage } from "@/storefront/pages/checkout/OrderConfirmationPage";
+import { PaymentProofUploadPage } from "@/storefront/pages/checkout/PaymentProofUploadPage";
+import { OrderListPage } from "@/storefront/pages/OrderListPage";
+import { OrderDetailPage } from "@/storefront/pages/OrderDetailPage";
+import {
+  CategoryIndexStub,
+  CategoryPageStub,
+} from "@/storefront/pages/stubs";
 
 interface ProtectedProps {
   children: ReactNode;
@@ -45,7 +67,7 @@ function Protected({ children }: ProtectedProps) {
 }
 
 function PublicRoute({ children }: ProtectedProps) {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
@@ -56,9 +78,44 @@ function PublicRoute({ children }: ProtectedProps) {
     );
   }
   if (user) {
-    return <Navigate to="/dashboard" replace />;
+    const target = profile ? ROLE_DEFAULT_REDIRECT[profile.role] ?? "/" : "/";
+    return <Navigate to={target} replace />;
   }
   return <>{children}</>;
+}
+
+/**
+ * Renders the root route (`/`). Authenticated admin-shell roles get
+ * redirected to their dashboard; everyone else (including unauthenticated
+ * visitors and customers) sees the storefront homepage.
+ */
+function RootRoute() {
+  const { profile, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
+        <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280]">
+          Loading…
+        </p>
+      </div>
+    );
+  }
+  if (
+    profile &&
+    (ADMIN_SHELL_ROLES as readonly string[]).includes(profile.role)
+  ) {
+    return (
+      <Navigate
+        to={ROLE_DEFAULT_REDIRECT[profile.role] ?? "/admin/dashboard"}
+        replace
+      />
+    );
+  }
+  return (
+    <StorefrontLayout>
+      <HomePage />
+    </StorefrontLayout>
+  );
 }
 
 function ShelledRoute({
@@ -73,7 +130,7 @@ function ShelledRoute({
   const { user, profile, requestSignOut } = useAuth();
 
   // If auth is resolved but profile is not loaded yet, wait or return loading
-  if (user && !profile) {
+  if (!profile) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
         <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280]">
@@ -83,16 +140,18 @@ function ShelledRoute({
     );
   }
 
-  // Redirect to respective default dashboard/landing page if role is not allowed
+  // Redirect to respective default landing page if role is not allowed
   if (profile && !allowedRoles.includes(profile.role)) {
-    const defaultRedirects: Record<string, string> = {
-      tim_produksi: "/production",
-      distribusi: "/dispatch",
-      pelanggan: "/orders",
-      admin: "/dashboard",
-      monitoring: "/dashboard",
-    };
-    const target = defaultRedirects[profile.role] || "/dashboard";
+    // Admin-only routes (those that allow ONLY the admin role) show the
+    // "Akses Ditolak" screen for non-admins and redirect to the storefront
+    // homepage within 3 seconds (Requirements 16.3, 16.5).
+    const isAdminOnlyRoute =
+      allowedRoles.length === 1 && allowedRoles[0] === "admin";
+    if (isAdminOnlyRoute) {
+      return <AdminAccessDenied />;
+    }
+
+    const target = ROLE_DEFAULT_REDIRECT[profile.role] ?? "/admin/dashboard";
     return <Navigate to={target} replace />;
   }
 
@@ -109,9 +168,20 @@ function ShelledRoute({
   );
 }
 
+/**
+ * Wraps a storefront page with the {@link StorefrontLayout}. The layout
+ * does NOT enforce authentication so unauthenticated visitors can browse
+ * the catalog. Auth-required pages will be guarded individually in task
+ * 12.1 once the StorefrontProtected wrapper is introduced.
+ */
+function Storefront({ children }: { children: ReactNode }) {
+  return <StorefrontLayout>{children}</StorefrontLayout>;
+}
+
 function RoutesTree() {
   return (
     <Routes>
+      {/* Auth pages */}
       <Route
         path="/login"
         element={
@@ -136,12 +206,93 @@ function RoutesTree() {
           </PublicRoute>
         }
       />
+
+      {/* Storefront (public + customer) */}
+      <Route path="/" element={<RootRoute />} />
       <Route
-        path="/"
-        element={<Navigate to="/dashboard" replace />}
+        path="/category"
+        element={
+          <Storefront>
+            <CategoryIndexStub />
+          </Storefront>
+        }
       />
       <Route
-        path="/dashboard"
+        path="/category/:name"
+        element={
+          <Storefront>
+            <CategoryPageStub />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/product/:id"
+        element={
+          <Storefront>
+            <ProductDetailPage />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/cart"
+        element={
+          <Storefront>
+            <CartPage />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/checkout/address"
+        element={
+          <Storefront>
+            <CheckoutWizard />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/checkout/payment"
+        element={
+          <Storefront>
+            <CheckoutWizard />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/checkout/payment-proof/:orderId"
+        element={
+          <Storefront>
+            <PaymentProofUploadPage />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/checkout/confirmation"
+        element={
+          <Storefront>
+            <OrderConfirmationPage />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/orders"
+        element={
+          <Storefront>
+            <OrderListPage />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/orders/:id"
+        element={
+          <Storefront>
+            <OrderDetailPage />
+          </Storefront>
+        }
+      />
+
+      {/* Admin shell routes (existing) */}
+      <Route
+        path="/admin/dashboard"
         element={
           <Protected>
             <ShelledRoute
@@ -154,12 +305,12 @@ function RoutesTree() {
         }
       />
       <Route
-        path="/orders"
+        path="/admin/orders"
         element={
           <Protected>
             <ShelledRoute
               pageTitle="Orders"
-              allowedRoles={["admin", "monitoring", "pelanggan"]}
+              allowedRoles={["admin", "monitoring"]}
             >
               <OrdersPage />
             </ShelledRoute>
@@ -167,7 +318,7 @@ function RoutesTree() {
         }
       />
       <Route
-        path="/production"
+        path="/admin/production"
         element={
           <Protected>
             <ShelledRoute
@@ -180,20 +331,17 @@ function RoutesTree() {
         }
       />
       <Route
-        path="/qc"
+        path="/admin/qc"
         element={
           <Protected>
-            <ShelledRoute
-              pageTitle="Quality Control"
-              allowedRoles={["admin"]}
-            >
+            <ShelledRoute pageTitle="Quality Control" allowedRoles={["admin"]}>
               <QCReviewPage />
             </ShelledRoute>
           </Protected>
         }
       />
       <Route
-        path="/dispatch"
+        path="/admin/dispatch"
         element={
           <Protected>
             <ShelledRoute
@@ -206,7 +354,7 @@ function RoutesTree() {
         }
       />
       <Route
-        path="/delivery"
+        path="/admin/delivery"
         element={
           <Protected>
             <ShelledRoute
@@ -219,7 +367,7 @@ function RoutesTree() {
         }
       />
       <Route
-        path="/tracking"
+        path="/admin/tracking"
         element={
           <Protected>
             <ShelledRoute
@@ -232,19 +380,110 @@ function RoutesTree() {
         }
       />
       <Route
-        path="/settings"
+        path="/admin/settings"
         element={
           <Protected>
             <ShelledRoute
               pageTitle="Settings"
-              allowedRoles={["admin", "monitoring", "tim_produksi", "distribusi", "pelanggan"]}
+              allowedRoles={[
+                "admin",
+                "monitoring",
+                "tim_produksi",
+                "distribusi",
+                "pelanggan",
+              ]}
             >
               <SettingsPage />
             </ShelledRoute>
           </Protected>
         }
       />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
+      {/* Admin-only stock & payment management (task 11) */}
+      <Route
+        path="/admin/products"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Daftar Produk" allowedRoles={["admin"]}>
+              <ProductsPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/admin/products/new"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Tambah Produk" allowedRoles={["admin"]}>
+              <ProductFormPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/admin/products/:id/edit"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Ubah Produk" allowedRoles={["admin"]}>
+              <ProductFormPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/admin/categories"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Kategori" allowedRoles={["admin"]}>
+              <CategoriesPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/admin/payment-approvals"
+        element={
+          <Protected>
+            <ShelledRoute
+              pageTitle="Persetujuan Pembayaran"
+              allowedRoles={["admin"]}
+            >
+              <PaymentApprovalPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+
+      {/* Legacy redirects: keep the previous admin URLs pointing at the
+          new /admin/* prefix so any bookmarked or hard-linked locations
+          keep working after the rename. */}
+      <Route
+        path="/dashboard"
+        element={<Navigate to="/admin/dashboard" replace />}
+      />
+      <Route
+        path="/production"
+        element={<Navigate to="/admin/production" replace />}
+      />
+      <Route path="/qc" element={<Navigate to="/admin/qc" replace />} />
+      <Route
+        path="/dispatch"
+        element={<Navigate to="/admin/dispatch" replace />}
+      />
+      <Route
+        path="/delivery"
+        element={<Navigate to="/admin/delivery" replace />}
+      />
+      <Route
+        path="/tracking"
+        element={<Navigate to="/admin/tracking" replace />}
+      />
+      <Route
+        path="/settings"
+        element={<Navigate to="/admin/settings" replace />}
+      />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

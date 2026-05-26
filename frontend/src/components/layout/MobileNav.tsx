@@ -18,11 +18,11 @@ interface MobileNavItem {
 }
 
 export const MOBILE_NAV_ITEMS: readonly MobileNavItem[] = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/orders", label: "Orders", icon: ShoppingCart },
-  { to: "/production", label: "Production", icon: Factory },
-  { to: "/dispatch", label: "Dispatch", icon: Truck },
-  { to: "/tracking", label: "Tracking", icon: MapPin },
+  { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
+  { to: "/admin/production", label: "Production", icon: Factory },
+  { to: "/admin/dispatch", label: "Dispatch", icon: Truck },
+  { to: "/admin/tracking", label: "Tracking", icon: MapPin },
 ] as const;
 
 const ITEM_BASE =

@@ -1,5 +1,8 @@
 export type OrderStatus =
   | 'PLACING'
+  | 'AWAITING_PAYMENT_PROOF'
+  | 'AWAITING_PAYMENT_APPROVAL'
+  | 'PAYMENT_REJECTED'
   | 'CONFIRMED'
   | 'IN_PRODUCTION'
   | 'READY'
@@ -32,6 +35,7 @@ export interface Order {
   qcFailReason?: string;
   deliveredAt?: string;
   proofFileIds?: string[];
+  paymentProofFileId?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -20,6 +20,9 @@ export interface StatusPipelineProps {
 export function StatusPipeline({ orders }: StatusPipelineProps) {
   const counts: Record<OrderStatus, number> = {
     PLACING: 0,
+    AWAITING_PAYMENT_PROOF: 0,
+    AWAITING_PAYMENT_APPROVAL: 0,
+    PAYMENT_REJECTED: 0,
     CONFIRMED: 0,
     IN_PRODUCTION: 0,
     READY: 0,

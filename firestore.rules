@@ -1,24 +1,45 @@
 // Firestore security rules for Al-Umana Order Fulfillment & Delivery
-// Tracking System.
+// Tracking System and Customer Storefront / Admin Stock Management.
 //
 // Security model:
 //   - Default DENY at the root.
 //   - Every named collection grants only the operations needed for its
-//     documented purpose, and only to authenticated users.
+//     documented purpose, gated on either authentication or admin role.
 //   - Wildcard write access is never permitted; rules are written with
-//     explicit `request.auth != null` guards per Requirement 8.3 / 10.2.
+//     explicit `request.auth != null` guards per Requirement 8.3 / 10.2
+//     of the order-fulfillment spec and Requirement 16.x of the
+//     customer-storefront-admin-stock spec.
 //
 // Collections:
 //   orders             — order pipeline state
-//   inventory          — product catalogue (read-only for clients)
+//   inventory          — product catalogue (public read; writes via backend)
 //   courier_locations  — latest courier GPS positions
 //     ./location_history — append-only history per courier
 //   delivery_files     — chunked proof-of-delivery file metadata
 //     ./chunks         — per-chunk Base64 payloads
+//   carts              — per-customer shopping cart line items
+//     {customerId}/items/{itemId}
+//   payment_proofs     — chunked customer payment proof uploads
+//     ./chunks         — per-chunk Base64 payloads
+//   product_images     — chunked admin-uploaded product photos
+//     ./chunks         — per-chunk Base64 payloads
+//   users              — user profiles (role, saved address, ...)
 
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------
+    // Defined at the top of the documents match block so every rule below
+    // can reference it. `isAdmin()` checks the `users/{uid}.role` field
+    // in Firestore. Backend service-account writes bypass rules entirely.
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
 
     // -------------------------------------------------------------------
     // Default deny. Any path not matched explicitly is forbidden.
@@ -41,10 +62,13 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     // Inventory
     // -------------------------------------------------------------------
-    // Read-only for any authenticated client. Inventory updates are made
-    // by trusted admin tooling using the Admin SDK.
+    // Public read so unauthenticated catalog browsing works
+    // (Requirement 1.7 / 16.2). Writes are denied at the rules layer to
+    // force admin tooling through the Go backend, which holds the
+    // canonical validation, image-cascade, and audit logic. The backend
+    // service account bypasses rules.
     match /inventory/{itemId} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow write: if false;
     }
 
@@ -98,26 +122,76 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------
+    // Carts (server-side shopping cart, per customer)
+    // -------------------------------------------------------------------
+    // Each customer owns the documents under `carts/{customerId}/items/*`.
+    // Read and write are restricted to the customer themselves so cart
+    // contents are private and cannot be tampered with by other users.
+    // (Requirement 3.1, 3.2, 16.1).
+    match /carts/{customerId}/items/{itemId} {
+      allow read: if request.auth != null && request.auth.uid == customerId;
+      allow write: if request.auth != null && request.auth.uid == customerId;
+    }
+
+    // -------------------------------------------------------------------
+    // Payment proofs (customer-uploaded, chunked storage)
+    // -------------------------------------------------------------------
+    // Customers upload proof-of-payment images for non-COD orders. Any
+    // authenticated user may read parent metadata and chunks because the
+    // admin role check for approval/rejection happens at the backend
+    // (Requirement 8.x). Only the original uploader may create or update
+    // their own proof document; status values are constrained to the
+    // protocol set. Deletes are backend-only via the service account
+    // (Requirement 7.7, 11.5).
+    match /payment_proofs/{fileId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.uploadedBy == request.auth.uid
+        && request.resource.data.status in ["uploading", "completed", "failed"];
+      allow update: if request.auth != null
+        && resource.data.uploadedBy == request.auth.uid
+        && request.resource.data.status in ["uploading", "completed", "failed"];
+      allow delete: if false;
+
+      match /chunks/{chunkId} {
+        allow read: if request.auth != null;
+        allow create, update: if request.auth != null;
+        allow delete: if false;
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // Product images (admin-uploaded, chunked storage)
+    // -------------------------------------------------------------------
+    // Product images are part of the public catalog so unauthenticated
+    // customers can render them while browsing (Requirement 1.7 / 16.2).
+    // Writes are admin-only (Requirement 11.5, 16.3); the backend
+    // service account bypasses rules for cascade deletes.
+    match /product_images/{fileId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+
+      match /chunks/{chunkId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
+    // -------------------------------------------------------------------
     // Users Profile Collection
     // -------------------------------------------------------------------
     // Rules for profile syncing, registration, and role escalation prevention.
-    function isAdmin() {
-      return request.auth != null 
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-
     match /users/{userId} {
       // Allow any logged-in user to view user profiles (needed for order dispatcher, QC tracking, etc.)
       allow read: if request.auth != null;
 
       // Allow users to register/setup their own profile on first login/registration
-      allow create: if request.auth != null 
+      allow create: if request.auth != null
         && request.auth.uid == userId;
 
       // Allow users to edit their own profile, but do not allow them to escalate/modify their own role
-      allow update: if request.auth != null 
-        && request.auth.uid == userId 
+      allow update: if request.auth != null
+        && request.auth.uid == userId
         && request.resource.data.role == resource.data.role;
 
       // Admins have full access to modify profiles (e.g., assigning internal roles)

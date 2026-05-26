@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Lock, Mail, Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 export function LoginPage() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,7 +24,12 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await signIn(email, password);
-      navigate("/dashboard", { replace: true });
+      const origin = (location.state as any)?.from?.pathname || "/";
+      const preservedQty = (location.state as any)?.selectedQty;
+      navigate(origin, {
+        replace: true,
+        state: { selectedQty: preservedQty }
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed");
     } finally {

@@ -226,7 +226,7 @@ describe("Authentication UI Features", () => {
         displayName: "Monitoring User",
         role: "monitoring",
       };
-      window.history.pushState({}, "", "/dashboard");
+      window.history.pushState({}, "", "/admin/dashboard");
     });
 
     afterEach(() => {
@@ -279,7 +279,7 @@ describe("Authentication UI Features", () => {
 
     it("should display confirmation modal when sign out is clicked in SettingsPage", async () => {
       // Go to settings page
-      window.history.pushState({}, "", "/settings");
+      window.history.pushState({}, "", "/admin/settings");
       render(<AppRouter />);
 
       // Find Sign out button in SettingsPage
@@ -314,7 +314,7 @@ describe("Authentication UI Features", () => {
         displayName: "Monitoring User",
         role: "monitoring",
       };
-      window.history.pushState({}, "", "/dashboard");
+      window.history.pushState({}, "", "/admin/dashboard");
     });
 
     afterEach(() => {
@@ -326,17 +326,17 @@ describe("Authentication UI Features", () => {
 
       await waitFor(() => {
         // Monitoring allowed routes: Dashboard, Orders, Tracking, Settings
-        expect(document.querySelector('a[href="/dashboard"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/orders"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/tracking"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/settings"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/dashboard"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/orders"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/tracking"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/settings"]')).not.toBeNull();
       });
 
       // Monitoring disallowed routes should not be rendered
-      expect(document.querySelector('a[href="/production"]')).toBeNull();
-      expect(document.querySelector('a[href="/qc"]')).toBeNull();
-      expect(document.querySelector('a[href="/dispatch"]')).toBeNull();
-      expect(document.querySelector('a[href="/delivery"]')).toBeNull();
+      expect(document.querySelector('a[href="/admin/production"]')).toBeNull();
+      expect(document.querySelector('a[href="/admin/qc"]')).toBeNull();
+      expect(document.querySelector('a[href="/admin/dispatch"]')).toBeNull();
+      expect(document.querySelector('a[href="/admin/delivery"]')).toBeNull();
     });
 
     it("should redirect and filter links for tim_produksi role", async () => {
@@ -353,7 +353,7 @@ describe("Authentication UI Features", () => {
       };
 
       // Go directly to production page
-      window.history.pushState({}, "", "/production");
+      window.history.pushState({}, "", "/admin/production");
       render(<AppRouter />);
 
       // Verify that the production page title is loaded
@@ -362,16 +362,16 @@ describe("Authentication UI Features", () => {
       });
 
       // Verify only allowed navigation links are visible
-      expect(document.querySelector('a[href="/production"]')).not.toBeNull();
-      expect(document.querySelector('a[href="/settings"]')).not.toBeNull();
+      expect(document.querySelector('a[href="/admin/production"]')).not.toBeNull();
+      expect(document.querySelector('a[href="/admin/settings"]')).not.toBeNull();
 
       // Verify other navigation links are hidden
-      expect(document.querySelector('a[href="/dashboard"]')).toBeNull();
-      expect(document.querySelector('a[href="/orders"]')).toBeNull();
-      expect(document.querySelector('a[href="/qc"]')).toBeNull();
-      expect(document.querySelector('a[href="/dispatch"]')).toBeNull();
-      expect(document.querySelector('a[href="/delivery"]')).toBeNull();
-      expect(document.querySelector('a[href="/tracking"]')).toBeNull();
+      expect(document.querySelector('a[href="/admin/dashboard"]')).toBeNull();
+      expect(document.querySelector('a[href="/admin/orders"]')).toBeNull();
+      expect(document.querySelector('a[href="/admin/qc"]')).toBeNull();
+      expect(document.querySelector('a[href="/admin/dispatch"]')).toBeNull();
+      expect(document.querySelector('a[href="/admin/delivery"]')).toBeNull();
+      expect(document.querySelector('a[href="/admin/tracking"]')).toBeNull();
     });
 
     it("should allow admin role to access all pages and see all links", async () => {
@@ -390,15 +390,56 @@ describe("Authentication UI Features", () => {
 
       await waitFor(() => {
         // Admin sees all links
-        expect(document.querySelector('a[href="/dashboard"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/orders"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/production"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/qc"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/dispatch"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/delivery"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/tracking"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/settings"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/dashboard"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/orders"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/production"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/qc"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/dispatch"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/delivery"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/tracking"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/settings"]')).not.toBeNull();
+      });
+    });
+  });
+
+  describe("Auto-Provisioning Flow", () => {
+    beforeEach(() => {
+      mockCurrentUser = {
+        email: "admin@alumana.id",
+        uid: "test-uid-admin",
+        displayName: "Admin User",
+      };
+      mockDocSnapshotExists = false;
+    });
+
+    afterEach(() => {
+      mockCurrentUser = null;
+      mockDocSnapshotExists = true;
+    });
+
+    it("should auto-provision new users with role 'pelanggan' regardless of their email containing 'admin'", async () => {
+      const { setDoc } = await import("firebase/firestore");
+
+      render(
+        <BrowserRouter>
+          <AuthProvider>
+            <div>Test child</div>
+          </AuthProvider>
+        </BrowserRouter>
+      );
+
+      await waitFor(() => {
+        expect(setDoc).toHaveBeenCalledWith(
+          undefined,
+          expect.objectContaining({
+            email: "admin@alumana.id",
+            displayName: "Admin User",
+            role: "pelanggan",
+            createdAt: expect.any(Date),
+          })
+        );
       });
     });
   });
 });
+

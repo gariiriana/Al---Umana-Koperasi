@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -266,6 +267,191 @@ func (h *Handler) ListOrderFiles(w http.ResponseWriter, r *http.Request) {
 	notImplemented(w, "ListOrderFiles")
 }
 
+// ListMine handles GET /api/orders/mine. The customer ID is taken from the
+// authenticated principal; the endpoint never returns orders belonging to
+// another customer.
+//
+// Optional query params:
+//
+//	cursor — RFC 3339 createdAt of the last order on the previous page
+//	limit  — positive integer, capped at 50 by the service layer
+//
+// Response shape: { "orders": [...], "nextCursor": "..." | null } where
+// nextCursor is the createdAt of the last returned order when more pages
+// may exist, or null when the caller has reached the end of the customer's
+// order history (Requirement 9.2).
+func (h *Handler) ListMine(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil {
+		notImplemented(w, "ListMine")
+		return
+	}
+
+	customerUID := uidFromContext(r)
+	if customerUID == "" {
+		common.WriteJSONError(w, http.StatusUnauthorized, common.CodeUnauthorized, "authentication required")
+		return
+	}
+
+	q := r.URL.Query()
+	var cursor *time.Time
+	if v := strings.TrimSpace(q.Get("cursor")); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			common.WriteJSONError(
+				w,
+				http.StatusBadRequest,
+				common.CodeValidationError,
+				"cursor must be an RFC 3339 timestamp",
+				common.FieldError{Field: "cursor", Reason: "must be an RFC 3339 timestamp"},
+			)
+			return
+		}
+		cursor = &t
+	}
+	limit := 0
+	if v := strings.TrimSpace(q.Get("limit")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			common.WriteJSONError(
+				w,
+				http.StatusBadRequest,
+				common.CodeValidationError,
+				"limit must be a positive integer",
+				common.FieldError{Field: "limit", Reason: "must be a positive integer"},
+			)
+			return
+		}
+		limit = n
+	}
+
+	orders, nextCursor, err := h.service.ListByCustomer(r.Context(), customerUID, cursor, limit)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	if orders == nil {
+		orders = []Order{}
+	}
+
+	var nextCursorOut interface{}
+	if nextCursor != nil {
+		nextCursorOut = nextCursor.UTC().Format(time.RFC3339Nano)
+	} else {
+		nextCursorOut = nil
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"orders":     orders,
+		"nextCursor": nextCursorOut,
+	})
+}
+
+// UploadPaymentProof handles POST /api/orders/{id}/payment-proof. The body
+// carries the chunked-file fileId; the customer UID is taken from the
+// authenticated principal. The service finalizes the upload by attaching
+// the proof to the order and transitioning it to AWAITING_PAYMENT_APPROVAL
+// (Requirement 7.9).
+//
+// Errors:
+//
+//	customer not the order's owner   -> 403 FORBIDDEN
+//	wrong source status              -> 409 INVALID_STATE_TRANSITION
+//	missing/invalid fileId           -> 400 VALIDATION_ERROR
+func (h *Handler) UploadPaymentProof(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil {
+		notImplemented(w, "UploadPaymentProof")
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		common.WriteJSONError(w, http.StatusBadRequest, common.CodeValidationError, "id path param is required")
+		return
+	}
+
+	var req UploadPaymentProofRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		common.WriteJSONError(w, http.StatusBadRequest, common.CodeValidationError, "invalid JSON body")
+		return
+	}
+
+	customerUID := uidFromContext(r)
+	if customerUID == "" {
+		common.WriteJSONError(w, http.StatusUnauthorized, common.CodeUnauthorized, "authentication required")
+		return
+	}
+
+	updated, err := h.service.UploadProof(r.Context(), id, customerUID, req.FileID)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+// ApprovePayment handles POST /api/orders/{id}/payment/approve. The endpoint
+// is admin-only; the AdminGuard middleware enforces the role check. The
+// service transitions the order from AWAITING_PAYMENT_APPROVAL to CONFIRMED
+// and records the approving admin's UID and timestamp (Requirement 8.5).
+func (h *Handler) ApprovePayment(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil {
+		notImplemented(w, "ApprovePayment")
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		common.WriteJSONError(w, http.StatusBadRequest, common.CodeValidationError, "id path param is required")
+		return
+	}
+
+	adminUID := uidFromContext(r)
+	if adminUID == "" {
+		common.WriteJSONError(w, http.StatusUnauthorized, common.CodeUnauthorized, "authentication required")
+		return
+	}
+
+	updated, err := h.service.ApprovePayment(r.Context(), id, adminUID)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+// RejectPayment handles POST /api/orders/{id}/payment/reject. The endpoint
+// is admin-only; the AdminGuard middleware enforces the role check. Body:
+// RejectPaymentRequest. The reason is validated by the service layer
+// (1–500 characters after trim, Requirement 8.7) and a wrong source status
+// returns INVALID_STATE_TRANSITION (Requirement 8.9).
+func (h *Handler) RejectPayment(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil {
+		notImplemented(w, "RejectPayment")
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		common.WriteJSONError(w, http.StatusBadRequest, common.CodeValidationError, "id path param is required")
+		return
+	}
+
+	var req RejectPaymentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		common.WriteJSONError(w, http.StatusBadRequest, common.CodeValidationError, "invalid JSON body")
+		return
+	}
+
+	adminUID := uidFromContext(r)
+	if adminUID == "" {
+		common.WriteJSONError(w, http.StatusUnauthorized, common.CodeUnauthorized, "authentication required")
+		return
+	}
+
+	updated, err := h.service.RejectPayment(r.Context(), id, adminUID, req.Reason)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
 // uidFromContext extracts the authenticated user's UID, or returns an empty
 // string when no token is attached (development stub guard mode).
 func uidFromContext(r *http.Request) string {
@@ -279,13 +465,27 @@ func uidFromContext(r *http.Request) string {
 // envelope. It recognises:
 //
 //	*ValidationError       -> 400 VALIDATION_ERROR with field details
+//	  (or 400 INVALID_PAYMENT_METHOD when the only failing field is
+//	  "paymentMethod"; the design's "Backend Error Categories" table
+//	  surfaces this as a top-level code)
 //	ErrInvalidTransition   -> 409 INVALID_STATE_TRANSITION
+//	ErrForbidden           -> 403 FORBIDDEN
 //	ErrNotFound (repo)     -> 404 NOT_FOUND
 //
 // Anything else falls through to 500 INTERNAL_ERROR.
 func writeServiceError(w http.ResponseWriter, err error) {
 	var v *ValidationError
 	if errors.As(err, &v) {
+		if isPaymentMethodOnlyError(v) {
+			common.WriteJSONError(
+				w,
+				http.StatusBadRequest,
+				common.CodeInvalidPaymentMethod,
+				"paymentMethod must be one of: cod, bank_transfer, e_wallet",
+				v.Fields...,
+			)
+			return
+		}
 		common.WriteJSONError(w, http.StatusBadRequest, common.CodeValidationError, "request failed validation", v.Fields...)
 		return
 	}
@@ -293,11 +493,28 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		common.WriteJSONError(w, http.StatusConflict, common.CodeInvalidStateTransition, err.Error())
 		return
 	}
+	if errors.Is(err, ErrForbidden) {
+		common.WriteJSONError(w, http.StatusForbidden, common.CodeForbidden, err.Error())
+		return
+	}
 	if errors.Is(err, ErrNotFound) {
 		common.WriteJSONError(w, http.StatusNotFound, common.CodeNotFound, "order not found")
 		return
 	}
 	common.WriteJSONError(w, http.StatusInternalServerError, common.CodeInternalError, err.Error())
+}
+
+// isPaymentMethodOnlyError reports whether v carries exactly one field
+// error and that field is "paymentMethod". When true the handler surfaces
+// the top-level code as INVALID_PAYMENT_METHOD so the frontend can react
+// to the specific problem without parsing the details slice; when false
+// the handler keeps the generic VALIDATION_ERROR code with full field
+// details.
+func isPaymentMethodOnlyError(v *ValidationError) bool {
+	if v == nil || len(v.Fields) != 1 {
+		return false
+	}
+	return v.Fields[0].Field == "paymentMethod"
 }
 
 // writeJSON encodes payload as JSON with the given status, setting the

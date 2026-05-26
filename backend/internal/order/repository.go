@@ -61,6 +61,7 @@ func (r *Repository) Create(ctx context.Context, o Order) (string, error) {
 		"items":           o.Items,
 		"deliveryAddress": o.DeliveryAddress,
 		"status":          o.Status,
+		"paymentMethod":   o.PaymentMethod,
 		"createdAt":       firestore.ServerTimestamp,
 		"updatedAt":       firestore.ServerTimestamp,
 	}
@@ -162,6 +163,37 @@ func (r *Repository) List(ctx context.Context, filter ListFilter) ([]Order, erro
 // status value.
 func (r *Repository) ListByStatus(ctx context.Context, s OrderStatus) ([]Order, error) {
 	return r.List(ctx, ListFilter{Status: &s})
+}
+
+// listByCustomerMaxLimit is the hard cap applied to the per-page limit
+// passed to ListByCustomer. Per Requirement 9.2, the customer order
+// history endpoint returns at most 50 orders per page.
+const listByCustomerMaxLimit = 50
+
+// ListByCustomer returns orders belonging to customerUID, ordered by
+// createdAt descending, paginated by an optional cursor. The cursor, when
+// non-nil, is the createdAt timestamp of the last order returned by the
+// previous page; results begin strictly after it.
+//
+// limit is clamped to [1, 50]: values ≤ 0 default to 50, and values > 50
+// are capped at 50 (Requirement 9.2).
+func (r *Repository) ListByCustomer(ctx context.Context, customerUID string, cursor *time.Time, limit int) ([]Order, error) {
+	if customerUID == "" {
+		return nil, fmt.Errorf("order repository: list by customer: customerUID is required")
+	}
+	if limit <= 0 || limit > listByCustomerMaxLimit {
+		limit = listByCustomerMaxLimit
+	}
+
+	q := r.client.Collection(ordersCollection).
+		Where("customerId", "==", customerUID).
+		OrderBy("createdAt", firestore.Desc)
+	if cursor != nil {
+		q = q.StartAfter(*cursor)
+	}
+	q = q.Limit(limit)
+
+	return r.runQuery(ctx, q)
 }
 
 // CountByStatus returns a map from each known order status to the count of

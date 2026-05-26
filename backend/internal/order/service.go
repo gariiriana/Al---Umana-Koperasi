@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"strings"
 	"time"
 
 	"al-umana/order-fulfillment/internal/common"
@@ -17,15 +19,38 @@ type StockChecker interface {
 	CheckAvailability(ctx context.Context, items []OrderLineItem) (outOfStock []string, err error)
 }
 
+// ProofFileDeleter is the consumer-side interface the order service uses to
+// remove a previously uploaded payment proof (parent metadata + chunks)
+// when a customer re-uploads from PAYMENT_REJECTED. Defining it here keeps
+// the dependency arrow pointing inward; the file package supplies a
+// concrete adapter.
+//
+// fileID is the bare document ID of the payment_proofs metadata document
+// (i.e. the value persisted on Order.PaymentProofFileID after stripping
+// the "payment_proofs/" prefix).
+type ProofFileDeleter interface {
+	DeletePaymentProof(ctx context.Context, fileID string) error
+}
+
 // stockCheckTimeout is the wall-time budget for the stock availability
 // query during order placement (Requirement 1.7).
 const stockCheckTimeout = 10 * time.Second
+
+// paymentProofPrefix is the canonical prefix persisted on
+// Order.PaymentProofFileID; the suffix is the metadata document ID under
+// the `payment_proofs` collection.
+const paymentProofPrefix = "payment_proofs/"
 
 // Domain errors returned by the service. The handler maps them onto the
 // canonical JSON error envelope.
 var (
 	ErrValidationFailed = errors.New("validation failed")
 	ErrNotFoundService  = errors.New("order not found")
+	// ErrForbidden is returned by lifecycle methods when the requesting
+	// principal is not permitted to act on the target order — for example,
+	// when a customer attempts to upload a payment proof for an order
+	// owned by a different customer.
+	ErrForbidden = errors.New("forbidden")
 )
 
 // ValidationError carries a slice of field-level errors so the handler can
@@ -40,7 +65,8 @@ func (e *ValidationError) Error() string {
 
 // CreateOrderResult is the value returned by Service.CreateOrder. The Order
 // reflects the post-stock-check terminal status of the placement flow:
-// CONFIRMED on success, FAILED on out-of-stock or stock service timeout.
+// CONFIRMED on success for COD orders, AWAITING_PAYMENT_PROOF on success
+// for non-COD orders, or FAILED on out-of-stock or stock service timeout.
 type CreateOrderResult struct {
 	Order *Order
 }
@@ -51,20 +77,43 @@ type orderRepository interface {
 	Get(ctx context.Context, id string) (*Order, error)
 	Update(ctx context.Context, id string, updates map[string]interface{}) error
 	UpdateStatus(ctx context.Context, id string, newStatus OrderStatus) error
+	ListByCustomer(ctx context.Context, customerUID string, cursor *time.Time, limit int) ([]Order, error)
 }
 
 // Service encapsulates the order business logic, orchestrating validation,
 // persistence, the stock availability check, and state-machine
 // transitions.
 type Service struct {
-	repo  orderRepository
-	stock StockChecker
+	repo         orderRepository
+	stock        StockChecker
+	proofDeleter ProofFileDeleter
 }
 
-// NewService returns a Service wired to its dependencies. Either dependency
-// may be nil in tests that only exercise validation.
-func NewService(repo orderRepository, stock StockChecker) *Service {
-	return &Service{repo: repo, stock: stock}
+// ServiceOption configures optional dependencies on a Service constructed
+// via NewService. Options are applied in order; later options override
+// earlier ones for the same field.
+type ServiceOption func(*Service)
+
+// WithProofDeleter wires a ProofFileDeleter into the Service. When set,
+// UploadProof will delete a previously uploaded payment proof before
+// transitioning a re-uploading order out of PAYMENT_REJECTED. When unset,
+// UploadProof logs a warning and proceeds with the transition.
+func WithProofDeleter(d ProofFileDeleter) ServiceOption {
+	return func(s *Service) { s.proofDeleter = d }
+}
+
+// NewService returns a Service wired to its dependencies. Either of the
+// positional dependencies may be nil in tests that only exercise
+// validation. Optional dependencies (e.g. ProofFileDeleter) are supplied
+// via ServiceOption values.
+func NewService(repo orderRepository, stock StockChecker, opts ...ServiceOption) *Service {
+	s := &Service{repo: repo, stock: stock}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(s)
+		}
+	}
+	return s
 }
 
 // CreateOrder validates the request, persists the order with status
@@ -87,6 +136,7 @@ func (s *Service) CreateOrder(ctx context.Context, req CreateOrderRequest, custo
 		Items:           req.Items,
 		DeliveryAddress: req.DeliveryAddress,
 		DeliveryTime:    req.DeliveryTime,
+		PaymentMethod:   req.PaymentMethod,
 		Status:          StatusPlacing,
 		CreatedAt:       now,
 		UpdatedAt:       now,
@@ -142,15 +192,29 @@ func (s *Service) CreateOrder(ctx context.Context, req CreateOrderRequest, custo
 	return &CreateOrderResult{Order: &final}, nil
 }
 
-// transitionAfterStock applies the post-stock-check transition: CONFIRMED
-// when outOfStock is empty, FAILED otherwise. The updated fields are
-// reflected on the supplied final order so the caller's view stays in
-// sync with persistence.
+// transitionAfterStock applies the post-stock-check transition. When stock
+// is available, COD orders go to CONFIRMED while non-COD orders go to
+// AWAITING_PAYMENT_PROOF with paymentStatus = "awaiting_proof"
+// (Requirements 6.1, 7.1). When any item is out of stock, the order
+// transitions to FAILED. The updated fields are reflected on the
+// supplied final order so the caller's view stays in sync with
+// persistence.
 func (s *Service) transitionAfterStock(ctx context.Context, id string, final *Order, outOfStock []string) error {
 	if len(outOfStock) == 0 {
-		final.Status = StatusConfirmed
+		if final.PaymentMethod == PaymentCOD {
+			final.Status = StatusConfirmed
+			return s.repo.Update(ctx, id, map[string]interface{}{
+				"status": StatusConfirmed,
+			})
+		}
+		// Non-COD: bank transfer or e-wallet. Validation guarantees one of
+		// the three known methods, so any non-COD value enters the
+		// payment-proof sub-lifecycle.
+		final.Status = StatusAwaitingPaymentProof
+		final.PaymentStatus = PaymentStatusAwaitingProof
 		return s.repo.Update(ctx, id, map[string]interface{}{
-			"status": StatusConfirmed,
+			"status":        StatusAwaitingPaymentProof,
+			"paymentStatus": PaymentStatusAwaitingProof,
 		})
 	}
 	final.Status = StatusFailed
@@ -370,4 +434,225 @@ func joinIDs(ids []string) string {
 		out += ", " + id
 	}
 	return out
+}
+
+// UploadProof finalizes a customer's payment-proof upload: it transitions
+// the order from AWAITING_PAYMENT_PROOF (initial upload) or
+// PAYMENT_REJECTED (re-upload) to AWAITING_PAYMENT_APPROVAL, sets
+// paymentStatus = "awaiting_approval", and persists the new
+// paymentProofFileId in the canonical "payment_proofs/{fileID}" form
+// (Requirement 7.9).
+//
+// Authorization: the order must belong to customerUID; otherwise
+// ErrForbidden is returned (Requirement 7.7).
+//
+// Re-upload from PAYMENT_REJECTED: when the order already carries a
+// previous PaymentProofFileID, the prior file (parent + chunks) is
+// deleted via the configured ProofFileDeleter before the new ID is
+// persisted (Requirement 7.12). When no ProofFileDeleter has been wired,
+// a warning is logged and the deletion is skipped — the transition still
+// proceeds so the customer is not blocked by infrastructure
+// configuration.
+func (s *Service) UploadProof(ctx context.Context, orderID, customerUID, fileID string) (*Order, error) {
+	if orderID == "" {
+		return nil, &ValidationError{Fields: []common.FieldError{{Field: "orderId", Reason: "orderId is required"}}}
+	}
+	if customerUID == "" {
+		return nil, &ValidationError{Fields: []common.FieldError{{Field: "customerUid", Reason: "customerUid is required"}}}
+	}
+	if strings.TrimSpace(fileID) == "" {
+		return nil, &ValidationError{Fields: []common.FieldError{{Field: "fileId", Reason: "fileId is required"}}}
+	}
+
+	o, err := s.repo.Get(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if o.CustomerID != customerUID {
+		return nil, fmt.Errorf("%w: order %s belongs to a different customer", ErrForbidden, orderID)
+	}
+
+	switch o.Status {
+	case StatusAwaitingPaymentProof, StatusPaymentRejected:
+		// allowed
+	default:
+		return nil, fmt.Errorf(
+			"%w: payment-proof upload requires status AWAITING_PAYMENT_PROOF or PAYMENT_REJECTED (got %s)",
+			ErrInvalidTransition, o.Status,
+		)
+	}
+
+	// Capture the previous proof so we can clean it up on a successful
+	// re-upload from PAYMENT_REJECTED (Requirement 7.12). Only the bare
+	// document ID (the suffix after "payment_proofs/") is forwarded to
+	// the deleter; the prefix is the canonical persisted form.
+	previousProofID := ""
+	if o.Status == StatusPaymentRejected && o.PaymentProofFileID != "" {
+		previousProofID = strings.TrimPrefix(o.PaymentProofFileID, paymentProofPrefix)
+	}
+
+	now := time.Now()
+	newProofRef := paymentProofPrefix + fileID
+	if err := s.repo.Update(ctx, orderID, map[string]interface{}{
+		"status":             StatusAwaitingPaymentApproval,
+		"paymentStatus":      PaymentStatusAwaitingApproval,
+		"paymentProofFileId": newProofRef,
+	}); err != nil {
+		return nil, err
+	}
+
+	if previousProofID != "" {
+		if s.proofDeleter != nil {
+			if delErr := s.proofDeleter.DeletePaymentProof(ctx, previousProofID); delErr != nil {
+				// Log and continue: the order has already advanced and the
+				// stale proof becomes orphaned. The handler/operator can
+				// reconcile out-of-band rather than the customer being
+				// blocked.
+				log.Printf("order service: failed to delete previous payment proof %s for order %s: %v", previousProofID, orderID, delErr)
+			}
+		} else {
+			log.Printf("order service: no ProofFileDeleter wired; previous payment proof %s for order %s left in place", previousProofID, orderID)
+		}
+	}
+
+	o.Status = StatusAwaitingPaymentApproval
+	o.PaymentStatus = PaymentStatusAwaitingApproval
+	o.PaymentProofFileID = newProofRef
+	o.UpdatedAt = now
+	return o, nil
+}
+
+// ApprovePayment transitions an order from AWAITING_PAYMENT_APPROVAL to
+// CONFIRMED, recording the approving admin's UID and a server-side
+// approval timestamp (Requirement 8.5). Any other source status is
+// rejected with ErrInvalidTransition (Requirement 8.9).
+func (s *Service) ApprovePayment(ctx context.Context, orderID, adminUID string) (*Order, error) {
+	if orderID == "" {
+		return nil, &ValidationError{Fields: []common.FieldError{{Field: "orderId", Reason: "orderId is required"}}}
+	}
+	if adminUID == "" {
+		return nil, &ValidationError{Fields: []common.FieldError{{Field: "adminUid", Reason: "adminUid is required"}}}
+	}
+
+	o, err := s.repo.Get(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if o.Status != StatusAwaitingPaymentApproval {
+		return nil, fmt.Errorf(
+			"%w: approve-payment requires status AWAITING_PAYMENT_APPROVAL (got %s)",
+			ErrInvalidTransition, o.Status,
+		)
+	}
+	if err := ValidateTransition(o.Status, StatusConfirmed); err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	if err := s.repo.Update(ctx, orderID, map[string]interface{}{
+		"status":            StatusConfirmed,
+		"paymentStatus":     PaymentStatusApproved,
+		"paymentApprovedBy": adminUID,
+		"paymentApprovedAt": now,
+	}); err != nil {
+		return nil, err
+	}
+	o.Status = StatusConfirmed
+	o.PaymentStatus = PaymentStatusApproved
+	o.PaymentApprovedBy = adminUID
+	o.PaymentApprovedAt = &now
+	return o, nil
+}
+
+// RejectPayment transitions an order from AWAITING_PAYMENT_APPROVAL to
+// PAYMENT_REJECTED, recording the rejecting admin's UID, a server-side
+// rejection timestamp, and the (trimmed) rejection reason (Requirement
+// 8.8). Any other source status is rejected with ErrInvalidTransition
+// (Requirement 8.9).
+//
+// Reason validation runs first: a reason that fails ValidateRejectionReason
+// short-circuits the call with a *ValidationError before the order is
+// loaded, so an invalid request leaves the order document untouched
+// (Requirement 8.7).
+func (s *Service) RejectPayment(ctx context.Context, orderID, adminUID, reason string) (*Order, error) {
+	if errs := ValidateRejectionReason(reason); len(errs) > 0 {
+		return nil, &ValidationError{Fields: errs}
+	}
+	if orderID == "" {
+		return nil, &ValidationError{Fields: []common.FieldError{{Field: "orderId", Reason: "orderId is required"}}}
+	}
+	if adminUID == "" {
+		return nil, &ValidationError{Fields: []common.FieldError{{Field: "adminUid", Reason: "adminUid is required"}}}
+	}
+
+	o, err := s.repo.Get(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if o.Status != StatusAwaitingPaymentApproval {
+		return nil, fmt.Errorf(
+			"%w: reject-payment requires status AWAITING_PAYMENT_APPROVAL (got %s)",
+			ErrInvalidTransition, o.Status,
+		)
+	}
+	if err := ValidateTransition(o.Status, StatusPaymentRejected); err != nil {
+		return nil, err
+	}
+
+	trimmedReason := strings.TrimSpace(reason)
+	now := time.Now()
+	if err := s.repo.Update(ctx, orderID, map[string]interface{}{
+		"status":                 StatusPaymentRejected,
+		"paymentStatus":          PaymentStatusRejected,
+		"paymentRejectionReason": trimmedReason,
+		"paymentRejectedBy":      adminUID,
+		"paymentRejectedAt":      now,
+	}); err != nil {
+		return nil, err
+	}
+	o.Status = StatusPaymentRejected
+	o.PaymentStatus = PaymentStatusRejected
+	o.PaymentRejectReason = trimmedReason
+	o.PaymentRejectedBy = adminUID
+	o.PaymentRejectedAt = &now
+	return o, nil
+}
+
+// listByCustomerMaxLimitService is the page-size cap enforced at the
+// service boundary. It mirrors the repository-level cap so callers cannot
+// request more than 50 orders per page (Requirement 9.2).
+const listByCustomerMaxLimitService = 50
+
+// ListByCustomer returns the page of orders belonging to customerUID,
+// ordered by createdAt descending. The optional cursor is the createdAt
+// timestamp of the previous page's last order; when nil, the first page
+// is returned. The result includes nextCursor — the createdAt of the
+// last returned order — when more pages may exist (i.e. the page was
+// fully populated to the requested limit). nextCursor is nil when the
+// caller has reached the end of the customer's order history.
+//
+// limit is clamped to (0, 50]: values ≤ 0 default to 50 and values > 50
+// are capped at 50 (Requirement 9.2).
+func (s *Service) ListByCustomer(ctx context.Context, customerUID string, cursor *time.Time, limit int) ([]Order, *time.Time, error) {
+	if customerUID == "" {
+		return nil, nil, &ValidationError{Fields: []common.FieldError{
+			{Field: "customerUid", Reason: "customerUid is required"},
+		}}
+	}
+	effective := limit
+	if effective <= 0 || effective > listByCustomerMaxLimitService {
+		effective = listByCustomerMaxLimitService
+	}
+
+	orders, err := s.repo.ListByCustomer(ctx, customerUID, cursor, effective)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var nextCursor *time.Time
+	if len(orders) == effective {
+		last := orders[len(orders)-1].CreatedAt
+		nextCursor = &last
+	}
+	return orders, nextCursor, nil
 }

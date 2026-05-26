@@ -18,6 +18,7 @@ import (
 	cloudfirestore "cloud.google.com/go/firestore"
 
 	"al-umana/order-fulfillment/internal/auth"
+	"al-umana/order-fulfillment/internal/catalog"
 	"al-umana/order-fulfillment/internal/dashboard"
 	"al-umana/order-fulfillment/internal/file"
 	"al-umana/order-fulfillment/internal/firebase"
@@ -48,6 +49,50 @@ const (
 	envFBProjectID = "FIREBASE_PROJECT_ID"
 )
 
+// productImageDeleterAdapter adapts a *file.Repository bound to the
+// `product_images` collection onto stock.ProductImageDeleter. The adapter
+// lives in main.go so the stock package does not need to import the file
+// package, keeping the dependency arrow pointing outward.
+type productImageDeleterAdapter struct {
+	repo *file.Repository
+}
+
+func newProductImageDeleterAdapter(repo *file.Repository) *productImageDeleterAdapter {
+	return &productImageDeleterAdapter{repo: repo}
+}
+
+// DeleteProductImage removes the parent doc and chunks for the given file
+// ID under the `product_images` collection. A nil repository (dev mode
+// without Firestore) is treated as a no-op.
+func (a *productImageDeleterAdapter) DeleteProductImage(ctx context.Context, fileID string) error {
+	if a == nil || a.repo == nil {
+		return nil
+	}
+	return a.repo.DeleteFile(ctx, fileID)
+}
+
+// paymentProofDeleterAdapter adapts a *file.Repository bound to the
+// `payment_proofs` collection onto order.ProofFileDeleter. Used by the
+// order service to clean up a previously-uploaded proof when the
+// customer re-uploads from PAYMENT_REJECTED (Requirement 7.12).
+type paymentProofDeleterAdapter struct {
+	repo *file.Repository
+}
+
+func newPaymentProofDeleterAdapter(repo *file.Repository) *paymentProofDeleterAdapter {
+	return &paymentProofDeleterAdapter{repo: repo}
+}
+
+// DeletePaymentProof removes the parent doc and chunks for the given file
+// ID under the `payment_proofs` collection. A nil repository (dev mode
+// without Firestore) is treated as a no-op.
+func (a *paymentProofDeleterAdapter) DeletePaymentProof(ctx context.Context, fileID string) error {
+	if a == nil || a.repo == nil {
+		return nil
+	}
+	return a.repo.DeleteFile(ctx, fileID)
+}
+
 func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -62,37 +107,71 @@ func main() {
 	projectID := os.Getenv(envFBProjectID)
 
 	guard := buildAuthGuard(ctx, appEnv, credsPath)
+	adminGuard := auth.NewAdminGuard(guard)
 	fsConn := buildFirestore(ctx, appEnv, projectID, credsPath)
 
 	// Build domain layers (repositories, services, handlers). When fsConn
 	// is nil (dev mode without Firestore), handlers gracefully return 501
 	// for endpoints that need persistence.
 	var (
-		orderRepo *order.Repository
-		fileRepo  *file.Repository
-		gpsRepo   *gps.Repository
-		stockSvc  *stock.Service
-		orderSvc  *order.Service
-		fileAsm   *file.Assembler
+		orderRepo   *order.Repository
+		gpsRepo     *gps.Repository
+		stockSvc    *stock.Service
+		orderSvc    *order.Service
+		catalogSvc  *catalog.Service
+		fileHandler *file.Handler
 	)
 	if fsConn != nil {
 		orderRepo = order.NewRepository(fsConn)
-		fileRepo = file.NewRepository(fsConn)
+		deliveryFilesRepo := file.NewDeliveryFilesRepository(fsConn)
+		productImagesRepo := file.NewProductImagesRepository(fsConn)
+		paymentProofsRepo := file.NewPaymentProofsRepository(fsConn)
 		gpsRepo = gps.NewRepository(fsConn)
-		stockSvc = stock.NewService(stock.NewRepository(fsConn))
-		orderSvc = order.NewService(orderRepo, stockSvc)
-		fileAsm = file.NewAssembler(fileRepo)
+
+		stockRepo := stock.NewRepository(fsConn)
+		productImageDeleter := newProductImageDeleterAdapter(productImagesRepo)
+		paymentProofDeleter := newPaymentProofDeleterAdapter(paymentProofsRepo)
+
+		stockSvc = stock.NewService(
+			stockRepo,
+			stock.WithProductImageDeleter(productImageDeleter),
+		)
+		orderSvc = order.NewService(
+			orderRepo,
+			stockSvc,
+			order.WithProofDeleter(paymentProofDeleter),
+		)
+		catalogSvc = catalog.NewService(stockRepo)
+
+		// Multi-collection file handler so the unified per-collection
+		// download endpoint can serve product_images and payment_proofs
+		// alongside the legacy delivery_files routes. The constructor
+		// also seeds the legacy single-collection assembler from the
+		// delivery_files repo so the existing AssembleFile, DownloadFile
+		// and ListByOrderHandler endpoints keep working unchanged.
+		fileHandler = file.NewHandlerMulti(map[string]*file.Repository{
+			file.DeliveryFilesCollection: deliveryFilesRepo,
+			file.ProductImagesCollection: productImagesRepo,
+			file.PaymentProofsCollection: paymentProofsRepo,
+		})
+	} else {
+		// Dev mode: still construct a Handler so registered routes
+		// return the canonical 501 NOT_IMPLEMENTED rather than 404.
+		fileHandler = file.NewHandler(nil, nil)
 	}
 
 	deps := router.Dependencies{
-		AuthGuard: guard,
+		AuthGuard:  guard,
+		AdminGuard: adminGuard,
 		CORSConfig: middleware.CORSConfig{
 			AllowedOrigins: corsOrigins,
 			Env:            appEnv,
 		},
 		OrderHandler:     order.NewHandler(orderSvc, orderRepo),
-		FileHandler:      file.NewHandler(fileRepo, fileAsm),
+		FileHandler:      fileHandler,
 		DashboardHandler: dashboard.NewHandler(orderRepo, gpsRepo),
+		CatalogHandler:   catalog.NewHandler(catalogSvc),
+		StockHandler:     stock.NewHandler(stockSvc),
 	}
 	handler := router.NewRouter(deps)
 

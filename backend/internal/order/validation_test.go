@@ -33,12 +33,16 @@ func TestValidationProperty_CreateOrder(t *testing.T) {
 		validName := genValidString(1, 200).Draw(rt, "validName")
 		validAddress := genValidString(1, 500).Draw(rt, "validAddress")
 		validTime := genValidString(1, 100).Draw(rt, "validTime")
+		validPayment := rapid.SampledFrom([]PaymentMethod{
+			PaymentCOD, PaymentBankTransfer, PaymentEWallet,
+		}).Draw(rt, "validPayment")
 
 		// Create a valid order request
 		req := CreateOrderRequest{
 			CustomerName:    validName,
 			DeliveryAddress: validAddress,
 			DeliveryTime:    validTime,
+			PaymentMethod:   validPayment,
 		}
 
 		numItems := rapid.IntRange(1, 5).Draw(rt, "numItems")
@@ -72,11 +76,15 @@ func TestValidationProperty_InvalidFields(t *testing.T) {
 		validName := genValidString(1, 200).Draw(rt, "validName")
 		validAddress := genValidString(1, 500).Draw(rt, "validAddress")
 		validTime := genValidString(1, 100).Draw(rt, "validTime")
+		validPayment := rapid.SampledFrom([]PaymentMethod{
+			PaymentCOD, PaymentBankTransfer, PaymentEWallet,
+		}).Draw(rt, "validPayment")
 
 		req := CreateOrderRequest{
 			CustomerName:    validName,
 			DeliveryAddress: validAddress,
 			DeliveryTime:    validTime,
+			PaymentMethod:   validPayment,
 		}
 
 		// Inject at least one validation failure

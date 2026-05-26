@@ -15,19 +15,35 @@ var ErrInvalidTransition = errors.New("invalid state transition")
 //
 // The table mirrors the design's "Valid State Transitions" section:
 //
-//   PLACING          -> CONFIRMED       (stock available)
-//   PLACING          -> FAILED          (out of stock / timeout)
-//   CONFIRMED        -> IN_PRODUCTION   (production started)
-//   IN_PRODUCTION    -> READY           (production complete)
-//   READY            -> READY_TO_DELIVER (QC passed)
-//   READY            -> CONFIRMED       (QC failed, re-queue)
-//   READY_TO_DELIVER -> OUT_FOR_DELIVERY (dispatched)
-//   OUT_FOR_DELIVERY -> READY_TO_DELIVER (rescheduled)
-//   OUT_FOR_DELIVERY -> DELIVERED       (proof submitted)
+//	PLACING                   -> CONFIRMED                  (stock available, cod)
+//	PLACING                   -> AWAITING_PAYMENT_PROOF     (stock available, non-cod)
+//	PLACING                   -> FAILED                     (out of stock / timeout)
+//	AWAITING_PAYMENT_PROOF    -> AWAITING_PAYMENT_APPROVAL  (customer uploads proof)
+//	AWAITING_PAYMENT_APPROVAL -> CONFIRMED                  (admin approves)
+//	AWAITING_PAYMENT_APPROVAL -> PAYMENT_REJECTED           (admin rejects)
+//	PAYMENT_REJECTED          -> AWAITING_PAYMENT_APPROVAL  (customer re-uploads)
+//	CONFIRMED                 -> IN_PRODUCTION              (production started)
+//	IN_PRODUCTION             -> READY                      (production complete)
+//	READY                     -> READY_TO_DELIVER           (QC passed)
+//	READY                     -> CONFIRMED                  (QC failed, re-queue)
+//	READY_TO_DELIVER          -> OUT_FOR_DELIVERY           (dispatched)
+//	OUT_FOR_DELIVERY          -> READY_TO_DELIVER           (rescheduled)
+//	OUT_FOR_DELIVERY          -> DELIVERED                  (proof submitted)
 var validTransitions = map[OrderStatus]map[OrderStatus]struct{}{
 	StatusPlacing: {
-		StatusConfirmed: {},
-		StatusFailed:    {},
+		StatusConfirmed:            {},
+		StatusAwaitingPaymentProof: {},
+		StatusFailed:               {},
+	},
+	StatusAwaitingPaymentProof: {
+		StatusAwaitingPaymentApproval: {},
+	},
+	StatusAwaitingPaymentApproval: {
+		StatusConfirmed:       {},
+		StatusPaymentRejected: {},
+	},
+	StatusPaymentRejected: {
+		StatusAwaitingPaymentApproval: {},
 	},
 	StatusConfirmed: {
 		StatusInProduction: {},

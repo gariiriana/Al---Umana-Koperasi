@@ -17,18 +17,22 @@ const (
 // Reason strings returned in field-specific validation errors. Keeping these
 // as constants makes them easy to assert in tests and easy to translate.
 const (
-	reasonCustomerNameRequired = "must not be empty"
-	reasonCustomerNameTooLong  = "must be at most 200 characters"
-	reasonAddressRequired      = "must not be empty"
-	reasonAddressTooLong       = "must be at most 500 characters"
-	reasonTimeRequired         = "must not be empty"
-	reasonTimeTooLong          = "must be at most 100 characters"
-	reasonItemsRequired        = "at least one item is required"
-	reasonItemIDRequired       = "item identifier must not be empty"
-	reasonItemNameRequired     = "item name must not be empty"
-	reasonQuantityNotPositive  = "quantity must be a positive integer"
-	reasonQuantityBelowMinimum = "quantity must be at least 1"
-	reasonDuplicateItemID      = "duplicate item identifier in request"
+	reasonCustomerNameRequired  = "must not be empty"
+	reasonCustomerNameTooLong   = "must be at most 200 characters"
+	reasonAddressRequired       = "must not be empty"
+	reasonAddressTooLong        = "must be at most 500 characters"
+	reasonTimeRequired          = "must not be empty"
+	reasonTimeTooLong           = "must be at most 100 characters"
+	reasonItemsRequired         = "at least one item is required"
+	reasonItemIDRequired        = "item identifier must not be empty"
+	reasonItemNameRequired      = "item name must not be empty"
+	reasonQuantityNotPositive   = "quantity must be a positive integer"
+	reasonQuantityBelowMinimum  = "quantity must be at least 1"
+	reasonDuplicateItemID       = "duplicate item identifier in request"
+	reasonPaymentMethodRequired = "must not be empty"
+	reasonPaymentMethodInvalid  = "must be one of: cod, bank_transfer, e_wallet"
+	reasonRejectionReasonEmpty  = "rejection reason must not be empty"
+	reasonRejectionReasonLong   = "rejection reason must be at most 500 characters"
 )
 
 // ValidateCreateOrder validates a CreateOrderRequest and returns a slice of
@@ -38,6 +42,8 @@ const (
 //   - customerName: non-empty, ≤ 200 characters (after trimming whitespace)
 //   - deliveryAddress: non-empty, ≤ 500 characters (after trimming)
 //   - deliveryTime: non-empty, ≤ 100 characters (after trimming)
+//   - paymentMethod: required; must be one of "cod", "bank_transfer",
+//     "e_wallet" (Requirements 5.2, 6.1)
 //   - items: at least one entry; each item has a non-empty itemId and
 //     itemName, and a quantity ≥ 1; itemId values must be unique within
 //     the request
@@ -66,6 +72,15 @@ func ValidateCreateOrder(req CreateOrderRequest) []common.FieldError {
 		errs = append(errs, common.FieldError{Field: "deliveryTime", Reason: reasonTimeRequired})
 	case len(devTime) > MaxDeliveryTimeLen:
 		errs = append(errs, common.FieldError{Field: "deliveryTime", Reason: reasonTimeTooLong})
+	}
+
+	switch req.PaymentMethod {
+	case "":
+		errs = append(errs, common.FieldError{Field: "paymentMethod", Reason: reasonPaymentMethodRequired})
+	case PaymentCOD, PaymentBankTransfer, PaymentEWallet:
+		// valid
+	default:
+		errs = append(errs, common.FieldError{Field: "paymentMethod", Reason: reasonPaymentMethodInvalid})
 	}
 
 	if len(req.Items) == 0 {
@@ -132,6 +147,21 @@ func ValidateQCFailReason(reason string) []common.FieldError {
 	}
 	if len(reason) > 500 {
 		return []common.FieldError{{Field: "reason", Reason: "fail reason must be at most 500 characters"}}
+	}
+	return nil
+}
+
+// ValidateRejectionReason validates the reason supplied with a payment-proof
+// rejection (Requirement 8.7). The reason must be non-empty and at most 500
+// characters after trimming leading and trailing whitespace. An empty
+// FieldError slice indicates a valid reason.
+func ValidateRejectionReason(reason string) []common.FieldError {
+	trimmed := strings.TrimSpace(reason)
+	if len(trimmed) < 1 {
+		return []common.FieldError{{Field: "reason", Reason: reasonRejectionReasonEmpty}}
+	}
+	if len(trimmed) > 500 {
+		return []common.FieldError{{Field: "reason", Reason: reasonRejectionReasonLong}}
 	}
 	return nil
 }

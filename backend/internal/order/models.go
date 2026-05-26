@@ -13,14 +13,45 @@ type OrderStatus string
 // storage representation; both the JSON API and Firestore documents use them
 // verbatim.
 const (
-	StatusPlacing        OrderStatus = "PLACING"
-	StatusConfirmed      OrderStatus = "CONFIRMED"
-	StatusInProduction   OrderStatus = "IN_PRODUCTION"
-	StatusReady          OrderStatus = "READY"
-	StatusReadyToDeliver OrderStatus = "READY_TO_DELIVER"
-	StatusOutForDelivery OrderStatus = "OUT_FOR_DELIVERY"
-	StatusDelivered      OrderStatus = "DELIVERED"
-	StatusFailed         OrderStatus = "FAILED"
+	StatusPlacing                 OrderStatus = "PLACING"
+	StatusAwaitingPaymentProof    OrderStatus = "AWAITING_PAYMENT_PROOF"
+	StatusAwaitingPaymentApproval OrderStatus = "AWAITING_PAYMENT_APPROVAL"
+	StatusPaymentRejected         OrderStatus = "PAYMENT_REJECTED"
+	StatusConfirmed               OrderStatus = "CONFIRMED"
+	StatusInProduction            OrderStatus = "IN_PRODUCTION"
+	StatusReady                   OrderStatus = "READY"
+	StatusReadyToDeliver          OrderStatus = "READY_TO_DELIVER"
+	StatusOutForDelivery          OrderStatus = "OUT_FOR_DELIVERY"
+	StatusDelivered               OrderStatus = "DELIVERED"
+	StatusFailed                  OrderStatus = "FAILED"
+)
+
+// PaymentMethod is a string-typed enumeration of supported payment methods on
+// an Order. COD orders bypass the payment-proof workflow; non-COD orders
+// (bank transfer, e-wallet) require a customer-uploaded proof and admin
+// approval before transitioning to CONFIRMED.
+type PaymentMethod string
+
+// Payment method constants. These string values are the canonical wire and
+// storage representation.
+const (
+	PaymentCOD          PaymentMethod = "cod"
+	PaymentBankTransfer PaymentMethod = "bank_transfer"
+	PaymentEWallet      PaymentMethod = "e_wallet"
+)
+
+// PaymentStatus is a string-typed enumeration tracking the payment-proof
+// sub-lifecycle for non-COD orders. It is independent of OrderStatus so the
+// fulfillment pipeline can advance without being coupled to payment fields.
+type PaymentStatus string
+
+// Payment status constants. These string values are the canonical wire and
+// storage representation.
+const (
+	PaymentStatusAwaitingProof    PaymentStatus = "awaiting_proof"
+	PaymentStatusAwaitingApproval PaymentStatus = "awaiting_approval"
+	PaymentStatusApproved         PaymentStatus = "approved"
+	PaymentStatusRejected         PaymentStatus = "rejected"
 )
 
 // OrderLineItem represents a single line on an order: a product, its display
@@ -58,6 +89,18 @@ type Order struct {
 	QCFailReason        string          `json:"qcFailReason,omitempty" firestore:"qcFailReason,omitempty"`
 	DeliveredAt         *time.Time      `json:"deliveredAt,omitempty" firestore:"deliveredAt,omitempty"`
 	ProofFileIDs        []string        `json:"proofFileIds,omitempty" firestore:"proofFileIds,omitempty"`
-	CreatedAt           time.Time       `json:"createdAt" firestore:"createdAt"`
-	UpdatedAt           time.Time       `json:"updatedAt" firestore:"updatedAt"`
+	// Payment workflow fields. PaymentMethod is required on newly placed
+	// orders; the remaining fields are populated as the payment-proof
+	// sub-lifecycle advances and use `omitempty` so legacy COD orders that
+	// pre-date this feature serialize cleanly.
+	PaymentMethod       PaymentMethod `json:"paymentMethod" firestore:"paymentMethod"`
+	PaymentStatus       PaymentStatus `json:"paymentStatus,omitempty" firestore:"paymentStatus,omitempty"`
+	PaymentProofFileID  string        `json:"paymentProofFileId,omitempty" firestore:"paymentProofFileId,omitempty"`
+	PaymentApprovedBy   string        `json:"paymentApprovedBy,omitempty" firestore:"paymentApprovedBy,omitempty"`
+	PaymentApprovedAt   *time.Time    `json:"paymentApprovedAt,omitempty" firestore:"paymentApprovedAt,omitempty"`
+	PaymentRejectedBy   string        `json:"paymentRejectedBy,omitempty" firestore:"paymentRejectedBy,omitempty"`
+	PaymentRejectedAt   *time.Time    `json:"paymentRejectedAt,omitempty" firestore:"paymentRejectedAt,omitempty"`
+	PaymentRejectReason string        `json:"paymentRejectionReason,omitempty" firestore:"paymentRejectionReason,omitempty"`
+	CreatedAt           time.Time     `json:"createdAt" firestore:"createdAt"`
+	UpdatedAt           time.Time     `json:"updatedAt" firestore:"updatedAt"`
 }

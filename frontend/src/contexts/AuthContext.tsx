@@ -25,6 +25,8 @@ export interface UserProfile {
   displayName: string;
   role: "admin" | "tim_produksi" | "distribusi" | "monitoring" | "pelanggan";
   createdAt?: unknown;
+  /** Optional delivery address saved during checkout for auto-fill. */
+  savedDeliveryAddress?: string;
 }
 
 /** Shape of the value exposed by useAuth(). */
@@ -92,28 +94,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
               setLoading(false);
             } else {
               // Automatically provision missing Firestore document on first login
-              const email = nextUser.email?.toLowerCase() ?? "";
-              let role: "admin" | "tim_produksi" | "distribusi" | "monitoring" | "pelanggan" = "pelanggan";
-
-              if (email.includes("admin")) {
-                role = "admin";
-              } else if (email.includes("produksi")) {
-                role = "tim_produksi";
-              } else if (email.includes("distrib") || email.includes("kurir") || email.includes("courier")) {
-                role = "distribusi";
-              } else if (email.includes("monit")) {
-                role = "monitoring";
-              }
-
               const fallbackDisplayName = nextUser.displayName ?? nextUser.email?.split("@")[0] ?? "User";
 
               try {
                 await setDoc(userDocRef, {
                   email: nextUser.email ?? "",
                   displayName: fallbackDisplayName,
-                  role: role,
+                  role: "pelanggan", // Selalu default ke pelanggan
                   createdAt: new Date(),
                 });
+                // NOTE: setLoading(false) will be called by the onSnapshot callback
+                // when the document creation is confirmed. However, we set a fallback
+                // profile here so the UI doesn't get stuck if onSnapshot is slow.
+                setProfile({
+                  email: nextUser.email ?? "",
+                  displayName: fallbackDisplayName,
+                  role: "pelanggan",
+                });
+                setLoading(false);
               } catch (err) {
                 console.error("Failed to automatically create user profile:", err);
                 setProfile(null);

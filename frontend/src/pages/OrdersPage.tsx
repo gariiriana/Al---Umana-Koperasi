@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ApiError } from "@/services/apiClient";
-import { createOrder } from "@/services/orderService";
+import { createOrder, type PaymentMethod } from "@/services/orderService";
 import { subscribeOrders } from "@/services/realtimeService";
 import type { Order, OrderLineItem } from "@/types/order";
 
@@ -28,6 +28,7 @@ export function OrdersPage() {
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryTime, setDeliveryTime] = useState("");
   const [items, setItems] = useState<FormItem[]>([newItem()]);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cod");
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [bannerError, setBannerError] = useState<string | null>(null);
@@ -42,6 +43,7 @@ export function OrdersPage() {
     setDeliveryAddress("");
     setDeliveryTime("");
     setItems([newItem()]);
+    setPaymentMethod("cod");
     setErrors({});
     setBannerError(null);
   };
@@ -62,6 +64,7 @@ export function OrdersPage() {
           itemName: item.itemName,
           quantity: item.quantity,
         })),
+        paymentMethod,
       });
       setSuccess(`Order ${created.id.slice(0, 8)}… created with status ${created.status}`);
       reset();
@@ -209,6 +212,35 @@ export function OrdersPage() {
                 className="mt-2 text-xs text-[#EF4444] font-['Hanken_Grotesk',system-ui,sans-serif]"
               >
                 {errors.items}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label
+              htmlFor="payment-method"
+              className="block mb-1.5 font-['Hanken_Grotesk',system-ui,sans-serif] text-sm font-medium text-[#374151]"
+            >
+              Payment method
+            </label>
+            <select
+              id="payment-method"
+              value={paymentMethod}
+              onChange={(e) =>
+                setPaymentMethod(e.target.value as PaymentMethod)
+              }
+              className="w-full rounded-lg border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-[#111827] font-['Hanken_Grotesk',system-ui,sans-serif] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40"
+            >
+              <option value="cod">Bayar di Tempat (COD)</option>
+              <option value="bank_transfer">Transfer Bank</option>
+              <option value="e_wallet">E-Wallet</option>
+            </select>
+            {errors.paymentMethod && (
+              <p
+                role="alert"
+                className="mt-1 text-xs text-[#EF4444] font-['Hanken_Grotesk',system-ui,sans-serif]"
+              >
+                {errors.paymentMethod}
               </p>
             )}
           </div>

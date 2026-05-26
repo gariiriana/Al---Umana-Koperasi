@@ -84,6 +84,32 @@ func (m *mockOrderRepo) UpdateStatus(ctx context.Context, id string, newStatus O
 	return m.Update(ctx, id, map[string]interface{}{"status": newStatus})
 }
 
+func (m *mockOrderRepo) ListByCustomer(ctx context.Context, customerUID string, cursor *time.Time, limit int) ([]Order, error) {
+	// Naive implementation sufficient for the existing service tests: return
+	// every persisted order matching customerUID in arbitrary order, then
+	// truncate to limit. The ordering and cursor semantics are exercised
+	// by repository-level tests against the real Firestore client.
+	var matches []Order
+	for _, o := range m.orders {
+		if o.CustomerID == customerUID {
+			matches = append(matches, *o)
+		}
+	}
+	if cursor != nil {
+		filtered := matches[:0]
+		for _, o := range matches {
+			if o.CreatedAt.Before(*cursor) {
+				filtered = append(filtered, o)
+			}
+		}
+		matches = filtered
+	}
+	if limit > 0 && len(matches) > limit {
+		matches = matches[:limit]
+	}
+	return matches, nil
+}
+
 type mockStockChecker struct {
 	checkFunc func(ctx context.Context, items []OrderLineItem) ([]string, error)
 }
@@ -103,6 +129,7 @@ func TestServiceProperty_CreateOrderPersistenceAndStockCheck(t *testing.T) {
 			CustomerName:    customerName,
 			DeliveryAddress: address,
 			DeliveryTime:    validTime,
+			PaymentMethod:   PaymentCOD,
 		}
 
 		numItems := rapid.IntRange(1, 3).Draw(rt, "numItems")

@@ -2,14 +2,18 @@ import { NavLink } from "react-router-dom";
 import { motion } from "motion/react";
 import { ROLE_PERMISSIONS } from "@/constants/roles";
 import {
+  BadgeCheck,
   CheckCircle2,
   Factory,
   LayoutDashboard,
   LogOut,
   MapPin,
   Package,
+  Package2,
+  PackagePlus,
   Settings,
   ShoppingCart,
+  Tags,
   Truck,
   type LucideIcon,
 } from "lucide-react";
@@ -21,14 +25,18 @@ interface NavItem {
 }
 
 export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/orders", label: "Orders", icon: ShoppingCart },
-  { to: "/production", label: "Production", icon: Factory },
-  { to: "/qc", label: "Quality Control", icon: CheckCircle2 },
-  { to: "/dispatch", label: "Dispatch", icon: Truck },
-  { to: "/delivery", label: "Delivery", icon: Package },
-  { to: "/tracking", label: "Tracking", icon: MapPin },
-  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
+  { to: "/admin/production", label: "Production", icon: Factory },
+  { to: "/admin/qc", label: "Quality Control", icon: CheckCircle2 },
+  { to: "/admin/dispatch", label: "Dispatch", icon: Truck },
+  { to: "/admin/delivery", label: "Delivery", icon: Package },
+  { to: "/admin/tracking", label: "Tracking", icon: MapPin },
+  { to: "/admin/settings", label: "Settings", icon: Settings },
+  { to: "/admin/products", label: "Daftar Produk", icon: Package2 },
+  { to: "/admin/products/new", label: "Tambah Produk", icon: PackagePlus },
+  { to: "/admin/categories", label: "Kategori", icon: Tags },
+  { to: "/admin/payment-approvals", label: "Persetujuan Pembayaran", icon: BadgeCheck },
 ] as const;
 
 export interface SidebarProps {
