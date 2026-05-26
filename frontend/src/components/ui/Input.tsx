@@ -94,14 +94,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           ref={ref}
           id={inputId}
           disabled={disabled}
-          aria-invalid={hasError || undefined}
           aria-describedby={describedBy}
           className={inputClasses}
+          {...(hasError ? { "aria-invalid": true } : {})}
           {...rest}
         />
         {rightIcon && (
           <span
-            className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-[#6B7280]"
+            className="absolute inset-y-0 right-0 flex items-center pr-3 text-[#6B7280]"
             aria-hidden="true"
           >
             {rightIcon}

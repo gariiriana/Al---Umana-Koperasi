@@ -96,5 +96,32 @@ service cloud.firestore {
         allow delete: if false;
       }
     }
+
+    // -------------------------------------------------------------------
+    // Users Profile Collection
+    // -------------------------------------------------------------------
+    // Rules for profile syncing, registration, and role escalation prevention.
+    function isAdmin() {
+      return request.auth != null 
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /users/{userId} {
+      // Allow any logged-in user to view user profiles (needed for order dispatcher, QC tracking, etc.)
+      allow read: if request.auth != null;
+
+      // Allow users to register/setup their own profile on first login/registration
+      allow create: if request.auth != null 
+        && request.auth.uid == userId;
+
+      // Allow users to edit their own profile, but do not allow them to escalate/modify their own role
+      allow update: if request.auth != null 
+        && request.auth.uid == userId 
+        && request.resource.data.role == resource.data.role;
+
+      // Admins have full access to modify profiles (e.g., assigning internal roles)
+      allow write: if isAdmin();
+    }
   }
 }

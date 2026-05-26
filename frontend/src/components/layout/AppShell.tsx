@@ -17,6 +17,8 @@ export interface AppShellProps {
   userName?: string;
   /** Authenticated user's email. */
   userEmail?: string;
+  /** Authenticated user's role. */
+  userRole?: string;
   /** Sign-out callback fired by the sidebar button. */
   onSignOut?: () => void;
   /** Optional custom slot rendered on the right side of the header. */
@@ -31,6 +33,7 @@ export function AppShell({
   searchPlaceholder = "Search orders, couriers...",
   userName,
   userEmail,
+  userRole,
   onSignOut,
   headerActions,
 }: AppShellProps) {
@@ -45,6 +48,7 @@ export function AppShell({
       <Sidebar
         userName={userName}
         userEmail={userEmail}
+        userRole={userRole}
         onSignOut={onSignOut}
       />
 
@@ -102,7 +106,7 @@ export function AppShell({
         </main>
       </div>
 
-      <MobileNav />
+      <MobileNav userRole={userRole} />
     </div>
   );
 }

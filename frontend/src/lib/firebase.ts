@@ -44,7 +44,6 @@ const requiredKeys: Array<keyof typeof firebaseConfig> = [
 ];
 for (const key of requiredKeys) {
   if (!firebaseConfig[key]) {
-    // eslint-disable-next-line no-console
     console.warn(
       `[firebase] Missing required env var for "${key}". ` +
         `Check your .env file (see .env.example for required keys).`

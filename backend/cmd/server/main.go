@@ -20,6 +20,7 @@ import (
 	"al-umana/order-fulfillment/internal/auth"
 	"al-umana/order-fulfillment/internal/dashboard"
 	"al-umana/order-fulfillment/internal/file"
+	"al-umana/order-fulfillment/internal/firebase"
 	fsclient "al-umana/order-fulfillment/internal/firestore"
 	"al-umana/order-fulfillment/internal/gps"
 	"al-umana/order-fulfillment/internal/middleware"
@@ -145,7 +146,7 @@ func buildAuthGuard(ctx context.Context, appEnv, credsPath string) *auth.Guard {
 		return auth.NewStubGuard("FIREBASE_CREDENTIALS_PATH unset; using stub guard for development")
 	}
 
-	app, err := auth.InitFirebaseApp(ctx, credsPath)
+	app, err := firebase.InitFirebaseApp(ctx, credsPath)
 	if err != nil {
 		if isProduction(appEnv) {
 			log.Fatalf("auth: failed to initialise Firebase in production: %v", err)
@@ -154,7 +155,7 @@ func buildAuthGuard(ctx context.Context, appEnv, credsPath string) *auth.Guard {
 		return auth.NewStubGuard("development environment; Firebase init failed")
 	}
 
-	client, err := auth.InitAuthClient(ctx, app)
+	client, err := firebase.InitAuthClient(ctx, app)
 	if err != nil {
 		if isProduction(appEnv) {
 			log.Fatalf("auth: failed to initialise Firebase auth client in production: %v", err)

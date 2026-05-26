@@ -12,6 +12,7 @@ import type { Order, OrderLineItem, OrderStatus } from "@/types/order";
 export interface CreateOrderPayload {
   customerName: string;
   deliveryAddress: string;
+  deliveryTime: string;
   items: OrderLineItem[];
 }
 

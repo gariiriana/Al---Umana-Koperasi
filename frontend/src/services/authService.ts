@@ -10,16 +10,47 @@ import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged as firebaseOnAuthStateChanged,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  sendPasswordResetEmail,
   type User,
   type Unsubscribe,
 } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 
 /** Sign in with email + password. Resolves to the authenticated user. */
 export async function signIn(email: string, password: string): Promise<User> {
   const credential = await signInWithEmailAndPassword(auth, email, password);
   return credential.user;
+}
+
+/** Create a new customer user with email, password, and displayName, and store in Firestore users collection. */
+export async function signUp(
+  email: string,
+  password: string,
+  displayName: string
+): Promise<User> {
+  const credential = await createUserWithEmailAndPassword(auth, email, password);
+  const user = credential.user;
+  await updateProfile(user, { displayName });
+  
+  // Write to users collection
+  const userRef = doc(db, "users", user.uid);
+  await setDoc(userRef, {
+    email,
+    displayName,
+    role: "pelanggan",
+    createdAt: new Date(),
+  });
+  
+  return user;
+}
+
+/** Send password reset email. */
+export async function sendPasswordReset(email: string): Promise<void> {
+  await sendPasswordResetEmail(auth, email);
 }
 
 /** Sign the current user out. Resolves once the local session is cleared. */

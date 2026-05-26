@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { motion } from "motion/react";
+import { ROLE_PERMISSIONS } from "@/constants/roles";
 import {
   CheckCircle2,
   Factory,
@@ -33,8 +34,10 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
 export interface SidebarProps {
   userName?: string;
   userEmail?: string;
+  userRole?: string;
   onSignOut?: () => void;
 }
+
 
 const ITEM_BASE =
   "flex items-center gap-3 px-4 py-2.5 rounded-full text-sm font-semibold " +
@@ -45,7 +48,12 @@ const ITEM_BASE =
 const ITEM_ACTIVE = "bg-[#FBBF24] text-[#111827]";
 const ITEM_INACTIVE = "text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]";
 
-export function Sidebar({ userName, userEmail, onSignOut }: SidebarProps) {
+export function Sidebar({ userName, userEmail, userRole, onSignOut }: SidebarProps) {
+  const allowedItems = SIDEBAR_NAV_ITEMS.filter((item) => {
+    if (!userRole) return false;
+    const allowedPaths = ROLE_PERMISSIONS[userRole] || [];
+    return allowedPaths.includes(item.to);
+  });
   return (
     <aside
       aria-label="Primary navigation"
@@ -64,7 +72,7 @@ export function Sidebar({ userName, userEmail, onSignOut }: SidebarProps) {
       {/* Nav items */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="space-y-1">
-          {SIDEBAR_NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+          {allowedItems.map(({ to, label, icon: Icon }) => (
             <li key={to}>
               <NavLink
                 to={to}

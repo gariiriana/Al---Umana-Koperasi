@@ -45,6 +45,7 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     customerName: (data.customerName as string) ?? "",
     items: (data.items as Order["items"]) ?? [],
     deliveryAddress: (data.deliveryAddress as string) ?? "",
+    deliveryTime: (data.deliveryTime as string) ?? "",
     status: ((data.status as string) ?? "PLACING") as OrderStatus,
     rejectionReason: data.rejectionReason as string | undefined,
     outOfStockItems: data.outOfStockItems as string[] | undefined,

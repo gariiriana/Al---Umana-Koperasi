@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { LogOut } from "lucide-react";
 
 export function SettingsPage() {
-  const { user, signOut } = useAuth();
+  const { user, requestSignOut } = useAuth();
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" subtitle="Account & preferences." />
@@ -34,7 +34,7 @@ export function SettingsPage() {
           <Button
             variant="outlined"
             leftIcon={<LogOut className="h-4 w-4" />}
-            onClick={() => signOut()}
+            onClick={requestSignOut}
           >
             Sign out
           </Button>

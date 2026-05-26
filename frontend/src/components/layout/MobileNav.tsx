@@ -9,6 +9,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { ROLE_PERMISSIONS } from "@/constants/roles";
+
 interface MobileNavItem {
   to: string;
   label: string;
@@ -32,14 +34,24 @@ const ITEM_BASE =
 const LABEL_ACTIVE = "text-[#111827]";
 const LABEL_INACTIVE = "text-[#6B7280]";
 
-export function MobileNav() {
+export interface MobileNavProps {
+  userRole?: string;
+}
+
+export function MobileNav({ userRole }: MobileNavProps) {
+  const allowedItems = MOBILE_NAV_ITEMS.filter((item) => {
+    if (!userRole) return false;
+    const allowedPaths = ROLE_PERMISSIONS[userRole] || [];
+    return allowedPaths.includes(item.to);
+  });
+
   return (
     <nav
       aria-label="Mobile navigation"
       className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-[#E5E7EB] pb-[env(safe-area-inset-bottom)]"
     >
       <ul className="flex items-stretch justify-around px-2 py-1">
-        {MOBILE_NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+        {allowedItems.map(({ to, label, icon: Icon }) => (
           <li key={to} className="flex-1">
             <NavLink
               to={to}
