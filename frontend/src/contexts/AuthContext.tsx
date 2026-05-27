@@ -8,14 +8,16 @@ import {
 } from "react";
 import type { User } from "firebase/auth";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { getRedirectResult } from "firebase/auth";
 
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import {
   onAuthStateChanged,
   signIn as authSignIn,
   signUp as authSignUp,
   sendPasswordReset as authSendPasswordReset,
   signOut as authSignOut,
+  signInWithGoogle as authSignInWithGoogle,
 } from "@/services/authService";
 
 /** Shape of the user profile document in Firestore. */
@@ -27,6 +29,7 @@ export interface UserProfile {
   createdAt?: unknown;
   /** Optional delivery address saved during checkout for auto-fill. */
   savedDeliveryAddress?: string;
+  photoURL?: string;
 }
 
 /** Shape of the value exposed by useAuth(). */
@@ -39,6 +42,8 @@ export interface AuthContextValue {
   loading: boolean;
   /** Sign in with email + password. Throws on failure. */
   signIn: (email: string, password: string) => Promise<void>;
+  /** Sign in with Google provider. Throws on failure. */
+  signInWithGoogle: () => Promise<void>;
   /** Register a new customer user. Throws on failure. */
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
   /** Send password reset link to email. Throws on failure. */
@@ -72,6 +77,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
 
   useEffect(() => {
+    // Process redirect result if returning from Google OAuth redirect flow
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          console.log("Redirect login successful for user:", result.user.email);
+        }
+      })
+      .catch((error) => {
+        console.error("Redirect login error:", error);
+      });
+
     let unsubscribeSnapshot: (() => void) | null = null;
 
     const unsubscribeAuth = onAuthStateChanged((nextUser) => {
@@ -147,6 +163,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       loading,
       signIn: async (email, password) => {
         await authSignIn(email, password);
+      },
+      signInWithGoogle: async () => {
+        await authSignInWithGoogle();
       },
       signUp: async (email, password, displayName) => {
         await authSignUp(email, password, displayName);

@@ -251,7 +251,7 @@ export function CartPage() {
           </div>
 
           {/* Sticky Summary & Checkout Footer */}
-          <div className="bg-white border-t border-[#E5E7EB] fixed bottom-14 left-0 right-0 p-4 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] max-w-[480px] mx-auto z-10 space-y-4">
+          <div className="bg-white border-t border-[#E5E7EB] fixed bottom-14 lg:bottom-0 left-0 right-0 p-4 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] max-w-[480px] lg:max-w-7xl mx-auto z-10 space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">Total Pembayaran</p>

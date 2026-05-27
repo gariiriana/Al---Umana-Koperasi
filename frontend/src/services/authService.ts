@@ -13,12 +13,33 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
   type User,
   type Unsubscribe,
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 
 import { auth, db } from "@/lib/firebase";
+
+/** Sign in with Google provider. Uses popup by default (works better with third-party cookie restrictions on mobile), falls back to redirect if blocked. */
+export async function signInWithGoogle(): Promise<User> {
+  const provider = new GoogleAuthProvider();
+  
+  try {
+    const credential = await signInWithPopup(auth, provider);
+    return credential.user;
+  } catch (error: unknown) {
+    const err = error as { code?: string };
+    if (err && (err.code === "auth/popup-blocked" || err.code === "auth/popup-closed-by-user")) {
+      console.warn("Popup blocked or closed by user, attempting redirect flow...");
+      await signInWithRedirect(auth, provider);
+      return new Promise(() => {}); // Page redirects, so this promise never resolves
+    }
+    throw error;
+  }
+}
 
 /** Sign in with email + password. Resolves to the authenticated user. */
 export async function signIn(email: string, password: string): Promise<User> {

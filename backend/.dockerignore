@@ -1,0 +1,21 @@
+# Exclude build artifacts and caches
+tmp/
+bin/
+*.exe
+*.test
+*.prof
+backend/server.exe
+
+# Exclude Git files
+.git/
+.gitignore
+
+# Exclude local environment and secret credentials
+.env*.local
+firebase-service-account.json
+*-key.json
+serviceAccountKey.json
+
+# Exclude documentation
+docs/
+README.md

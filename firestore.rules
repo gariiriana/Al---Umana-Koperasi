@@ -62,13 +62,10 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // -------------------------------------------------------------------
-    // Inventory
-    // -------------------------------------------------------------------
-    // Public read, write restricted to admin.
     match /inventory/{itemId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow update: if request.auth != null;
+      allow create, delete: if isAdmin();
     }
 
     // -------------------------------------------------------------------

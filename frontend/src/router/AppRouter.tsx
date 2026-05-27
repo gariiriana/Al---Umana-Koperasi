@@ -41,6 +41,7 @@ import { OrderListPage } from "@/storefront/pages/OrderListPage";
 import { OrderDetailPage } from "@/storefront/pages/OrderDetailPage";
 import { HelpCenterPage } from "@/storefront/pages/HelpCenterPage";
 import { NotificationsPage } from "@/storefront/pages/NotificationsPage";
+import { ProfilePage } from "@/storefront/pages/ProfilePage";
 import {
   CategoryIndexStub,
   CategoryPageStub,
@@ -305,6 +306,16 @@ function RoutesTree() {
           <Protected>
             <Storefront>
               <NotificationsPage />
+            </Storefront>
+          </Protected>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <Protected>
+            <Storefront>
+              <ProfilePage />
             </Storefront>
           </Protected>
         }

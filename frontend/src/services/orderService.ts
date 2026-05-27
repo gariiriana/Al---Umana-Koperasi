@@ -131,8 +131,10 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
 
   await runTransaction(db, async (tx) => {
     const outOfStockItems: string[] = [];
+    // Cache inventory details during reads phase to avoid reads-after-writes in the second phase
+    const inventoryDataMap = new Map<string, { quantity: number; available?: boolean }>();
 
-    // 1. Fetch and verify stock for all items
+    // 1. Fetch and verify stock for all items (READS PHASE)
     for (const item of payload.items) {
       const itemRef = doc(db, "inventory", item.itemId);
       const itemSnap = await tx.get(itemRef);
@@ -140,7 +142,13 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
         outOfStockItems.push(item.itemId);
         continue;
       }
-      const currentQty = (itemSnap.data().quantity as number) ?? 0;
+      const data = itemSnap.data();
+      const currentQty = (data.quantity as number) ?? 0;
+      inventoryDataMap.set(item.itemId, {
+        quantity: currentQty,
+        available: data.available as boolean | undefined,
+      });
+
       if (currentQty < item.quantity) {
         outOfStockItems.push(item.itemId);
       }
@@ -158,18 +166,17 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
       updatedAt: now,
     };
 
-    // 2. Branch depending on stock availability
+    // 2. Branch depending on stock availability (WRITES PHASE)
     if (outOfStockItems.length > 0) {
       orderData.status = "FAILED";
       orderData.outOfStockItems = outOfStockItems;
       orderData.rejectionReason = "items unavailable: " + outOfStockItems.join(", ");
     } else {
-      // Deduct stock
+      // Deduct stock (WRITES ONLY)
       for (const item of payload.items) {
         const itemRef = doc(db, "inventory", item.itemId);
-        const itemSnap = await tx.get(itemRef);
-        const data = itemSnap.data();
-        const currentQty = (data?.quantity as number) ?? 0;
+        const data = inventoryDataMap.get(item.itemId);
+        const currentQty = data?.quantity ?? 0;
         const newQty = currentQty - item.quantity;
         tx.update(itemRef, {
           quantity: newQty,
@@ -193,22 +200,23 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
   return snapshotToOrder(finalSnap);
 }
 
-/** List orders matching the supplied filter (admin/staff view). */
 export async function listOrders(filter: ListOrdersFilter = {}): Promise<Order[]> {
   const colRef = collection(db, "orders");
-  let q = query(colRef, orderBy("createdAt", "desc"));
   
-  if (filter.status) {
-    q = query(q, where("status", "==", filter.status));
-  }
-  if (filter.courierId) {
-    q = query(q, where("assignedCourierId", "==", filter.courierId));
-  }
-  
-  const snap = await getDocs(q);
+  // Retrieve all orders (uses default auto-created single-field indexes)
+  const snap = await getDocs(colRef);
   let orders = snapshotToOrders(snap);
 
-  // Apply in-memory filtering for dates if specified
+  // 1. Sort by createdAt descending in-memory
+  orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  
+  // 2. Filter in-memory
+  if (filter.status) {
+    orders = orders.filter((o) => o.status === filter.status);
+  }
+  if (filter.courierId) {
+    orders = orders.filter((o) => o.assignedCourierId === filter.courierId);
+  }
   if (filter.startDate) {
     const start = new Date(filter.startDate);
     orders = orders.filter((o) => new Date(o.createdAt) >= start);
@@ -236,33 +244,32 @@ export async function listMyOrders(
   }
 
   const colRef = collection(db, "orders");
-  let q = query(
-    colRef,
-    where("customerId", "==", user.uid),
-    orderBy("createdAt", "desc")
-  );
-
-  const limitCount = Math.min(opts.limit ?? 50, 50);
-  q = query(q, firestoreLimit(limitCount));
-
+  // Only query by customerId (automatic single-field index) to avoid composite index requirement
+  const q = query(colRef, where("customerId", "==", user.uid));
   const snap = await getDocs(q);
-  const orders = snapshotToOrders(snap);
+  const allOrders = snapshotToOrders(snap);
 
-  // Simple in-memory pagination cursor logic
-  let nextCursor: string | null = null;
-  if (orders.length === limitCount && orders.length > 0) {
-    nextCursor = orders[orders.length - 1].createdAt;
-  }
+  // Sort by createdAt descending in-memory
+  allOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  // If a cursor was provided, filter client side (fallback simple pagination)
-  let resultOrders = orders;
+  // Filter by cursor (pagination) in-memory
+  let resultOrders = allOrders;
   if (opts.cursor) {
     const cursorTime = Date.parse(opts.cursor);
-    resultOrders = orders.filter((o) => Date.parse(o.createdAt) < cursorTime);
+    resultOrders = allOrders.filter((o) => Date.parse(o.createdAt) < cursorTime);
+  }
+
+  // Paginate / limit in-memory
+  const limitCount = Math.min(opts.limit ?? 50, 50);
+  const slicedOrders = resultOrders.slice(0, limitCount);
+
+  let nextCursor: string | null = null;
+  if (resultOrders.length > limitCount) {
+    nextCursor = slicedOrders[slicedOrders.length - 1].createdAt;
   }
 
   return {
-    orders: resultOrders,
+    orders: slicedOrders,
     nextCursor,
   };
 }

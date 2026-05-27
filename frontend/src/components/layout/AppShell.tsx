@@ -3,6 +3,7 @@ import { useState, type ChangeEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { MobileNav } from "./MobileNav";
 import { Sidebar } from "./Sidebar";
+import { Footer } from "./Footer";
 
 export interface AppShellProps {
   children: ReactNode;
@@ -153,8 +154,9 @@ export function AppShell({
         </header>
 
         {/* Main scrollable area */}
-        <main className="flex-1 overflow-y-auto bg-[#F3F4F6] pb-20 md:pb-0">
+        <main className="flex-1 overflow-y-auto bg-[#F3F4F6] pb-20 md:pb-0 flex flex-col justify-between">
           <div className="px-4 md:px-6 py-6">{children}</div>
+          <Footer />
         </main>
       </div>
 

@@ -1,0 +1,12 @@
+# Ignore node modules and build outputs
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Ignore Git files
+.git/
+.gitignore
+
+# Ignore local environment overrides
+.env*.local

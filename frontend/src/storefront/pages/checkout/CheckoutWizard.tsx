@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { doc, updateDoc } from "firebase/firestore";
-import { ArrowLeft, ArrowRight, Loader2, MapPin, Wallet, CreditCard, ChevronRight, CheckCircle2, AlertTriangle } from "lucide-react";
+import { doc, setDoc } from "firebase/firestore";
+import { ArrowLeft, ArrowRight, Loader2, MapPin, Wallet, CreditCard, ChevronRight, CheckCircle2, AlertTriangle, Navigation } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 import { db } from "@/lib/firebase";
@@ -28,6 +28,10 @@ export function CheckoutWizard() {
   const [deliveryTime, setDeliveryTime] = useState("Segera (30 - 60 Menit)");
   const [addressError, setAddressError] = useState("");
   const [savingAddress, setSavingAddress] = useState(false);
+
+  // Geolocation state
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [geoError, setGeoError] = useState<string | null>(null);
 
   // Payment Step Fields
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
@@ -74,6 +78,69 @@ export function CheckoutWizard() {
   const subtotal = computeCartTotal(cartItems);
   const grandTotal = subtotal + DELIVERY_FEE + SERVICE_FEE;
 
+  // Auto-detect location via device GPS + Nominatim reverse geocoding
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) {
+      setGeoError("Browser Anda tidak mendukung GPS.");
+      return;
+    }
+    setGeoLoading(true);
+    setGeoError(null);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=id`,
+            { headers: { "Accept-Language": "id" } }
+          );
+          if (!res.ok) throw new Error("Nominatim error");
+          const data = await res.json() as {
+            address?: {
+              road?: string;
+              village?: string;
+              suburb?: string;
+              city_district?: string;
+              city?: string;
+              county?: string;
+              state?: string;
+              postcode?: string;
+              neighbourhood?: string;
+            };
+            display_name?: string;
+          };
+          const a = data.address || {};
+          // Build a clean Indonesian-style address string
+          const parts = [
+            a.road,
+            a.neighbourhood || a.village || a.suburb,
+            a.city_district,
+            a.city || a.county,
+            a.state,
+            a.postcode,
+          ].filter(Boolean);
+          const autoAddress = parts.length >= 2
+            ? parts.join(", ")
+            : (data.display_name ?? "").split(",").slice(0, 5).join(",").trim();
+          setAddress(autoAddress);
+        } catch {
+          setGeoError("Gagal mendapatkan alamat dari GPS. Isi manual ya.");
+        } finally {
+          setGeoLoading(false);
+        }
+      },
+      (err) => {
+        setGeoLoading(false);
+        if (err.code === 1) {
+          setGeoError("Akses lokasi ditolak. Izinkan di pengaturan browser.");
+        } else {
+          setGeoError("Gagal mendapatkan lokasi. Pastikan GPS aktif.");
+        }
+      },
+      { timeout: 10000, maximumAge: 60000 }
+    );
+  };
+
   // Step 1 validation & save address
   const handleProceedToPayment = async () => {
     setAddressError("");
@@ -94,10 +161,11 @@ export function CheckoutWizard() {
 
     try {
       // Save updated address to Firestore user profile for future orders (Requirement 4.4)
-      await updateDoc(doc(db, "users", user.uid), {
+      // Use setDoc with merge:true to handle both new and existing user documents safely
+      await setDoc(doc(db, "users", user.uid), {
         savedDeliveryAddress: trimmedAddress,
         displayName: trimmedName,
-      });
+      }, { merge: true });
     } catch (err) {
       console.warn("Gagal menyimpan alamat ke profil pengguna. Melanjutkan checkout...", err);
       // Retain entered address and allow proceed anyway per Requirement 4.5
@@ -260,9 +328,26 @@ export function CheckoutWizard() {
 
                     {/* Delivery Address */}
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-[#4B5563] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                        Alamat Lengkap
-                      </label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-[#4B5563] font-['Hanken_Grotesk',system-ui,sans-serif]">
+                          Alamat Lengkap
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleDetectLocation}
+                          disabled={geoLoading}
+                          className="flex items-center gap-1.5 text-[10px] font-bold text-[#B45309] bg-amber-50 border border-amber-200 rounded-full px-3 py-1 hover:bg-amber-100 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {geoLoading ? (
+                            <><Loader2 className="h-3 w-3 animate-spin" /> Mendeteksi…</>
+                          ) : (
+                            <><Navigation className="h-3 w-3" /> Deteksi Lokasi</>  
+                          )}
+                        </button>
+                      </div>
+                      {geoError && (
+                        <p className="text-[11px] text-red-600 font-['Hanken_Grotesk',system-ui,sans-serif]">{geoError}</p>
+                      )}
                       <textarea
                         rows={4}
                         placeholder="Masukkan alamat pengantaran lengkap Anda (contoh: nomor rumah, jalan, RT/RW, kelurahan, detail patokan)"

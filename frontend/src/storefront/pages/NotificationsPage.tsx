@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   collection,
   query,
@@ -188,33 +189,10 @@ const STATIC_INFO_NOTIFICATIONS: NotificationItem[] = [
 
 export function NotificationsPage() {
   const { user, requestSignOut } = useAuth();
-  const [lang, setLang] = useState<"id" | "en">("id");
+  const { lang } = useLanguage();
   const [activeTab, setActiveTab] = useState<"order" | "promo" | "info">("order");
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-
-  // Sync language
-  useEffect(() => {
-    const checkLang = () => {
-      const saved = localStorage.getItem("al-umana-lang");
-      setLang(saved === "en" ? "en" : "id");
-    };
-    checkLang();
-    window.addEventListener("storage", checkLang);
-    return () => window.removeEventListener("storage", checkLang);
-  }, []);
-
-  // Poll for language changes
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const saved = localStorage.getItem("al-umana-lang");
-      const current = saved === "en" ? "en" : "id";
-      if (current !== lang) {
-        setLang(current);
-      }
-    }, 500);
-    return () => clearInterval(interval);
-  }, [lang]);
 
   // Firestore real-time subscription for current user's orders
   useEffect(() => {

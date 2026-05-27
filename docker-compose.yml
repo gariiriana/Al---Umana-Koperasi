@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app
+      - /app/tmp
+    env_file:
+      - ./backend/.env.local
+    environment:
+      - ENV=development
+      # Tell Go to use our service account credential path inside the container if needed
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/firebase-service-account.json
+    stdin_open: true
+    tty: true
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    env_file:
+      - ./frontend/.env.local
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8080
+    depends_on:
+      - backend

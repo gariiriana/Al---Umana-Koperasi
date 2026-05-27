@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Search,
   HelpCircle,
@@ -9,6 +9,7 @@ import {
   ChevronUp,
   ShoppingBag,
 } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface FAQItem {
   id: string;
@@ -131,35 +132,10 @@ const CATEGORIES = [
 ];
 
 export function HelpCenterPage() {
-  const [lang, setLang] = useState<"id" | "en">("id");
+  const { lang } = useLanguage();
   const [activeTab, setActiveTab] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [expandedFaqId, setExpandedFaqId] = useState<string | null>(null);
-
-  // Sync language with localStorage
-  useEffect(() => {
-    const checkLang = () => {
-      const saved = localStorage.getItem("al-umana-lang");
-      setLang(saved === "en" ? "en" : "id");
-    };
-
-    checkLang();
-    // Listen to storage events to stay sync'd if user toggles language
-    window.addEventListener("storage", checkLang);
-    return () => window.removeEventListener("storage", checkLang);
-  }, []);
-
-  // Poll for language changes periodically (as custom storage changes don't always fire storage events in same window)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const saved = localStorage.getItem("al-umana-lang");
-      const current = saved === "en" ? "en" : "id";
-      if (current !== lang) {
-        setLang(current);
-      }
-    }, 500);
-    return () => clearInterval(interval);
-  }, [lang]);
 
   const handleToggleFaq = (id: string) => {
     setExpandedFaqId(expandedFaqId === id ? null : id);

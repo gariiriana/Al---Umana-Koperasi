@@ -65,3 +65,56 @@ h5,
 h6 {
   font-family: var(--font-heading);
 }
+
+/* ── Fly-to-Cart animation ───────────────────────────────────────────── */
+@keyframes flyToCart {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--fly-dx), var(--fly-dy)) scale(0.3);
+    opacity: 0;
+  }
+}
+
+/* ── Badge pop animation ─────────────────────────────────────────────── */
+@keyframes badgePop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.45); }
+  70%  { transform: scale(0.85); }
+  100% { transform: scale(1); }
+}
+
+/* ── Fly-to-Cart dot element (static styles; left/top/--fly-* set inline) */
+.fly-dot {
+  position: fixed;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fbbf24;
+  border: 2px solid #b45309;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.5);
+  z-index: 9999;
+  pointer-events: none;
+  animation: flyToCart 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* ── Stock progress bar fill (width driven by --stock-pct CSS variable) */
+.stock-bar-fill {
+  width: var(--stock-pct, 100%);
+}
+
+/* ── Hide scrollbar utility ── */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+@supports (scrollbar-width: none) {
+  .scrollbar-none {
+    scrollbar-width: none;  /* Firefox */
+  }
+}
+

@@ -196,3 +196,42 @@ To run frontend property-based tests:
 cd frontend
 npm run test
 ```
+
+---
+
+## Running with Docker
+
+This project includes a Docker setup supporting both development and production environments.
+
+### Docker Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/)
+- [Docker Compose](https://docs.docker.com/compose/install/)
+
+### 1. Development (with Hot-Reloading)
+
+To run the entire stack (Go backend + React frontend) in development mode with automatic hot-reloading:
+
+```bash
+# Build and run the services in the background
+docker compose up --build -d
+
+# View live container logs
+docker compose logs -f
+```
+
+- **Frontend** will be served at `http://localhost:5173`.
+- **Backend** will be accessible at `http://localhost:8080`.
+- Editing backend `.go` or frontend `.tsx` files locally will automatically trigger rebuilds inside the containers.
+
+### 2. Production (Optimized)
+
+To build and run optimized production containers (statically-compiled Go backend, Vite production build served via Nginx):
+
+```bash
+# Build and run in production mode
+docker compose -f docker-compose.prod.yml up --build -d
+```
+
+- **Frontend** will be served on port `http://localhost:80`.
+- **Backend** will be served on port `http://localhost:8080`.

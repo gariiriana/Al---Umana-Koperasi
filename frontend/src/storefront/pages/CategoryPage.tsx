@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 import { listAvailableProducts } from "@/services/catalogService";
 import type { InventoryItem } from "@/types/inventory";
@@ -28,6 +29,7 @@ type LoadState =
   | { status: "error"; message: string };
 
 export function CategoryPage() {
+  const { lang } = useLanguage();
   const { name } = useParams<{ name: string }>();
   // Decode the URL-encoded segment so the API receives the literal
   // category string (e.g. "Makanan Siap Saji").
@@ -39,7 +41,7 @@ export function CategoryPage() {
     if (!categoryName) {
       setState({
         status: "error",
-        message: "Kategori tidak ditemukan.",
+        message: "notFound",
       });
       return;
     }
@@ -52,7 +54,7 @@ export function CategoryPage() {
       settled = true;
       setState({
         status: "error",
-        message: "Kategori sementara tidak dapat dimuat. Silakan coba lagi.",
+        message: "unavailable",
       });
     }, CATALOG_TIMEOUT_MS);
 
@@ -69,7 +71,7 @@ export function CategoryPage() {
         window.clearTimeout(timeoutId);
         setState({
           status: "error",
-          message: "Kategori sementara tidak dapat dimuat. Silakan coba lagi.",
+          message: "unavailable",
         });
       });
   }, [categoryName]);
@@ -78,14 +80,20 @@ export function CategoryPage() {
     load();
   }, [load]);
 
+  const resolvedErrorMsg = state.status === "error"
+    ? (state.message === "notFound"
+        ? (lang === "id" ? "Kategori tidak ditemukan." : "Category not found.")
+        : (lang === "id" ? "Kategori sementara tidak dapat dimuat. Silakan coba lagi." : "Category temporarily unavailable. Please try again."))
+    : "";
+
   return (
     <div className="px-4 py-5 space-y-4">
       <header className="space-y-1">
         <p className="text-xs uppercase tracking-wide text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-          Kategori
+          {lang === "id" ? "Kategori" : "Category"}
         </p>
         <h1 className="font-['Manrope',system-ui,sans-serif] text-xl font-bold text-[#111827]">
-          {categoryName || "Kategori"}
+          {categoryName || (lang === "id" ? "Kategori" : "Category")}
         </h1>
       </header>
 
@@ -95,12 +103,12 @@ export function CategoryPage() {
           className="flex items-center justify-center py-16 text-[#6B7280]"
         >
           <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
-          <span className="ml-2 text-sm">Memuat produk…</span>
+          <span className="ml-2 text-sm">{lang === "id" ? "Memuat produk…" : "Loading products..."}</span>
         </div>
       ) : null}
 
       {state.status === "error" ? (
-        <ErrorState message={state.message} onRetry={load} />
+        <ErrorState message={resolvedErrorMsg} onRetry={load} />
       ) : null}
 
       {state.status === "ready" && state.items.length === 0 ? (
@@ -127,6 +135,7 @@ function ErrorState({
   message: string;
   onRetry: () => void;
 }) {
+  const { lang } = useLanguage();
   return (
     <div
       role="alert"
@@ -142,17 +151,18 @@ function ErrorState({
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FBBF24] focus-visible:ring-offset-2"
         }
       >
-        Coba Lagi
+        {lang === "id" ? "Coba Lagi" : "Try Again"}
       </button>
     </div>
   );
 }
 
 function EmptyState() {
+  const { lang } = useLanguage();
   return (
     <div className="py-16 text-center space-y-4">
       <p className="text-sm text-[#6B7280]">
-        Belum ada produk di kategori ini.
+        {lang === "id" ? "Belum ada produk di kategori ini." : "No products in this category yet."}
       </p>
       <Link
         to="/"
@@ -162,7 +172,7 @@ function EmptyState() {
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FBBF24] focus-visible:ring-offset-2"
         }
       >
-        Kembali ke Beranda
+        {lang === "id" ? "Kembali ke Beranda" : "Back to Home"}
       </Link>
     </div>
   );
