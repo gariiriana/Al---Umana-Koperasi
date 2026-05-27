@@ -39,6 +39,8 @@ import { OrderConfirmationPage } from "@/storefront/pages/checkout/OrderConfirma
 import { PaymentProofUploadPage } from "@/storefront/pages/checkout/PaymentProofUploadPage";
 import { OrderListPage } from "@/storefront/pages/OrderListPage";
 import { OrderDetailPage } from "@/storefront/pages/OrderDetailPage";
+import { HelpCenterPage } from "@/storefront/pages/HelpCenterPage";
+import { NotificationsPage } from "@/storefront/pages/NotificationsPage";
 import {
   CategoryIndexStub,
   CategoryPageStub,
@@ -287,6 +289,24 @@ function RoutesTree() {
           <Storefront>
             <OrderDetailPage />
           </Storefront>
+        }
+      />
+      <Route
+        path="/help"
+        element={
+          <Storefront>
+            <HelpCenterPage />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <Protected>
+            <Storefront>
+              <NotificationsPage />
+            </Storefront>
+          </Protected>
         }
       />
 

@@ -239,7 +239,12 @@ describe("Authentication UI Features", () => {
       // Verify the page has loaded (loading overlay is gone)
       expect(screen.queryByText("Loading…")).toBeNull();
 
-      // Find the Sign out button in Sidebar
+      // Open profile dropdown
+      const profileBtn = document.getElementById("profile-menu-button");
+      expect(profileBtn).not.toBeNull();
+      fireEvent.click(profileBtn!);
+
+      // Find the Sign out button in profile dropdown
       const signOutBtn = screen.getByRole("button", { name: /Sign out/i });
       expect(signOutBtn).toBeDefined();
 
@@ -264,8 +269,10 @@ describe("Authentication UI Features", () => {
       const authService = await import("../services/authService");
       expect(authService.signOut).not.toHaveBeenCalled();
 
-      // Open modal again
-      fireEvent.click(signOutBtn);
+      // Open dropdown and click Sign out again to open modal again
+      fireEvent.click(profileBtn!);
+      const signOutBtn2 = screen.getByRole("button", { name: /Sign out/i });
+      fireEvent.click(signOutBtn2);
       expect(screen.getByText("Konfirmasi Keluar")).toBeDefined();
 
       // Find Confirm ("Keluar") button
@@ -283,7 +290,7 @@ describe("Authentication UI Features", () => {
       render(<AppRouter />);
 
       // Find Sign out button in SettingsPage
-      const settingsSignOutBtn = screen.getAllByRole("button", { name: /Sign out/i })[1];
+      const settingsSignOutBtn = screen.getByRole("button", { name: /Sign out/i });
       
       // Click sign out in settings page
       fireEvent.click(settingsSignOutBtn);
@@ -325,12 +332,17 @@ describe("Authentication UI Features", () => {
       render(<AppRouter />);
 
       await waitFor(() => {
-        // Monitoring allowed routes: Dashboard, Orders, Tracking, Settings
+        // Monitoring allowed routes: Dashboard, Orders, Tracking
         expect(document.querySelector('a[href="/admin/dashboard"]')).not.toBeNull();
         expect(document.querySelector('a[href="/admin/orders"]')).not.toBeNull();
         expect(document.querySelector('a[href="/admin/tracking"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/admin/settings"]')).not.toBeNull();
       });
+
+      // Open profile dropdown to check Settings link
+      const profileBtn = document.getElementById("profile-menu-button");
+      expect(profileBtn).not.toBeNull();
+      fireEvent.click(profileBtn!);
+      expect(document.querySelector('a[href="/admin/settings"]')).not.toBeNull();
 
       // Monitoring disallowed routes should not be rendered
       expect(document.querySelector('a[href="/admin/production"]')).toBeNull();
@@ -363,6 +375,11 @@ describe("Authentication UI Features", () => {
 
       // Verify only allowed navigation links are visible
       expect(document.querySelector('a[href="/admin/production"]')).not.toBeNull();
+
+      // Open profile dropdown to check Settings link
+      const profileBtn = document.getElementById("profile-menu-button");
+      expect(profileBtn).not.toBeNull();
+      fireEvent.click(profileBtn!);
       expect(document.querySelector('a[href="/admin/settings"]')).not.toBeNull();
 
       // Verify other navigation links are hidden
@@ -397,8 +414,13 @@ describe("Authentication UI Features", () => {
         expect(document.querySelector('a[href="/admin/dispatch"]')).not.toBeNull();
         expect(document.querySelector('a[href="/admin/delivery"]')).not.toBeNull();
         expect(document.querySelector('a[href="/admin/tracking"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/admin/settings"]')).not.toBeNull();
       });
+
+      // Open profile dropdown to check Settings link
+      const profileBtn = document.getElementById("profile-menu-button");
+      expect(profileBtn).not.toBeNull();
+      fireEvent.click(profileBtn!);
+      expect(document.querySelector('a[href="/admin/settings"]')).not.toBeNull();
     });
   });
 

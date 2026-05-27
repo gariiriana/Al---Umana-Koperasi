@@ -63,6 +63,14 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     proofFileIds: data.proofFileIds as string[] | undefined,
     createdAt: toIsoString(data.createdAt),
     updatedAt: toIsoString(data.updatedAt),
+    paymentMethod: ((data.paymentMethod as string) ?? "cod") as Order["paymentMethod"],
+    paymentStatus: data.paymentStatus as string | undefined,
+    paymentProofFileId: data.paymentProofFileId as string | undefined,
+    paymentApprovedBy: data.paymentApprovedBy as string | undefined,
+    paymentApprovedAt: data.paymentApprovedAt ? toIsoString(data.paymentApprovedAt) : undefined,
+    paymentRejectedBy: data.paymentRejectedBy as string | undefined,
+    paymentRejectedAt: data.paymentRejectedAt ? toIsoString(data.paymentRejectedAt) : undefined,
+    paymentRejectionReason: data.paymentRejectionReason as string | undefined,
   };
 }
 

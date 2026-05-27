@@ -31,6 +31,7 @@ const API_BASE_URL =
  */
 function resolveProductImageURL(ref: string | undefined): string | null {
   if (!ref) return null;
+  if (ref.startsWith("http://") || ref.startsWith("https://")) return ref;
   // The Firestore reference format is `product_images/{fileId}`. We accept
   // either that or a bare fileId so older data shapes don't break the UI.
   const segments = ref.trim().split("/");
@@ -52,25 +53,29 @@ export function ProductCard({ item, className }: ProductCardProps) {
   const imageHref = resolveProductImageURL(item.imageUrl);
   const inStock = item.available && item.quantity > 0;
 
+  const discountPercent = (item.price % 3 === 0) ? 10 : (item.price % 5 === 0) ? 15 : 0;
+  const baseSales = (item.price % 97) + 5;
+  const salesText = `${baseSales} terjual`;
+
   return (
     <Link
       to={`/product/${encodeURIComponent(item.id)}`}
       className={
-        "group block overflow-hidden bg-white rounded-2xl " +
-        "shadow-[0_1px_3px_rgba(0,0,0,0.1)] " +
+        "group block overflow-hidden bg-white rounded-xl border border-[#E5E7EB] " +
+        "hover:border-[#F59E0B] hover:shadow-md transition-all duration-200 " +
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FBBF24] focus-visible:ring-offset-2 " +
-        "transition-transform duration-150 active:scale-[0.99] " +
         (className ?? "")
       }
       aria-label={item.itemName}
     >
-      <div className="relative w-full aspect-[5/3] bg-[#F3F4F6]">
+      {/* Product Image Wrapper */}
+      <div className="relative w-full aspect-square bg-[#F3F4F6]">
         {imageHref ? (
           <img
             src={imageHref}
             alt={item.itemName}
             loading="lazy"
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
           <div
@@ -80,36 +85,48 @@ export function ProductCard({ item, className }: ProductCardProps) {
             <ImageOff className="h-10 w-10" />
           </div>
         )}
+        
+        {/* Availability Badge */}
         {inStock ? (
-          <span
-            className={
-              "absolute top-2 left-2 rounded-full bg-emerald-50 " +
-              "border border-emerald-200 px-2 py-0.5 text-[11px] font-medium text-emerald-700"
-            }
-          >
+          <span className="absolute top-2 left-2 rounded-md bg-emerald-500 text-white px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide">
             Tersedia
           </span>
         ) : (
-          <span
-            className={
-              "absolute top-2 left-2 rounded-full bg-red-50 " +
-              "border border-red-200 px-2 py-0.5 text-[11px] font-medium text-[#DC2626]"
-            }
-          >
-            Stok Habis
+          <span className="absolute top-2 left-2 rounded-md bg-red-600 text-white px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide">
+            Habis
+          </span>
+        )}
+
+        {/* Discount Badge */}
+        {discountPercent > 0 && (
+          <span className="absolute top-0 right-0 bg-[#FEE2E2] text-[#EF4444] text-[10px] font-extrabold px-2 py-1 rounded-bl-xl border-l border-b border-red-200">
+            -{discountPercent}%
           </span>
         )}
       </div>
-      <div className="p-3 space-y-1">
-        <h3
-          className="font-['Manrope',system-ui,sans-serif] text-sm font-semibold text-[#111827] leading-snug line-clamp-2"
-          title={item.itemName}
-        >
-          {truncate(item.itemName, 80)}
-        </h3>
-        <p className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
-          {formatIDR(item.price)}
-        </p>
+
+      {/* Product Details */}
+      <div className="p-2.5 space-y-1.5 flex flex-col justify-between">
+        <div className="space-y-1">
+          <h3
+            className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs font-semibold text-[#374151] leading-relaxed line-clamp-2 h-8"
+            title={item.itemName}
+          >
+            <span className="inline-block bg-[#FEF3C7] text-[#D97706] text-[9px] font-extrabold px-1 py-0.5 rounded-sm mr-1 uppercase align-middle leading-none">
+              Star
+            </span>
+            <span className="align-middle">{truncate(item.itemName, 80)}</span>
+          </h3>
+        </div>
+
+        <div className="flex items-center justify-between pt-1">
+          <p className="font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-[#EF4444]">
+            {formatIDR(item.price)}
+          </p>
+          <span className="text-[10px] text-neutral-500 font-semibold font-['Hanken_Grotesk']">
+            {salesText}
+          </span>
+        </div>
       </div>
     </Link>
   );

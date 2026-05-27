@@ -1,36 +1,42 @@
 /**
- * Order REST client. Each method maps to one endpoint on the Go backend,
- * plus two Firestore real-time subscriptions (`subscribeToOrder` and
+ * Order client using Firestore direct access.
+ *
+ * Implements order management operations and lifecycle transitions directly via
+ * the Firebase Client SDK, bypassing the Go order package endpoints.
+ *
+ * Contains two Firestore real-time subscriptions (`subscribeToOrder` and
  * `subscribeToPaymentApprovalQueue`) used by the storefront and admin
  * approval queue.
  *
- * Components / hooks should call these helpers rather than crafting fetch
- * requests directly so the auth token, retries, and error envelope are
- * handled uniformly.
- *
- * Requirements covered: 6.1, 7.9, 8.2, 8.5, 8.8, 8.10, 9.2.
+ * Requirements covered: 5.2, 6.1, 7.1, 7.7, 7.9, 7.12, 8.2, 8.5, 8.8, 8.9,
+ * 8.10, 9.2.
  */
 
 import {
   collection,
   doc,
-  limit as firestoreLimit,
-  onSnapshot,
-  orderBy,
+  getDoc,
+  getDocs,
   query,
   where,
+  orderBy,
+  limit as firestoreLimit,
+  onSnapshot,
+  runTransaction,
+  deleteDoc,
   Timestamp,
   type DocumentData,
   type DocumentSnapshot,
   type QuerySnapshot,
   type Unsubscribe,
+  type DocumentReference,
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
-import { api } from "@/services/apiClient";
+import { currentUser } from "@/services/authService";
 import type { Order, OrderLineItem, OrderStatus } from "@/types/order";
 
-/** Payment method identifiers accepted by `POST /api/orders` (Requirement 5.2). */
+/** Payment method identifiers accepted by the order creation. */
 export type PaymentMethod = "cod" | "bank_transfer" | "e_wallet";
 
 export interface CreateOrderPayload {
@@ -38,11 +44,6 @@ export interface CreateOrderPayload {
   deliveryAddress: string;
   deliveryTime: string;
   items: OrderLineItem[];
-  /**
-   * Selected payment method. Required because the backend uses it to
-   * branch the post-stock-check transition (COD → CONFIRMED, non-COD →
-   * AWAITING_PAYMENT_PROOF) per Requirements 6.1 and 7.1.
-   */
   paymentMethod: PaymentMethod;
 }
 
@@ -54,173 +55,16 @@ export interface ListOrdersFilter {
   limit?: number;
 }
 
-interface ListOrdersResponse {
-  orders: Order[];
-}
-
 export interface ListMyOrdersOptions {
-  /** Opaque cursor returned from a previous `listMyOrders` call. */
   cursor?: string;
-  /** Server-side cap is 50 (Requirement 9.2); larger values are clamped server-side. */
   limit?: number;
 }
 
 export interface ListMyOrdersResult {
   orders: Order[];
-  /** Cursor for the next page; `null` or absent when there are no more pages. */
   nextCursor?: string | null;
 }
 
-interface ListMyOrdersResponse {
-  orders: Order[];
-  nextCursor?: string | null;
-  /** Older `next` envelope is tolerated for forward compat. */
-  next?: string | null;
-}
-
-/**
- * Create a new order. The customer ID is taken from the auth token.
- * `paymentMethod` is required (Requirement 5.2).
- */
-export function createOrder(payload: CreateOrderPayload): Promise<Order> {
-  return api.post<Order>("/api/orders", payload);
-}
-
-/** List orders matching the supplied filter (admin/staff view). */
-export async function listOrders(filter: ListOrdersFilter = {}): Promise<Order[]> {
-  const params = new URLSearchParams();
-  if (filter.status) params.set("status", filter.status);
-  if (filter.courierId) params.set("courierId", filter.courierId);
-  if (filter.startDate) params.set("startDate", filter.startDate);
-  if (filter.endDate) params.set("endDate", filter.endDate);
-  if (filter.limit) params.set("limit", String(filter.limit));
-  const qs = params.toString();
-  const path = qs ? `/api/orders?${qs}` : "/api/orders";
-  const res = await api.get<ListOrdersResponse>(path);
-  return res.orders ?? [];
-}
-
-/**
- * List the signed-in customer's own orders, paginated (Requirement 9.2).
- * Returns at most `min(limit, 50)` orders, sorted by `createdAt` desc;
- * `nextCursor` is `null` when no more pages are available.
- */
-export async function listMyOrders(
-  opts: ListMyOrdersOptions = {}
-): Promise<ListMyOrdersResult> {
-  const params = new URLSearchParams();
-  if (opts.cursor) params.set("cursor", opts.cursor);
-  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
-  const qs = params.toString();
-  const path = qs ? `/api/orders/mine?${qs}` : "/api/orders/mine";
-  const res = await api.get<ListMyOrdersResponse>(path);
-  // Tolerate either `nextCursor` (preferred) or `next` (legacy envelope).
-  const cursor =
-    res.nextCursor !== undefined ? res.nextCursor : res.next ?? null;
-  return {
-    orders: res.orders ?? [],
-    nextCursor: cursor,
-  };
-}
-
-/** Fetch a single order by ID. */
-export function getOrder(id: string): Promise<Order> {
-  return api.get<Order>(`/api/orders/${encodeURIComponent(id)}`);
-}
-
-export type TransitionAction =
-  | "start-production"
-  | "complete-production"
-  | "qc-pass"
-  | "qc-fail"
-  | "reschedule";
-
-export interface TransitionPayload {
-  action: TransitionAction;
-  reason?: string;
-}
-
-/** Apply a state machine transition to an order. */
-export function transitionOrder(
-  id: string,
-  payload: TransitionPayload
-): Promise<Order> {
-  return api.patch<Order>(`/api/orders/${encodeURIComponent(id)}/status`, payload);
-}
-
-/** Assign a courier to a READY_TO_DELIVER order. */
-export function assignCourier(id: string, courierId: string): Promise<Order> {
-  return api.post<Order>(`/api/orders/${encodeURIComponent(id)}/assign-courier`, {
-    courierId,
-  });
-}
-
-/** Confirm dispatch for an assigned order. */
-export function dispatchOrder(id: string): Promise<Order> {
-  return api.post<Order>(`/api/orders/${encodeURIComponent(id)}/dispatch`);
-}
-
-/** Mark an OUT_FOR_DELIVERY order as DELIVERED. */
-export function confirmDelivery(
-  id: string,
-  proofFileIds: string[]
-): Promise<Order> {
-  return api.post<Order>(`/api/orders/${encodeURIComponent(id)}/deliver`, {
-    proofFileIds,
-  });
-}
-
-/* ------------------------------------------------------------------ */
-/*  Payment lifecycle                                                  */
-/* ------------------------------------------------------------------ */
-
-/**
- * Attach an already-uploaded payment proof file to an order. Triggers the
- * `AWAITING_PAYMENT_PROOF | PAYMENT_REJECTED → AWAITING_PAYMENT_APPROVAL`
- * transition (Requirement 7.9). Used both directly (e.g. the storefront
- * payment-proof page) and indirectly via `paymentProofService`.
- */
-export function attachPaymentProof(
-  orderId: string,
-  fileId: string
-): Promise<Order> {
-  return api.post<Order>(
-    `/api/orders/${encodeURIComponent(orderId)}/payment-proof`,
-    { fileId }
-  );
-}
-
-/** Admin: approve a payment proof, transitioning to CONFIRMED (Requirement 8.5). */
-export function approvePayment(orderId: string): Promise<Order> {
-  return api.post<Order>(
-    `/api/orders/${encodeURIComponent(orderId)}/payment/approve`
-  );
-}
-
-/**
- * Admin: reject a payment proof with a Bahasa reason, transitioning to
- * `PAYMENT_REJECTED` (Requirement 8.8). Reason is sent verbatim; the
- * backend trims and validates length 1–500.
- */
-export function rejectPayment(
-  orderId: string,
-  reason: string
-): Promise<Order> {
-  return api.post<Order>(
-    `/api/orders/${encodeURIComponent(orderId)}/payment/reject`,
-    { reason }
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Real-time subscriptions                                            */
-/* ------------------------------------------------------------------ */
-
-/**
- * Maximum number of orders surfaced by `subscribeToPaymentApprovalQueue`
- * (Requirement 8.2). Keeps the admin view bounded and predictable even
- * if the queue grows.
- */
 const PAYMENT_APPROVAL_QUEUE_LIMIT = 50;
 
 function toIsoString(value: unknown): string {
@@ -257,6 +101,14 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     proofFileIds: data.proofFileIds as string[] | undefined,
     createdAt: toIsoString(data.createdAt),
     updatedAt: toIsoString(data.updatedAt),
+    paymentMethod: ((data.paymentMethod as string) ?? "cod") as Order["paymentMethod"],
+    paymentStatus: data.paymentStatus as string | undefined,
+    paymentProofFileId: data.paymentProofFileId as string | undefined,
+    paymentApprovedBy: data.paymentApprovedBy as string | undefined,
+    paymentApprovedAt: toIsoStringOrUndefined(data.paymentApprovedAt),
+    paymentRejectedBy: data.paymentRejectedBy as string | undefined,
+    paymentRejectedAt: toIsoStringOrUndefined(data.paymentRejectedAt),
+    paymentRejectionReason: data.paymentRejectionReason as string | undefined,
   };
 }
 
@@ -265,14 +117,400 @@ function snapshotToOrders(snap: QuerySnapshot<DocumentData>): Order[] {
 }
 
 /**
- * Subscribe to a single order document for real-time status updates
- * (Requirement 8.10 / 9.6). The callback receives every snapshot,
- * including the initial one. The returned `Unsubscribe` must be called
- * by the caller (typically a React `useEffect` cleanup).
- *
- * If the document is deleted or never existed, the callback is not
- * invoked; `onError` is used for permission / network failures.
+ * Create a new order. The customer ID is taken from the auth token.
+ * Validates stock and reduces it in a transaction.
  */
+export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
+  const user = currentUser();
+  if (!user) {
+    throw new Error("Unauthorized to create order");
+  }
+
+  const colRef = collection(db, "orders");
+  const orderDocRef = doc(colRef);
+
+  await runTransaction(db, async (tx) => {
+    const outOfStockItems: string[] = [];
+
+    // 1. Fetch and verify stock for all items
+    for (const item of payload.items) {
+      const itemRef = doc(db, "inventory", item.itemId);
+      const itemSnap = await tx.get(itemRef);
+      if (!itemSnap.exists()) {
+        outOfStockItems.push(item.itemId);
+        continue;
+      }
+      const currentQty = (itemSnap.data().quantity as number) ?? 0;
+      if (currentQty < item.quantity) {
+        outOfStockItems.push(item.itemId);
+      }
+    }
+
+    const now = new Date();
+    const orderData: Record<string, unknown> = {
+      customerId: user.uid,
+      customerName: payload.customerName,
+      items: payload.items,
+      deliveryAddress: payload.deliveryAddress,
+      deliveryTime: payload.deliveryTime,
+      paymentMethod: payload.paymentMethod,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // 2. Branch depending on stock availability
+    if (outOfStockItems.length > 0) {
+      orderData.status = "FAILED";
+      orderData.outOfStockItems = outOfStockItems;
+      orderData.rejectionReason = "items unavailable: " + outOfStockItems.join(", ");
+    } else {
+      // Deduct stock
+      for (const item of payload.items) {
+        const itemRef = doc(db, "inventory", item.itemId);
+        const itemSnap = await tx.get(itemRef);
+        const data = itemSnap.data();
+        const currentQty = (data?.quantity as number) ?? 0;
+        const newQty = currentQty - item.quantity;
+        tx.update(itemRef, {
+          quantity: newQty,
+          available: newQty > 0 ? (data?.available ?? true) : false,
+          updatedAt: now.toISOString(),
+        });
+      }
+
+      if (payload.paymentMethod === "cod") {
+        orderData.status = "CONFIRMED";
+      } else {
+        orderData.status = "AWAITING_PAYMENT_PROOF";
+        orderData.paymentStatus = "awaiting_proof";
+      }
+    }
+
+    tx.set(orderDocRef, orderData);
+  });
+
+  const finalSnap = await getDoc(orderDocRef);
+  return snapshotToOrder(finalSnap);
+}
+
+/** List orders matching the supplied filter (admin/staff view). */
+export async function listOrders(filter: ListOrdersFilter = {}): Promise<Order[]> {
+  const colRef = collection(db, "orders");
+  let q = query(colRef, orderBy("createdAt", "desc"));
+  
+  if (filter.status) {
+    q = query(q, where("status", "==", filter.status));
+  }
+  if (filter.courierId) {
+    q = query(q, where("assignedCourierId", "==", filter.courierId));
+  }
+  
+  const snap = await getDocs(q);
+  let orders = snapshotToOrders(snap);
+
+  // Apply in-memory filtering for dates if specified
+  if (filter.startDate) {
+    const start = new Date(filter.startDate);
+    orders = orders.filter((o) => new Date(o.createdAt) >= start);
+  }
+  if (filter.endDate) {
+    const end = new Date(filter.endDate);
+    orders = orders.filter((o) => new Date(o.createdAt) <= end);
+  }
+  if (filter.limit) {
+    orders = orders.slice(0, filter.limit);
+  }
+
+  return orders;
+}
+
+/**
+ * List the signed-in customer's own orders, paginated.
+ */
+export async function listMyOrders(
+  opts: ListMyOrdersOptions = {}
+): Promise<ListMyOrdersResult> {
+  const user = currentUser();
+  if (!user) {
+    throw new Error("Unauthorized to list orders");
+  }
+
+  const colRef = collection(db, "orders");
+  let q = query(
+    colRef,
+    where("customerId", "==", user.uid),
+    orderBy("createdAt", "desc")
+  );
+
+  const limitCount = Math.min(opts.limit ?? 50, 50);
+  q = query(q, firestoreLimit(limitCount));
+
+  const snap = await getDocs(q);
+  const orders = snapshotToOrders(snap);
+
+  // Simple in-memory pagination cursor logic
+  let nextCursor: string | null = null;
+  if (orders.length === limitCount && orders.length > 0) {
+    nextCursor = orders[orders.length - 1].createdAt;
+  }
+
+  // If a cursor was provided, filter client side (fallback simple pagination)
+  let resultOrders = orders;
+  if (opts.cursor) {
+    const cursorTime = Date.parse(opts.cursor);
+    resultOrders = orders.filter((o) => Date.parse(o.createdAt) < cursorTime);
+  }
+
+  return {
+    orders: resultOrders,
+    nextCursor,
+  };
+}
+
+/** Fetch a single order by ID. */
+export async function getOrder(id: string): Promise<Order> {
+  const docSnap = await getDoc(doc(db, "orders", id));
+  if (!docSnap.exists()) {
+    throw new Error("Order not found");
+  }
+  return snapshotToOrder(docSnap);
+}
+
+export type TransitionAction =
+  | "start-production"
+  | "complete-production"
+  | "qc-pass"
+  | "qc-fail"
+  | "reschedule";
+
+export interface TransitionPayload {
+  action: TransitionAction;
+  reason?: string;
+}
+
+/** Apply a state machine transition to an order. */
+export async function transitionOrder(
+  id: string,
+  payload: TransitionPayload
+): Promise<Order> {
+  const user = currentUser();
+  const actorUid = user?.uid ?? "unknown";
+
+  await runTransaction(db, async (tx) => {
+    const docRef = doc(db, "orders", id);
+    const snap = await tx.get(docRef);
+    if (!snap.exists()) {
+      throw new Error("Order not found");
+    }
+    const currentStatus = snap.data().status as OrderStatus;
+    const now = new Date();
+
+    const updates: Record<string, unknown> = {
+      updatedAt: now,
+    };
+
+    switch (payload.action) {
+      case "start-production":
+        if (currentStatus !== "CONFIRMED") {
+          throw new Error(`Invalid transition CONFIRMED -> IN_PRODUCTION`);
+        }
+        updates.status = "IN_PRODUCTION";
+        updates.productionStartedBy = actorUid;
+        updates.productionStartedAt = now;
+        break;
+
+      case "complete-production":
+        if (currentStatus !== "IN_PRODUCTION") {
+          throw new Error(`Invalid transition IN_PRODUCTION -> READY`);
+        }
+        updates.status = "READY";
+        break;
+
+      case "qc-pass":
+        if (currentStatus !== "READY") {
+          throw new Error(`Invalid transition READY -> READY_TO_DELIVER`);
+        }
+        updates.status = "READY_TO_DELIVER";
+        updates.qcReviewedBy = actorUid;
+        updates.qcReviewedAt = now;
+        break;
+
+      case "qc-fail":
+        if (currentStatus !== "READY") {
+          throw new Error(`Invalid transition READY -> CONFIRMED (QC_FAIL)`);
+        }
+        if (!payload.reason || payload.reason.trim() === "") {
+          throw new Error("QC fail reason is required");
+        }
+        updates.status = "CONFIRMED";
+        updates.qcReviewedBy = actorUid;
+        updates.qcReviewedAt = now;
+        updates.qcFailReason = payload.reason.trim();
+        break;
+
+      case "reschedule":
+        if (currentStatus !== "OUT_FOR_DELIVERY") {
+          throw new Error(`Invalid transition OUT_FOR_DELIVERY -> READY_TO_DELIVER`);
+        }
+        updates.status = "READY_TO_DELIVER";
+        break;
+
+      default:
+        throw new Error(`Unknown action ${payload.action}`);
+    }
+
+    tx.update(docRef, updates);
+  });
+
+  return getOrder(id);
+}
+
+/** Assign a courier to a READY_TO_DELIVER order. */
+export async function assignCourier(id: string, courierId: string): Promise<Order> {
+  const docRef = doc(db, "orders", id);
+  await updateDocAndReturn(docRef, {
+    assignedCourierId: courierId,
+    updatedAt: new Date(),
+  });
+  return getOrder(id);
+}
+
+/** Confirm dispatch for an assigned order. */
+export async function dispatchOrder(id: string): Promise<Order> {
+  const docRef = doc(db, "orders", id);
+  await updateDocAndReturn(docRef, {
+    status: "OUT_FOR_DELIVERY",
+    updatedAt: new Date(),
+  });
+  return getOrder(id);
+}
+
+/** Mark an OUT_FOR_DELIVERY order as DELIVERED. */
+export async function confirmDelivery(
+  id: string,
+  proofFileIds: string[]
+): Promise<Order> {
+  const docRef = doc(db, "orders", id);
+  const updates: Record<string, unknown> = {
+    status: "DELIVERED",
+    deliveredAt: new Date(),
+    updatedAt: new Date(),
+  };
+  if (proofFileIds.length > 0) {
+    updates.proofFileIds = proofFileIds;
+  }
+  await updateDocAndReturn(docRef, updates);
+  return getOrder(id);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Payment lifecycle                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Attach an already-uploaded payment proof file to an order.
+ */
+export async function attachPaymentProof(
+  orderId: string,
+  fileId: string
+): Promise<Order> {
+  const user = currentUser();
+  if (!user) {
+    throw new Error("Unauthorized to attach payment proof");
+  }
+
+  const docRef = doc(db, "orders", orderId);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) {
+    throw new Error("Order not found");
+  }
+  const currentStatus = snap.data().status;
+  const currentProof = snap.data().paymentProofFileId as string | undefined;
+
+  if (currentStatus !== "AWAITING_PAYMENT_PROOF" && currentStatus !== "PAYMENT_REJECTED") {
+    throw new Error(`Invalid status for proof upload: ${currentStatus}`);
+  }
+
+  const updates: Record<string, unknown> = {
+    status: "AWAITING_PAYMENT_APPROVAL",
+    paymentStatus: "awaiting_approval",
+    paymentProofFileId: "payment_proofs/" + fileId,
+    updatedAt: new Date(),
+  };
+
+  await updateDocAndReturn(docRef, updates);
+
+  // If there was a previous proof (re-upload), cascade delete it
+  if (currentStatus === "PAYMENT_REJECTED" && currentProof) {
+    const prevFileId = currentProof.replace("payment_proofs/", "");
+    if (prevFileId) {
+      try {
+        await deleteDoc(doc(db, "payment_proofs", prevFileId));
+        for (let i = 0; i < 30; i++) {
+          await deleteDoc(doc(db, "payment_proofs", prevFileId, "chunks", String(i)));
+        }
+      } catch (err) {
+        console.warn(`Failed to clean up old proof ${prevFileId}:`, err);
+      }
+    }
+  }
+
+  return getOrder(orderId);
+}
+
+/** Admin: approve a payment proof, transitioning to CONFIRMED. */
+export async function approvePayment(orderId: string): Promise<Order> {
+  const user = currentUser();
+  const adminUid = user?.uid ?? "unknown";
+  const docRef = doc(db, "orders", orderId);
+
+  await updateDocAndReturn(docRef, {
+    status: "CONFIRMED",
+    paymentStatus: "approved",
+    paymentApprovedBy: adminUid,
+    paymentApprovedAt: new Date(),
+    updatedAt: new Date(),
+  });
+  return getOrder(orderId);
+}
+
+/**
+ * Admin: reject a payment proof, transitioning to PAYMENT_REJECTED.
+ */
+export async function rejectPayment(
+  orderId: string,
+  reason: string
+): Promise<Order> {
+  const user = currentUser();
+  const adminUid = user?.uid ?? "unknown";
+  const docRef = doc(db, "orders", orderId);
+
+  await updateDocAndReturn(docRef, {
+    status: "PAYMENT_REJECTED",
+    paymentStatus: "rejected",
+    paymentRejectionReason: reason.trim(),
+    paymentRejectedBy: adminUid,
+    paymentRejectedAt: new Date(),
+    updatedAt: new Date(),
+  });
+  return getOrder(orderId);
+}
+
+/* Helper to update doc directly */
+async function updateDocAndReturn(
+  docRef: DocumentReference<DocumentData>,
+  updates: Record<string, unknown>
+): Promise<void> {
+  // Use runTransaction or setDoc with merge to ensure updates are written
+  await runTransaction(db, async (tx) => {
+    tx.set(docRef, updates, { merge: true });
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/*  Real-time subscriptions                                            */
+/* ------------------------------------------------------------------ */
+
 export function subscribeToOrder(
   orderId: string,
   cb: (order: Order) => void,
@@ -288,12 +526,6 @@ export function subscribeToOrder(
   );
 }
 
-/**
- * Subscribe to the admin payment-approval queue: orders awaiting
- * approval, newest first, capped at 50 (Requirement 8.2). The cap is
- * enforced server-side via Firestore `limit()` so the listener payload
- * stays bounded even when the underlying collection grows large.
- */
 export function subscribeToPaymentApprovalQueue(
   cb: (orders: Order[]) => void,
   onError?: (err: Error) => void

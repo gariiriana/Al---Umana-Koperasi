@@ -112,6 +112,9 @@ func validateImageURL(imageURL string) (common.FieldError, bool) {
 	if imageURL == "" {
 		return common.FieldError{}, true
 	}
+	if strings.HasPrefix(imageURL, "https://images.unsplash.com/") {
+		return common.FieldError{}, true
+	}
 	if !strings.HasPrefix(imageURL, imageURLPrefix) {
 		return common.FieldError{Field: "imageURL", Reason: reasonImageURLFormat}, false
 	}

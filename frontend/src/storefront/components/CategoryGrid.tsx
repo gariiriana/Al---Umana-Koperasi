@@ -24,10 +24,10 @@ interface CategoryGroup {
 }
 
 /**
- * Pure helper exported for test reuse — buckets `items` by `category` and
+ * Pure helper — buckets `items` by `category` and
  * applies the alphabetical sort orders required by Requirement 1.2.
  */
-export function groupByCategory(items: InventoryItem[]): CategoryGroup[] {
+function groupByCategory(items: InventoryItem[]): CategoryGroup[] {
   const buckets = new Map<string, InventoryItem[]>();
   for (const item of items) {
     const key = item.category.trim();
@@ -74,7 +74,7 @@ export function CategoryGrid({ items }: CategoryGridProps) {
           >
             {group.category}
           </h2>
-          <div className="grid grid-cols-2 gap-3 px-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 px-4">
             {group.items.map((item) => (
               <ProductCard key={item.id} item={item} />
             ))}

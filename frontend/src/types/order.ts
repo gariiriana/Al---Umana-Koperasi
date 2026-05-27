@@ -35,7 +35,14 @@ export interface Order {
   qcFailReason?: string;
   deliveredAt?: string;
   proofFileIds?: string[];
+  paymentMethod: 'cod' | 'bank_transfer' | 'e_wallet';
+  paymentStatus?: string;
   paymentProofFileId?: string;
+  paymentApprovedBy?: string;
+  paymentApprovedAt?: string;
+  paymentRejectedBy?: string;
+  paymentRejectedAt?: string;
+  paymentRejectionReason?: string;
   createdAt: string;
   updatedAt: string;
 }

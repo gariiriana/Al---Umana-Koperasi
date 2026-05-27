@@ -21,7 +21,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { PackageOpen } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import {
   getRecommended,
@@ -32,67 +33,14 @@ import { CategoryGrid } from "@/storefront/components/CategoryGrid";
 import { ProductCard } from "@/storefront/components/ProductCard";
 import { RecommendedBanner } from "@/storefront/components/RecommendedBanner";
 import { SearchBar } from "@/storefront/components/SearchBar";
+import {
+  loadDemoFromStorage,
+  clearDemoStorage,
+} from "@/lib/dummyData";
 
 const CATALOG_TIMEOUT_MS = 10_000;
 const SEARCH_MIN_LENGTH = 2;
 
-const MOCK_PRODUCTS: InventoryItem[] = [
-  {
-    id: "mock-1",
-    itemName: "Beras Sentra Ramos Premium 5kg",
-    category: "Sembako",
-    price: 78000,
-    quantity: 50,
-    imageUrl: "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&q=80&w=400",
-    available: true,
-    unit: "karung",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "mock-2",
-    itemName: "Minyak Goreng Bimoli Klasik 2L",
-    category: "Sembako",
-    price: 36500,
-    quantity: 30,
-    imageUrl: "https://images.unsplash.com/photo-1620706857370-e1b977f7f13d?auto=format&fit=crop&q=80&w=400",
-    available: true,
-    unit: "pouch",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "mock-3",
-    itemName: "Gula Pasir Gulaku Putih 1kg",
-    category: "Sembako",
-    price: 18500,
-    quantity: 100,
-    imageUrl: "https://images.unsplash.com/photo-1581781870027-04212e231e96?auto=format&fit=crop&q=80&w=400",
-    available: true,
-    unit: "pcs",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "mock-4",
-    itemName: "Kopi Hitam Bubuk Toraja 250g",
-    category: "Minuman",
-    price: 45000,
-    quantity: 25,
-    imageUrl: "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?auto=format&fit=crop&q=80&w=400",
-    available: true,
-    unit: "pcs",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "mock-5",
-    itemName: "Teh Celup Premium isi 50",
-    category: "Minuman",
-    price: 12500,
-    quantity: 80,
-    imageUrl: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&q=80&w=400",
-    available: true,
-    unit: "pcs",
-    updatedAt: new Date().toISOString(),
-  },
-];
 
 type LoadState =
   | { status: "loading" }
@@ -105,7 +53,11 @@ type LoadState =
 
 export function HomePage() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
-  const [query, setQuery] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const query = searchParams.get("search") || "";
+  const setQuery = (newQuery: string) => {
+    setSearchParams(newQuery ? { search: newQuery } : {}, { replace: true });
+  };
   const [isDemo, setIsDemo] = useState(false);
 
   // Track the current AbortController so retries can cancel the in-flight
@@ -113,6 +65,18 @@ export function HomePage() {
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
+    // If there's demo data in localStorage, show it immediately.
+    const demoProducts = loadDemoFromStorage();
+    if (demoProducts && demoProducts.length > 0) {
+      setIsDemo(true);
+      setState({
+        status: "ready",
+        products: demoProducts,
+        recommended: demoProducts.slice(0, 5),
+      });
+      return;
+    }
+
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -148,6 +112,12 @@ export function HomePage() {
     }
   }, []);
 
+  const exitDemo = useCallback(async () => {
+    clearDemoStorage();
+    setIsDemo(false);
+    await load();
+  }, [load]);
+
   useEffect(() => {
     void load();
     return () => {
@@ -169,25 +139,17 @@ export function HomePage() {
       );
   }, [state, isSearching, trimmedQuery]);
 
-  const startDemo = () => {
-    setIsDemo(true);
-    setState({
-      status: "ready",
-      products: MOCK_PRODUCTS,
-      recommended: MOCK_PRODUCTS.slice(0, 3),
-    });
-  };
 
   return (
     <div className="space-y-4 pt-4">
       {isDemo && (
-        <div className="mx-4 px-4 py-2 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold rounded-xl flex items-center justify-between animate-pulse font-['Hanken_Grotesk',system-ui,sans-serif]">
-          <span>⚠️ Mode Demo Aktif (Server Offline)</span>
+        <div className="mx-4 mt-4 px-4 py-2.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold rounded-2xl flex items-center justify-between font-['Hanken_Grotesk',system-ui,sans-serif]">
+          <span>⚠️ Mode Demo Aktif — data dari admin</span>
           <button
-            onClick={() => void load()}
+            onClick={() => void exitDemo()}
             className="underline text-amber-900 hover:text-amber-950 font-bold ml-2 cursor-pointer"
           >
-            Hubungkan Kembali
+            Sambungkan ke Server
           </button>
         </div>
       )}
@@ -199,11 +161,7 @@ export function HomePage() {
       {state.status === "loading" && <HomePageLoading />}
 
       {state.status === "error" && (
-        <HomePageError
-          message={state.message}
-          onRetry={() => void load()}
-          onDemo={startDemo}
-        />
+        <EmptyState message="Katalog sedang tidak tersedia." />
       )}
 
       {state.status === "ready" && (
@@ -225,7 +183,7 @@ export function HomePage() {
                 <h2 className="px-4 font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
                   Hasil pencarian
                 </h2>
-                <div className="grid grid-cols-2 gap-3 px-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 px-4">
                   {filtered.map((item) => (
                     <ProductCard key={item.id} item={item} />
                   ))}
@@ -253,64 +211,31 @@ function HomePageLoading() {
   );
 }
 
-function HomePageError({
-  message,
-  onRetry,
-  onDemo,
-}: {
-  message: string;
-  onRetry: () => void;
-  onDemo: () => void;
-}) {
-  return (
-    <div
-      role="alert"
-      className="mx-4 rounded-2xl border border-[#FCA5A5] bg-[#FEF2F2] p-4 space-y-3"
-    >
-      <p className="text-sm text-[#991B1B] font-['Hanken_Grotesk',system-ui,sans-serif]">
-        {message}
-      </p>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={onRetry}
-          className={
-            "inline-flex items-center gap-2 min-h-11 min-w-11 rounded-2xl " +
-            "bg-[#FBBF24] px-4 py-2 text-sm font-semibold text-[#111827] " +
-            "font-['Hanken_Grotesk',system-ui,sans-serif] " +
-            "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FBBF24] " +
-            "focus-visible:ring-offset-2 active:opacity-80 cursor-pointer"
-          }
-        >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          Coba lagi
-        </button>
-        <button
-          type="button"
-          onClick={onDemo}
-          className={
-            "inline-flex items-center gap-2 min-h-11 min-w-11 rounded-2xl " +
-            "bg-[#10B981] px-4 py-2 text-sm font-semibold text-white " +
-            "font-['Hanken_Grotesk',system-ui,sans-serif] " +
-            "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10B981] " +
-            "focus-visible:ring-offset-2 active:opacity-80 cursor-pointer"
-          }
-        >
-          Gunakan Mode Demo
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function EmptyState({ message }: { message: string }) {
   return (
-    <p
+    <div
       role="status"
-      className="px-4 py-12 text-center text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]"
+      className="flex flex-col items-center justify-center px-4 py-20 text-center space-y-5"
     >
-      {message}
-    </p>
+      <div className="h-20 w-20 rounded-full bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center text-[#9CA3AF] shadow-inner">
+        <PackageOpen className="h-10 w-10" />
+      </div>
+      <div className="space-y-1.5">
+        <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
+          {message}
+        </h2>
+        <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-xs">
+          Koperasi Al-Umana sedang mempersiapkan produk terbaik untuk Anda.
+          Silakan kembali lagi nanti.
+        </p>
+      </div>
+      <Link
+        to="/category"
+        className="inline-flex items-center justify-center min-h-11 px-6 rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-bold text-[#111827] shadow-sm transition-all cursor-pointer"
+      >
+        Jelajahi Kategori
+      </Link>
+    </div>
   );
 }
 

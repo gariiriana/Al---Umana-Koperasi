@@ -6,14 +6,10 @@ import {
   CheckCircle2,
   Factory,
   LayoutDashboard,
-  LogOut,
   MapPin,
   Package,
   Package2,
-  PackagePlus,
-  Settings,
   ShoppingCart,
-  Tags,
   Truck,
   type LucideIcon,
 } from "lucide-react";
@@ -32,10 +28,7 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/admin/dispatch", label: "Dispatch", icon: Truck },
   { to: "/admin/delivery", label: "Delivery", icon: Package },
   { to: "/admin/tracking", label: "Tracking", icon: MapPin },
-  { to: "/admin/settings", label: "Settings", icon: Settings },
   { to: "/admin/products", label: "Daftar Produk", icon: Package2 },
-  { to: "/admin/products/new", label: "Tambah Produk", icon: PackagePlus },
-  { to: "/admin/categories", label: "Kategori", icon: Tags },
   { to: "/admin/payment-approvals", label: "Persetujuan Pembayaran", icon: BadgeCheck },
 ] as const;
 
@@ -56,7 +49,7 @@ const ITEM_BASE =
 const ITEM_ACTIVE = "bg-[#FBBF24] text-[#111827]";
 const ITEM_INACTIVE = "text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]";
 
-export function Sidebar({ userName, userEmail, userRole, onSignOut }: SidebarProps) {
+export function Sidebar({ userRole }: SidebarProps) {
   const allowedItems = SIDEBAR_NAV_ITEMS.filter((item) => {
     if (!userRole) return false;
     const allowedPaths = ROLE_PERMISSIONS[userRole] || [];
@@ -68,13 +61,12 @@ export function Sidebar({ userName, userEmail, userRole, onSignOut }: SidebarPro
       className="hidden md:flex md:w-60 md:flex-col md:shrink-0 bg-white border-r border-[#E5E7EB] h-screen sticky top-0"
     >
       {/* Logo */}
-      <div className="px-6 py-6 border-b border-[#E5E7EB]">
-        <h1 className="font-['Manrope',system-ui,sans-serif] text-xl font-bold text-[#111827] tracking-tight">
-          Al-<span className="text-[#FBBF24]">Umana</span>
-        </h1>
-        <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-[#6B7280] mt-0.5">
-          Koperasi
-        </p>
+      <div className="px-6 py-4 border-b border-[#E5E7EB]">
+        <img
+          src="/logo.png"
+          alt="Pondok Pesantren Modern Al Umanaa"
+          className="h-14 object-contain"
+        />
       </div>
 
       {/* Nav items */}
@@ -104,39 +96,7 @@ export function Sidebar({ userName, userEmail, userRole, onSignOut }: SidebarPro
         </ul>
       </nav>
 
-      {/* User profile + sign out */}
-      <div className="border-t border-[#E5E7EB] px-4 py-4">
-        {(userName || userEmail) && (
-          <div className="mb-3 flex items-center gap-3">
-            <div
-              className="h-9 w-9 rounded-full bg-[#FBBF24] flex items-center justify-center text-[#111827] font-semibold text-sm shrink-0"
-              aria-hidden="true"
-            >
-              {(userName ?? userEmail ?? "?").charAt(0).toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              {userName && (
-                <p className="text-sm font-semibold text-[#111827] truncate font-['Hanken_Grotesk',system-ui,sans-serif]">
-                  {userName}
-                </p>
-              )}
-              {userEmail && (
-                <p className="text-xs text-[#6B7280] truncate font-['Hanken_Grotesk',system-ui,sans-serif]">
-                  {userEmail}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={onSignOut}
-          className={`${ITEM_BASE} ${ITEM_INACTIVE} w-full`}
-        >
-          <LogOut className="h-5 w-5 shrink-0" aria-hidden="true" />
-          <span>Sign out</span>
-        </button>
-      </div>
+
     </aside>
   );
 }

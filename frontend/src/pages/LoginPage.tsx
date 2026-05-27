@@ -24,8 +24,14 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await signIn(email, password);
-      const origin = (location.state as any)?.from?.pathname || "/";
-      const preservedQty = (location.state as any)?.selectedQty;
+      const state = location.state as {
+        from?: {
+          pathname: string;
+        };
+        selectedQty?: unknown;
+      } | null;
+      const origin = state?.from?.pathname || "/";
+      const preservedQty = state?.selectedQty;
       navigate(origin, {
         replace: true,
         state: { selectedQty: preservedQty }
@@ -40,12 +46,14 @@ export function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6] px-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-6">
-          <h1 className="font-['Manrope',system-ui,sans-serif] text-3xl font-bold text-[#111827]">
-            Al-<span className="text-[#FBBF24]">Umana</span>
-          </h1>
-          <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280] mt-1">
-            Order Fulfillment & Delivery Tracking
+        <div className="text-center mb-8">
+          <img
+            src="/logo.png"
+            alt="Pondok Pesantren Modern Al Umanaa"
+            className="h-24 mx-auto object-contain"
+          />
+          <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280] mt-2">
+            Koperasi Al-Umanaa — Masuk untuk melanjutkan
           </p>
         </div>
         <Card>

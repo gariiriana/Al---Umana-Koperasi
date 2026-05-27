@@ -14,6 +14,7 @@ const API_BASE_URL =
 
 function resolveProductImageURL(ref: string | undefined): string | null {
   if (!ref) return null;
+  if (ref.startsWith("http://") || ref.startsWith("https://")) return ref;
   const segments = ref.trim().split("/");
   if (segments.length === 0) return null;
   const fileId = segments[segments.length - 1];
@@ -280,6 +281,7 @@ export function ProductFormPage() {
       } else {
         await createItem(payload);
       }
+      alert("Produk berhasil disimpan");
       navigate("/admin/products");
     } catch (err: unknown) {
       const errorObj = err as { message?: string };

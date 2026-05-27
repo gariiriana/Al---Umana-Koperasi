@@ -43,12 +43,14 @@ export function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6] px-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-6">
-          <h1 className="font-['Manrope',system-ui,sans-serif] text-3xl font-bold text-[#111827]">
-            Al-<span className="text-[#FBBF24]">Umana</span>
-          </h1>
-          <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280] mt-1">
-            Order Fulfillment & Delivery Tracking
+        <div className="text-center mb-8">
+          <img
+            src="/logo.png"
+            alt="Pondok Pesantren Modern Al Umanaa"
+            className="h-24 mx-auto object-contain"
+          />
+          <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280] mt-2">
+            Koperasi Al-Umanaa — Buat akun baru
           </p>
         </div>
         <Card>

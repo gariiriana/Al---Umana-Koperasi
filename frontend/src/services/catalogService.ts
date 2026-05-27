@@ -1,23 +1,22 @@
 /**
- * Public catalog REST client.
+ * Public catalog client using Firestore direct access.
  *
- * Mirrors the Go `catalog` package endpoints exposed at `/api/catalog/*`.
- * These endpoints do not require authentication, but they tolerate a
- * Bearer token if the shared `apiClient` happens to attach one — so we
- * intentionally reuse `apiClient` here rather than duplicating a fetch
- * wrapper.
+ * Implements catalog operations directly via the Firebase Client SDK,
+ * bypassing the Go catalog package endpoints.
  *
- * Endpoints:
- *   - GET /api/catalog/items?category=...  → InventoryItem[]
- *   - GET /api/catalog/items/{id}          → InventoryItem
- *   - GET /api/catalog/categories          → string[]
- *
- * The "recommended banner" view (Requirement 14.8) is computed
- * client-side from `listAvailableProducts` so we keep one source of
- * truth for "available" filtering and avoid an extra backend route.
+ * Requirements covered: 1.1, 1.7, 13.5, 13.6, 14.8.
  */
 
-import { api } from "@/services/apiClient";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  Timestamp,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import type { InventoryItem } from "@/types/inventory";
 
 export interface ListAvailableProductsOptions {
@@ -25,62 +24,111 @@ export interface ListAvailableProductsOptions {
   category?: string;
 }
 
+function formatUpdatedAt(val: unknown): string {
+  if (!val) return new Date().toISOString();
+  if (typeof val === "string") return val;
+  if (val instanceof Timestamp) return val.toDate().toISOString();
+  if (val && typeof val === "object" && "toDate" in val) {
+    const toDateFn = (val as { toDate?: unknown }).toDate;
+    if (typeof toDateFn === "function") {
+      const date = toDateFn.call(val);
+      if (date instanceof Date) {
+        return date.toISOString();
+      }
+    }
+  }
+  if (val instanceof Date) return val.toISOString();
+  return new Date().toISOString();
+}
+
 /**
- * Fetch all available products. When `category` is supplied, the
- * backend additionally restricts the result to items in that category.
- * The backend already filters by `available = true ∧ quantity > 0`
- * (Requirements 1.1, 1.7, 13.5), so callers can render the result
- * directly without re-filtering.
+ * Fetch all available products.
+ * Filters by `available == true` and `quantity > 0` ordered by quantity asc.
+ * (Requirements 1.1, 1.7, 13.5)
  */
 export async function listAvailableProducts(
   opts: ListAvailableProductsOptions = {}
 ): Promise<InventoryItem[]> {
-  const params = new URLSearchParams();
+  const colRef = collection(db, "inventory");
+  
+  // Construct a query that only uses equality filters to avoid index requirements
+  let q = query(colRef, where("available", "==", true));
+
   if (opts.category && opts.category.trim() !== "") {
-    params.set("category", opts.category);
+    q = query(q, where("category", "==", opts.category.trim()));
   }
-  const qs = params.toString();
-  const path = qs ? `/api/catalog/items?${qs}` : "/api/catalog/items";
-  const res = await api.get<InventoryItem[] | { items: InventoryItem[] }>(path);
-  // Tolerate both `[]` and `{ items: [] }` envelopes so this client
-  // doesn't break if the backend response shape is wrapped later.
-  return Array.isArray(res) ? res : res.items ?? [];
+
+  const snap = await getDocs(q);
+  const items = snap.docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      itemName: (data.itemName as string) ?? "",
+      quantity: (data.quantity as number) ?? 0,
+      unit: (data.unit as string) ?? "",
+      price: (data.price as number) ?? 0,
+      available: (data.available as boolean) ?? false,
+      category: (data.category as string) ?? "",
+      imageUrl: (data.imageUrl as string) ?? "",
+      updatedAt: formatUpdatedAt(data.updatedAt),
+    } as InventoryItem;
+  });
+
+  // Filter quantity > 0 and sort by quantity asc in-memory to avoid composite index
+  const filtered = items.filter((item) => item.quantity > 0);
+  filtered.sort((a, b) => a.quantity - b.quantity);
+  return filtered;
 }
 
 /** Fetch a single product by document ID. */
-export function getProduct(id: string): Promise<InventoryItem> {
-  return api.get<InventoryItem>(
-    `/api/catalog/items/${encodeURIComponent(id)}`
-  );
+export async function getProduct(id: string): Promise<InventoryItem> {
+  const docRef = doc(db, "inventory", id);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) {
+    throw new Error(`Product not found: ${id}`);
+  }
+  const data = docSnap.data();
+  return {
+    id: docSnap.id,
+    itemName: (data.itemName as string) ?? "",
+    quantity: (data.quantity as number) ?? 0,
+    unit: (data.unit as string) ?? "",
+    price: (data.price as number) ?? 0,
+    available: (data.available as boolean) ?? false,
+    category: (data.category as string) ?? "",
+    imageUrl: (data.imageUrl as string) ?? "",
+    updatedAt: formatUpdatedAt(data.updatedAt),
+  } as InventoryItem;
 }
 
 /**
- * Distinct non-empty category strings, sorted alphabetically server-side
- * (Requirement 13.6). Used by the storefront category navigation and by
- * the admin product form's category dropdown.
+ * Distinct non-empty category strings, sorted alphabetically
+ * (Requirement 13.6).
  */
 export async function listCategories(): Promise<string[]> {
-  const res = await api.get<string[] | { categories: string[] }>(
-    "/api/catalog/categories"
-  );
-  return Array.isArray(res) ? res : res.categories ?? [];
+  const colRef = collection(db, "inventory");
+  const snap = await getDocs(colRef);
+  const categories = new Set<string>();
+  snap.docs.forEach((docSnap) => {
+    const cat = docSnap.data().category;
+    if (typeof cat === "string" && cat.trim() !== "") {
+      categories.add(cat.trim());
+    }
+  });
+  return Array.from(categories).sort();
 }
 
 /**
  * Top 5 available products sorted by `updatedAt` descending — used by
  * the "Sering Direkomendasikan" banner on the home page (Requirement
- * 14.8). Computed client-side from `listAvailableProducts` so we don't
- * require a dedicated backend route.
+ * 14.8).
  */
 export async function getRecommended(): Promise<InventoryItem[]> {
   const items = await listAvailableProducts();
   return [...items]
     .sort((a, b) => {
-      // Descending by updatedAt. Stable on equal timestamps because
-      // Array.prototype.sort is stable in all modern engines.
       const ta = Date.parse(a.updatedAt);
       const tb = Date.parse(b.updatedAt);
-      // NaN-safe: items with an unparseable timestamp sink to the end.
       if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
       if (Number.isNaN(ta)) return 1;
       if (Number.isNaN(tb)) return -1;
