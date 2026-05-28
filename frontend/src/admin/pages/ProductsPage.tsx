@@ -1,17 +1,18 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Loader2, Plus, Edit, Trash2, ImageOff, Check, X, ArrowUpDown, ChevronLeft, ChevronRight, Filter, FlaskConical, Trash, ArrowLeft, Upload, AlertCircle, RefreshCw } from "lucide-react";
+import { Loader2, Plus, Edit, Trash2, ImageOff, Check, X, ArrowUpDown, ChevronLeft, ChevronRight, Filter, ArrowLeft, Upload, AlertCircle, RefreshCw } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useToast } from "@/contexts/ToastContext";
 import { translateCategory } from "@/constants/categories";
 
 import { db } from "@/lib/firebase";
-import { addDoc, collection, doc, getDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, deleteDoc } from "firebase/firestore";
 
 import { listAllItems, deleteItem, patchStock, listCategories, updateItem, createItem, getItem } from "@/services/stockAdminService";
 import { uploadFileInChunks, ChunkUploadError } from "@/services/chunkUploadService";
 import { validateImageUpload } from "@/lib/validators";
 import type { InventoryItem, InventoryItemInput } from "@/types/inventory";
 import { formatIDR } from "@/lib/format";
-import { DUMMY_PRODUCTS, clearDemoStorage } from "@/lib/dummyData";
+import { ProductImage } from "@/components/ProductImage";
 
 const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
@@ -226,6 +227,7 @@ const DICTIONARY = {
 
 export function ProductsPage() {
   const { lang } = useLanguage();
+  const { showToast } = useToast();
   const t = DICTIONARY[lang];
 
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -247,12 +249,6 @@ export function ProductsPage() {
   const [editingQty, setEditingQty] = useState<number>(0);
   const [savingStockId, setSavingStockId] = useState<string | null>(null);
 
-  // Demo mode
-  const isDemoMode = items.some(
-    (item) => item.imageUrl && item.imageUrl.startsWith("http")
-  );
-  const [loadingDemo, setLoadingDemo] = useState(false);
-
   // Delete target state
   const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -269,9 +265,9 @@ export function ProductsPage() {
 
   // Form fields
   const [fItemName, setFItemName] = useState("");
-  const [fQty, setFQty] = useState(0);
+  const [fQty, setFQty] = useState<number | "">("");
   const [fUnit, setFUnit] = useState("pcs");
-  const [fPrice, setFPrice] = useState(0);
+  const [fPrice, setFPrice] = useState<number | "">("");
   const [fAvailable, setFAvailable] = useState(true);
   const [fCategory, setFCategory] = useState("");
   const [fImageURL, setFImageURL] = useState("");
@@ -321,54 +317,6 @@ export function ProductsPage() {
   useEffect(() => {
     load();
   }, [load]);
-
-  const handleLoadDummy = async () => {
-    setLoadingDemo(true);
-    try {
-      const col = collection(db, "inventory");
-      const promises = DUMMY_PRODUCTS.map((dummy) =>
-        addDoc(col, {
-          itemName: dummy.itemName,
-          quantity: dummy.quantity,
-          unit: dummy.unit,
-          price: dummy.price,
-          available: dummy.quantity === 0 ? false : dummy.available,
-          category: dummy.category,
-          imageUrl: dummy.imageUrl ?? "",
-          updatedAt: serverTimestamp(),
-        })
-      );
-      await Promise.all(promises);
-      clearDemoStorage();
-      await load();
-      alert(t.demoLoadSuccess);
-    } catch (err: unknown) {
-      console.error("Gagal memuat data dummy:", err);
-      alert(t.demoLoadError);
-    } finally {
-      setLoadingDemo(false);
-    }
-  };
-
-  const handleClearDemo = async () => {
-    setLoading(true);
-    try {
-      const dummyItems = items.filter(
-        (item) => item.imageUrl && item.imageUrl.startsWith("https://images.unsplash.com/")
-      );
-      const col = collection(db, "inventory");
-      await Promise.all(
-        dummyItems.map((item) => deleteDoc(doc(col, item.id)))
-      );
-      clearDemoStorage();
-      await load();
-      alert(t.demoClearSuccess);
-    } catch {
-      alert(t.demoClearError);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -441,7 +389,7 @@ export function ProductsPage() {
       setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch {
-      alert(t.deleteError);
+      showToast({ message: t.deleteError, variant: "error" });
     } finally {
       setDeletingId(null);
     }
@@ -449,7 +397,7 @@ export function ProductsPage() {
 
   const handleInlineStockSave = async (item: InventoryItem, newQty: number) => {
     if (newQty < 0 || newQty > 99999) {
-      alert(t.qtyValError);
+      showToast({ message: t.qtyValError, variant: "error" });
       return;
     }
 
@@ -476,7 +424,7 @@ export function ProductsPage() {
         setEditingStockId(null);
       }
     } catch {
-      alert(t.stockUpdateError);
+      showToast({ message: t.stockUpdateError, variant: "error" });
     } finally {
       setSavingStockId(null);
     }
@@ -511,7 +459,7 @@ export function ProductsPage() {
       }
       setEditingStockId(null);
     } catch {
-      alert(t.productUpdateError);
+      showToast({ message: t.productUpdateError, variant: "error" });
     } finally {
       setSavingStockId(null);
       setPromptTarget(null);
@@ -534,7 +482,7 @@ export function ProductsPage() {
         prev.map((i) => (i.id === item.id ? { ...i, available: nextAvailable } : i))
       );
     } catch {
-      alert(t.stockToggleError);
+      showToast({ message: t.stockToggleError, variant: "error" });
     }
   };
 
@@ -574,9 +522,9 @@ export function ProductsPage() {
     } else {
       setDrawerEditId(null);
       setFItemName("");
-      setFQty(0);
+      setFQty("");
       setFUnit("pcs");
-      setFPrice(0);
+      setFPrice("");
       setFAvailable(true);
       setFCategory("");
       setFImageURL("");
@@ -592,9 +540,9 @@ export function ProductsPage() {
     setDrawerEditId(null);
     setDrawerError(null);
     setFItemName("");
-    setFQty(0);
+    setFQty("");
     setFUnit("pcs");
-    setFPrice(0);
+    setFPrice("");
     setFAvailable(true);
     setFCategory("");
     setFImageURL("");
@@ -604,6 +552,50 @@ export function ProductsPage() {
     setFUploadProgress(0);
     setFFailedFileId(undefined);
     setFFailedChunk(undefined);
+  };
+
+  const uploadFileDirectly = async (file: File, isRetry = false) => {
+    setFUploading(true);
+    setFImageError(null);
+
+    try {
+      if (!isRetry && fImageURL) {
+        await deleteProductImageFromFirestore(fImageURL);
+      }
+
+      let uploadResult;
+      if (isRetry && fFailedFileId && fFailedChunk !== undefined) {
+        uploadResult = await uploadFileInChunks(file, {
+          collection: "product_images",
+          resumeFileId: fFailedFileId,
+          resumeFromChunk: fFailedChunk,
+          onProgress: (p) => setFUploadProgress(p.percent),
+        });
+      } else {
+        uploadResult = await uploadFileInChunks(file, {
+          collection: "product_images",
+          onProgress: (p) => setFUploadProgress(p.percent),
+        });
+      }
+
+      const newImageUrl = `product_images/${uploadResult.fileId}`;
+      setFImageURL(newImageUrl);
+      setFSelectedFile(file);
+      setFFailedFileId(undefined);
+      setFFailedChunk(undefined);
+    } catch (err: unknown) {
+      console.error("Gagal mengunggah gambar produk:", err);
+      if (err instanceof ChunkUploadError && err.code === "WRITE_FAILED") {
+        setFFailedFileId(err.fileId);
+        setFFailedChunk(err.failedChunkIndex);
+        setFImageError(t.uploadInterrupt.replace("{chunk}", String(err.failedChunkIndex || 0)));
+      } else {
+        const errorObj = err as { message?: string };
+        setFImageError(errorObj.message || t.uploadGeneralError);
+      }
+    } finally {
+      setFUploading(false);
+    }
   };
 
   const handleDrawerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -631,6 +623,7 @@ export function ProductsPage() {
     setFSelectedFile(file);
     const previewUrl = URL.createObjectURL(file);
     setFImagePreview(previewUrl);
+    void uploadFileDirectly(file);
   };
 
   const handleRemoveImage = async () => {
@@ -644,57 +637,10 @@ export function ProductsPage() {
         setFSelectedFile(null);
         setFImagePreview(null);
       } catch {
-        alert(t.removePhotoError);
+        showToast({ message: t.removePhotoError, variant: "error" });
       } finally {
         setFUploading(false);
       }
-    }
-  };
-
-  const handleDrawerUpload = async (isRetry = false) => {
-    if (!fSelectedFile) return;
-
-    setFUploading(true);
-    setFImageError(null);
-
-    try {
-      if (!isRetry && fImageURL) {
-        await deleteProductImageFromFirestore(fImageURL);
-      }
-
-      let uploadResult;
-      if (isRetry && fFailedFileId && fFailedChunk !== undefined) {
-        uploadResult = await uploadFileInChunks(fSelectedFile, {
-          collection: "product_images",
-          resumeFileId: fFailedFileId,
-          resumeFromChunk: fFailedChunk,
-          onProgress: (p) => setFUploadProgress(p.percent),
-        });
-      } else {
-        uploadResult = await uploadFileInChunks(fSelectedFile, {
-          collection: "product_images",
-          onProgress: (p) => setFUploadProgress(p.percent),
-        });
-      }
-
-      const newImageUrl = `product_images/${uploadResult.fileId}`;
-      setFImageURL(newImageUrl);
-      setFSelectedFile(null);
-      setFFailedFileId(undefined);
-      setFFailedChunk(undefined);
-      alert(t.uploadSuccess);
-    } catch (err: unknown) {
-      console.error("Gagal mengunggah gambar produk:", err);
-      if (err instanceof ChunkUploadError && err.code === "WRITE_FAILED") {
-        setFFailedFileId(err.fileId);
-        setFFailedChunk(err.failedChunkIndex);
-        setFImageError(t.uploadInterrupt.replace("{chunk}", String(err.failedChunkIndex || 0)));
-      } else {
-        const errorObj = err as { message?: string };
-        setFImageError(errorObj.message || t.uploadGeneralError);
-      }
-    } finally {
-      setFUploading(false);
     }
   };
 
@@ -721,12 +667,12 @@ export function ProductsPage() {
       return;
     }
 
-    if (fQty < 0 || fQty > 99999) {
+    if (fQty !== "" && (fQty < 0 || fQty > 99999)) {
       setDrawerError(t.qtyValError);
       return;
     }
 
-    if (fPrice < 0) {
+    if (fPrice !== "" && fPrice < 0) {
       setDrawerError(t.priceValError);
       return;
     }
@@ -735,11 +681,11 @@ export function ProductsPage() {
 
     const payload: InventoryItemInput = {
       itemName: trimmedName,
-      quantity: fQty,
+      quantity: fQty === "" ? 0 : fQty,
       unit: trimmedUnit,
-      price: fPrice,
+      price: fPrice === "" ? 0 : fPrice,
       // Rule 12.2: quantity 0 forces available false
-      available: fQty === 0 ? false : fAvailable,
+      available: (fQty === "" || fQty === 0) ? false : fAvailable,
       category: trimmedCategory,
       imageUrl: fImageURL || undefined,
     };
@@ -750,7 +696,7 @@ export function ProductsPage() {
       } else {
         await createItem(payload);
       }
-      alert(t.saveSuccess);
+      showToast({ message: t.saveSuccess, variant: "success" });
       closeDrawer();
       await load();
     } catch (err: unknown) {
@@ -762,70 +708,37 @@ export function ProductsPage() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
-      {/* Demo Mode Banner */}
-      {isDemoMode && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between gap-4 font-['Hanken_Grotesk',system-ui,sans-serif]">
-          <div className="flex items-center gap-2 text-amber-800">
-            <FlaskConical className="h-4 w-4 shrink-0" />
-            <span className="text-xs font-semibold">
-              {t.demoActive}
-            </span>
-          </div>
-          <button
-            onClick={handleClearDemo}
-            className="shrink-0 inline-flex items-center gap-1.5 text-xs font-bold text-amber-900 hover:text-red-700 transition-colors cursor-pointer"
-          >
-            <Trash className="h-3.5 w-3.5" />
-            {t.btnRemoveDemo}
-          </button>
-        </div>
-      )}
-
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-6xl mx-auto">
       {/* Header and Add Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]">
+          <h1 className="font-['Manrope',system-ui,sans-serif] text-xl sm:text-2xl font-extrabold text-[#111827]">
             {t.title}
           </h1>
-          <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] mt-0.5">
+          <p className="text-xs sm:text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] mt-0.5">
             {t.subtitle}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            id="btn-muat-data-dummy"
-            type="button"
-            onClick={() => void handleLoadDummy()}
-            disabled={loadingDemo}
-            className="inline-flex items-center gap-2 min-h-11 px-5 rounded-2xl bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-sm font-bold text-white shadow-sm transition-all cursor-pointer"
-          >
-            {loadingDemo ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <FlaskConical className="h-4 w-4" />
-            )}
-            {loadingDemo ? t.loadingText : t.btnLoadDemo}
-          </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => void openDrawer()}
-            className="inline-flex items-center gap-2 min-h-11 px-5 rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-bold text-[#111827] shadow-sm transition-all cursor-pointer"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 h-9 sm:h-10 px-2.5 sm:px-4 rounded-lg bg-[#FBBF24] hover:bg-[#F59E0B] text-[11px] sm:text-xs font-bold text-[#111827] shadow-sm transition-all cursor-pointer whitespace-nowrap flex-nowrap"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-4 w-4" />
             {t.btnAddProduct}
           </button>
         </div>
       </div>
 
       {/* Filter and Pagesize Toolbar */}
-      <div className="bg-white rounded-3xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-lg p-2.5 shadow-xs flex flex-row items-center justify-between gap-3 border border-[#E5E7EB]">
         {/* Category Filter */}
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-[#6B7280]" />
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          <Filter className="h-3.5 w-3.5 text-[#6B7280] shrink-0" />
           <select
             title="Pilih Kategori"
-            className="bg-[#F3F4F6] border border-[#E5E7EB] rounded-2xl px-4 py-2 text-xs font-semibold text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+            className="bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg px-2 py-1 text-[11px] font-semibold text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] w-full max-w-[160px] sm:max-w-[200px]"
             value={selectedCategory}
             onChange={(e) => {
               setSelectedCategory(e.target.value);
@@ -842,11 +755,11 @@ export function ProductsPage() {
         </div>
 
         {/* Page Size selector */}
-        <div className="flex items-center gap-2 text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-          <span>{t.showText}</span>
+        <div className="flex items-center gap-1 text-[11px] text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] shrink-0">
+          <span className="hidden sm:inline">{t.showText}</span>
           <select
             title="Jumlah Baris"
-            className="bg-[#F3F4F6] border border-[#E5E7EB] rounded-xl px-2 py-1 font-bold text-[#374151] focus:outline-none"
+            className="bg-[#F3F4F6] border border-[#E5E7EB] rounded-md px-1 py-0.5 font-bold text-[#374151] focus:outline-none"
             value={pageSize}
             onChange={(e) => {
               setPageSize(Number(e.target.value));
@@ -867,14 +780,14 @@ export function ProductsPage() {
           <p className="mt-2 text-sm font-['Hanken_Grotesk',system-ui,sans-serif]">{t.loadingDatabase}</p>
         </div>
       ) : error ? (
-        <div className="bg-red-50 border border-red-200 text-red-950 p-6 rounded-3xl text-center space-y-3 font-['Hanken_Grotesk',system-ui,sans-serif]">
+        <div className="bg-red-50 border border-red-200 text-red-950 p-6 rounded-lg text-center space-y-3 font-['Hanken_Grotesk',system-ui,sans-serif]">
           <p>{error}</p>
-          <button onClick={load} className="inline-flex min-h-11 px-6 bg-[#FBBF24] rounded-2xl items-center font-bold text-[#111827]">
+          <button onClick={load} className="inline-flex min-h-10 px-5 bg-[#FBBF24] rounded-lg items-center font-bold text-[#111827]">
             {t.tryAgain}
           </button>
         </div>
       ) : items.length === 0 ? (
-        <div className="bg-white rounded-[32px] p-12 text-center space-y-4 shadow-sm border border-[#E5E7EB]">
+        <div className="bg-white rounded-lg p-12 text-center space-y-4 shadow-sm border border-[#E5E7EB]">
           <ImageOff className="h-16 w-16 mx-auto text-[#9CA3AF]" />
           <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">{t.noProduct}</h2>
           <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-sm mx-auto">
@@ -883,15 +796,139 @@ export function ProductsPage() {
           <button
             type="button"
             onClick={() => void openDrawer()}
-            className="inline-flex min-h-11 px-6 bg-[#FBBF24] text-[#111827] rounded-2xl items-center font-bold cursor-pointer"
+            className="inline-flex min-h-10 px-5 bg-[#FBBF24] text-[#111827] rounded-lg items-center font-bold cursor-pointer"
           >
             {t.btnAddNewProduct}
           </button>
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Main Table */}
-          <div className="bg-white rounded-3xl shadow-sm border border-[#E5E7EB] overflow-x-auto">
+          {/* Mobile view cards (2-column compact grid) */}
+          <div className="md:hidden grid grid-cols-2 gap-3">
+            {paginatedItems.map((item) => {
+              const isEditingThis = editingStockId === item.id;
+
+              return (
+                <div
+                  key={item.id}
+                  className="bg-white rounded-lg border border-[#E5E7EB] p-3 shadow-xs flex flex-col justify-between font-['Hanken_Grotesk',system-ui,sans-serif]"
+                >
+                  <div className="space-y-2">
+                    {/* Thumbnail preview - top aligned, full width */}
+                    <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center text-[#9CA3AF] shrink-0">
+                      <ProductImage imageUrl={item.imageUrl} alt={item.itemName} className="h-full w-full object-cover" fallbackClassName="h-5 w-5 text-[#9CA3AF]" />
+                    </div>
+                    
+                    {/* Info text */}
+                    <div className="min-w-0">
+                      <p className="font-['Manrope',system-ui,sans-serif] font-bold text-xs text-[#111827] line-clamp-2 min-h-[32px] leading-tight" title={item.itemName}>
+                        {item.itemName}
+                      </p>
+                      <span className="inline-block text-[9px] font-semibold text-[#6B7280] bg-[#F3F4F6] px-1.5 py-0.5 rounded-md mt-1">
+                        {translateCategory(item.category, lang) || "-"}
+                      </span>
+                      <p className="font-extrabold text-xs text-[#111827] mt-1.5">
+                        {formatIDR(item.price)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2 mt-2 border-t border-[#F3F4F6]">
+                    {/* Availability switch / badge */}
+                    <div className="flex items-center justify-between gap-1 text-[10px]">
+                      <span className="text-[#6B7280] font-semibold">Status:</span>
+                      <button
+                        onClick={() => handleToggleAvailability(item)}
+                        className={
+                          "rounded-md border px-1.5 py-0.5 text-[9px] font-bold cursor-pointer transition-all " +
+                          (item.available
+                            ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                            : "bg-red-50 border-red-200 text-red-700 hover:bg-red-100")
+                        }
+                        title={t.btnAvailabilityTooltip}
+                      >
+                        {item.available ? t.statusActive : t.statusInactive}
+                      </button>
+                    </div>
+
+                    {/* Stock inline editor */}
+                    <div className="flex items-center justify-between gap-1 text-[10px]">
+                      <span className="text-[#6B7280] font-semibold">Stok:</span>
+                      {isEditingThis ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            title={t.inlineStockTitle}
+                            placeholder="0"
+                            className="w-10 bg-[#F3F4F6] border border-[#D1D5DB] rounded px-1 py-0.5 text-center text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-[#FBBF24]"
+                            value={editingQty}
+                            min={0}
+                            max={99999}
+                            onChange={(e) => setEditingQty(Number(e.target.value))}
+                          />
+                          <button
+                            onClick={() => handleInlineStockSave(item, editingQty)}
+                            className="p-0.5 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 cursor-pointer"
+                            title={t.inlineStockConfirmTooltip}
+                            disabled={savingStockId === item.id}
+                          >
+                            {savingStockId === item.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Check className="h-3 w-3" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => setEditingStockId(null)}
+                            className="p-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 cursor-pointer"
+                            title={t.inlineStockCancelTooltip}
+                            disabled={savingStockId === item.id}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => {
+                            setEditingStockId(item.id);
+                            setEditingQty(item.quantity);
+                          }}
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#F9FAFB] hover:bg-[#F3F4F6] border border-[#E5E7EB] rounded cursor-pointer font-bold text-[10px] text-neutral-800"
+                          title={t.inlineStockTooltip}
+                        >
+                          <span>{item.quantity}</span>
+                          <span className="text-[8px] text-[#6B7280] font-normal">{item.unit || "pcs"}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-1.5 pt-2 border-t border-[#F3F4F6] mt-2">
+                    <button
+                      onClick={() => void openDrawer(item)}
+                      className="flex-1 flex items-center justify-center gap-1 py-1 border border-[#E5E7EB] hover:bg-amber-50 hover:text-[#FBBF24] hover:border-amber-200 rounded-lg cursor-pointer text-[10px] font-bold text-[#4B5563] transition-all"
+                      title={t.btnEditTooltip}
+                    >
+                      <Edit className="h-3 w-3" />
+                      <span>Ubah</span>
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget(item)}
+                      className="flex-1 flex items-center justify-center gap-1 py-1 border border-[#E5E7EB] hover:bg-red-50 hover:text-red-600 hover:border-red-200 rounded-lg cursor-pointer text-[10px] font-bold text-[#4B5563] transition-all"
+                      title={t.btnDeleteTooltip}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      <span>Hapus</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block bg-white rounded-3xl shadow-sm border border-[#E5E7EB] overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[800px] table-fixed">
               <thead>
                 <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB] text-xs font-extrabold text-[#4B5563] uppercase font-['Manrope',system-ui,sans-serif]">
@@ -913,7 +950,6 @@ export function ProductsPage() {
               </thead>
               <tbody className="divide-y divide-[#E5E7EB] text-xs font-medium text-[#111827] font-['Hanken_Grotesk',system-ui,sans-serif]">
                 {paginatedItems.map((item) => {
-                  const imageHref = resolveProductImageURL(item.imageUrl);
                   const isEditingThis = editingStockId === item.id;
 
                   return (
@@ -921,11 +957,7 @@ export function ProductsPage() {
                       {/* Photo Thumbnail */}
                       <td className="p-4">
                         <div className="h-12 w-12 rounded-xl overflow-hidden bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center text-[#9CA3AF]">
-                          {imageHref ? (
-                            <img src={imageHref} alt={item.itemName} className="h-full w-full object-cover" />
-                          ) : (
-                            <ImageOff className="h-5 w-5" />
-                          )}
+                          <ProductImage imageUrl={item.imageUrl} alt={item.itemName} className="h-full w-full object-cover" fallbackClassName="h-5 w-5 text-[#9CA3AF]" />
                         </div>
                       </td>
 
@@ -1168,16 +1200,16 @@ export function ProductsPage() {
                 {/* Image Upload */}
                 <div className="space-y-3">
                   <label className="text-sm font-bold text-[#111827] font-['Manrope',system-ui,sans-serif]">{t.labelProductPhoto}</label>
-                  <div className="flex flex-col sm:flex-row gap-4 items-center">
+                  <div className="flex flex-col items-center justify-center gap-4 w-full py-2">
                     <div className="h-36 w-36 rounded-2xl overflow-hidden bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center text-[#9CA3AF] shrink-0">
                       {fImagePreview ? (
-                        <img src={fImagePreview} alt={t.photoPlaceholder} className="h-full w-full object-cover" />
+                        <ProductImage imageUrl={fImagePreview} alt={t.photoPlaceholder} className="h-full w-full object-cover" fallbackClassName="h-8 w-8 text-[#9CA3AF]" />
                       ) : (
                         <ImageOff className="h-8 w-8" />
                       )}
                     </div>
-                    <div className="flex-1 space-y-2 w-full">
-                      <div className="flex gap-2">
+                    <div className="flex flex-col items-center justify-center space-y-2 w-full">
+                      <div className="flex flex-wrap items-center justify-center gap-2">
                         <label className="inline-flex items-center gap-1.5 px-4 py-2 border border-[#E5E7EB] bg-white text-xs font-bold text-[#374151] rounded-xl cursor-pointer hover:bg-[#F9FAFB]">
                           <Upload className="h-4 w-4" />
                           {t.btnSelectFile}
@@ -1200,19 +1232,12 @@ export function ProductsPage() {
                           </button>
                         )}
                       </div>
-                      {fSelectedFile && !fUploading && (
+                      {fFailedChunk !== undefined && fSelectedFile && !fUploading && (
                         <div className="flex gap-2 pt-2">
-                          {fFailedChunk !== undefined ? (
-                            <button type="button" onClick={() => void handleDrawerUpload(true)}
-                              className="px-3 py-1.5 bg-emerald-600 text-xs font-bold text-white rounded-xl flex items-center gap-1 cursor-pointer">
-                              <RefreshCw className="h-3.5 w-3.5" /> {t.btnResumeChunk.replace("{chunk}", String(fFailedChunk))}
-                            </button>
-                          ) : (
-                            <button type="button" onClick={() => void handleDrawerUpload(false)}
-                              className="px-3 py-1.5 bg-[#FBBF24] text-xs font-bold text-[#111827] rounded-xl cursor-pointer">
-                              {t.btnUploadImage}
-                            </button>
-                          )}
+                          <button type="button" onClick={() => void uploadFileDirectly(fSelectedFile, true)}
+                            className="px-3 py-1.5 bg-emerald-600 text-xs font-bold text-white rounded-xl flex items-center gap-1 cursor-pointer">
+                            <RefreshCw className="h-3.5 w-3.5" /> {t.btnResumeChunk.replace("{chunk}", String(fFailedChunk))}
+                          </button>
                         </div>
                       )}
                       {fUploading && (
@@ -1271,7 +1296,7 @@ export function ProductsPage() {
                       <label className="text-xs font-bold text-[#4B5563]">{t.labelInitialStock}</label>
                       <input type="number" required min={0} max={99999} placeholder={t.placeholderDrawerQty}
                          className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-                         value={fQty} onChange={(e) => setFQty(Number(e.target.value))} />
+                         value={fQty || ""} onChange={(e) => setFQty(Number(e.target.value))} />
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-[#4B5563] block">{t.labelAvailabilityStatus}</label>
@@ -1301,9 +1326,9 @@ export function ProductsPage() {
                        className="flex-1 min-h-12 border border-[#E5E7EB] hover:bg-[#F9FAFB] text-sm font-bold text-[#374151] rounded-2xl cursor-pointer">
                       {t.btnCancel}
                     </button>
-                    <button type="submit" disabled={drawerSaving}
+                    <button type="submit" disabled={drawerSaving || fUploading}
                        className="flex-1 min-h-12 bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-bold text-[#111827] rounded-2xl flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50">
-                      {drawerSaving ? <><Loader2 className="h-5 w-5 animate-spin" />{t.savingText}</> : t.btnSave}
+                      {drawerSaving ? <><Loader2 className="h-5 w-5 animate-spin" />{t.savingText}</> : fUploading ? <><Loader2 className="h-5 w-5 animate-spin" />{t.uploadingText}</> : t.btnSave}
                     </button>
                   </div>
                 </form>

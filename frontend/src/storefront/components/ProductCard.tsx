@@ -1,10 +1,10 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ImageOff } from "lucide-react";
 
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatIDR, truncate } from "@/lib/format";
 import type { InventoryItem } from "@/types/inventory";
+import { ProductImage } from "@/components/ProductImage";
 
 /**
  * Mobile-first product card redesigned to look like modern premium e-commerce (Shopee).
@@ -19,18 +19,7 @@ import type { InventoryItem } from "@/types/inventory";
  *   - Coral red "Beli" action button.
  */
 
-const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
-function resolveProductImageURL(ref: string | undefined): string | null {
-  if (!ref) return null;
-  if (ref.startsWith("http://") || ref.startsWith("https://")) return ref;
-  const segments = ref.trim().split("/");
-  if (segments.length === 0) return null;
-  const fileId = segments[segments.length - 1];
-  if (!fileId) return null;
-  return `${API_BASE_URL}/api/files/product_images/${encodeURIComponent(fileId)}/download`;
-}
 
 const translateUnit = (unit: string, lang: string) => {
   if (lang !== "en") return unit;
@@ -49,9 +38,7 @@ export interface ProductCardProps {
 
 export function ProductCard({ item, className }: ProductCardProps) {
   const { lang } = useLanguage();
-  const imageHref = resolveProductImageURL(item.imageUrl);
   const inStock = item.available && item.quantity > 0;
-  const [imageError, setImageError] = useState(false);
 
   const discountPercent = (item.price % 3 === 0) ? 10 : (item.price % 5 === 0) ? 15 : 0;
   const baseSales = (item.price % 97) + 5;
@@ -73,13 +60,12 @@ export function ProductCard({ item, className }: ProductCardProps) {
     >
       {/* Product Image Wrapper */}
       <div className="relative w-full aspect-square bg-[#F3F4F6] overflow-hidden">
-        {imageHref && !imageError ? (
-          <img
-            src={imageHref}
+        {item.imageUrl ? (
+          <ProductImage
+            imageUrl={item.imageUrl}
             alt={item.itemName}
-            loading="lazy"
-            onError={() => setImageError(true)}
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            fallbackClassName="h-10 w-10 text-[#9CA3AF]"
           />
         ) : (
           <div

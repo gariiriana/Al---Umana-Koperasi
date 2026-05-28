@@ -144,65 +144,109 @@ export function OrdersPage() {
               <div>Qty</div>
               <div className="w-[38px]"></div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {items.map((it, idx) => (
                 <div
                   key={it.uid}
-                  className="grid grid-cols-[2.5fr_4fr_2fr_auto] md:grid-cols-[1fr_2fr_120px_auto] gap-2 items-center"
+                  className="p-3 bg-[#F9FAFB] md:bg-transparent border border-[#E5E7EB] md:border-0 rounded-2xl md:rounded-none flex flex-col md:grid md:grid-cols-[1fr_2fr_120px_auto] gap-3 md:gap-2 md:items-center"
                 >
-                  <Input
-                    placeholder="SKU-001"
-                    value={it.itemId}
-                    onChange={(e) =>
-                      setItems((s) =>
-                        s.map((x) =>
-                          x.uid === it.uid ? { ...x, itemId: e.target.value } : x
+                  {/* Row 1 (Mobile: ID + Qty + Delete) */}
+                  <div className="flex md:contents gap-2 items-start">
+                    <div className="flex-1 md:w-auto">
+                      <label className="block md:hidden mb-1 text-[10px] font-bold text-[#6B7280] uppercase tracking-wide">
+                        Item ID
+                      </label>
+                      <Input
+                        placeholder="SKU-001"
+                        value={it.itemId}
+                        onChange={(e) =>
+                          setItems((s) =>
+                            s.map((x) =>
+                              x.uid === it.uid ? { ...x, itemId: e.target.value } : x
+                            )
+                          )
+                        }
+                        error={errors[`items[${idx}].itemId`]}
+                      />
+                    </div>
+                    
+                    <div className="w-20 md:w-auto">
+                      <label className="block md:hidden mb-1 text-[10px] font-bold text-[#6B7280] uppercase tracking-wide">
+                        Qty
+                      </label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={String(it.quantity)}
+                        onChange={(e) =>
+                          setItems((s) =>
+                            s.map((x) =>
+                              x.uid === it.uid
+                                ? { ...x, quantity: parseInt(e.target.value, 10) || 0 }
+                                : x
+                            )
+                          )
+                        }
+                        error={errors[`items[${idx}].quantity`]}
+                      />
+                    </div>
+                    
+                    <div className="md:hidden flex items-center pt-5">
+                      <Button
+                        type="button"
+                        variant="outlined"
+                        size="sm"
+                        className="!p-3 border border-[#E5E7EB] text-[#EF4444] hover:bg-red-50 hover:border-red-200"
+                        onClick={() =>
+                          setItems((s) =>
+                            s.length > 1 ? s.filter((x) => x.uid !== it.uid) : s
+                          )
+                        }
+                        aria-label="Remove item"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Row 2 (Mobile: Item Name) */}
+                  <div className="w-full md:w-auto md:contents">
+                    <div className="w-full">
+                      <label className="block md:hidden mb-1 text-[10px] font-bold text-[#6B7280] uppercase tracking-wide">
+                        Item Name
+                      </label>
+                      <Input
+                        placeholder="e.g. Beras 5kg"
+                        value={it.itemName}
+                        onChange={(e) =>
+                          setItems((s) =>
+                            s.map((x) =>
+                              x.uid === it.uid ? { ...x, itemName: e.target.value } : x
+                            )
+                          )
+                        }
+                        error={errors[`items[${idx}].itemName`]}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Desktop Delete Button */}
+                  <div className="hidden md:block">
+                    <Button
+                      type="button"
+                      variant="outlined"
+                      size="sm"
+                      className="p-3"
+                      onClick={() =>
+                        setItems((s) =>
+                          s.length > 1 ? s.filter((x) => x.uid !== it.uid) : s
                         )
-                      )
-                    }
-                    error={errors[`items[${idx}].itemId`]}
-                  />
-                  <Input
-                    placeholder="e.g. Beras 5kg"
-                    value={it.itemName}
-                    onChange={(e) =>
-                      setItems((s) =>
-                        s.map((x) =>
-                          x.uid === it.uid ? { ...x, itemName: e.target.value } : x
-                        )
-                      )
-                    }
-                    error={errors[`items[${idx}].itemName`]}
-                  />
-                  <Input
-                    type="number"
-                    min={1}
-                    value={String(it.quantity)}
-                    onChange={(e) =>
-                      setItems((s) =>
-                        s.map((x) =>
-                          x.uid === it.uid
-                            ? { ...x, quantity: parseInt(e.target.value, 10) || 0 }
-                            : x
-                        )
-                      )
-                    }
-                    error={errors[`items[${idx}].quantity`]}
-                  />
-                  <Button
-                    type="button"
-                    variant="outlined"
-                    size="sm"
-                    className="p-3"
-                    onClick={() =>
-                      setItems((s) =>
-                        s.length > 1 ? s.filter((x) => x.uid !== it.uid) : s
-                      )
-                    }
-                    aria-label="Remove item"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                      }
+                      aria-label="Remove item"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

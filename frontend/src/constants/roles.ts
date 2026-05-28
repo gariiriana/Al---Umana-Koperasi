@@ -6,34 +6,41 @@
  * `/category/:name`).
  */
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
+  /**
+   * Admin: mengelola produk, menyetujui pembayaran, dan melihat dashboard.
+   * Tidak perlu akses ke fitur produksi atau distribusi.
+   */
   admin: [
     "/admin/dashboard",
-    "/admin/orders",
-    "/admin/production",
-    "/admin/qc",
-    "/admin/dispatch",
-    "/admin/delivery",
-    "/admin/tracking",
-    "/admin/settings",
     "/admin/products",
     "/admin/products/new",
     "/admin/categories",
     "/admin/payment-approvals",
   ],
+
+  /**
+   * Tim Produksi: mengelola proses produksi dan quality control.
+   */
+  tim_produksi: [
+    "/admin/production",
+    "/admin/qc",
+  ],
+
+  /**
+   * Distribusi: mengelola pengiriman dan pengantaran.
+   */
+  distribusi: [
+    "/distribusi/dispatch",
+    "/distribusi/delivery",
+  ],
+
   monitoring: [
     "/admin/dashboard",
     "/admin/orders",
     "/admin/tracking",
-    "/admin/settings",
   ],
-  tim_produksi: ["/admin/production", "/admin/settings"],
-  distribusi: [
-    "/admin/dispatch",
-    "/admin/delivery",
-    "/admin/tracking",
-    "/admin/settings",
-  ],
-  pelanggan: ["/admin/settings"],
+
+  pelanggan: [],
 };
 
 /** Roles that land on the admin AppShell when authenticated. */
@@ -52,6 +59,6 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   admin: "/admin/dashboard",
   monitoring: "/admin/dashboard",
   tim_produksi: "/admin/production",
-  distribusi: "/admin/dispatch",
+  distribusi: "/distribusi/dispatch",
   pelanggan: "/",
 };

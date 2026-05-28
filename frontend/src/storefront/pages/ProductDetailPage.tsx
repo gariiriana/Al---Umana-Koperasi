@@ -14,25 +14,16 @@ import {
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useToast } from "@/contexts/ToastContext";
 import { getProduct } from "@/services/catalogService";
 import { addToCart } from "@/services/cartService";
 import { formatIDR } from "@/lib/format";
+import { ProductImage } from "@/components/ProductImage";
 import type { InventoryItem } from "@/types/inventory";
 import { useCartAnimation } from "@/contexts/useCartAnimation";
 import { translateCategory } from "@/constants/categories";
 
-const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
-function resolveProductImageURL(ref: string | undefined): string | null {
-  if (!ref) return null;
-  if (ref.startsWith("http://") || ref.startsWith("https://")) return ref;
-  const segments = ref.trim().split("/");
-  if (segments.length === 0) return null;
-  const fileId = segments[segments.length - 1];
-  if (!fileId) return null;
-  return `${API_BASE_URL}/api/files/product_images/${encodeURIComponent(fileId)}/download`;
-}
 
 const translateUnit = (unit: string, lang: string) => {
   if (lang !== "en") return unit;
@@ -112,6 +103,7 @@ export function ProductDetailPage() {
   const location = useLocation();
   const { user } = useAuth();
   const { lang } = useLanguage();
+  const { showToast } = useToast();
   const t = DICTIONARY[lang];
   const { triggerFlyAnimation } = useCartAnimation();
 
@@ -181,7 +173,7 @@ export function ProductDetailPage() {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2500);
     } catch {
-      alert(t.addError);
+      showToast({ message: t.addError, variant: "error" });
     } finally {
       setAdding(false);
     }
@@ -218,7 +210,6 @@ export function ProductDetailPage() {
   }
 
   const { product } = state;
-  const imageHref = resolveProductImageURL(product.imageUrl);
   const inStock = product.available && product.quantity > 0;
   const totalPrice = product.price * qty;
 
@@ -249,11 +240,12 @@ export function ProductDetailPage() {
         <div className="lg:sticky lg:top-20 lg:self-start">
           {/* Main Image */}
           <div className="relative w-full aspect-square bg-white lg:rounded-2xl overflow-hidden shadow-sm border border-[#E5E7EB]">
-            {imageHref ? (
-              <img
-                src={imageHref}
+            {product.imageUrl ? (
+              <ProductImage
+                imageUrl={product.imageUrl}
                 alt={product.itemName}
                 className="absolute inset-0 h-full w-full object-contain p-4"
+                fallbackClassName="h-20 w-20 text-[#9CA3AF]"
               />
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-[#9CA3AF]">
@@ -281,8 +273,8 @@ export function ProductDetailPage() {
             <div
               className={`h-16 w-16 rounded-xl border-2 border-[#FBBF24] overflow-hidden bg-white flex items-center justify-center`}
             >
-              {imageHref ? (
-                <img src={imageHref} alt="" className="h-full w-full object-contain p-1" />
+              {product.imageUrl ? (
+                <ProductImage imageUrl={product.imageUrl} alt="" className="h-full w-full object-contain p-1" fallbackClassName="h-6 w-6 text-[#9CA3AF]" />
               ) : (
                 <ImageOff className="h-6 w-6 text-[#9CA3AF]" />
               )}

@@ -384,6 +384,7 @@ describe("Authentication UI Features", () => {
 
       // Verify only allowed navigation links are visible
       expect(document.querySelector('a[href="/admin/production"]')).not.toBeNull();
+      expect(document.querySelector('a[href="/admin/qc"]')).not.toBeNull();
 
       // Open profile dropdown to check Settings link
       const profileBtn = document.getElementById("profile-menu-button");
@@ -394,7 +395,6 @@ describe("Authentication UI Features", () => {
       // Verify other navigation links are hidden
       expect(document.querySelector('a[href="/admin/dashboard"]')).toBeNull();
       expect(document.querySelector('a[href="/admin/orders"]')).toBeNull();
-      expect(document.querySelector('a[href="/admin/qc"]')).toBeNull();
       expect(document.querySelector('a[href="/admin/dispatch"]')).toBeNull();
       expect(document.querySelector('a[href="/admin/delivery"]')).toBeNull();
       expect(document.querySelector('a[href="/admin/tracking"]')).toBeNull();
@@ -415,14 +415,18 @@ describe("Authentication UI Features", () => {
       render(<AppRouter />);
 
       await waitFor(() => {
-        // Admin sees all links
+        // Admin sees allowed links
         expect(document.querySelector('a[href="/admin/dashboard"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/admin/orders"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/admin/production"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/admin/qc"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/admin/dispatch"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/admin/delivery"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/admin/tracking"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/products"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/payment-approvals"]')).not.toBeNull();
+        
+        // Admin does not see production/delivery/etc.
+        expect(document.querySelector('a[href="/admin/orders"]')).toBeNull();
+        expect(document.querySelector('a[href="/admin/production"]')).toBeNull();
+        expect(document.querySelector('a[href="/admin/qc"]')).toBeNull();
+        expect(document.querySelector('a[href="/admin/dispatch"]')).toBeNull();
+        expect(document.querySelector('a[href="/admin/delivery"]')).toBeNull();
+        expect(document.querySelector('a[href="/admin/tracking"]')).toBeNull();
       });
 
       // Open profile dropdown to check Settings link

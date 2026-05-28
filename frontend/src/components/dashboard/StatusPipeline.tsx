@@ -1,16 +1,14 @@
 import { motion } from "motion/react";
-import { Card } from "@/components/ui/Card";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { Order, OrderStatus } from "@/types/order";
 
-const STATUSES: OrderStatus[] = [
-  "PLACING",
-  "CONFIRMED",
-  "IN_PRODUCTION",
-  "READY",
-  "READY_TO_DELIVER",
-  "OUT_FOR_DELIVERY",
-  "DELIVERED",
+const STATUSES: { key: OrderStatus; label: string; color: string; bg: string }[] = [
+  { key: "PLACING",            label: "Menunggu",   color: "text-gray-600",   bg: "bg-gray-100" },
+  { key: "CONFIRMED",          label: "Dikonfirmasi", color: "text-emerald-700", bg: "bg-emerald-50" },
+  { key: "IN_PRODUCTION",      label: "Diproduksi", color: "text-amber-700",  bg: "bg-amber-50" },
+  { key: "READY",              label: "Selesai QC", color: "text-purple-700", bg: "bg-purple-50" },
+  { key: "READY_TO_DELIVER",   label: "Siap Kirim", color: "text-blue-700",   bg: "bg-blue-50" },
+  { key: "OUT_FOR_DELIVERY",   label: "Dalam Jalan",color: "text-orange-700", bg: "bg-orange-50" },
+  { key: "DELIVERED",          label: "Terkirim",   color: "text-teal-700",   bg: "bg-teal-50" },
 ];
 
 export interface StatusPipelineProps {
@@ -18,40 +16,31 @@ export interface StatusPipelineProps {
 }
 
 export function StatusPipeline({ orders }: StatusPipelineProps) {
-  const counts: Record<OrderStatus, number> = {
-    PLACING: 0,
-    AWAITING_PAYMENT_PROOF: 0,
-    AWAITING_PAYMENT_APPROVAL: 0,
-    PAYMENT_REJECTED: 0,
-    CONFIRMED: 0,
-    IN_PRODUCTION: 0,
-    READY: 0,
-    READY_TO_DELIVER: 0,
-    OUT_FOR_DELIVERY: 0,
-    DELIVERED: 0,
-    FAILED: 0,
-  };
-  for (const o of orders) counts[o.status] += 1;
+  const counts: Record<string, number> = {};
+  for (const o of orders) {
+    counts[o.status] = (counts[o.status] ?? 0) + 1;
+  }
 
   return (
-    <div className="flex overflow-x-auto gap-3 pb-2 md:grid md:grid-cols-4 lg:grid-cols-7">
-      {STATUSES.map((status) => (
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+      {STATUSES.map(({ key, label, color, bg }, i) => (
         <motion.div
-          key={status}
+          key={key}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.18 }}
-          className="min-w-[140px] md:min-w-0 flex-1 md:flex-initial shrink-0 md:shrink"
+          transition={{ duration: 0.15, delay: i * 0.04 }}
         >
-          <Card className="!p-4 h-full">
-            <StatusBadge status={status} />
+          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-3.5 h-full flex flex-col gap-2">
+            <span className={`self-start inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${bg} ${color} font-['Manrope',system-ui,sans-serif]`}>
+              {label}
+            </span>
             <p
-              className="mt-3 font-['Manrope',system-ui,sans-serif] text-3xl font-bold text-[#111827]"
-              data-testid={`pipeline-count-${status}`}
+              className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]"
+              data-testid={`pipeline-count-${key}`}
             >
-              {counts[status]}
+              {counts[key] ?? 0}
             </p>
-          </Card>
+          </div>
         </motion.div>
       ))}
     </div>

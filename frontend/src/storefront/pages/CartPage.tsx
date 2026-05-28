@@ -4,6 +4,7 @@ import { Loader2, ArrowLeft, Trash2, Plus, Minus, FileText, ArrowRight, Shopping
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useToast } from "@/contexts/ToastContext";
 import {
   subscribeToCart,
   setLineQuantity,
@@ -73,6 +74,7 @@ export function CartPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { lang } = useLanguage();
+  const { showToast } = useToast();
   const t = DICTIONARY[lang];
 
   const [loading, setLoading] = useState(true);
@@ -109,7 +111,7 @@ export function CartPage() {
     try {
       await setLineQuantity(user.uid, itemId, nextQty);
     } catch {
-      alert(t.updateError);
+      showToast({ message: t.updateError, variant: "error" });
     }
   };
 
@@ -128,7 +130,7 @@ export function CartPage() {
       try {
         await removeLineItem(user.uid, itemId);
       } catch {
-        alert(t.deleteError);
+        showToast({ message: t.deleteError, variant: "error" });
       }
     }
   };

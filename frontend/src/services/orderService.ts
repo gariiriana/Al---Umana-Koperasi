@@ -19,8 +19,6 @@ import {
   getDocs,
   query,
   where,
-  orderBy,
-  limit as firestoreLimit,
   onSnapshot,
   runTransaction,
   deleteDoc,
@@ -109,6 +107,15 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     paymentRejectedBy: data.paymentRejectedBy as string | undefined,
     paymentRejectedAt: toIsoStringOrUndefined(data.paymentRejectedAt),
     paymentRejectionReason: data.paymentRejectionReason as string | undefined,
+    productionStartPhotoId: data.productionStartPhotoId as string | undefined,
+    productionTimerEnd: toIsoStringOrUndefined(data.productionTimerEnd),
+    productionDurationMinutes: data.productionDurationMinutes as number | undefined,
+    deliveryStartPhotoId: data.deliveryStartPhotoId as string | undefined,
+    deliveryTimerEnd: toIsoStringOrUndefined(data.deliveryTimerEnd),
+    deliveryStartedAt: toIsoStringOrUndefined(data.deliveryStartedAt),
+    deliveryDurationMinutes: data.deliveryDurationMinutes as number | undefined,
+    courierLat: data.courierLat as number | undefined,
+    courierLng: data.courierLng as number | undefined,
   };
 }
 
@@ -539,9 +546,15 @@ export function subscribeToPaymentApprovalQueue(
 ): Unsubscribe {
   const q = query(
     collection(db, "orders"),
-    where("status", "==", "AWAITING_PAYMENT_APPROVAL"),
-    orderBy("createdAt", "desc"),
-    firestoreLimit(PAYMENT_APPROVAL_QUEUE_LIMIT)
+    where("status", "==", "AWAITING_PAYMENT_APPROVAL")
   );
-  return onSnapshot(q, (snap) => cb(snapshotToOrders(snap)), onError);
+  return onSnapshot(
+    q,
+    (snap) => {
+      const orders = snapshotToOrders(snap);
+      orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      cb(orders.slice(0, PAYMENT_APPROVAL_QUEUE_LIMIT));
+    },
+    onError
+  );
 }

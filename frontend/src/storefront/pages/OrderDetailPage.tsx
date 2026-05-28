@@ -135,7 +135,6 @@ const translateTime = (time: string, lang: string) => {
   }
 };
 
-
 function getStatusStepIndex(status: string): number {
   switch (status) {
     case "PLACING":
@@ -158,6 +157,476 @@ function getStatusStepIndex(status: string): number {
       return 1;
   }
 }
+
+// ── DYNAMIC LEAFLET COURIER TRACKING MAP ───────────────────────
+
+const ORIGIN: [number, number] = [-6.9034, 106.9696]; // PP Modern Al-Umanaa
+const FALLBACK_DEST: [number, number] = [-6.9080, 106.9780]; // Fallback customer coords
+
+/** Build a realistic-looking road path between two points with minor intermediate offsets */
+function buildRoute(origin: [number, number], dest: [number, number]): [number, number][] {
+  const steps = 8;
+  const points: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const lat = origin[0] + (dest[0] - origin[0]) * t;
+    const lng = origin[1] + (dest[1] - origin[1]) * t;
+    // Add small perpendicular wobble to simulate real road curves
+    const offset = Math.sin(t * Math.PI) * 0.0008;
+    points.push([lat + offset * 0.4, lng + offset]);
+  }
+  return points;
+}
+
+function getInterpolatedPoint(coords: [number, number][], t: number): [number, number] {
+  if (t <= 0) return coords[0];
+  if (t >= 1) return coords[coords.length - 1];
+  const fractionalIndex = t * (coords.length - 1);
+  const index = Math.floor(fractionalIndex);
+  const remainder = fractionalIndex - index;
+  const startPt = coords[index];
+  const endPt = coords[index + 1];
+  return [
+    startPt[0] + (endPt[0] - startPt[0]) * remainder,
+    startPt[1] + (endPt[1] - startPt[1]) * remainder,
+  ];
+}
+
+function CourierTrackingMap({
+  progress,
+  courierLat,
+  courierLng,
+  customerLat,
+  customerLng,
+}: {
+  progress: number;
+  courierLat?: number;
+  courierLng?: number;
+  customerLat?: number | null;
+  customerLng?: number | null;
+}) {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null);
+  const courierMarkerRef = useRef<any>(null);
+  const polylineRef = useRef<any>(null);
+  const destMarkerRef = useRef<any>(null);
+  const routeRef = useRef<[number, number][]>([]);
+
+  // Determine destination coordinates
+  const destLat = (customerLat != null && !isNaN(customerLat)) ? customerLat : FALLBACK_DEST[0];
+  const destLng = (customerLng != null && !isNaN(customerLng)) ? customerLng : FALLBACK_DEST[1];
+  const dest: [number, number] = [destLat, destLng];
+
+  // Initialize map once
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+    const L = (window as any).L;
+    if (!L) return;
+
+    if (!mapRef.current) {
+      // Build initial route
+      routeRef.current = buildRoute(ORIGIN, dest);
+
+      mapRef.current = L.map(mapContainerRef.current, {
+        zoomControl: false,
+        attributionControl: false,
+      }).setView([
+        (ORIGIN[0] + dest[0]) / 2,
+        (ORIGIN[1] + dest[1]) / 2,
+      ], 14);
+
+      // Voyager map tiles (clean, like Gojek)
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        maxZoom: 19,
+      }).addTo(mapRef.current);
+
+      // Emerald green route polyline
+      polylineRef.current = L.polyline(routeRef.current, {
+        color: "#10B981",
+        weight: 5,
+        opacity: 0.9,
+        lineCap: "round",
+        lineJoin: "round",
+      }).addTo(mapRef.current);
+
+      // Origin (Al-Umanaa) marker
+      const startIcon = L.divIcon({
+        className: "bg-transparent",
+        html: `<div style="display:flex;align-items:center;justify-content:center;height:32px;width:32px;border-radius:50%;background:#10B981;color:white;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.25);"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="height:14px;width:14px;"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+      });
+      L.marker(ORIGIN, { icon: startIcon }).addTo(mapRef.current);
+
+      // Destination (Customer) marker
+      const destIcon = L.divIcon({
+        className: "bg-transparent",
+        html: `<div style="display:flex;align-items:center;justify-content:center;height:32px;width:32px;border-radius:50%;background:#3B82F6;color:white;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.25);"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="height:14px;width:14px;"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+      });
+      destMarkerRef.current = L.marker(dest, { icon: destIcon }).addTo(mapRef.current);
+
+      // Courier marker (orange truck)
+      const courierIcon = L.divIcon({
+        className: "bg-transparent",
+        html: `<div style="display:flex;align-items:center;justify-content:center;height:40px;width:40px;border-radius:50%;background:#F97316;color:white;border:2px solid white;box-shadow:0 3px 8px rgba(0,0,0,0.3);"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="height:18px;width:18px;"><rect x="1" y="3" width="15" height="13" rx="2" ry="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>`,
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+      });
+      courierMarkerRef.current = L.marker(ORIGIN, { icon: courierIcon }).addTo(mapRef.current);
+
+      // Fit map to route
+      mapRef.current.fitBounds(routeRef.current, { padding: [40, 40] });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Update route + destination marker when customer location changes
+  useEffect(() => {
+    const L = (window as any).L;
+    if (!L || !mapRef.current || !polylineRef.current || !destMarkerRef.current) return;
+
+    const newRoute = buildRoute(ORIGIN, dest);
+    routeRef.current = newRoute;
+    polylineRef.current.setLatLngs(newRoute);
+    destMarkerRef.current.setLatLng(dest);
+    mapRef.current.fitBounds(newRoute, { padding: [40, 40] });
+  }, [destLat, destLng]);
+
+  // Smooth courier marker update from real GPS or interpolated progress
+  useEffect(() => {
+    if (!courierMarkerRef.current || !mapRef.current) return;
+
+    let lat: number;
+    let lng: number;
+
+    if (courierLat && courierLng) {
+      // Real GPS from courier device
+      lat = courierLat;
+      lng = courierLng;
+    } else {
+      // Fallback: interpolate along route based on timer progress
+      const pt = getInterpolatedPoint(routeRef.current, progress / 100);
+      lat = pt[0];
+      lng = pt[1];
+    }
+
+    courierMarkerRef.current.setLatLng([lat, lng]);
+    mapRef.current.panTo([lat, lng], { animate: true, duration: 1 });
+  }, [progress, courierLat, courierLng]);
+
+  return (
+    <div className="bg-white rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] border border-[#E5E7EB] space-y-4 overflow-hidden relative">
+      <div className="flex justify-between items-center">
+        <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
+          Pelacakan Kurir Real-Time
+        </h3>
+        <span className="text-[10px] font-extrabold text-[#F59E0B] bg-[#FEF3C7] px-2 py-0.5 rounded-full uppercase tracking-wider">
+          Kurir OTW
+        </span>
+      </div>
+
+      {/* Real Map Container */}
+      <div className="relative w-full h-[220px] rounded-2xl border border-emerald-100 overflow-hidden shadow-inner z-0">
+        <div ref={mapContainerRef} className="w-full h-full" />
+      </div>
+
+      {/* Progress detail text */}
+      <div className="flex justify-between items-center text-[10px] text-[#6B7280] font-['Hanken_Grotesk'] font-bold">
+        <span>PP Modern Al-Umanaa</span>
+        <span className="text-amber-600 font-extrabold">
+          {courierLat && courierLng ? (
+            <span className="flex items-center gap-1">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+              </span>
+              GPS Live
+            </span>
+          ) : (
+            `${Math.round(progress)}% Perjalanan`
+          )}
+        </span>
+        <span>{(customerLat != null && customerLng != null) ? "📍 Lokasi GPS Anda" : "Lokasi Anda"}</span>
+      </div>
+    </div>
+  );
+}
+
+function CustomerDeliveryCountdown({ order }: { order: Order }) {
+  const [deliveryPhotoSrc, setDeliveryPhotoSrc] = useState<string | null>(null);
+  const [loadingDeliveryPhoto, setLoadingDeliveryPhoto] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [progress, setProgress] = useState<number>(0);
+  // Customer's own GPS coordinates for dynamic destination pin
+  const [customerLat, setCustomerLat] = useState<number | null>(null);
+  const [customerLng, setCustomerLng] = useState<number | null>(null);
+  const [gpsPermission, setGpsPermission] = useState<"pending" | "granted" | "denied">("pending");
+
+  // Request customer's geolocation for real destination marker
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setGpsPermission("denied");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCustomerLat(pos.coords.latitude);
+        setCustomerLng(pos.coords.longitude);
+        setGpsPermission("granted");
+      },
+      () => {
+        setGpsPermission("denied");
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, []);
+
+  useEffect(() => {
+    const photoId = order?.deliveryStartPhotoId;
+    if (!photoId) {
+      setDeliveryPhotoSrc(null);
+      return;
+    }
+
+    const loadDeliveryPhoto = async () => {
+      setLoadingDeliveryPhoto(true);
+      try {
+        const fileId = photoId.replace("delivery_files/", "");
+        const parentRef = doc(db, "delivery_files", fileId);
+        const parentSnap = await getDoc(parentRef);
+        
+        if (parentSnap.exists()) {
+          const meta = parentSnap.data();
+          const totalChunks = meta.totalChunks || 0;
+          
+          const chunkPromises = [];
+          for (let i = 0; i < totalChunks; i++) {
+            const chunkRef = doc(db, "delivery_files", fileId, "chunks", String(i));
+            chunkPromises.push(getDoc(chunkRef));
+          }
+          const chunkSnaps = await Promise.all(chunkPromises);
+          
+          let fullDataUri = "";
+          for (const chunkSnap of chunkSnaps) {
+            if (chunkSnap.exists()) {
+              fullDataUri += chunkSnap.data().data || "";
+            }
+          }
+          setDeliveryPhotoSrc(fullDataUri);
+        }
+      } catch (err) {
+        console.error("Gagal memuat foto keberangkatan:", err);
+      } finally {
+        setLoadingDeliveryPhoto(false);
+      }
+    };
+
+    loadDeliveryPhoto();
+  }, [order?.deliveryStartPhotoId]);
+
+  useEffect(() => {
+    if (order.status !== "OUT_FOR_DELIVERY" || !order.deliveryTimerEnd || !order.deliveryStartedAt) {
+      setTimeLeft(0);
+      setProgress(0);
+      return;
+    }
+
+    const calculateTimer = () => {
+      const now = Date.now();
+      const start = new Date(order.deliveryStartedAt!).getTime();
+      const end = new Date(order.deliveryTimerEnd!).getTime();
+
+      const totalDuration = end - start;
+      const timeElapsed = now - start;
+
+      const newProgress = totalDuration > 0
+        ? Math.min(100, Math.max(0, (timeElapsed / totalDuration) * 100))
+        : 100;
+
+      const remaining = Math.max(0, Math.floor((end - now) / 1000));
+
+      return { remaining, progress: newProgress };
+    };
+
+    const initial = calculateTimer();
+    setTimeLeft(initial.remaining);
+    setProgress(initial.progress);
+
+    const interval = setInterval(() => {
+      const updated = calculateTimer();
+      setTimeLeft(updated.remaining);
+      setProgress(updated.progress);
+      if (updated.remaining <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [order.status, order.deliveryTimerEnd, order.deliveryStartedAt]);
+
+  if (order.status !== "OUT_FOR_DELIVERY") return null;
+
+  const minutes = Math.floor(timeLeft / 60);
+  const seconds = timeLeft % 60;
+  const formatted = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+
+  const isOvertime = timeLeft <= 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Waktu tiba & Status */}
+      <div className={`p-4 rounded-3xl border ${
+        isOvertime 
+          ? "bg-red-50 border-red-200 text-red-800 animate-pulse" 
+          : "bg-orange-50 border-orange-200 text-orange-900"
+      } flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.04)]`}>
+        <div className="space-y-0.5">
+          <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block">
+            {isOvertime ? "Keterlambatan Pengiriman" : "Estimasi Pesanan Tiba"}
+          </span>
+          <span className="text-xs sm:text-sm font-['Manrope'] font-bold">
+            {isOvertime ? "Kurir akan segera sampai di lokasi" : "Kurir sedang dalam perjalanan ke alamat Anda"}
+          </span>
+        </div>
+        <div className="text-right">
+          <span className="text-lg font-mono font-extrabold tracking-wider block">{formatted}</span>
+        </div>
+      </div>
+
+      {/* Real Interactive Leaflet Courier Tracking Map */}
+      <CourierTrackingMap
+        progress={progress}
+        courierLat={order.courierLat}
+        courierLng={order.courierLng}
+        customerLat={customerLat}
+        customerLng={customerLng}
+      />
+
+      {/* GPS Permission Notice (if denied) */}
+      {gpsPermission === "denied" && (
+        <div className="flex items-start gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] font-['Hanken_Grotesk'] text-amber-800">
+          <span className="text-base leading-none mt-0.5">📍</span>
+          <div>
+            <p className="font-bold">Izinkan akses lokasi agar peta lebih akurat.</p>
+            <p className="text-[10px] text-amber-600 mt-0.5">Titik tujuan pada peta menggunakan lokasi estimasi karena izin GPS ditolak atau tidak tersedia.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Live GPS Coordinates Info */}
+      {order.courierLat && order.courierLng && (
+        <div className="p-3 bg-emerald-50/30 border border-emerald-100 rounded-2xl flex items-center justify-between text-[11px] font-['Hanken_Grotesk'] text-[#065F46] shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="font-bold uppercase tracking-wider text-[9px] text-emerald-600">Live GPS</span>
+            <span className="text-neutral-500 font-medium">Lokasi Kurir Terkini:</span>
+          </div>
+          <span className="font-mono font-bold bg-white border border-emerald-100 rounded-lg px-2 py-0.5 shadow-2xs">
+            {order.courierLat.toFixed(5)}, {order.courierLng.toFixed(5)}
+          </span>
+        </div>
+      )}
+
+      {/* Bukti Foto Keberangkatan Kurir */}
+      {order.deliveryStartPhotoId && (
+        <div className="bg-white rounded-3xl p-5 border border-[#E5E7EB] shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            <h4 className="font-['Manrope',system-ui,sans-serif] text-xs font-bold text-[#111827]">
+              Foto Bukti Keberangkatan Kurir (Otw)
+            </h4>
+          </div>
+          <p className="text-[10px] text-[#6B7280] font-['Hanken_Grotesk'] leading-relaxed">
+            Foto ini diambil langsung oleh kurir kami ({order.assignedCourierId || "Kurir"}) sesaat sebelum berangkat mengantarkan pesanan Anda.
+          </p>
+          <div className="relative border border-[#E5E7EB] rounded-2xl overflow-hidden bg-[#F3F4F6] aspect-video flex items-center justify-center text-[#9CA3AF]">
+            {loadingDeliveryPhoto ? (
+              <div className="flex flex-col items-center justify-center gap-2">
+                <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
+                <p className="text-[10px] text-neutral-500 font-['Hanken_Grotesk']">Memuat foto keberangkatan…</p>
+              </div>
+            ) : deliveryPhotoSrc ? (
+              <img
+                src={deliveryPhotoSrc}
+                alt="Foto Bukti Keberangkatan Kurir"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center p-4 text-center">
+                <FileImage className="h-8 w-8 text-[#9CA3AF] mb-2" />
+                <p className="text-[10px] text-neutral-500 font-['Hanken_Grotesk']">Foto gagal dimuat</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CustomerCookingCountdown({ order }: { order: Order }) {
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+
+  useEffect(() => {
+    if (order.status !== "IN_PRODUCTION" || !order.productionTimerEnd) {
+      setTimeLeft(0);
+      return;
+    }
+
+    const calculateTimer = () => {
+      const now = Date.now();
+      const end = new Date(order.productionTimerEnd!).getTime();
+      return Math.max(0, Math.floor((end - now) / 1000));
+    };
+
+    setTimeLeft(calculateTimer());
+
+    const interval = setInterval(() => {
+      const remaining = calculateTimer();
+      setTimeLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [order.status, order.productionTimerEnd]);
+
+  if (order.status !== "IN_PRODUCTION") return null;
+
+  const minutes = Math.floor(timeLeft / 60);
+  const seconds = timeLeft % 60;
+  const formatted = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+
+  const isOvertime = timeLeft <= 0;
+
+  return (
+    <div className={`p-4 rounded-3xl border ${
+      isOvertime 
+        ? "bg-red-50 border-red-200 text-red-800 animate-pulse" 
+        : "bg-amber-50 border-amber-200 text-amber-900"
+    } flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.04)]`}>
+      <div className="space-y-0.5">
+        <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block">
+          {isOvertime ? "Sedang finishing penyajian" : "Estimasi Waktu Memasak"}
+        </span>
+        <span className="text-xs sm:text-sm font-['Manrope'] font-bold">
+          {isOvertime ? "Koki sedang mengemas pesanan Anda" : "Pesanan Anda sedang diracik & dimasak secara higienis"}
+        </span>
+      </div>
+      <div className="text-right">
+        <span className="text-lg font-mono font-extrabold tracking-wider block">{formatted}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 
 export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -411,6 +880,16 @@ export function OrderDetailPage() {
               </div>
             </div>
 
+            {/* REAL-TIME ESTIMATED COOKING COUNTDOWN FOR IN_PRODUCTION */}
+            {order.status === "IN_PRODUCTION" && (
+              <CustomerCookingCountdown order={order} />
+            )}
+
+            {/* REAL-TIME ESTIMATED courier DELIVERY COUNTDOWN FOR OUT_FOR_DELIVERY */}
+            {order.status === "OUT_FOR_DELIVERY" && (
+              <CustomerDeliveryCountdown order={order} />
+            )}
+
             {/* Product Items List Card */}
             <div className="bg-white rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3">
               <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
@@ -419,10 +898,10 @@ export function OrderDetailPage() {
               <div className="space-y-3 pt-1">
                 {order.items.map((item, idx) => (
                   <div key={idx} className="flex justify-between items-start text-xs">
-                    <div className="space-y-0.5 max-w-[70%]">
-                      <p className="font-bold text-[#111827] leading-relaxed">{item.itemName}</p>
-                      <p className="text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">{t.itemsCount.replace("{count}", String(item.quantity))}</p>
-                    </div>
+                     <div className="space-y-0.5 max-w-[70%]">
+                       <p className="font-bold text-[#111827] leading-relaxed">{item.itemName}</p>
+                       <p className="text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">{t.itemsCount.replace("{count}", String(item.quantity))}</p>
+                     </div>
                   </div>
                 ))}
               </div>
@@ -488,10 +967,10 @@ export function OrderDetailPage() {
                 {t.createdOn} <span className="font-semibold text-[#111827]">{formattedDate}</span>
               </div>
 
-              {order.status === "PAYMENT_REJECTED" && order.rejectionReason && (
+              {order.status === "PAYMENT_REJECTED" && (order.paymentRejectionReason || order.rejectionReason) && (
                 <div className="bg-red-50 border border-red-200 text-red-900 p-3.5 rounded-2xl text-xs font-['Hanken_Grotesk',system-ui,sans-serif] space-y-1">
                   <span className="font-bold">{t.rejectionTitle}</span>
-                  <p className="leading-relaxed">{order.rejectionReason}</p>
+                  <p className="leading-relaxed">{order.paymentRejectionReason || order.rejectionReason}</p>
                 </div>
               )}
 
@@ -499,6 +978,18 @@ export function OrderDetailPage() {
                 <div className="bg-red-50 border border-red-200 text-red-900 p-3.5 rounded-2xl text-xs font-['Hanken_Grotesk',system-ui,sans-serif] space-y-1">
                   <span className="font-bold">{t.outOfStockTitle}</span>
                   <p className="leading-relaxed">{t.outOfStockDesc}</p>
+                </div>
+              )}
+
+              {needsProofUpload && (
+                <div className="pt-2">
+                  <Link
+                    to={`/checkout/payment-proof/${encodeURIComponent(order.id)}`}
+                    className="w-full flex items-center justify-center gap-2 min-h-12 bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-extrabold text-[#111827] rounded-2xl shadow-md transition-all"
+                  >
+                    <FileImage className="h-5 w-5" />
+                    {t.uploadProofBtn}
+                  </Link>
                 </div>
               )}
             </div>
@@ -527,19 +1018,6 @@ export function OrderDetailPage() {
             </div>
           </div>
         </div>
-
-        {/* Floating Upload Proof Button if pending proof */}
-        {needsProofUpload && (
-          <div className="bg-white border-t border-[#E5E7EB] fixed bottom-14 left-0 right-0 p-4 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] max-w-[480px] mx-auto z-10">
-            <Link
-              to={`/checkout/payment-proof/${encodeURIComponent(order.id)}`}
-              className="w-full flex items-center justify-center gap-2 min-h-12 bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-extrabold text-[#111827] rounded-2xl shadow-md transition-all"
-            >
-              <FileImage className="h-5 w-5" />
-              {t.uploadProofBtn}
-            </Link>
-          </div>
-        )}
       </div>
     </div>
   );

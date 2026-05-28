@@ -161,7 +161,7 @@ function ShelledRoute({
   return (
     <AppShell
       pageTitle={pageTitle}
-      userName={user?.displayName ?? undefined}
+      userName={profile?.displayName ?? user?.displayName ?? undefined}
       userEmail={user?.email ?? undefined}
       userRole={profile?.role}
       onSignOut={requestSignOut}
@@ -341,7 +341,7 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Orders"
-              allowedRoles={["admin", "monitoring"]}
+              allowedRoles={["monitoring"]}
             >
               <OrdersPage />
             </ShelledRoute>
@@ -354,7 +354,7 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Production"
-              allowedRoles={["admin", "tim_produksi"]}
+              allowedRoles={["tim_produksi"]}
             >
               <ProductionPage />
             </ShelledRoute>
@@ -365,19 +365,19 @@ function RoutesTree() {
         path="/admin/qc"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Quality Control" allowedRoles={["admin"]}>
+            <ShelledRoute pageTitle="Quality Control" allowedRoles={["tim_produksi"]}>
               <QCReviewPage />
             </ShelledRoute>
           </Protected>
         }
       />
       <Route
-        path="/admin/dispatch"
+        path="/distribusi/dispatch"
         element={
           <Protected>
             <ShelledRoute
               pageTitle="Dispatch"
-              allowedRoles={["admin", "distribusi"]}
+              allowedRoles={["distribusi"]}
             >
               <DispatchPage />
             </ShelledRoute>
@@ -385,12 +385,12 @@ function RoutesTree() {
         }
       />
       <Route
-        path="/admin/delivery"
+        path="/distribusi/delivery"
         element={
           <Protected>
             <ShelledRoute
               pageTitle="Delivery"
-              allowedRoles={["admin", "distribusi"]}
+              allowedRoles={["distribusi"]}
             >
               <DeliveryPage />
             </ShelledRoute>
@@ -403,7 +403,7 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Tracking"
-              allowedRoles={["admin", "monitoring", "distribusi"]}
+              allowedRoles={["monitoring"]}
             >
               <TrackingPage />
             </ShelledRoute>
@@ -499,11 +499,11 @@ function RoutesTree() {
       <Route path="/qc" element={<Navigate to="/admin/qc" replace />} />
       <Route
         path="/dispatch"
-        element={<Navigate to="/admin/dispatch" replace />}
+        element={<Navigate to="/distribusi/dispatch" replace />}
       />
       <Route
         path="/delivery"
-        element={<Navigate to="/admin/delivery" replace />}
+        element={<Navigate to="/distribusi/delivery" replace />}
       />
       <Route
         path="/tracking"

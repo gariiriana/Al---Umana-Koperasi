@@ -43,6 +43,15 @@ export interface Order {
   paymentRejectedBy?: string;
   paymentRejectedAt?: string;
   paymentRejectionReason?: string;
+  productionStartPhotoId?: string;
+  productionTimerEnd?: string;
+  productionDurationMinutes?: number;
+  deliveryStartPhotoId?: string;
+  deliveryTimerEnd?: string;
+  deliveryStartedAt?: string;
+  deliveryDurationMinutes?: number;
+  courierLat?: number;
+  courierLng?: number;
   createdAt: string;
   updatedAt: string;
 }

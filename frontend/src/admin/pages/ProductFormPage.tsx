@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Loader2, ArrowLeft, ImageOff, Upload, AlertCircle, RefreshCw } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useToast } from "@/contexts/ToastContext";
 import { translateCategory } from "@/constants/categories";
 
 import { db } from "@/lib/firebase";
@@ -10,6 +11,7 @@ import { getItem, createItem, updateItem, listCategories } from "@/services/stoc
 import { uploadFileInChunks, ChunkUploadError } from "@/services/chunkUploadService";
 import { validateImageUpload } from "@/lib/validators";
 import type { InventoryItemInput } from "@/types/inventory";
+import { ProductImage } from "@/components/ProductImage";
 
 const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
@@ -120,6 +122,7 @@ export function ProductFormPage() {
   const navigate = useNavigate();
   const isEdit = !!id;
   const { lang } = useLanguage();
+  const { showToast } = useToast();
   const t = DICTIONARY[lang];
 
   const [loading, setLoading] = useState(isEdit);
@@ -128,7 +131,7 @@ export function ProductFormPage() {
 
   // Form Fields (Requirement 10.1)
   const [itemName, setItemName] = useState("");
-  const [quantity, setQuantity] = useState<number>(0);
+  const [quantity, setQuantity] = useState<number | "">("");
   const [unit, setUnit] = useState("pcs");
   const [price, setPrice] = useState<number>(0);
   const [available, setAvailable] = useState(true);
@@ -288,7 +291,7 @@ export function ProductFormPage() {
       setSelectedFile(null);
       setFailedFileId(undefined);
       setFailedChunkIndex(undefined);
-      alert(t.uploadSuccess);
+      showToast({ message: t.uploadSuccess, variant: "success" });
     } catch (err: unknown) {
       console.error("Gagal mengunggah gambar produk:", err);
       if (err instanceof ChunkUploadError && err.code === "WRITE_FAILED") {
@@ -316,7 +319,7 @@ export function ProductFormPage() {
         setSelectedFile(null);
         setImagePreview(null);
       } catch {
-        alert(t.removePhotoError);
+        showToast({ message: t.removePhotoError, variant: "error" });
       } finally {
         setUploadingImage(false);
       }
@@ -347,7 +350,7 @@ export function ProductFormPage() {
       return;
     }
 
-    if (quantity < 0 || quantity > 99999) {
+    if (quantity !== "" && (quantity < 0 || quantity > 99999)) {
       setError(t.qtyValError);
       return;
     }
@@ -361,11 +364,11 @@ export function ProductFormPage() {
 
     const payload: InventoryItemInput = {
       itemName: trimmedName,
-      quantity,
+      quantity: quantity === "" ? 0 : quantity,
       unit: trimmedUnit,
       price,
       // Rule 12.2: quantity 0 forces available false
-      available: quantity === 0 ? false : available,
+      available: (quantity === "" || quantity === 0) ? false : available,
       category: trimmedCategory,
       imageUrl: imageURL || undefined,
     };
@@ -376,7 +379,7 @@ export function ProductFormPage() {
       } else {
         await createItem(payload);
       }
-      alert(t.saveSuccess);
+      showToast({ message: t.saveSuccess, variant: "success" });
       navigate("/admin/products");
     } catch (err: unknown) {
       const errorObj = err as { message?: string };
@@ -416,18 +419,18 @@ export function ProductFormPage() {
           <label className="text-sm font-bold text-[#111827] font-['Manrope',system-ui,sans-serif]">
             {t.photoLabel}
           </label>
-          <div className="flex flex-col sm:flex-row gap-4 items-center">
+          <div className="flex flex-col items-center justify-center gap-4 w-full py-2">
             {/* Image Preview Window (Requirement 11.10 - 300x300 px max) */}
             <div className="h-44 w-44 rounded-3xl overflow-hidden bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center text-[#9CA3AF] shrink-0 max-w-[300px] max-h-[300px]">
               {imagePreview ? (
-                <img src={imagePreview} alt={t.photoPlaceholder} className="h-full w-full object-cover" />
+                <ProductImage imageUrl={imagePreview} alt={t.photoPlaceholder} className="h-full w-full object-cover" fallbackClassName="h-10 w-10 text-[#9CA3AF]" />
               ) : (
                 <ImageOff className="h-10 w-10" />
               )}
             </div>
 
-            <div className="flex-1 space-y-3 w-full">
-              <div className="flex gap-2">
+            <div className="flex flex-col items-center justify-center space-y-3 w-full">
+              <div className="flex flex-wrap items-center justify-center gap-2">
                 <label className="inline-flex items-center gap-1.5 px-4 py-2 border border-[#E5E7EB] bg-white text-xs font-bold text-[#374151] rounded-xl cursor-pointer hover:bg-[#F9FAFB]">
                   <Upload className="h-4 w-4" />
                   {t.btnSelectFile}
@@ -573,7 +576,7 @@ export function ProductFormPage() {
                 max={99999}
                 placeholder={t.qtyPlaceholder}
                 className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-                value={quantity}
+                value={quantity || ""}
                 onChange={(e) => setQuantity(Number(e.target.value))}
               />
             </div>

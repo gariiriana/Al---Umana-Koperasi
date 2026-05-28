@@ -1,15 +1,20 @@
-import { NavLink } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { ROLE_PERMISSIONS } from "@/constants/roles";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   BadgeCheck,
   CheckCircle2,
+  ChevronUp,
   Factory,
   LayoutDashboard,
+  LogOut,
   MapPin,
   Package,
   Package2,
+  Search,
+  Settings,
   ShoppingCart,
   Truck,
   type LucideIcon,
@@ -26,8 +31,8 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
   { to: "/admin/production", label: "Production", icon: Factory },
   { to: "/admin/qc", label: "Quality Control", icon: CheckCircle2 },
-  { to: "/admin/dispatch", label: "Dispatch", icon: Truck },
-  { to: "/admin/delivery", label: "Delivery", icon: Package },
+  { to: "/distribusi/dispatch", label: "Dispatch", icon: Truck },
+  { to: "/distribusi/delivery", label: "Delivery", icon: Package },
   { to: "/admin/tracking", label: "Tracking", icon: MapPin },
   { to: "/admin/products", label: "Daftar Produk", icon: Package2 },
   { to: "/admin/payment-approvals", label: "Persetujuan Pembayaran", icon: BadgeCheck },
@@ -39,8 +44,8 @@ const LABELS_DICT = {
     "/admin/orders": "Pesanan",
     "/admin/production": "Produksi",
     "/admin/qc": "Kontrol Kualitas",
-    "/admin/dispatch": "Pengiriman",
-    "/admin/delivery": "Pengantaran",
+    "/distribusi/dispatch": "Pengiriman",
+    "/distribusi/delivery": "Pengantaran",
     "/admin/tracking": "Pelacakan",
     "/admin/products": "Daftar Produk",
     "/admin/payment-approvals": "Persetujuan Pembayaran",
@@ -50,8 +55,8 @@ const LABELS_DICT = {
     "/admin/orders": "Orders",
     "/admin/production": "Production",
     "/admin/qc": "Quality Control",
-    "/admin/dispatch": "Dispatch",
-    "/admin/delivery": "Delivery",
+    "/distribusi/dispatch": "Dispatch",
+    "/distribusi/delivery": "Delivery",
     "/admin/tracking": "Tracking",
     "/admin/products": "Product List",
     "/admin/payment-approvals": "Payment Approval",
@@ -63,6 +68,9 @@ export interface SidebarProps {
   userEmail?: string;
   userRole?: string;
   onSignOut?: () => void;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  searchPlaceholder?: string;
 }
 
 
@@ -75,13 +83,33 @@ const ITEM_BASE =
 const ITEM_ACTIVE = "bg-[#FBBF24] text-[#111827]";
 const ITEM_INACTIVE = "text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]";
 
-export function Sidebar({ userRole }: SidebarProps) {
+const roleBadge: Record<string, string> = {
+  admin: "Admin",
+  tim_produksi: "Produksi",
+  distribusi: "Distribusi",
+  monitoring: "Monitor",
+};
+
+export function Sidebar({
+  userName,
+  userEmail,
+  userRole,
+  onSignOut,
+  searchValue,
+  onSearchChange,
+  searchPlaceholder = "Cari pesanan, kurir...",
+}: SidebarProps) {
   const { lang } = useLanguage();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
   const allowedItems = SIDEBAR_NAV_ITEMS.filter((item) => {
     if (!userRole) return false;
     const allowedPaths = ROLE_PERMISSIONS[userRole] || [];
     return allowedPaths.includes(item.to);
   });
+
+  const initial = (userName ?? userEmail ?? "?").charAt(0).toUpperCase();
+
   return (
     <aside
       aria-label="Primary navigation"
@@ -95,6 +123,26 @@ export function Sidebar({ userRole }: SidebarProps) {
           className="h-14 object-contain"
         />
       </div>
+
+      {/* Search Input (Desktop) */}
+      {onSearchChange && (
+        <div className="px-4 py-3 border-b border-[#E5E7EB]">
+          <label className="relative block">
+            <span className="sr-only">Cari</span>
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]"
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              value={searchValue ?? ""}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="w-full rounded-full border border-[#E5E7EB] bg-[#F9FAFB] pl-9 pr-4 py-1.5 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent font-['Hanken_Grotesk',system-ui,sans-serif] transition"
+            />
+          </label>
+        </div>
+      )}
 
       {/* Nav items */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -126,7 +174,66 @@ export function Sidebar({ userRole }: SidebarProps) {
         </ul>
       </nav>
 
+      {/* Profile Section at the Bottom */}
+      {(userName || userEmail) && (
+        <div className="relative p-4 border-t border-[#E5E7EB] bg-white">
+          <button
+            type="button"
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="w-full flex items-center gap-3 p-1.5 rounded-xl hover:bg-[#F3F4F6] transition-colors text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+          >
+            <div className="h-9 w-9 rounded-full bg-[#FBBF24] flex items-center justify-center text-sm font-bold text-[#111827] shrink-0">
+              {initial}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-[#111827] truncate">{userName || userEmail || "Pengguna"}</p>
+              {userRole && (
+                <span className="inline-block text-[10px] font-bold bg-[#F3F4F6] text-[#6B7280] rounded-full px-2 py-0.5 mt-0.5">
+                  {roleBadge[userRole] ?? userRole}
+                </span>
+              )}
+            </div>
+            <ChevronUp className="h-4 w-4 text-[#9CA3AF] shrink-0" />
+          </button>
 
+          {isDropdownOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40 cursor-default"
+                onClick={() => setIsDropdownOpen(false)}
+              />
+              <div className="absolute bottom-full left-4 right-4 mb-2 rounded-2xl bg-white border border-[#E5E7EB] shadow-xl py-2 z-50 font-['Hanken_Grotesk',system-ui,sans-serif]">
+                <div className="px-4 py-3 border-b border-[#F3F4F6]">
+                  <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">
+                    {lang === "id" ? "Akun Saya" : "My Account"}
+                  </p>
+                  <p className="text-sm font-bold text-[#111827] truncate">{userName}</p>
+                  {userEmail && <p className="text-xs text-[#6B7280] truncate">{userEmail}</p>}
+                </div>
+                <Link
+                  to="/admin/settings"
+                  onClick={() => setIsDropdownOpen(false)}
+                  className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-[#374151] hover:bg-[#F3F4F6] hover:text-[#111827] transition-colors border-b border-[#F3F4F6]"
+                >
+                  <Settings className="h-4 w-4 text-[#6B7280]" />
+                  <span>{lang === "id" ? "Pengaturan" : "Settings"}</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDropdownOpen(false);
+                    onSignOut?.();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-[#DC2626] hover:bg-red-50 transition-colors text-left cursor-pointer"
+                >
+                  <LogOut className="h-4 w-4" />
+                  {lang === "id" ? "Keluar" : "Sign Out"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </aside>
   );
 }
