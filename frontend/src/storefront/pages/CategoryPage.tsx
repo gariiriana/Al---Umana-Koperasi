@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { translateCategory } from "@/constants/categories";
 
 import { listAvailableProducts } from "@/services/catalogService";
 import type { InventoryItem } from "@/types/inventory";
@@ -93,7 +94,7 @@ export function CategoryPage() {
           {lang === "id" ? "Kategori" : "Category"}
         </p>
         <h1 className="font-['Manrope',system-ui,sans-serif] text-xl font-bold text-[#111827]">
-          {categoryName || (lang === "id" ? "Kategori" : "Category")}
+          {translateCategory(categoryName, lang) || (lang === "id" ? "Kategori" : "Category")}
         </h1>
       </header>
 

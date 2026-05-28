@@ -18,6 +18,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export interface SearchBarProps {
   /** Called with the debounced (≥ 300 ms idle) search query. */
@@ -36,6 +37,7 @@ export function SearchBar({
   initialValue = "",
   debounceMs = DEFAULT_DEBOUNCE_MS,
 }: SearchBarProps) {
+  const { lang } = useLanguage();
   const [value, setValue] = useState(initialValue);
 
   // Track the latest onChange in a ref so the debounce effect doesn't
@@ -63,8 +65,8 @@ export function SearchBar({
       <input
         type="text"
         role="searchbox"
-        aria-label="Cari produk"
-        placeholder="Cari produk..."
+        aria-label={lang === "en" ? "Search products" : "Cari produk"}
+        placeholder={lang === "en" ? "Search products..." : "Cari produk..."}
         value={value}
         maxLength={MAX_LENGTH}
         onChange={(e) => setValue(e.target.value)}
@@ -79,7 +81,7 @@ export function SearchBar({
       {value.length > 0 && (
         <button
           type="button"
-          aria-label="Hapus pencarian"
+          aria-label={lang === "en" ? "Clear search" : "Hapus pencarian"}
           onClick={() => setValue("")}
           className={
             "absolute inset-y-0 right-2 my-auto flex h-8 w-8 items-center " +

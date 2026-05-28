@@ -8,6 +8,7 @@
  * Validates: Requirement 14.8.
  */
 
+import { useLanguage } from "@/contexts/LanguageContext";
 import type { InventoryItem } from "@/types/inventory";
 import { ProductCard } from "@/storefront/components/ProductCard";
 
@@ -17,6 +18,8 @@ export interface RecommendedBannerProps {
 }
 
 export function RecommendedBanner({ items }: RecommendedBannerProps) {
+  const { lang } = useLanguage();
+
   if (items.length === 0) {
     return null;
   }
@@ -30,7 +33,7 @@ export function RecommendedBanner({ items }: RecommendedBannerProps) {
         id="recommended-heading"
         className="px-4 font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]"
       >
-        Sering Direkomendasikan
+        {lang === "en" ? "Frequently Recommended" : "Sering Direkomendasikan"}
       </h2>
       <div
         className={

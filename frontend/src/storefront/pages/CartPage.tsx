@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Loader2, ArrowLeft, Trash2, Plus, Minus, FileText, ArrowRight, ShoppingBag } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   subscribeToCart,
   setLineQuantity,
@@ -13,9 +14,66 @@ import {
 } from "@/services/cartService";
 import { formatIDR } from "@/lib/format";
 
+const DICTIONARY = {
+  id: {
+    loadError: "Gagal memuat keranjang. Silakan coba lagi.",
+    updateError: "Gagal memperbarui jumlah item.",
+    deleteError: "Gagal menghapus item.",
+    deleteConfirm: "Hapus item ini dari keranjang?",
+    cart: "Keranjang",
+    notLoggedIn: "Belum Masuk Akun",
+    loginPrompt: "Silakan masuk ke akun koperasi Anda untuk melihat dan mengisi keranjang belanja.",
+    logInNow: "Masuk Sekarang",
+    loadingCart: "Memuat keranjang Anda…",
+    reload: "Muat Ulang",
+    shoppingCart: "Keranjang Belanja",
+    itemCount: "Item",
+    emptyCart: "Keranjang Kosong",
+    emptyPrompt: "Belum ada produk yang Anda tambahkan. Yuk, intip katalog kami!",
+    startShopping: "Mulai Belanja",
+    removeProduct: "Hapus produk",
+    unitPrice: "Harga Satuan",
+    reduceQty: "Kurangi jumlah",
+    increaseQty: "Tambah jumlah",
+    subtotal: "Subtotal",
+    notesPlaceholder: "Catatan belanja (misal: bungkus plastik, pisah plastik)",
+    totalPayment: "Total Pembayaran",
+    proceedToAddress: "Lanjut ke Alamat",
+    back: "Kembali",
+  },
+  en: {
+    loadError: "Failed to load cart. Please try again.",
+    updateError: "Failed to update item quantity.",
+    deleteError: "Failed to remove item.",
+    deleteConfirm: "Remove this item from the cart?",
+    cart: "Cart",
+    notLoggedIn: "Not Logged In",
+    loginPrompt: "Please log in to your cooperative account to view and edit your shopping cart.",
+    logInNow: "Log In Now",
+    loadingCart: "Loading your cart...",
+    reload: "Reload",
+    shoppingCart: "Shopping Cart",
+    itemCount: "Item(s)",
+    emptyCart: "Empty Cart",
+    emptyPrompt: "No products added yet. Let's explore our catalog!",
+    startShopping: "Start Shopping",
+    removeProduct: "Remove product",
+    unitPrice: "Unit Price",
+    reduceQty: "Reduce quantity",
+    increaseQty: "Increase quantity",
+    subtotal: "Subtotal",
+    notesPlaceholder: "Shopping notes (e.g. plastic bag, separate packaging)",
+    totalPayment: "Total Payment",
+    proceedToAddress: "Proceed to Address",
+    back: "Back",
+  }
+} as const;
+
 export function CartPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { lang } = useLanguage();
+  const t = DICTIONARY[lang];
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<CartLineItem[]>([]);
@@ -37,13 +95,13 @@ export function CartPage() {
         setLoading(false);
       },
       () => {
-        setError("Gagal memuat keranjang. Silakan coba lagi.");
+        setError(t.loadError);
         setLoading(false);
       }
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, t]);
 
   const handleQtyChange = async (itemId: string, currentQty: number, delta: number) => {
     if (!user) return;
@@ -51,7 +109,7 @@ export function CartPage() {
     try {
       await setLineQuantity(user.uid, itemId, nextQty);
     } catch {
-      alert("Gagal memperbarui jumlah item.");
+      alert(t.updateError);
     }
   };
 
@@ -66,11 +124,11 @@ export function CartPage() {
 
   const handleRemoveItem = async (itemId: string) => {
     if (!user) return;
-    if (confirm("Hapus item ini dari keranjang?")) {
+    if (confirm(t.deleteConfirm)) {
       try {
         await removeLineItem(user.uid, itemId);
       } catch {
-        alert("Gagal menghapus item.");
+        alert(t.deleteError);
       }
     }
   };
@@ -82,23 +140,23 @@ export function CartPage() {
           <Link to="/" className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#111827]">
             <ArrowLeft className="h-6 w-6" />
           </Link>
-          <h1 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">Keranjang</h1>
+          <h1 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">{t.cart}</h1>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-4">
           <div className="h-16 w-16 bg-amber-50 rounded-full flex items-center justify-center text-[#FBBF24]">
             <ShoppingBag className="h-8 w-8" />
           </div>
           <div className="space-y-1">
-            <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">Belum Masuk Akun</h2>
+            <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">{t.notLoggedIn}</h2>
             <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-xs">
-              Silakan masuk ke akun koperasi Anda untuk melihat dan mengisi keranjang belanja.
+              {t.loginPrompt}
             </p>
           </div>
           <Link
             to="/login"
             className="inline-flex items-center justify-center min-h-11 px-6 rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-bold text-[#111827] shadow-sm cursor-pointer"
           >
-            Masuk Sekarang
+            {t.logInNow}
           </Link>
         </div>
       </div>
@@ -109,7 +167,7 @@ export function CartPage() {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-[#6B7280] bg-[#F3F4F6] min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" aria-hidden="true" />
-        <p className="mt-2 text-sm font-['Hanken_Grotesk',system-ui,sans-serif]">Memuat keranjang Anda…</p>
+        <p className="mt-2 text-sm font-['Hanken_Grotesk',system-ui,sans-serif]">{t.loadingCart}</p>
       </div>
     );
   }
@@ -125,7 +183,7 @@ export function CartPage() {
           onClick={() => navigate(0)}
           className="inline-flex items-center gap-2 min-h-11 px-6 rounded-2xl bg-[#FBBF24] text-sm font-semibold text-[#111827] cursor-pointer"
         >
-          Muat Ulang
+          {t.reload}
         </button>
       </div>
     );
@@ -140,15 +198,15 @@ export function CartPage() {
         <Link
           to="/"
           className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#111827] focus:outline-none"
-          aria-label="Kembali"
+          aria-label={t.back}
         >
           <ArrowLeft className="h-6 w-6" />
         </Link>
         <h1 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
-          Keranjang Belanja
+          {t.shoppingCart}
         </h1>
         <span className="ml-auto text-xs font-semibold px-2 py-0.5 bg-[#F3F4F6] rounded-full text-[#6B7280]">
-          {items.length} Item
+          {items.length} {t.itemCount}
         </span>
       </div>
 
@@ -158,16 +216,16 @@ export function CartPage() {
             <ShoppingBag className="h-8 w-8" />
           </div>
           <div className="space-y-1">
-            <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">Keranjang Kosong</h2>
+            <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">{t.emptyCart}</h2>
             <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-xs">
-              Belum ada produk yang Anda tambahkan. Yuk, intip katalog kami!
+              {t.emptyPrompt}
             </p>
           </div>
           <Link
             to="/"
             className="inline-flex items-center justify-center min-h-11 px-6 rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-bold text-[#111827] shadow-sm cursor-pointer"
           >
-            Mulai Belanja
+            {t.startShopping}
           </Link>
         </div>
       ) : (
@@ -187,7 +245,7 @@ export function CartPage() {
                   <button
                     onClick={() => handleRemoveItem(item.itemId)}
                     className="text-[#9CA3AF] hover:text-[#EF4444] p-1 rounded-full hover:bg-red-50 focus:outline-none transition-colors"
-                    aria-label="Hapus produk"
+                    aria-label={t.removeProduct}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -196,7 +254,7 @@ export function CartPage() {
                 {/* Price, Controls & Notes */}
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">Harga Satuan</p>
+                    <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">{t.unitPrice}</p>
                     <p className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
                       {formatIDR(item.unitPrice)}
                     </p>
@@ -208,7 +266,7 @@ export function CartPage() {
                       onClick={() => handleQtyChange(item.itemId, item.quantity, -1)}
                       className="h-8 w-8 flex items-center justify-center bg-white rounded-full shadow-sm text-[#111827] hover:bg-[#E5E7EB] disabled:opacity-40 disabled:cursor-not-allowed"
                       disabled={item.quantity <= 1}
-                      aria-label="Kurangi jumlah"
+                      aria-label={t.reduceQty}
                     >
                       <Minus className="h-4 w-4" />
                     </button>
@@ -219,7 +277,7 @@ export function CartPage() {
                       onClick={() => handleQtyChange(item.itemId, item.quantity, 1)}
                       className="h-8 w-8 flex items-center justify-center bg-white rounded-full shadow-sm text-[#111827] hover:bg-[#E5E7EB] disabled:opacity-40 disabled:cursor-not-allowed"
                       disabled={item.quantity >= 99}
-                      aria-label="Tambah jumlah"
+                      aria-label={t.increaseQty}
                     >
                       <Plus className="h-4 w-4" />
                     </button>
@@ -228,7 +286,7 @@ export function CartPage() {
 
                 {/* Subtotal */}
                 <div className="flex items-center justify-between text-xs pt-1 border-t border-[#F3F4F6]">
-                  <span className="text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">Subtotal</span>
+                  <span className="text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">{t.subtotal}</span>
                   <span className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">
                     {formatIDR(item.unitPrice * item.quantity)}
                   </span>
@@ -240,7 +298,7 @@ export function CartPage() {
                   <input
                     type="text"
                     maxLength={200}
-                    placeholder="Catatan belanja (misal: bungkus plastik, pisah plastik)"
+                    placeholder={t.notesPlaceholder}
                     className="w-full bg-transparent border-none text-xs text-[#374151] placeholder-[#9CA3AF] focus:outline-none"
                     value={item.notes ?? ""}
                     onChange={(e) => handleNotesChange(item.itemId, e.target.value)}
@@ -254,7 +312,7 @@ export function CartPage() {
           <div className="bg-white border-t border-[#E5E7EB] fixed bottom-14 lg:bottom-0 left-0 right-0 p-4 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] max-w-[480px] lg:max-w-7xl mx-auto z-10 space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">Total Pembayaran</p>
+                <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">{t.totalPayment}</p>
                 <p className="font-['Manrope',system-ui,sans-serif] text-lg font-black text-[#111827]">
                   {formatIDR(grandTotal)}
                 </p>
@@ -263,7 +321,7 @@ export function CartPage() {
                 onClick={() => navigate("/checkout/address")}
                 className="inline-flex items-center gap-2 min-h-12 px-6 rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-extrabold text-[#111827] shadow-md transition-all cursor-pointer"
               >
-                Lanjut ke Alamat
+                {t.proceedToAddress}
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>

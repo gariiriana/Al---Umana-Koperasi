@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { motion } from "motion/react";
 import { ROLE_PERMISSIONS } from "@/constants/roles";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   BadgeCheck,
   CheckCircle2,
@@ -32,6 +33,31 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/admin/payment-approvals", label: "Persetujuan Pembayaran", icon: BadgeCheck },
 ] as const;
 
+const LABELS_DICT = {
+  id: {
+    "/admin/dashboard": "Dashboard",
+    "/admin/orders": "Pesanan",
+    "/admin/production": "Produksi",
+    "/admin/qc": "Kontrol Kualitas",
+    "/admin/dispatch": "Pengiriman",
+    "/admin/delivery": "Pengantaran",
+    "/admin/tracking": "Pelacakan",
+    "/admin/products": "Daftar Produk",
+    "/admin/payment-approvals": "Persetujuan Pembayaran",
+  },
+  en: {
+    "/admin/dashboard": "Dashboard",
+    "/admin/orders": "Orders",
+    "/admin/production": "Production",
+    "/admin/qc": "Quality Control",
+    "/admin/dispatch": "Dispatch",
+    "/admin/delivery": "Delivery",
+    "/admin/tracking": "Tracking",
+    "/admin/products": "Product List",
+    "/admin/payment-approvals": "Payment Approval",
+  }
+} as const;
+
 export interface SidebarProps {
   userName?: string;
   userEmail?: string;
@@ -50,6 +76,7 @@ const ITEM_ACTIVE = "bg-[#FBBF24] text-[#111827]";
 const ITEM_INACTIVE = "text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]";
 
 export function Sidebar({ userRole }: SidebarProps) {
+  const { lang } = useLanguage();
   const allowedItems = SIDEBAR_NAV_ITEMS.filter((item) => {
     if (!userRole) return false;
     const allowedPaths = ROLE_PERMISSIONS[userRole] || [];
@@ -72,27 +99,30 @@ export function Sidebar({ userRole }: SidebarProps) {
       {/* Nav items */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="space-y-1">
-          {allowedItems.map(({ to, label, icon: Icon }) => (
-            <li key={to}>
-              <NavLink
-                to={to}
-                className={({ isActive }) =>
-                  `${ITEM_BASE} ${isActive ? ITEM_ACTIVE : ITEM_INACTIVE}`
-                }
-              >
-                {({ isActive }) => (
-                  <motion.span
-                    className="flex items-center gap-3 w-full"
-                    whileHover={{ x: isActive ? 0 : 2 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                  >
-                    <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                    <span className="truncate">{label}</span>
-                  </motion.span>
-                )}
-              </NavLink>
-            </li>
-          ))}
+          {allowedItems.map(({ to, label, icon: Icon }) => {
+            const translatedLabel = LABELS_DICT[lang][to as keyof typeof LABELS_DICT["en"]] || label;
+            return (
+              <li key={to}>
+                <NavLink
+                  to={to}
+                  className={({ isActive }) =>
+                    `${ITEM_BASE} ${isActive ? ITEM_ACTIVE : ITEM_INACTIVE}`
+                  }
+                >
+                  {({ isActive }) => (
+                    <motion.span
+                      className="flex items-center gap-3 w-full"
+                      whileHover={{ x: isActive ? 0 : 2 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                    >
+                      <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{translatedLabel}</span>
+                    </motion.span>
+                  )}
+                </NavLink>
+              </li>
+            );
+          })}
         </ul>
       </nav>
 

@@ -13,6 +13,8 @@ import { useMemo } from "react";
 
 import type { InventoryItem } from "@/types/inventory";
 import { ProductCard } from "@/storefront/components/ProductCard";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { translateCategory } from "@/constants/categories";
 
 export interface CategoryGridProps {
   items: InventoryItem[];
@@ -54,6 +56,7 @@ function groupByCategory(items: InventoryItem[]): CategoryGroup[] {
 }
 
 export function CategoryGrid({ items }: CategoryGridProps) {
+  const { lang } = useLanguage();
   const groups = useMemo(() => groupByCategory(items), [items]);
 
   if (groups.length === 0) {
@@ -72,7 +75,7 @@ export function CategoryGrid({ items }: CategoryGridProps) {
             id={`category-heading-${slugify(group.category)}`}
             className="px-4 font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]"
           >
-            {group.category}
+            {translateCategory(group.category, lang)}
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 px-4">
             {group.items.map((item) => (

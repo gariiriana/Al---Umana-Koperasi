@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Loader2, ArrowLeft, ImageOff, Upload, AlertCircle, RefreshCw } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { translateCategory } from "@/constants/categories";
 
 import { db } from "@/lib/firebase";
 import { doc, getDoc, deleteDoc } from "firebase/firestore";
@@ -22,10 +24,103 @@ function resolveProductImageURL(ref: string | undefined): string | null {
   return `${API_BASE_URL}/api/files/product_images/${encodeURIComponent(fileId)}/download`;
 }
 
+const DICTIONARY = {
+  id: {
+    loading: "Memuat data...",
+    loadError: "Gagal memuat data produk atau daftar kategori.",
+    editTitle: "Ubah Produk Koperasi",
+    addTitle: "Tambah Produk Koperasi",
+    photoLabel: "Foto Produk",
+    photoPlaceholder: "Pratinjau produk",
+    btnSelectFile: "Pilih Berkas",
+    btnRemovePhoto: "Hapus Foto",
+    uploading: "Mengunggah...",
+    btnResumeUpload: "Lanjutkan (Chunk {chunk})",
+    btnUploadImage: "Unggah Gambar",
+    mimeError: "Format file tidak didukung. Pilih JPEG, PNG, atau WEBP.",
+    sizeError: "Ukuran file melebihi batas 15 MB.",
+    uploadInterrupt: "Unggah terputus di chunk {chunk}. Silakan klik 'Lanjutkan'.",
+    uploadGeneralError: "Gagal mengunggah gambar.",
+    uploadSuccess: "Gambar berhasil diunggah! Jangan lupa menyimpan form produk.",
+    confirmRemovePhoto: "Hapus gambar produk ini?",
+    removePhotoError: "Gagal menghapus gambar.",
+    nameLabel: "Nama Barang",
+    namePlaceholder: "Contoh: Beras Sentra Ramos 5kg",
+    nameValError: "Nama produk harus di antara 1 dan 200 karakter.",
+    categoryLabel: "Kategori",
+    categoryPlaceholder: "Pilih atau ketik kategori baru",
+    categoryValError: "Kategori produk harus di antara 1 dan 50 karakter.",
+    priceLabel: "Harga (Rupiah)",
+    pricePlaceholder: "Contoh: 75000",
+    priceValError: "Harga produk tidak boleh kurang dari 0.",
+    unitLabel: "Satuan Unit",
+    unitPlaceholder: "Contoh: pcs, kg, karung",
+    unitValError: "Satuan produk harus di antara 1 and 50 karakter.",
+    qtyLabel: "Jumlah Stok Awal",
+    qtyPlaceholder: "Contoh: 100",
+    qtyValError: "Jumlah kuantitas harus di antara 0 dan 99.999",
+    availabilityLabel: "Status Ketersediaan",
+    statusOutOfStock: "Nonaktif (Stok Kosong)",
+    statusAvailable: "Aktif (Tersedia)",
+    statusUnavailable: "Nonaktif (Habis)",
+    btnCancel: "Batal",
+    btnSave: "Simpan Produk",
+    savingText: "Menyimpan…",
+    saveSuccess: "Produk berhasil disimpan",
+    saveError: "Gagal menyimpan data produk.",
+  },
+  en: {
+    loading: "Loading data...",
+    loadError: "Failed to load product data or categories list.",
+    editTitle: "Edit Cooperative Product",
+    addTitle: "Add Cooperative Product",
+    photoLabel: "Product Photo",
+    photoPlaceholder: "Product preview",
+    btnSelectFile: "Choose File",
+    btnRemovePhoto: "Delete Photo",
+    uploading: "Uploading...",
+    btnResumeUpload: "Resume (Chunk {chunk})",
+    btnUploadImage: "Upload Image",
+    mimeError: "Unsupported file format. Choose JPEG, PNG, or WEBP.",
+    sizeError: "File size exceeds the 15 MB limit.",
+    uploadInterrupt: "Upload interrupted at chunk {chunk}. Please click 'Resume'.",
+    uploadGeneralError: "Failed to upload image.",
+    uploadSuccess: "Image uploaded successfully! Don't forget to save the product form.",
+    confirmRemovePhoto: "Delete this product image?",
+    removePhotoError: "Failed to delete image.",
+    nameLabel: "Item Name",
+    namePlaceholder: "Example: Sentra Ramos Rice 5kg",
+    nameValError: "Product name must be between 1 and 200 characters.",
+    categoryLabel: "Category",
+    categoryPlaceholder: "Select or type new category",
+    categoryValError: "Product category must be between 1 and 50 characters.",
+    priceLabel: "Price (Rupiah)",
+    pricePlaceholder: "Example: 75000",
+    priceValError: "Product price cannot be less than 0.",
+    unitLabel: "Unit",
+    unitPlaceholder: "Example: pcs, kg, sack",
+    unitValError: "Product unit must be between 1 and 50 characters.",
+    qtyLabel: "Initial Stock Quantity",
+    qtyPlaceholder: "Example: 100",
+    qtyValError: "Quantity must be between 0 and 99,999",
+    availabilityLabel: "Availability Status",
+    statusOutOfStock: "Inactive (Out of Stock)",
+    statusAvailable: "Active (Available)",
+    statusUnavailable: "Inactive (Sold Out)",
+    btnCancel: "Cancel",
+    btnSave: "Save Product",
+    savingText: "Saving…",
+    saveSuccess: "Product saved successfully",
+    saveError: "Failed to save product data.",
+  }
+} as const;
+
 export function ProductFormPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEdit = !!id;
+  const { lang } = useLanguage();
+  const t = DICTIONARY[lang];
 
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
@@ -83,11 +178,11 @@ export function ProductFormPage() {
         }
       }
     } catch {
-      setError("Gagal memuat data produk atau daftar kategori.");
+      setError(t.loadError);
     } finally {
       setLoading(false);
     }
-  }, [id, isEdit]);
+  }, [id, isEdit, t.loadError]);
 
   useEffect(() => {
     loadData();
@@ -117,9 +212,9 @@ export function ProductFormPage() {
     const validation = validateImageUpload(file.type, file.size);
     if (!validation.accepted) {
       if (validation.reason === "mime") {
-        setImageError("Format file tidak didukung. Pilih JPEG, PNG, atau WEBP.");
+        setImageError(t.mimeError);
       } else {
-        setImageError("Ukuran file melebihi batas 15 MB.");
+        setImageError(t.sizeError);
       }
       setSelectedFile(null);
       return;
@@ -193,16 +288,16 @@ export function ProductFormPage() {
       setSelectedFile(null);
       setFailedFileId(undefined);
       setFailedChunkIndex(undefined);
-      alert("Gambar berhasil diunggah! Jangan lupa menyimpan form produk.");
+      alert(t.uploadSuccess);
     } catch (err: unknown) {
       console.error("Gagal mengunggah gambar produk:", err);
       if (err instanceof ChunkUploadError && err.code === "WRITE_FAILED") {
         setFailedFileId(err.fileId);
         setFailedChunkIndex(err.failedChunkIndex);
-        setImageError(`Unggahan terputus di chunk ${err.failedChunkIndex || 0}. Silakan klik 'Lanjutkan'.`);
+        setImageError(t.uploadInterrupt.replace("{chunk}", String(err.failedChunkIndex || 0)));
       } else {
         const errorObj = err as { message?: string };
-        setImageError(errorObj.message || "Gagal mengunggah gambar.");
+        setImageError(errorObj.message || t.uploadGeneralError);
       }
     } finally {
       setUploadingImage(false);
@@ -210,7 +305,7 @@ export function ProductFormPage() {
   };
 
   const handleRemoveImage = async () => {
-    if (confirm("Hapus gambar produk ini?")) {
+    if (confirm(t.confirmRemovePhoto)) {
       setUploadingImage(true);
       try {
         if (imageURL) {
@@ -221,7 +316,7 @@ export function ProductFormPage() {
         setSelectedFile(null);
         setImagePreview(null);
       } catch {
-        alert("Gagal menghapus gambar.");
+        alert(t.removePhotoError);
       } finally {
         setUploadingImage(false);
       }
@@ -238,27 +333,27 @@ export function ProductFormPage() {
     const trimmedUnit = unit.trim();
 
     if (!trimmedName || trimmedName.length > 200) {
-      setError("Nama produk harus di antara 1 dan 200 karakter.");
+      setError(t.nameValError);
       return;
     }
 
     if (!trimmedCategory || trimmedCategory.length > 50) {
-      setError("Kategori produk harus di antara 1 dan 50 karakter.");
+      setError(t.categoryValError);
       return;
     }
 
     if (!trimmedUnit || trimmedUnit.length > 50) {
-      setError("Satuan produk harus di antara 1 and 50 karakter.");
+      setError(t.unitValError);
       return;
     }
 
     if (quantity < 0 || quantity > 99999) {
-      setError("Jumlah kuantitas harus di antara 0 dan 99.999");
+      setError(t.qtyValError);
       return;
     }
 
     if (price < 0) {
-      setError("Harga produk tidak boleh kurang dari 0.");
+      setError(t.priceValError);
       return;
     }
 
@@ -281,11 +376,11 @@ export function ProductFormPage() {
       } else {
         await createItem(payload);
       }
-      alert("Produk berhasil disimpan");
+      alert(t.saveSuccess);
       navigate("/admin/products");
     } catch (err: unknown) {
       const errorObj = err as { message?: string };
-      setError(errorObj.message || "Gagal menyimpan data produk.");
+      setError(errorObj.message || t.saveError);
     } finally {
       setSaving(false);
     }
@@ -295,7 +390,7 @@ export function ProductFormPage() {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-[#6B7280]">
         <Loader2 className="h-8 w-8 animate-spin text-[#FBBF24]" />
-        <p className="mt-2 text-sm font-['Hanken_Grotesk',system-ui,sans-serif]">Memuat data...</p>
+        <p className="mt-2 text-sm font-['Hanken_Grotesk',system-ui,sans-serif]">{t.loading}</p>
       </div>
     );
   }
@@ -311,7 +406,7 @@ export function ProductFormPage() {
           <ArrowLeft className="h-6 w-6" />
         </Link>
         <h1 className="font-['Manrope',system-ui,sans-serif] text-xl font-extrabold text-[#111827]">
-          {isEdit ? "Ubah Produk Koperasi" : "Tambah Produk Koperasi"}
+          {isEdit ? t.editTitle : t.addTitle}
         </h1>
       </div>
 
@@ -319,13 +414,13 @@ export function ProductFormPage() {
         {/* Photo Uploader Component */}
         <div className="space-y-3">
           <label className="text-sm font-bold text-[#111827] font-['Manrope',system-ui,sans-serif]">
-            Foto Produk
+            {t.photoLabel}
           </label>
           <div className="flex flex-col sm:flex-row gap-4 items-center">
             {/* Image Preview Window (Requirement 11.10 - 300x300 px max) */}
             <div className="h-44 w-44 rounded-3xl overflow-hidden bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center text-[#9CA3AF] shrink-0 max-w-[300px] max-h-[300px]">
               {imagePreview ? (
-                <img src={imagePreview} alt="Pratinjau produk" className="h-full w-full object-cover" />
+                <img src={imagePreview} alt={t.photoPlaceholder} className="h-full w-full object-cover" />
               ) : (
                 <ImageOff className="h-10 w-10" />
               )}
@@ -335,7 +430,7 @@ export function ProductFormPage() {
               <div className="flex gap-2">
                 <label className="inline-flex items-center gap-1.5 px-4 py-2 border border-[#E5E7EB] bg-white text-xs font-bold text-[#374151] rounded-xl cursor-pointer hover:bg-[#F9FAFB]">
                   <Upload className="h-4 w-4" />
-                  Pilih Berkas
+                  {t.btnSelectFile}
                   <input
                     type="file"
                     accept="image/jpeg, image/png, image/webp"
@@ -352,7 +447,7 @@ export function ProductFormPage() {
                     disabled={uploadingImage}
                     className="inline-flex items-center gap-1.5 px-4 py-2 border border-[#FCA5A5] bg-red-50 text-xs font-bold text-[#DC2626] rounded-xl cursor-pointer hover:bg-red-100"
                   >
-                    Hapus Foto
+                    {t.btnRemovePhoto}
                   </button>
                 )}
               </div>
@@ -362,7 +457,7 @@ export function ProductFormPage() {
                   {uploadingImage ? (
                     <div className="space-y-1">
                       <div className="flex justify-between text-[10px] font-bold text-[#111827]">
-                        <span>Mengunggah...</span>
+                        <span>{t.uploading}</span>
                         <span>{uploadProgress}%</span>
                       </div>
                       <div className="w-full bg-[#E5E7EB] h-1.5 rounded-full overflow-hidden">
@@ -378,7 +473,7 @@ export function ProductFormPage() {
                           className="px-3 py-1.5 bg-emerald-600 text-xs font-bold text-white rounded-xl flex items-center gap-1 cursor-pointer"
                         >
                           <RefreshCw className="h-3.5 w-3.5" />
-                          Lanjutkan (Chunk {failedChunkIndex})
+                          {t.btnResumeUpload.replace("{chunk}", String(failedChunkIndex))}
                         </button>
                       ) : (
                         <button
@@ -386,7 +481,7 @@ export function ProductFormPage() {
                           onClick={() => handleUploadImage(false)}
                           className="px-3 py-1.5 bg-[#FBBF24] text-xs font-bold text-[#111827] rounded-xl cursor-pointer"
                         >
-                          Unggah Gambar
+                          {t.btnUploadImage}
                         </button>
                       )}
                     </div>
@@ -409,12 +504,12 @@ export function ProductFormPage() {
         <form onSubmit={handleSubmit} className="space-y-4 font-['Hanken_Grotesk',system-ui,sans-serif]">
           {/* Item Name */}
           <div className="space-y-1">
-            <label className="text-xs font-bold text-[#4B5563]">Nama Barang</label>
+            <label className="text-xs font-bold text-[#4B5563]">{t.nameLabel}</label>
             <input
               type="text"
               required
               maxLength={200}
-              placeholder="Contoh: Beras Sentra Ramos 5kg"
+              placeholder={t.namePlaceholder}
               className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
               value={itemName}
               onChange={(e) => setItemName(e.target.value)}
@@ -423,19 +518,19 @@ export function ProductFormPage() {
 
           {/* Category Dropdown Autocomplete + Free text input (Requirement 13.1, 13.2, 13.3) */}
           <div className="space-y-1">
-            <label className="text-xs font-bold text-[#4B5563]">Kategori</label>
+            <label className="text-xs font-bold text-[#4B5563]">{t.categoryLabel}</label>
             <input
               type="text"
               required
               list="categories-datalist"
-              placeholder="Pilih atau ketik kategori baru"
+              placeholder={t.categoryPlaceholder}
               className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
             />
             <datalist id="categories-datalist">
               {categoriesList.map((cat) => (
-                <option key={cat} value={cat} />
+                <option key={cat} value={cat} label={translateCategory(cat, lang)} />
               ))}
             </datalist>
           </div>
@@ -443,23 +538,23 @@ export function ProductFormPage() {
           {/* Price & Unit fields */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#4B5563]">Harga (Rupiah)</label>
+              <label className="text-xs font-bold text-[#4B5563]">{t.priceLabel}</label>
               <input
                 type="number"
                 required
                 min={0}
-                placeholder="Contoh: 75000"
+                placeholder={t.pricePlaceholder}
                 className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                 value={price || ""}
                 onChange={(e) => setPrice(Number(e.target.value))}
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#4B5563]">Satuan Unit</label>
+              <label className="text-xs font-bold text-[#4B5563]">{t.unitLabel}</label>
               <input
                 type="text"
                 required
-                placeholder="Contoh: pcs, kg, karung"
+                placeholder={t.unitPlaceholder}
                 className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
@@ -470,13 +565,13 @@ export function ProductFormPage() {
           {/* Stock Quantity Stepper / Direct Input */}
           <div className="grid grid-cols-2 gap-4 items-center">
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#4B5563]">Jumlah Stok Awal</label>
+              <label className="text-xs font-bold text-[#4B5563]">{t.qtyLabel}</label>
               <input
                 type="number"
                 required
                 min={0}
                 max={99999}
-                placeholder="Contoh: 100"
+                placeholder={t.qtyPlaceholder}
                 className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                 value={quantity}
                 onChange={(e) => setQuantity(Number(e.target.value))}
@@ -485,7 +580,7 @@ export function ProductFormPage() {
 
             {/* Availability Boolean Toggle */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#4B5563] block">Status Ketersediaan</label>
+              <label className="text-xs font-bold text-[#4B5563] block">{t.availabilityLabel}</label>
               <div className="pt-2">
                 <label className="inline-flex items-center gap-2 cursor-pointer">
                   <input
@@ -497,7 +592,7 @@ export function ProductFormPage() {
                   />
                   <div className="relative w-11 h-6 bg-[#E5E7EB] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 disabled:opacity-50"></div>
                   <span className="text-sm font-semibold text-[#374151]">
-                    {quantity === 0 ? "Nonaktif (Stok Kosong)" : available ? "Aktif (Tersedia)" : "Nonaktif (Habis)"}
+                    {quantity === 0 ? t.statusOutOfStock : available ? t.statusAvailable : t.statusUnavailable}
                   </span>
                 </label>
               </div>
@@ -516,7 +611,7 @@ export function ProductFormPage() {
               to="/admin/products"
               className="flex-1 min-h-12 border border-[#E5E7EB] hover:bg-[#F9FAFB] text-sm font-bold text-[#374151] rounded-2xl flex items-center justify-center"
             >
-              Batal
+              {t.btnCancel}
             </Link>
             <button
               type="submit"
@@ -526,10 +621,10 @@ export function ProductFormPage() {
               {saving ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  Menyimpan…
+                  {t.savingText}
                 </>
               ) : (
-                "Simpan Produk"
+                t.btnSave
               )}
             </button>
           </div>

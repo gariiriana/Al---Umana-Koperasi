@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Loader2, Plus, Edit, Trash2, ImageOff, Check, X, ArrowUpDown, ChevronLeft, ChevronRight, Filter, FlaskConical, Trash, ArrowLeft, Upload, AlertCircle, RefreshCw } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { translateCategory } from "@/constants/categories";
 
 import { db } from "@/lib/firebase";
 import { addDoc, collection, doc, getDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
@@ -27,7 +29,205 @@ function resolveProductImageURL(ref: string | undefined): string | null {
 type SortField = "itemName" | "category" | "price" | "quantity";
 type SortOrder = "asc" | "desc";
 
+const DICTIONARY = {
+  id: {
+    demoActive: "Mode Demo Aktif — data produk berikut hanya tersimpan lokal dan juga tampil di halaman pelanggan.",
+    btnRemoveDemo: "Hapus Demo",
+    title: "Daftar Produk Koperasi",
+    subtitle: "Kelola inventaris barang koperasi, stok kuantitas, harga, dan gambar.",
+    btnLoadDemo: "Muat Data Dummy",
+    loadingText: "Memuat…",
+    btnAddProduct: "Tambah Produk",
+    filterAll: "Semua Kategori",
+    showText: "Tampilkan",
+    rowsText: "baris",
+    loadingDatabase: "Memuat basis data produk…",
+    tryAgain: "Coba Lagi",
+    noProduct: "Tidak Ada Produk",
+    noProductDesc: "Inventaris koperasi kosong atau tidak cocok dengan filter kategori yang dipilih.",
+    btnAddNewProduct: "Tambah Produk Baru",
+    thPhoto: "Foto",
+    thName: "Nama Produk",
+    thCategory: "Kategori",
+    thPrice: "Harga (IDR)",
+    thStockQty: "Stok Qty",
+    thActions: "Aksi",
+    statusActive: "Aktif",
+    statusInactive: "Nonaktif",
+    titleEditProduct: "Ubah Produk Koperasi",
+    titleAddProduct: "Tambah Produk Koperasi",
+    labelProductPhoto: "Foto Produk",
+    photoPlaceholder: "Pratinjau produk",
+    btnSelectFile: "Pilih Berkas",
+    btnDeletePhoto: "Hapus Foto",
+    btnResumeChunk: "Lanjutkan (Chunk {chunk})",
+    btnUploadImage: "Unggah Gambar",
+    uploadingText: "Mengunggah...",
+    mimeError: "Format file tidak didukung. Pilih JPEG, PNG, atau WEBP.",
+    sizeError: "Ukuran file melebihi batas 15 MB.",
+    uploadInterrupt: "Unggah terputus di chunk {chunk}. Silakan klik 'Lanjutkan'.",
+    uploadGeneralError: "Gagal mengunggah gambar.",
+    uploadSuccess: "Gambar berhasil diunggah! Jangan lupa menyimpan form produk.",
+    confirmRemovePhoto: "Hapus gambar produk ini?",
+    removePhotoError: "Gagal menghapus gambar.",
+    labelProductName: "Nama Barang",
+    placeholderProductName: "Contoh: Beras Sentra Ramos 5kg",
+    labelCategory: "Kategori",
+    placeholderCategory: "Pilih atau ketik kategori baru",
+    labelPrice: "Harga (Rupiah)",
+    labelUnit: "Satuan Unit",
+    placeholderUnit: "Contoh: pcs, kg, karung",
+    labelInitialStock: "Jumlah Stok Awal",
+    labelAvailabilityStatus: "Status Ketersediaan",
+    statusOutOfStock: "Nonaktif (Stok Kosong)",
+    statusAvailable: "Aktif (Tersedia)",
+    statusUnavailable: "Nonaktif (Habis)",
+    btnCancel: "Batal",
+    btnSave: "Simpan Produk",
+    savingText: "Menyimpan…",
+    saveSuccess: "Produk berhasil disimpan",
+    saveError: "Gagal menyimpan data produk.",
+    loadError: "Gagal memuat daftar produk inventaris.",
+    demoLoadSuccess: "Data dummy berhasil disimpan ke database Firestore!",
+    demoLoadError: "Gagal menyimpan data dummy ke Firestore.",
+    demoClearSuccess: "Data dummy berhasil dihapus dari database.",
+    demoClearError: "Gagal menghapus data dummy.",
+    deleteProductTitle: "Hapus Produk",
+    deleteProductConfirm: "Apakah Anda yakin ingin menghapus produk **{name}** secara permanen? Seluruh gambar terkait produk ini juga akan terhapus.",
+    btnDeletePermanently: "Hapus Permanen",
+    enableAvailabilityTitle: "Aktifkan Ketersediaan?",
+    enableAvailabilityConfirm: "Stok produk **{name}** saat ini diatur menjadi **{qty}**, namun status produk ini sedang Nonaktif (Tidak Tersedia). Apakah Anda ingin mengaktifkan ketersediaan produk ini secara otomatis?",
+    btnKeepInactive: "Biarkan Nonaktif",
+    btnYesEnable: "Ya, Aktifkan",
+    inlineStockTitle: "Jumlah Stok Baru",
+    inlineStockConfirmTooltip: "Simpan",
+    inlineStockCancelTooltip: "Batal",
+    inlineStockTooltip: "Klik untuk ubah stok langsung",
+    btnEditTooltip: "Ubah data produk",
+    btnDeleteTooltip: "Hapus produk",
+    btnAvailabilityTooltip: "Klik untuk mengubah ketersediaan",
+    itemsText: "produk",
+    showingText: "Menampilkan",
+    fromText: "dari",
+    loadDetailError: "Gagal memuat data detail produk.",
+    btnBackTooltip: "Kembali",
+    drawerEditTitle: "Ubah Produk",
+    drawerAddTitle: "Tambah Produk",
+    placeholderDrawerUnit: "pcs, kg, karung",
+    placeholderDrawerPrice: "75000",
+    placeholderDrawerQty: "100",
+    nameValError: "Nama produk harus di antara 1 dan 200 karakter.",
+    categoryValError: "Kategori produk harus di antara 1 dan 50 karakter.",
+    unitValError: "Satuan produk harus di antara 1 and 50 karakter.",
+    qtyValError: "Jumlah kuantitas harus di antara 0 dan 99.999",
+    priceValError: "Harga produk tidak boleh kurang dari 0.",
+    deleteError: "Gagal menghapus produk dari database.",
+    stockUpdateError: "Gagal memperbarui jumlah stok.",
+    stockToggleError: "Gagal mengubah ketersediaan produk.",
+    productUpdateError: "Gagal memperbarui produk.",
+  },
+  en: {
+    demoActive: "Demo Mode Active — product data below is only stored locally and also appears on storefront.",
+    btnRemoveDemo: "Delete Demo",
+    title: "Cooperative Product List",
+    subtitle: "Manage cooperative inventory items, stock quantities, prices, and images.",
+    btnLoadDemo: "Load Dummy Data",
+    loadingText: "Loading…",
+    btnAddProduct: "Add Product",
+    filterAll: "All Categories",
+    showText: "Show",
+    rowsText: "rows",
+    loadingDatabase: "Loading product database…",
+    tryAgain: "Try Again",
+    noProduct: "No Products",
+    noProductDesc: "Cooperative inventory is empty or does not match the selected category filter.",
+    btnAddNewProduct: "Add New Product",
+    thPhoto: "Photo",
+    thName: "Product Name",
+    thCategory: "Category",
+    thPrice: "Price (IDR)",
+    thStockQty: "Stock Qty",
+    thActions: "Actions",
+    statusActive: "Active",
+    statusInactive: "Inactive",
+    titleEditProduct: "Edit Cooperative Product",
+    titleAddProduct: "Add Cooperative Product",
+    labelProductPhoto: "Product Photo",
+    photoPlaceholder: "Product preview",
+    btnSelectFile: "Choose File",
+    btnDeletePhoto: "Delete Photo",
+    btnResumeChunk: "Resume (Chunk {chunk})",
+    btnUploadImage: "Upload Image",
+    uploadingText: "Uploading...",
+    mimeError: "Unsupported file format. Choose JPEG, PNG, or WEBP.",
+    sizeError: "File size exceeds the 15 MB limit.",
+    uploadInterrupt: "Upload interrupted at chunk {chunk}. Please click 'Resume'.",
+    uploadGeneralError: "Failed to upload image.",
+    uploadSuccess: "Image uploaded successfully! Don't forget to save the product form.",
+    confirmRemovePhoto: "Delete this product image?",
+    removePhotoError: "Failed to delete image.",
+    labelProductName: "Item Name",
+    placeholderProductName: "Example: Sentra Ramos Rice 5kg",
+    labelCategory: "Category",
+    placeholderCategory: "Select or type new category",
+    labelPrice: "Price (Rupiah)",
+    labelUnit: "Unit",
+    placeholderUnit: "Example: pcs, kg, sack",
+    labelInitialStock: "Initial Stock Quantity",
+    labelAvailabilityStatus: "Availability Status",
+    statusOutOfStock: "Inactive (Out of Stock)",
+    statusAvailable: "Active (Available)",
+    statusUnavailable: "Inactive (Sold Out)",
+    btnCancel: "Cancel",
+    btnSave: "Save Product",
+    savingText: "Saving…",
+    saveSuccess: "Product saved successfully",
+    saveError: "Failed to save product data.",
+    loadError: "Failed to load inventory products list.",
+    demoLoadSuccess: "Dummy data saved successfully to Firestore database!",
+    demoLoadError: "Failed to save dummy data to Firestore.",
+    demoClearSuccess: "Dummy data successfully deleted from database.",
+    demoClearError: "Failed to delete dummy data.",
+    deleteProductTitle: "Delete Product",
+    deleteProductConfirm: "Are you sure you want to delete product **{name}** permanently? All associated images will also be deleted.",
+    btnDeletePermanently: "Delete Permanently",
+    enableAvailabilityTitle: "Enable Availability?",
+    enableAvailabilityConfirm: "The stock of product **{name}** is currently set to **{qty}**, but this product's status is Inactive (Unavailable). Do you want to automatically enable this product's availability?",
+    btnKeepInactive: "Keep Inactive",
+    btnYesEnable: "Yes, Enable",
+    inlineStockTitle: "New Stock Quantity",
+    inlineStockConfirmTooltip: "Save",
+    inlineStockCancelTooltip: "Cancel",
+    inlineStockTooltip: "Click to change stock directly",
+    btnEditTooltip: "Edit product details",
+    btnDeleteTooltip: "Delete product",
+    btnAvailabilityTooltip: "Click to change availability status",
+    itemsText: "product(s)",
+    showingText: "Showing",
+    fromText: "of",
+    loadDetailError: "Failed to load product details.",
+    btnBackTooltip: "Back",
+    drawerEditTitle: "Edit Product",
+    drawerAddTitle: "Add Product",
+    placeholderDrawerUnit: "pcs, kg, sack",
+    placeholderDrawerPrice: "75000",
+    placeholderDrawerQty: "100",
+    nameValError: "Product name must be between 1 and 200 characters.",
+    categoryValError: "Product category must be between 1 and 50 characters.",
+    unitValError: "Product unit must be between 1 and 50 characters.",
+    qtyValError: "Quantity must be between 0 and 99,999",
+    priceValError: "Product price cannot be less than 0.",
+    deleteError: "Failed to delete product from database.",
+    stockUpdateError: "Failed to update stock quantity.",
+    stockToggleError: "Failed to change product availability.",
+    productUpdateError: "Failed to update product.",
+  }
+} as const;
+
 export function ProductsPage() {
+  const { lang } = useLanguage();
+  const t = DICTIONARY[lang];
+
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
@@ -112,11 +312,11 @@ export function ProductsPage() {
       setCategories(allCategories);
     } catch (err) {
       console.error("Gagal memuat inventaris:", err);
-      setError("Gagal memuat daftar produk inventaris.");
+      setError(DICTIONARY[lang].loadError);
     } finally {
       setLoading(false);
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, lang]);
 
   useEffect(() => {
     load();
@@ -125,10 +325,6 @@ export function ProductsPage() {
   const handleLoadDummy = async () => {
     setLoadingDemo(true);
     try {
-      // Write directly to Firestore — bypasses the Go REST API
-      // (which returns 501 in dev mode when FIREBASE_PROJECT_ID is unset).
-      // Field names mirror the backend repository exactly:
-      //   itemName, quantity, unit, price, available, category, imageUrl, updatedAt
       const col = collection(db, "inventory");
       const promises = DUMMY_PRODUCTS.map((dummy) =>
         addDoc(col, {
@@ -145,10 +341,10 @@ export function ProductsPage() {
       await Promise.all(promises);
       clearDemoStorage();
       await load();
-      alert("Data dummy berhasil disimpan ke database Firestore!");
+      alert(t.demoLoadSuccess);
     } catch (err: unknown) {
       console.error("Gagal memuat data dummy:", err);
-      alert("Gagal menyimpan data dummy ke Firestore.");
+      alert(t.demoLoadError);
     } finally {
       setLoadingDemo(false);
     }
@@ -157,20 +353,18 @@ export function ProductsPage() {
   const handleClearDemo = async () => {
     setLoading(true);
     try {
-      // Items seeded by the dummy loader have Unsplash imageUrl (starts with https://)
       const dummyItems = items.filter(
         (item) => item.imageUrl && item.imageUrl.startsWith("https://images.unsplash.com/")
       );
-      // Delete directly from Firestore using the Firebase SDK
       const col = collection(db, "inventory");
       await Promise.all(
         dummyItems.map((item) => deleteDoc(doc(col, item.id)))
       );
       clearDemoStorage();
       await load();
-      alert("Data dummy berhasil dihapus dari database.");
+      alert(t.demoClearSuccess);
     } catch {
-      alert("Gagal menghapus data dummy.");
+      alert(t.demoClearError);
     } finally {
       setLoading(false);
     }
@@ -247,7 +441,7 @@ export function ProductsPage() {
       setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch {
-      alert("Gagal menghapus produk dari database.");
+      alert(t.deleteError);
     } finally {
       setDeletingId(null);
     }
@@ -255,7 +449,7 @@ export function ProductsPage() {
 
   const handleInlineStockSave = async (item: InventoryItem, newQty: number) => {
     if (newQty < 0 || newQty > 99999) {
-      alert("Jumlah stok harus di antara 0 dan 99.999");
+      alert(t.qtyValError);
       return;
     }
 
@@ -282,7 +476,7 @@ export function ProductsPage() {
         setEditingStockId(null);
       }
     } catch {
-      alert("Gagal memperbarui jumlah stok.");
+      alert(t.stockUpdateError);
     } finally {
       setSavingStockId(null);
     }
@@ -317,7 +511,7 @@ export function ProductsPage() {
       }
       setEditingStockId(null);
     } catch {
-      alert("Gagal memperbarui produk.");
+      alert(t.productUpdateError);
     } finally {
       setSavingStockId(null);
       setPromptTarget(null);
@@ -340,7 +534,7 @@ export function ProductsPage() {
         prev.map((i) => (i.id === item.id ? { ...i, available: nextAvailable } : i))
       );
     } catch {
-      alert("Gagal mengubah ketersediaan produk.");
+      alert(t.stockToggleError);
     }
   };
 
@@ -373,7 +567,7 @@ export function ProductsPage() {
           setFImagePreview(null);
         }
       } catch {
-        setDrawerError("Gagal memuat data detail produk.");
+        setDrawerError(t.loadDetailError);
       } finally {
         setDrawerLoading(false);
       }
@@ -426,9 +620,9 @@ export function ProductsPage() {
     const validation = validateImageUpload(file.type, file.size);
     if (!validation.accepted) {
       if (validation.reason === "mime") {
-        setFImageError("Format file tidak didukung. Pilih JPEG, PNG, atau WEBP.");
+        setFImageError(t.mimeError);
       } else {
-        setFImageError("Ukuran file melebihi batas 15 MB.");
+        setFImageError(t.sizeError);
       }
       setFSelectedFile(null);
       return;
@@ -440,7 +634,7 @@ export function ProductsPage() {
   };
 
   const handleRemoveImage = async () => {
-    if (confirm("Hapus gambar produk ini?")) {
+    if (confirm(t.confirmRemovePhoto)) {
       setFUploading(true);
       try {
         if (fImageURL) {
@@ -450,7 +644,7 @@ export function ProductsPage() {
         setFSelectedFile(null);
         setFImagePreview(null);
       } catch {
-        alert("Gagal menghapus gambar.");
+        alert(t.removePhotoError);
       } finally {
         setFUploading(false);
       }
@@ -488,16 +682,16 @@ export function ProductsPage() {
       setFSelectedFile(null);
       setFFailedFileId(undefined);
       setFFailedChunk(undefined);
-      alert("Gambar berhasil diunggah! Jangan lupa menyimpan form produk.");
+      alert(t.uploadSuccess);
     } catch (err: unknown) {
       console.error("Gagal mengunggah gambar produk:", err);
       if (err instanceof ChunkUploadError && err.code === "WRITE_FAILED") {
         setFFailedFileId(err.fileId);
         setFFailedChunk(err.failedChunkIndex);
-        setFImageError(`Unggahan terputus di chunk ${err.failedChunkIndex || 0}. Silakan klik 'Lanjutkan'.`);
+        setFImageError(t.uploadInterrupt.replace("{chunk}", String(err.failedChunkIndex || 0)));
       } else {
         const errorObj = err as { message?: string };
-        setFImageError(errorObj.message || "Gagal mengunggah gambar.");
+        setFImageError(errorObj.message || t.uploadGeneralError);
       }
     } finally {
       setFUploading(false);
@@ -513,27 +707,27 @@ export function ProductsPage() {
     const trimmedUnit = fUnit.trim();
 
     if (!trimmedName || trimmedName.length > 200) {
-      setDrawerError("Nama produk harus di antara 1 dan 200 karakter.");
+      setDrawerError(t.nameValError);
       return;
     }
 
     if (!trimmedCategory || trimmedCategory.length > 50) {
-      setDrawerError("Kategori produk harus di antara 1 dan 50 karakter.");
+      setDrawerError(t.categoryValError);
       return;
     }
 
     if (!trimmedUnit || trimmedUnit.length > 50) {
-      setDrawerError("Satuan produk harus di antara 1 and 50 karakter.");
+      setDrawerError(t.unitValError);
       return;
     }
 
     if (fQty < 0 || fQty > 99999) {
-      setDrawerError("Jumlah kuantitas harus di antara 0 dan 99.999");
+      setDrawerError(t.qtyValError);
       return;
     }
 
     if (fPrice < 0) {
-      setDrawerError("Harga produk tidak boleh kurang dari 0.");
+      setDrawerError(t.priceValError);
       return;
     }
 
@@ -556,12 +750,12 @@ export function ProductsPage() {
       } else {
         await createItem(payload);
       }
-      alert("Produk berhasil disimpan");
+      alert(t.saveSuccess);
       closeDrawer();
       await load();
     } catch (err: unknown) {
       const errorObj = err as { message?: string };
-      setDrawerError(errorObj.message || "Gagal menyimpan data produk.");
+      setDrawerError(errorObj.message || t.saveError);
     } finally {
       setDrawerSaving(false);
     }
@@ -575,7 +769,7 @@ export function ProductsPage() {
           <div className="flex items-center gap-2 text-amber-800">
             <FlaskConical className="h-4 w-4 shrink-0" />
             <span className="text-xs font-semibold">
-              Mode Demo Aktif — data produk berikut hanya tersimpan lokal dan juga tampil di halaman pelanggan.
+              {t.demoActive}
             </span>
           </div>
           <button
@@ -583,7 +777,7 @@ export function ProductsPage() {
             className="shrink-0 inline-flex items-center gap-1.5 text-xs font-bold text-amber-900 hover:text-red-700 transition-colors cursor-pointer"
           >
             <Trash className="h-3.5 w-3.5" />
-            Hapus Demo
+            {t.btnRemoveDemo}
           </button>
         </div>
       )}
@@ -592,10 +786,10 @@ export function ProductsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]">
-            Daftar Produk Koperasi
+            {t.title}
           </h1>
           <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] mt-0.5">
-            Kelola inventaris barang koperasi, stok kuantitas, harga, dan gambar.
+            {t.subtitle}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -611,7 +805,7 @@ export function ProductsPage() {
             ) : (
               <FlaskConical className="h-4 w-4" />
             )}
-            {loadingDemo ? "Memuat…" : "Muat Data Dummy"}
+            {loadingDemo ? t.loadingText : t.btnLoadDemo}
           </button>
           <button
             type="button"
@@ -619,7 +813,7 @@ export function ProductsPage() {
             className="inline-flex items-center gap-2 min-h-11 px-5 rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-bold text-[#111827] shadow-sm transition-all cursor-pointer"
           >
             <Plus className="h-5 w-5" />
-            Tambah Produk
+            {t.btnAddProduct}
           </button>
         </div>
       </div>
@@ -638,10 +832,10 @@ export function ProductsPage() {
               setCurrentPage(1);
             }}
           >
-            <option value="">Semua Kategori</option>
+            <option value="">{t.filterAll}</option>
             {categories.map((cat) => (
               <option key={cat} value={cat}>
-                {cat}
+                {translateCategory(cat, lang)}
               </option>
             ))}
           </select>
@@ -649,7 +843,7 @@ export function ProductsPage() {
 
         {/* Page Size selector */}
         <div className="flex items-center gap-2 text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-          <span>Tampilkan</span>
+          <span>{t.showText}</span>
           <select
             title="Jumlah Baris"
             className="bg-[#F3F4F6] border border-[#E5E7EB] rounded-xl px-2 py-1 font-bold text-[#374151] focus:outline-none"
@@ -663,35 +857,35 @@ export function ProductsPage() {
             <option value={25}>25</option>
             <option value={50}>50</option>
           </select>
-          <span>baris</span>
+          <span>{t.rowsText}</span>
         </div>
       </div>
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 text-[#6B7280]">
           <Loader2 className="h-8 w-8 animate-spin text-[#FBBF24]" />
-          <p className="mt-2 text-sm font-['Hanken_Grotesk',system-ui,sans-serif]">Memuat basis data produk…</p>
+          <p className="mt-2 text-sm font-['Hanken_Grotesk',system-ui,sans-serif]">{t.loadingDatabase}</p>
         </div>
       ) : error ? (
         <div className="bg-red-50 border border-red-200 text-red-950 p-6 rounded-3xl text-center space-y-3 font-['Hanken_Grotesk',system-ui,sans-serif]">
           <p>{error}</p>
           <button onClick={load} className="inline-flex min-h-11 px-6 bg-[#FBBF24] rounded-2xl items-center font-bold text-[#111827]">
-            Coba Lagi
+            {t.tryAgain}
           </button>
         </div>
       ) : items.length === 0 ? (
         <div className="bg-white rounded-[32px] p-12 text-center space-y-4 shadow-sm border border-[#E5E7EB]">
           <ImageOff className="h-16 w-16 mx-auto text-[#9CA3AF]" />
-          <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">Tidak Ada Produk</h2>
+          <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">{t.noProduct}</h2>
           <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-sm mx-auto">
-            Inventaris koperasi kosong atau tidak cocok dengan filter kategori yang dipilih.
+            {t.noProductDesc}
           </p>
           <button
             type="button"
             onClick={() => void openDrawer()}
             className="inline-flex min-h-11 px-6 bg-[#FBBF24] text-[#111827] rounded-2xl items-center font-bold cursor-pointer"
           >
-            Tambah Produk Baru
+            {t.btnAddNewProduct}
           </button>
         </div>
       ) : (
@@ -701,20 +895,20 @@ export function ProductsPage() {
             <table className="w-full text-left border-collapse min-w-[800px] table-fixed">
               <thead>
                 <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB] text-xs font-extrabold text-[#4B5563] uppercase font-['Manrope',system-ui,sans-serif]">
-                  <th className="p-4 w-[8%]">Foto</th>
+                  <th className="p-4 w-[8%]">{t.thPhoto}</th>
                   <th className="p-4 w-[28%] cursor-pointer select-none hover:bg-neutral-100" onClick={() => handleSort("itemName")}>
-                    <div className="flex items-center gap-1">Nama Produk <ArrowUpDown className="h-3 w-3" /></div>
+                    <div className="flex items-center gap-1">{t.thName} <ArrowUpDown className="h-3 w-3" /></div>
                   </th>
                   <th className="p-4 w-[16%] cursor-pointer select-none hover:bg-neutral-100" onClick={() => handleSort("category")}>
-                    <div className="flex items-center gap-1">Kategori <ArrowUpDown className="h-3 w-3" /></div>
+                    <div className="flex items-center gap-1">{t.thCategory} <ArrowUpDown className="h-3 w-3" /></div>
                   </th>
                   <th className="p-4 w-[14%] cursor-pointer select-none hover:bg-neutral-100" onClick={() => handleSort("price")}>
-                    <div className="flex items-center gap-1">Harga (IDR) <ArrowUpDown className="h-3 w-3" /></div>
+                    <div className="flex items-center gap-1">{t.thPrice} <ArrowUpDown className="h-3 w-3" /></div>
                   </th>
                   <th className="p-4 w-[16%] cursor-pointer select-none hover:bg-neutral-100" onClick={() => handleSort("quantity")}>
-                    <div className="flex items-center gap-1">Stok Qty <ArrowUpDown className="h-3 w-3" /></div>
+                    <div className="flex items-center gap-1">{t.thStockQty} <ArrowUpDown className="h-3 w-3" /></div>
                   </th>
-                  <th className="p-4 w-[18%]">Aksi</th>
+                  <th className="p-4 w-[18%]">{t.thActions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E5E7EB] text-xs font-medium text-[#111827] font-['Hanken_Grotesk',system-ui,sans-serif]">
@@ -742,7 +936,7 @@ export function ProductsPage() {
 
                       {/* Category */}
                       <td className="p-4 truncate">
-                        {item.category || "-"}
+                        {translateCategory(item.category, lang) || "-"}
                       </td>
 
                       {/* Price */}
@@ -756,7 +950,7 @@ export function ProductsPage() {
                           <div className="flex items-center gap-1.5">
                             <input
                               type="number"
-                              title="Jumlah Stok Baru"
+                              title={t.inlineStockTitle}
                               placeholder="0"
                               className="w-16 bg-[#F3F4F6] border border-[#D1D5DB] rounded-xl px-2 py-1 text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                               value={editingQty}
@@ -767,7 +961,7 @@ export function ProductsPage() {
                             <button
                               onClick={() => handleInlineStockSave(item, editingQty)}
                               className="p-1 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 cursor-pointer"
-                              title="Simpan"
+                              title={t.inlineStockConfirmTooltip}
                               disabled={savingStockId === item.id}
                             >
                               {savingStockId === item.id ? (
@@ -779,7 +973,7 @@ export function ProductsPage() {
                             <button
                               onClick={() => setEditingStockId(null)}
                               className="p-1 rounded-full bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 cursor-pointer"
-                              title="Batal"
+                              title={t.inlineStockCancelTooltip}
                               disabled={savingStockId === item.id}
                             >
                               <X className="h-3.5 w-3.5" />
@@ -792,7 +986,7 @@ export function ProductsPage() {
                               setEditingQty(item.quantity);
                             }}
                             className="inline-flex items-center gap-1 px-3 py-1 bg-[#F9FAFB] hover:bg-[#F3F4F6] border border-[#E5E7EB] rounded-2xl cursor-pointer hover:border-neutral-400 font-bold transition-all text-neutral-800"
-                            title="Klik untuk ubah stok langsung"
+                            title={t.inlineStockTooltip}
                           >
                             <span>{item.quantity}</span>
                             <span className="text-[10px] text-[#6B7280] font-semibold">{item.unit || "pcs"}</span>
@@ -811,15 +1005,15 @@ export function ProductsPage() {
                               ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
                               : "bg-red-50 border-red-200 text-red-700 hover:bg-red-100")
                           }
-                          title="Klik untuk mengubah ketersediaan"
+                          title={t.btnAvailabilityTooltip}
                         >
-                          {item.available ? "Aktif" : "Nonaktif"}
+                          {item.available ? t.statusActive : t.statusInactive}
                         </button>
 
                         <button
                           onClick={() => void openDrawer(item)}
                           className="p-2 text-[#4B5563] hover:text-[#FBBF24] hover:bg-amber-50 border border-transparent hover:border-amber-200 rounded-full cursor-pointer transition-all"
-                          title="Ubah data produk"
+                          title={t.btnEditTooltip}
                         >
                           <Edit className="h-4 w-4" />
                         </button>
@@ -827,7 +1021,7 @@ export function ProductsPage() {
                         <button
                           onClick={() => setDeleteTarget(item)}
                           className="p-2 text-[#4B5563] hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-full cursor-pointer transition-all"
-                          title="Hapus produk"
+                          title={t.btnDeleteTooltip}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -842,7 +1036,7 @@ export function ProductsPage() {
           {/* Table Pagination Footer */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] px-2 pt-2">
-              <span>Menampilkan {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, items.length)} dari {items.length} produk</span>
+              <span>{t.showingText} {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, items.length)} {t.fromText} {items.length} {t.itemsText}</span>
               <div className="flex items-center gap-1">
                 <button
                   title="Halaman Sebelumnya"
@@ -872,9 +1066,9 @@ export function ProductsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4 font-['Hanken_Grotesk',system-ui,sans-serif]">
             <div className="space-y-1">
-              <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">Hapus Produk</h3>
+              <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">{t.deleteProductTitle}</h3>
               <p className="text-xs text-[#6B7280] leading-relaxed">
-                Apakah Anda yakin ingin menghapus produk **{deleteTarget.itemName}** secara permanen? Seluruh gambar terkait produk ini juga akan terhapus.
+                {t.deleteProductConfirm.replace("{name}", deleteTarget.itemName)}
               </p>
             </div>
             <div className="flex gap-2">
@@ -883,7 +1077,7 @@ export function ProductsPage() {
                 disabled={deletingId === deleteTarget.id}
                 className="flex-1 min-h-10 border border-[#E5E7EB] hover:bg-[#F3F4F6] text-xs font-bold text-[#374151] rounded-2xl cursor-pointer"
               >
-                Batal
+                {t.btnCancel}
               </button>
               <button
                 onClick={handleDelete}
@@ -893,7 +1087,7 @@ export function ProductsPage() {
                 {deletingId === deleteTarget.id ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Hapus Permanen"
+                  t.btnDeletePermanently
                 )}
               </button>
             </div>
@@ -906,10 +1100,11 @@ export function ProductsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4 font-['Hanken_Grotesk',system-ui,sans-serif]">
             <div className="space-y-1">
-              <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">Aktifkan Ketersediaan?</h3>
+              <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">{t.enableAvailabilityTitle}</h3>
               <p className="text-xs text-[#6B7280] leading-relaxed">
-                Stok produk **{promptTarget.item.itemName}** saat ini diatur menjadi **{promptTarget.nextQty}**, namun status produk ini sedang Nonaktif (Tidak Tersedia).
-                Apakah Anda ingin mengaktifkan ketersediaan produk ini secara otomatis?
+                {t.enableAvailabilityConfirm
+                  .replace("{name}", promptTarget.item.itemName)
+                  .replace("{qty}", String(promptTarget.nextQty))}
               </p>
             </div>
             <div className="flex gap-2">
@@ -918,7 +1113,7 @@ export function ProductsPage() {
                 disabled={savingStockId === promptTarget.item.id}
                 className="flex-1 min-h-10 border border-[#E5E7EB] hover:bg-[#F3F4F6] text-xs font-bold text-[#374151] rounded-2xl cursor-pointer"
               >
-                Biarkan Nonaktif
+                {t.btnKeepInactive}
               </button>
               <button
                 onClick={() => confirmEnableAvailability(true)}
@@ -928,7 +1123,7 @@ export function ProductsPage() {
                 {savingStockId === promptTarget.item.id ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Ya, Aktifkan"
+                  t.btnYesEnable
                 )}
               </button>
             </div>
@@ -951,14 +1146,14 @@ export function ProductsPage() {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  title="Kembali"
+                  title={t.btnBackTooltip}
                   onClick={closeDrawer}
                   className="h-9 w-9 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#6B7280] cursor-pointer"
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </button>
                 <h2 className="font-['Manrope',system-ui,sans-serif] text-lg font-extrabold text-[#111827]">
-                  {drawerEditId ? "Ubah Produk" : "Tambah Produk"}
+                  {drawerEditId ? t.drawerEditTitle : t.drawerAddTitle}
                 </h2>
               </div>
             </div>
@@ -972,11 +1167,11 @@ export function ProductsPage() {
               <div className="flex-1 p-6 space-y-6">
                 {/* Image Upload */}
                 <div className="space-y-3">
-                  <label className="text-sm font-bold text-[#111827] font-['Manrope',system-ui,sans-serif]">Foto Produk</label>
+                  <label className="text-sm font-bold text-[#111827] font-['Manrope',system-ui,sans-serif]">{t.labelProductPhoto}</label>
                   <div className="flex flex-col sm:flex-row gap-4 items-center">
                     <div className="h-36 w-36 rounded-2xl overflow-hidden bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center text-[#9CA3AF] shrink-0">
                       {fImagePreview ? (
-                        <img src={fImagePreview} alt="Pratinjau" className="h-full w-full object-cover" />
+                        <img src={fImagePreview} alt={t.photoPlaceholder} className="h-full w-full object-cover" />
                       ) : (
                         <ImageOff className="h-8 w-8" />
                       )}
@@ -985,7 +1180,7 @@ export function ProductsPage() {
                       <div className="flex gap-2">
                         <label className="inline-flex items-center gap-1.5 px-4 py-2 border border-[#E5E7EB] bg-white text-xs font-bold text-[#374151] rounded-xl cursor-pointer hover:bg-[#F9FAFB]">
                           <Upload className="h-4 w-4" />
-                          Pilih Berkas
+                          {t.btnSelectFile}
                           <input
                             type="file"
                             accept="image/jpeg, image/png, image/webp"
@@ -1001,7 +1196,7 @@ export function ProductsPage() {
                             disabled={fUploading}
                             className="inline-flex items-center gap-1.5 px-4 py-2 border border-[#FCA5A5] bg-red-50 text-xs font-bold text-[#DC2626] rounded-xl cursor-pointer hover:bg-red-100"
                           >
-                            Hapus Foto
+                            {t.btnDeletePhoto}
                           </button>
                         )}
                       </div>
@@ -1010,12 +1205,12 @@ export function ProductsPage() {
                           {fFailedChunk !== undefined ? (
                             <button type="button" onClick={() => void handleDrawerUpload(true)}
                               className="px-3 py-1.5 bg-emerald-600 text-xs font-bold text-white rounded-xl flex items-center gap-1 cursor-pointer">
-                              <RefreshCw className="h-3.5 w-3.5" /> Lanjutkan (Chunk {fFailedChunk})
+                              <RefreshCw className="h-3.5 w-3.5" /> {t.btnResumeChunk.replace("{chunk}", String(fFailedChunk))}
                             </button>
                           ) : (
                             <button type="button" onClick={() => void handleDrawerUpload(false)}
                               className="px-3 py-1.5 bg-[#FBBF24] text-xs font-bold text-[#111827] rounded-xl cursor-pointer">
-                              Unggah Gambar
+                              {t.btnUploadImage}
                             </button>
                           )}
                         </div>
@@ -1023,7 +1218,7 @@ export function ProductsPage() {
                       {fUploading && (
                         <div className="space-y-1">
                           <div className="flex justify-between text-[10px] font-bold text-[#111827]">
-                            <span>Mengunggah...</span><span>{fUploadProgress}%</span>
+                            <span>{t.uploadingText}</span><span>{fUploadProgress}%</span>
                           </div>
                           <div className="w-full bg-[#E5E7EB] h-1.5 rounded-full overflow-hidden">
                             <div ref={progressBarRef} className="bg-[#FBBF24] h-full transition-all duration-200" />
@@ -1040,55 +1235,55 @@ export function ProductsPage() {
                 {/* Form */}
                 <form onSubmit={(e) => void handleDrawerSubmit(e)} className="space-y-4 font-['Hanken_Grotesk',system-ui,sans-serif]">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-[#4B5563]">Nama Barang</label>
-                    <input type="text" required maxLength={200} placeholder="Contoh: Beras Sentra Ramos 5kg"
+                    <label className="text-xs font-bold text-[#4B5563]">{t.labelProductName}</label>
+                    <input type="text" required maxLength={200} placeholder={t.placeholderProductName}
                        className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                        value={fItemName} onChange={(e) => setFItemName(e.target.value)} />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-[#4B5563]">Kategori</label>
-                    <input type="text" required list="drawer-cats" placeholder="Pilih atau ketik kategori baru"
+                    <label className="text-xs font-bold text-[#4B5563]">{t.labelCategory}</label>
+                    <input type="text" required list="drawer-cats" placeholder={t.placeholderCategory}
                        className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                        value={fCategory} onChange={(e) => setFCategory(e.target.value)} />
                     <datalist id="drawer-cats">
-                      {categories.map((c) => <option key={c} value={c} />)}
+                      {categories.map((c) => <option key={c} value={c} label={translateCategory(c, lang)} />)}
                     </datalist>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-[#4B5563]">Harga (Rupiah)</label>
-                      <input type="number" required min={0} placeholder="75000"
-                        className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-                        value={fPrice || ""} onChange={(e) => setFPrice(Number(e.target.value))} />
+                      <label className="text-xs font-bold text-[#4B5563]">{t.labelPrice}</label>
+                      <input type="number" required min={0} placeholder={t.placeholderDrawerPrice}
+                         className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                         value={fPrice || ""} onChange={(e) => setFPrice(Number(e.target.value))} />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-[#4B5563]">Satuan</label>
-                      <input type="text" required placeholder="pcs, kg, karung"
-                        className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-                        value={fUnit} onChange={(e) => setFUnit(e.target.value)} />
+                      <label className="text-xs font-bold text-[#4B5563]">{t.labelUnit}</label>
+                      <input type="text" required placeholder={t.placeholderDrawerUnit}
+                         className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                         value={fUnit} onChange={(e) => setFUnit(e.target.value)} />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 items-center">
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-[#4B5563]">Jumlah Stok Awal</label>
-                      <input type="number" required min={0} max={99999} placeholder="100"
-                        className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-                        value={fQty} onChange={(e) => setFQty(Number(e.target.value))} />
+                      <label className="text-xs font-bold text-[#4B5563]">{t.labelInitialStock}</label>
+                      <input type="number" required min={0} max={99999} placeholder={t.placeholderDrawerQty}
+                         className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                         value={fQty} onChange={(e) => setFQty(Number(e.target.value))} />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-[#4B5563] block">Status Ketersediaan</label>
+                      <label className="text-xs font-bold text-[#4B5563] block">{t.labelAvailabilityStatus}</label>
                       <div className="pt-2">
                         <label className="inline-flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" className="sr-only peer"
-                            checked={fQty === 0 ? false : fAvailable}
-                            disabled={fQty === 0}
-                            onChange={(e) => setFAvailable(e.target.checked)} />
+                             checked={fQty === 0 ? false : fAvailable}
+                             disabled={fQty === 0}
+                             onChange={(e) => setFAvailable(e.target.checked)} />
                           <div className="relative w-11 h-6 bg-[#E5E7EB] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 disabled:opacity-50" />
                           <span className="text-xs font-semibold text-[#374151]">
-                            {fQty === 0 ? "Nonaktif (Stok Kosong)" : fAvailable ? "Aktif" : "Nonaktif"}
+                            {fQty === 0 ? t.statusOutOfStock : fAvailable ? t.statusActive : t.statusInactive}
                           </span>
                         </label>
                       </div>
@@ -1101,15 +1296,14 @@ export function ProductsPage() {
                       <span>{drawerError}</span>
                     </p>
                   )}
-
                   <div className="flex gap-3 pt-2">
                     <button type="button" onClick={closeDrawer}
-                      className="flex-1 min-h-12 border border-[#E5E7EB] hover:bg-[#F9FAFB] text-sm font-bold text-[#374151] rounded-2xl cursor-pointer">
-                      Batal
+                       className="flex-1 min-h-12 border border-[#E5E7EB] hover:bg-[#F9FAFB] text-sm font-bold text-[#374151] rounded-2xl cursor-pointer">
+                      {t.btnCancel}
                     </button>
                     <button type="submit" disabled={drawerSaving}
-                      className="flex-1 min-h-12 bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-bold text-[#111827] rounded-2xl flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50">
-                      {drawerSaving ? <><Loader2 className="h-5 w-5 animate-spin" />Menyimpan…</> : "Simpan Produk"}
+                       className="flex-1 min-h-12 bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-bold text-[#111827] rounded-2xl flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50">
+                      {drawerSaving ? <><Loader2 className="h-5 w-5 animate-spin" />{t.savingText}</> : t.btnSave}
                     </button>
                   </div>
                 </form>

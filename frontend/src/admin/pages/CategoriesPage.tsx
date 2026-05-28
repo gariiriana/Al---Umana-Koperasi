@@ -1,13 +1,35 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, ArrowLeft, Folder, ArrowRight } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 import { listCategories } from "@/services/stockAdminService";
+
+const DICTIONARY = {
+  id: {
+    loading: "Memuat kategori…",
+    title: "Daftar Kategori",
+    error: "Gagal memuat kategori.",
+    empty: "Belum ada kategori terdaftar pada produk aktif.",
+    addProduct: "Tambah Produk Pertama",
+    viewProducts: "Lihat Produk",
+  },
+  en: {
+    loading: "Loading categories…",
+    title: "Category List",
+    error: "Failed to load categories.",
+    empty: "No categories registered on active products yet.",
+    addProduct: "Add First Product",
+    viewProducts: "View Products",
+  }
+} as const;
 
 export function CategoriesPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { lang } = useLanguage();
+  const t = DICTIONARY[lang];
 
   const load = async () => {
     setLoading(true);
@@ -16,7 +38,7 @@ export function CategoriesPage() {
       const allCategories = await listCategories();
       setCategories(allCategories);
     } catch {
-      setError("Gagal memuat kategori.");
+      setError(t.error);
     } finally {
       setLoading(false);
     }
@@ -30,7 +52,7 @@ export function CategoriesPage() {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-[#6B7280]">
         <Loader2 className="h-8 w-8 animate-spin text-[#FBBF24]" />
-        <p className="mt-2 text-sm font-['Hanken_Grotesk',system-ui,sans-serif]">Memuat kategori…</p>
+        <p className="mt-2 text-sm font-['Hanken_Grotesk',system-ui,sans-serif]">{t.loading}</p>
       </div>
     );
   }
@@ -46,7 +68,7 @@ export function CategoriesPage() {
           <ArrowLeft className="h-6 w-6" />
         </Link>
         <h1 className="font-['Manrope',system-ui,sans-serif] text-xl font-extrabold text-[#111827]">
-          Daftar Kategori
+          {t.title}
         </h1>
       </div>
 
@@ -57,12 +79,12 @@ export function CategoriesPage() {
           </div>
         ) : categories.length === 0 ? (
           <div className="text-center py-12 text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] space-y-3">
-            <p>Belum ada kategori terdaftar pada produk aktif.</p>
+            <p>{t.empty}</p>
             <Link
               to="/admin/products/new"
               className="inline-flex min-h-10 px-5 bg-[#FBBF24] rounded-xl items-center font-bold text-xs text-[#111827]"
             >
-              Tambah Produk Pertama
+              {t.addProduct}
             </Link>
           </div>
         ) : (
@@ -84,7 +106,7 @@ export function CategoriesPage() {
                   }}
                   className="text-xs font-semibold text-[#6B7280] hover:text-[#111827] flex items-center gap-1 hover:underline"
                 >
-                  Lihat Produk
+                  {t.viewProducts}
                   <ArrowRight className="h-3 w-3" />
                 </Link>
               </div>

@@ -11,6 +11,7 @@ import { useCallback } from "react";
 import { ApiError } from "@/services/apiClient";
 import { errorMessage } from "@/constants/errorMessages";
 import { useToast } from "@/contexts/ToastContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 /** Subset of fields the hook reads from a backend error envelope. */
 export interface BackendErrorLike {
@@ -22,13 +23,11 @@ export interface BackendErrorLike {
 
 /** Options accepted by the callback returned from `useErrorToast`. */
 export interface ShowErrorOptions {
-  /** Optional toast title; defaults to `"Terjadi Kesalahan"`. */
+  /** Optional toast title. */
   title?: string;
   /** Override the auto-dismiss duration in ms. */
   durationMs?: number;
 }
-
-const DEFAULT_TITLE = "Terjadi Kesalahan";
 
 /**
  * Returns `showError(error, opts?)`. The error may be:
@@ -41,22 +40,25 @@ export function useErrorToast(): (
   opts?: ShowErrorOptions
 ) => number {
   const { showToast } = useToast();
+  const { lang } = useLanguage();
 
   return useCallback(
     (error: unknown, opts?: ShowErrorOptions) => {
       const { code, fallbackMessage } = extractErrorParts(error);
       const message = code
-        ? errorMessage(code)
-        : fallbackMessage ?? errorMessage(undefined);
+        ? errorMessage(code, lang)
+        : fallbackMessage ?? errorMessage(undefined, lang);
+
+      const defaultTitle = lang === "en" ? "An Error Occurred" : "Terjadi Kesalahan";
 
       return showToast({
-        title: opts?.title ?? DEFAULT_TITLE,
+        title: opts?.title ?? defaultTitle,
         message,
         variant: "error",
         durationMs: opts?.durationMs,
       });
     },
-    [showToast]
+    [showToast, lang]
   );
 }
 

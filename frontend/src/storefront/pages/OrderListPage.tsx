@@ -6,9 +6,51 @@ import { useAuth } from "@/contexts/AuthContext";
 import { listMyOrders } from "@/services/orderService";
 import type { Order } from "@/types/order";
 import { STATUS_LABELS, getStatusBadgeClass } from "@/lib/orderHelpers";
+import { useLanguage } from "@/contexts/LanguageContext";
+
+const DICTIONARY = {
+  id: {
+    title: "Pesanan Saya",
+    timeoutError: "Koneksi lambat atau server tidak merespons. Silakan coba lagi.",
+    fetchError: "Gagal memuat daftar pesanan Anda.",
+    notLoggedIn: "Belum Masuk Akun",
+    loginPrompt: "Silakan masuk ke akun koperasi Anda untuk melihat riwayat pembelian Anda.",
+    loginNow: "Masuk Sekarang",
+    loadingHistory: "Memuat riwayat pesanan…",
+    tryAgain: "Coba Lagi",
+    noOrders: "Belum Ada Pesanan",
+    emptyPrompt: "Sepertinya Anda belum pernah berbelanja di koperasi. Yuk beli barang kesukaanmu!",
+    startShopping: "Mulai Belanja",
+    unknownDate: "Tanggal tidak dikenal",
+    otherProducts: "dan {count} produk lainnya",
+    itemsCount: "{count} barang",
+    loading: "Memuat…",
+    showMore: "Tampilkan Pesanan Lainnya",
+  },
+  en: {
+    title: "My Orders",
+    timeoutError: "Slow connection or server is not responding. Please try again.",
+    fetchError: "Failed to load your order list.",
+    notLoggedIn: "Not Logged In",
+    loginPrompt: "Please log in to your cooperative account to view your purchase history.",
+    loginNow: "Log In Now",
+    loadingHistory: "Loading order history...",
+    tryAgain: "Try Again",
+    noOrders: "No Orders Yet",
+    emptyPrompt: "It looks like you haven't shopped at the cooperative yet. Let's buy your favorite items!",
+    startShopping: "Start Shopping",
+    unknownDate: "Unknown date",
+    otherProducts: "and {count} other products",
+    itemsCount: "{count} item(s)",
+    loading: "Loading...",
+    showMore: "Show More Orders",
+  }
+} as const;
 
 export function OrderListPage() {
   const { user } = useAuth();
+  const { lang } = useLanguage();
+  const t = DICTIONARY[lang];
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,9 +94,9 @@ export function OrderListPage() {
       requestCompleted = true;
       const errorObj = err as { message?: string };
       if (errorObj.message === "TIMEOUT") {
-        setError("Koneksi lambat atau server tidak merespons. Silakan coba lagi.");
+        setError(t.timeoutError);
       } else {
-        setError("Gagal memuat daftar pesanan Anda.");
+        setError(t.fetchError);
       }
     } finally {
       setLoading(false);
@@ -75,23 +117,23 @@ export function OrderListPage() {
           <Link to="/" className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#111827]">
             <ArrowLeft className="h-6 w-6" />
           </Link>
-          <h1 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">Pesanan Saya</h1>
+          <h1 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">{t.title}</h1>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-4">
           <div className="h-16 w-16 bg-amber-50 rounded-full flex items-center justify-center text-[#FBBF24]">
             <ClipboardList className="h-8 w-8" />
           </div>
           <div className="space-y-1">
-            <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">Belum Masuk Akun</h2>
+            <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">{t.notLoggedIn}</h2>
             <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-xs">
-              Silakan masuk ke akun koperasi Anda untuk melihat riwayat pembelian Anda.
+              {t.loginPrompt}
             </p>
           </div>
           <Link
             to="/login"
             className="inline-flex items-center justify-center min-h-11 px-6 rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-bold text-[#111827] shadow-sm cursor-pointer"
           >
-            Masuk Sekarang
+            {t.loginNow}
           </Link>
         </div>
       </div>
@@ -102,7 +144,7 @@ export function OrderListPage() {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-[#6B7280] bg-[#F3F4F6] min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-[#FBBF24]" aria-hidden="true" />
-        <p className="mt-2 text-sm font-['Hanken_Grotesk',system-ui,sans-serif]">Memuat riwayat pesanan…</p>
+        <p className="mt-2 text-sm font-['Hanken_Grotesk',system-ui,sans-serif]">{t.loadingHistory}</p>
       </div>
     );
   }
@@ -120,7 +162,7 @@ export function OrderListPage() {
           className="inline-flex items-center gap-2 min-h-11 px-6 rounded-2xl bg-[#FBBF24] text-sm font-semibold text-[#111827] cursor-pointer"
         >
           <RefreshCw className="h-4 w-4" />
-          Coba Lagi
+          {t.tryAgain}
         </button>
       </div>
     );
@@ -133,12 +175,12 @@ export function OrderListPage() {
         <Link
           to="/"
           className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#111827]"
-          aria-label="Kembali"
+          aria-label={t.title}
         >
           <ArrowLeft className="h-6 w-6" />
         </Link>
         <h1 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
-          Pesanan Saya
+          {t.title}
         </h1>
       </div>
 
@@ -148,16 +190,16 @@ export function OrderListPage() {
             <ClipboardList className="h-8 w-8" />
           </div>
           <div className="space-y-1">
-            <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">Belum Ada Pesanan</h2>
+            <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">{t.noOrders}</h2>
             <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-xs">
-              Sepertinya Anda belum pernah berbelanja di koperasi. Yuk beli barang kesukaanmu!
+              {t.emptyPrompt}
             </p>
           </div>
           <Link
             to="/"
             className="inline-flex items-center justify-center min-h-11 px-6 rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-bold text-[#111827] shadow-sm cursor-pointer"
           >
-            Mulai Belanja
+            {t.startShopping}
           </Link>
         </div>
       ) : (
@@ -165,8 +207,8 @@ export function OrderListPage() {
           {orders.map((order) => {
             const dateObj = new Date(order.createdAt);
             const formattedDate = isNaN(dateObj.getTime())
-              ? "Tanggal tidak dikenal"
-              : dateObj.toLocaleDateString("id-ID", {
+              ? t.unknownDate
+              : dateObj.toLocaleDateString(lang === "en" ? "en-US" : "id-ID", {
                   day: "numeric",
                   month: "short",
                   year: "numeric",
@@ -194,7 +236,7 @@ export function OrderListPage() {
                   </h3>
                   {order.items.length > 1 && (
                     <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                      dan {order.items.length - 1} produk lainnya
+                      {t.otherProducts.replace("{count}", String(order.items.length - 1))}
                     </p>
                   )}
                 </div>
@@ -202,7 +244,7 @@ export function OrderListPage() {
                 {/* Status Badge & Total Quantity */}
                 <div className="flex items-center justify-between pt-2 border-t border-[#F3F4F6]">
                   <span className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                    {totalQty} barang
+                    {t.itemsCount.replace("{count}", String(totalQty))}
                   </span>
                   <span
                     className={
@@ -210,7 +252,7 @@ export function OrderListPage() {
                       getStatusBadgeClass(order.status)
                     }
                   >
-                    {STATUS_LABELS[order.status] || order.status}
+                    {STATUS_LABELS[lang][order.status] || order.status}
                   </span>
                 </div>
               </Link>
@@ -227,10 +269,10 @@ export function OrderListPage() {
               {loadingMore ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin text-[#FBBF24]" />
-                  Memuat…
+                  {t.loading}
                 </>
               ) : (
-                "Tampilkan Pesanan Lainnya"
+                t.showMore
               )}
             </button>
           )}

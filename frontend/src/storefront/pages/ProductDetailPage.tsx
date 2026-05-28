@@ -13,11 +13,13 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { getProduct } from "@/services/catalogService";
 import { addToCart } from "@/services/cartService";
 import { formatIDR } from "@/lib/format";
 import type { InventoryItem } from "@/types/inventory";
 import { useCartAnimation } from "@/contexts/useCartAnimation";
+import { translateCategory } from "@/constants/categories";
 
 const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
@@ -32,6 +34,73 @@ function resolveProductImageURL(ref: string | undefined): string | null {
   return `${API_BASE_URL}/api/files/product_images/${encodeURIComponent(fileId)}/download`;
 }
 
+const translateUnit = (unit: string, lang: string) => {
+  if (lang !== "en") return unit;
+  const u = unit.toLowerCase().trim();
+  if (u === "botol") return "bottle(s)";
+  if (u === "kotak") return "box(es)";
+  if (u === "paket") return "pack(s)";
+  if (u === "bungkus") return "pack(s)";
+  return unit;
+};
+
+const DICTIONARY = {
+  id: {
+    invalidId: "ID produk tidak valid.",
+    loadError: "Gagal memuat detail produk. Periksa koneksi Anda.",
+    addError: "Gagal menambahkan ke keranjang. Silakan coba lagi.",
+    loading: "Memuat detail produk…",
+    retry: "Coba Lagi",
+    back: "Kembali",
+    detailTitle: "Detail Produk",
+    noPhoto: "Foto tidak tersedia",
+    inStock: "TERSEDIA",
+    outOfStock: "STOK HABIS",
+    defaultCategory: "Produk Koperasi",
+    guaranteeHalal: "Produk Halal & Higienis",
+    guaranteeReturn: "Garansi kualitas atau pengembalian",
+    guaranteePack: "Dikemas dengan aman oleh tim Koperasi",
+    productInfo: "Informasi Produk",
+    productDesc: "Produk segar berkualitas tinggi yang disediakan oleh Koperasi Al-Umanaa untuk memenuhi kebutuhan harian Anda secara higienis, bersih, dan halal. Dipilih langsung dari mitra terpercaya Koperasi.",
+    quantity: "Kuantitas",
+    reduceQty: "Kurangi jumlah",
+    increaseQty: "Tambah jumlah",
+    stock: "Stok",
+    subtotal: "Subtotal",
+    outOfStockMsg: "Produk ini sedang kosong. Dapatkan notifikasi ketika tersedia.",
+    addedSuccess: "Berhasil Ditambahkan ke Keranjang!",
+    adding: "Menambahkan…",
+    addToCart: "Masukkan Keranjang",
+  },
+  en: {
+    invalidId: "Invalid product ID.",
+    loadError: "Failed to load product details. Check your connection.",
+    addError: "Failed to add to cart. Please try again.",
+    loading: "Loading product details...",
+    retry: "Try Again",
+    back: "Back",
+    detailTitle: "Product Details",
+    noPhoto: "Photo not available",
+    inStock: "IN STOCK",
+    outOfStock: "OUT OF STOCK",
+    defaultCategory: "Cooperative Product",
+    guaranteeHalal: "Halal & Hygienic Product",
+    guaranteeReturn: "Quality guarantee or return",
+    guaranteePack: "Securely packed by the Cooperative team",
+    productInfo: "Product Information",
+    productDesc: "Fresh, high-quality product provided by Al-Umanaa Cooperative to meet your daily needs in a hygienic, clean, and halal way. Selected directly from the Cooperative's trusted partners.",
+    quantity: "Quantity",
+    reduceQty: "Reduce quantity",
+    increaseQty: "Increase quantity",
+    stock: "Stock",
+    subtotal: "Subtotal",
+    outOfStockMsg: "This product is currently out of stock. Get notified when available.",
+    addedSuccess: "Successfully Added to Cart!",
+    adding: "Adding...",
+    addToCart: "Add to Cart",
+  }
+} as const;
+
 type LoadState =
   | { status: "loading" }
   | { status: "ready"; product: InventoryItem }
@@ -42,6 +111,8 @@ export function ProductDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const { lang } = useLanguage();
+  const t = DICTIONARY[lang];
   const { triggerFlyAnimation } = useCartAnimation();
 
   const [state, setState] = useState<LoadState>({ status: "loading" });
@@ -54,7 +125,7 @@ export function ProductDetailPage() {
 
   const load = useCallback(() => {
     if (!id) {
-      setState({ status: "error", message: "ID produk tidak valid." });
+      setState({ status: "error", message: t.invalidId });
       return;
     }
 
@@ -73,10 +144,10 @@ export function ProductDetailPage() {
       .catch(() => {
         setState({
           status: "error",
-          message: "Gagal memuat detail produk. Periksa koneksi Anda.",
+          message: t.loadError,
         });
       });
-  }, [id, location.state]);
+  }, [id, location.state, t]);
 
   useEffect(() => {
     load();
@@ -110,7 +181,7 @@ export function ProductDetailPage() {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2500);
     } catch {
-      alert("Gagal menambahkan ke keranjang. Silakan coba lagi.");
+      alert(t.addError);
     } finally {
       setAdding(false);
     }
@@ -123,7 +194,7 @@ export function ProductDetailPage() {
       <div className="flex flex-col items-center justify-center py-24 text-[#6B7280]">
         <Loader2 className="h-8 w-8 animate-spin text-[#FBBF24]" aria-hidden="true" />
         <p className="mt-2 text-sm font-['Hanken_Grotesk',system-ui,sans-serif]">
-          Memuat detail produk…
+          {t.loading}
         </p>
       </div>
     );
@@ -140,7 +211,7 @@ export function ProductDetailPage() {
           onClick={load}
           className="inline-flex items-center gap-2 min-h-11 px-6 rounded-2xl bg-[#FBBF24] text-sm font-semibold text-[#111827] cursor-pointer"
         >
-          Coba Lagi
+          {t.retry}
         </button>
       </div>
     );
@@ -162,12 +233,12 @@ export function ProductDetailPage() {
           to={location.key !== "default" ? "/" : "/"}
           onClick={(e) => { e.preventDefault(); navigate(-1); }}
           className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#111827] focus:outline-none"
-          aria-label="Kembali"
+          aria-label={t.back}
         >
           <ArrowLeft className="h-6 w-6" />
         </Link>
         <h1 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827] truncate">
-          Detail Produk
+          {t.detailTitle}
         </h1>
       </div>
 
@@ -188,7 +259,7 @@ export function ProductDetailPage() {
               <div className="absolute inset-0 flex flex-col items-center justify-center text-[#9CA3AF]">
                 <ImageOff className="h-20 w-20" />
                 <span className="text-sm mt-2 font-['Hanken_Grotesk',system-ui,sans-serif]">
-                  Foto tidak tersedia
+                  {t.noPhoto}
                 </span>
               </div>
             )}
@@ -196,11 +267,11 @@ export function ProductDetailPage() {
             {/* Stock badge */}
             {inStock ? (
               <span className="absolute top-3 left-3 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-bold text-emerald-700">
-                TERSEDIA
+                {t.inStock}
               </span>
             ) : (
               <span className="absolute top-3 left-3 rounded-full bg-red-50 border border-red-200 px-3 py-1 text-xs font-bold text-[#DC2626]">
-                STOK HABIS
+                {t.outOfStock}
               </span>
             )}
           </div>
@@ -226,7 +297,7 @@ export function ProductDetailPage() {
           <div className="mx-4 mt-3 lg:mx-0 lg:mt-0 bg-white rounded-2xl lg:rounded-none lg:bg-transparent p-4 lg:p-0 space-y-2 lg:space-y-3">
             {/* Category badge */}
             <span className="inline-block text-[10px] uppercase font-bold tracking-wider text-[#B45309] bg-amber-50 border border-amber-200 rounded-full px-3 py-0.5">
-              {product.category || "Produk Koperasi"}
+              {translateCategory(product.category, lang) || t.defaultCategory}
             </span>
 
             {/* Product name */}
@@ -239,7 +310,7 @@ export function ProductDetailPage() {
               <p className="font-['Manrope',system-ui,sans-serif] text-3xl font-black text-[#B45309]">
                 {formatIDR(product.price)}
                 <span className="text-sm font-semibold text-[#6B7280] ml-1">
-                  / {product.unit}
+                  / {translateUnit(product.unit, lang)}
                 </span>
               </p>
             </div>
@@ -251,9 +322,9 @@ export function ProductDetailPage() {
           {/* Guarantees Row */}
           <div className="mx-4 mt-3 lg:mx-0 bg-white rounded-2xl lg:rounded-xl lg:border lg:border-[#E5E7EB] p-4 space-y-2">
             {[
-              { icon: ShieldCheck, text: "Produk Halal & Higienis" },
-              { icon: RotateCcw, text: "Garansi kualitas atau pengembalian" },
-              { icon: Package, text: "Dikemas dengan aman oleh tim Koperasi" },
+              { icon: ShieldCheck, text: t.guaranteeHalal },
+              { icon: RotateCcw, text: t.guaranteeReturn },
+              { icon: Package, text: t.guaranteePack },
             ].map(({ icon: Icon, text }) => (
               <div key={text} className="flex items-center gap-2 text-xs text-[#4B5563] font-['Hanken_Grotesk',system-ui,sans-serif]">
                 <Icon className="h-4 w-4 text-[#F59E0B] shrink-0" />
@@ -265,13 +336,10 @@ export function ProductDetailPage() {
           {/* Description */}
           <div className="mx-4 mt-3 lg:mx-0 bg-white rounded-2xl lg:rounded-xl lg:border lg:border-[#E5E7EB] p-4 space-y-1">
             <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
-              Informasi Produk
+              {t.productInfo}
             </h3>
             <p className="text-sm text-[#4B5563] font-['Hanken_Grotesk',system-ui,sans-serif] leading-relaxed">
-              Produk segar berkualitas tinggi yang disediakan oleh Koperasi
-              Al-Umana untuk memenuhi kebutuhan harian Anda secara higienis,
-              bersih, dan halal. Dipilih langsung dari mitra terpercaya
-              Koperasi.
+              {t.productDesc}
             </p>
           </div>
 
@@ -281,12 +349,12 @@ export function ProductDetailPage() {
               {/* Quantity row */}
               <div className="flex items-center justify-between">
                 <span className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
-                  Kuantitas
+                  {t.quantity}
                 </span>
                 <div className="flex items-center gap-3 bg-[#F3F4F6] rounded-full p-1 border border-[#E5E7EB]">
                   <button
                     type="button"
-                    aria-label="Kurangi jumlah"
+                    aria-label={t.reduceQty}
                     disabled={qty <= 1}
                     onClick={() => setQty((q) => Math.max(1, q - 1))}
                     className="h-9 w-9 flex items-center justify-center bg-white rounded-full shadow-sm text-[#111827] hover:bg-[#E5E7EB] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
@@ -298,7 +366,7 @@ export function ProductDetailPage() {
                   </span>
                   <button
                     type="button"
-                    aria-label="Tambah jumlah"
+                    aria-label={t.increaseQty}
                     disabled={qty >= product.quantity}
                     onClick={() => setQty((q) => Math.min(product.quantity, q + 1))}
                     className="h-9 w-9 flex items-center justify-center bg-white rounded-full shadow-sm text-[#111827] hover:bg-[#E5E7EB] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
@@ -307,13 +375,13 @@ export function ProductDetailPage() {
                   </button>
                 </div>
                 <span className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                  Stok: {product.quantity} {product.unit}
+                  {t.stock}: {product.quantity} {translateUnit(product.unit, lang)}
                 </span>
               </div>
 
               {/* Subtotal */}
               <div className="flex items-center justify-between text-sm py-2 border-t border-[#F3F4F6]">
-                <span className="text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">Subtotal</span>
+                <span className="text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">{t.subtotal}</span>
                 <span className="font-['Manrope',system-ui,sans-serif] font-black text-[#111827] text-lg">
                   {formatIDR(totalPrice)}
                 </span>
@@ -322,7 +390,7 @@ export function ProductDetailPage() {
           ) : (
             <div className="mx-4 mt-3 lg:mx-0 bg-white rounded-2xl p-4 text-center">
               <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                Produk ini sedang kosong. Dapatkan notifikasi ketika tersedia.
+                {t.outOfStockMsg}
               </p>
             </div>
           )}
@@ -348,16 +416,16 @@ export function ProductDetailPage() {
             {success ? (
               <>
                 <CheckCircle2 className="h-5 w-5" />
-                Berhasil Ditambahkan ke Keranjang!
+                {t.addedSuccess}
               </>
             ) : adding ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Menambahkan…
+                {t.adding}
               </>
             ) : (
               <>
-                Masukkan Keranjang — {formatIDR(totalPrice)}
+                {t.addToCart} — {formatIDR(totalPrice)}
               </>
             )}
           </button>
@@ -366,7 +434,7 @@ export function ProductDetailPage() {
             disabled
             className="w-full flex items-center justify-center gap-2 min-h-12 rounded-2xl bg-[#E5E7EB] text-sm font-bold text-[#9CA3AF] cursor-not-allowed"
           >
-            Stok Habis
+            {t.outOfStock}
           </button>
         )}
       </div>

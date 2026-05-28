@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ImageOff } from "lucide-react";
 
+import { useLanguage } from "@/contexts/LanguageContext";
 import { formatIDR, truncate } from "@/lib/format";
 import type { InventoryItem } from "@/types/inventory";
 
@@ -31,19 +32,30 @@ function resolveProductImageURL(ref: string | undefined): string | null {
   return `${API_BASE_URL}/api/files/product_images/${encodeURIComponent(fileId)}/download`;
 }
 
+const translateUnit = (unit: string, lang: string) => {
+  if (lang !== "en") return unit;
+  const u = unit.toLowerCase().trim();
+  if (u === "botol") return "bottle(s)";
+  if (u === "kotak") return "box(es)";
+  if (u === "paket") return "pack(s)";
+  if (u === "bungkus") return "pack(s)";
+  return unit;
+};
+
 export interface ProductCardProps {
   item: InventoryItem;
   className?: string;
 }
 
 export function ProductCard({ item, className }: ProductCardProps) {
+  const { lang } = useLanguage();
   const imageHref = resolveProductImageURL(item.imageUrl);
   const inStock = item.available && item.quantity > 0;
   const [imageError, setImageError] = useState(false);
 
   const discountPercent = (item.price % 3 === 0) ? 10 : (item.price % 5 === 0) ? 15 : 0;
   const baseSales = (item.price % 97) + 5;
-  const salesText = `${baseSales} terjual`;
+  const salesText = lang === "en" ? `${baseSales} sold` : `${baseSales} terjual`;
 
   // Determine badge type: even prices get Mall, odd prices get Star+
   const isMall = item.price % 2 === 0;
@@ -92,7 +104,7 @@ export function ProductCard({ item, className }: ProductCardProps) {
           
           {!inStock && (
             <span className="bg-neutral-800/85 text-white text-[8px] font-extrabold px-1.5 py-0.5 rounded-xs uppercase tracking-wide shadow-sm">
-              Habis
+              {lang === "en" ? "Sold Out" : "Habis"}
             </span>
           )}
         </div>
@@ -139,7 +151,7 @@ export function ProductCard({ item, className }: ProductCardProps) {
             type="button"
             className="bg-[#EE4D2D] hover:bg-[#D33E20] text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all duration-150 shadow-xs cursor-pointer focus:outline-none shrink-0"
           >
-            Beli
+            {lang === "en" ? "Buy" : "Beli"}
           </button>
         </div>
 
@@ -156,12 +168,12 @@ export function ProductCard({ item, className }: ProductCardProps) {
                 className="stock-bar-fill bg-gradient-to-r from-[#FF7337] to-[#EE4D2D] h-full absolute left-0 top-0 rounded-full"
               />
               <span className="relative z-10 text-[8px] font-black text-[#EE4D2D] tracking-wider uppercase">
-                Stok Terbatas ({item.quantity})
+                {lang === "en" ? `Limited Stock (${item.quantity})` : `Stok Terbatas (${item.quantity})`}
               </span>
             </div>
           ) : (
             <div className="flex items-center justify-between text-[9px] text-neutral-500 font-bold font-['Hanken_Grotesk'] leading-none">
-              <span className="truncate">Stok: {item.quantity} {item.unit}</span>
+              <span className="truncate">{lang === "en" ? "Stock" : "Stok"}: {item.quantity} {translateUnit(item.unit, lang)}</span>
               <span className="shrink-0">{salesText}</span>
             </div>
           )}

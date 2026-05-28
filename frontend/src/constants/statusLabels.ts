@@ -10,7 +10,7 @@
 import type { OrderStatus } from "@/types/order";
 
 /** Complete mapping from `OrderStatus` to its Bahasa Indonesian label. */
-export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+export const ORDER_STATUS_LABELS_ID: Record<OrderStatus, string> = {
   PLACING: "Menunggu Konfirmasi",
   AWAITING_PAYMENT_PROOF: "Menunggu Bukti Pembayaran",
   AWAITING_PAYMENT_APPROVAL: "Menunggu Persetujuan Pembayaran",
@@ -24,12 +24,28 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   FAILED: "Gagal",
 };
 
+/** Complete mapping from `OrderStatus` to its English label. */
+export const ORDER_STATUS_LABELS_EN: Record<OrderStatus, string> = {
+  PLACING: "Awaiting Confirmation",
+  AWAITING_PAYMENT_PROOF: "Awaiting Payment Proof",
+  AWAITING_PAYMENT_APPROVAL: "Awaiting Payment Approval",
+  PAYMENT_REJECTED: "Payment Rejected",
+  CONFIRMED: "Paid, Awaiting Cooking Process",
+  IN_PRODUCTION: "Processing",
+  READY: "Ready",
+  READY_TO_DELIVER: "Ready to Deliver",
+  OUT_FOR_DELIVERY: "Out for Delivery",
+  DELIVERED: "Delivered",
+  FAILED: "Failed",
+};
+
+export const ORDER_STATUS_LABELS = ORDER_STATUS_LABELS_ID;
+
 /**
- * Returns the Bahasa Indonesian label for a given `OrderStatus`. Falls back to
- * the raw status code when called with a value outside the typed union (which
- * can only happen if the backend returns a status the frontend has not been
- * built against yet).
+ * Returns the localized label for a given `OrderStatus`. Falls back to
+ * the raw status code when called with a value outside the typed union.
  */
-export function statusLabel(status: OrderStatus): string {
-  return ORDER_STATUS_LABELS[status] ?? String(status);
+export function statusLabel(status: OrderStatus, lang: "id" | "en" = "id"): string {
+  const labels = lang === "en" ? ORDER_STATUS_LABELS_EN : ORDER_STATUS_LABELS_ID;
+  return labels[status] ?? String(status);
 }

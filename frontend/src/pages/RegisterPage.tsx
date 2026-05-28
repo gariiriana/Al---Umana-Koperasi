@@ -5,10 +5,52 @@ import { Lock, Mail, User, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+
+const DICTIONARY = {
+  id: {
+    brandSubtitle: "Koperasi Al-Umanaa — Buat akun baru",
+    title: "Daftar",
+    subtitle: "Buat akun pelanggan baru.",
+    fullName: "Nama Lengkap",
+    email: "Email",
+    password: "Password",
+    confirmPassword: "Konfirmasi Password",
+    passwordMismatch: "Password tidak cocok",
+    registerBtn: "Daftar",
+    orContinue: "Atau lanjutkan dengan",
+    googleRegister: "Daftar dengan Google",
+    hasAccount: "Sudah punya akun?",
+    signIn: "Masuk",
+    placeholderName: "Nama Lengkap Anda",
+    placeholderPassword: "Buat password",
+    placeholderConfirm: "Konfirmasi password",
+  },
+  en: {
+    brandSubtitle: "Al-Umanaa Cooperative — Create new account",
+    title: "Register",
+    subtitle: "Create a new customer account.",
+    fullName: "Full Name",
+    email: "Email",
+    password: "Password",
+    confirmPassword: "Confirm Password",
+    passwordMismatch: "Passwords do not match",
+    registerBtn: "Register",
+    orContinue: "Or continue with",
+    googleRegister: "Register with Google",
+    hasAccount: "Already have an account?",
+    signIn: "Sign in",
+    placeholderName: "Your Full Name",
+    placeholderPassword: "Create password",
+    placeholderConfirm: "Confirm password",
+  }
+} as const;
 
 export function RegisterPage() {
   const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const { lang } = useLanguage();
+  const t = DICTIONARY[lang];
 
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -24,7 +66,7 @@ export function RegisterPage() {
     setError(null);
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError(t.passwordMismatch);
       return;
     }
 
@@ -82,33 +124,33 @@ export function RegisterPage() {
               className="h-20 mx-auto object-contain drop-shadow-md"
             />
             <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-amber-200/90 font-bold mt-2">
-              Koperasi Al-Umanaa — Buat akun baru
+              {t.brandSubtitle}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="border-t border-white/10 pt-4">
               <h2 className="font-['Manrope',system-ui,sans-serif] text-xl font-bold text-white">
-                Register
+                {t.title}
               </h2>
               <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-300 mt-1">
-                Create a new customer account.
+                {t.subtitle}
               </p>
             </div>
 
             <Input
-              label="Full Name"
+              label={t.fullName}
               type="text"
               required
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               leftIcon={<User className="h-4 w-4" />}
-              placeholder="Your Full Name"
+              placeholder={t.placeholderName}
               containerClassName="[&>label]:!text-neutral-200 [&>label]:!font-semibold"
             />
 
             <Input
-              label="Email"
+              label={t.email}
               type="email"
               autoComplete="email"
               required
@@ -120,14 +162,14 @@ export function RegisterPage() {
             />
 
             <Input
-              label="Password"
+              label={t.password}
               type={showPassword ? "text" : "password"}
               autoComplete="new-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               leftIcon={<Lock className="h-4 w-4" />}
-              placeholder="Create password"
+              placeholder={t.placeholderPassword}
               containerClassName="[&>label]:!text-neutral-200 [&>label]:!font-semibold"
               rightIcon={
                 <button
@@ -142,14 +184,14 @@ export function RegisterPage() {
             />
 
             <Input
-              label="Confirm Password"
+              label={t.confirmPassword}
               type={showConfirmPassword ? "text" : "password"}
               autoComplete="new-password"
               required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               leftIcon={<Lock className="h-4 w-4" />}
-              placeholder="Confirm password"
+              placeholder={t.placeholderConfirm}
               containerClassName="[&>label]:!text-neutral-200 [&>label]:!font-semibold"
               rightIcon={
                 <button
@@ -179,12 +221,12 @@ export function RegisterPage() {
               loading={submitting}
               className="w-full"
             >
-              Register
+              {t.registerBtn}
             </Button>
 
             <div className="relative flex items-center my-4">
               <div className="flex-grow border-t border-white/10"></div>
-              <span className="flex-shrink mx-4 text-[10px] text-neutral-300 font-['Hanken_Grotesk'] font-bold uppercase tracking-wider">Or continue with</span>
+              <span className="flex-shrink mx-4 text-[10px] text-neutral-300 font-['Hanken_Grotesk'] font-bold uppercase tracking-wider">{t.orContinue}</span>
               <div className="flex-grow border-t border-white/10"></div>
             </div>
 
@@ -200,14 +242,14 @@ export function RegisterPage() {
                 <path d="M7.1,13.3c-0.18,-0.54 -0.28,-1.11 -0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V7.24H2.78c-0.61,1.22 -0.96,2.6 -0.96,4.06c0,1.46 0.35,2.84 0.96,4.06l4.32,-3.36Z" fill="#FBBC05" />
                 <path d="M12,6.22c1.26,0 2.39,0.43 3.28,1.28l2.46,-2.46C16.26,3.64 14.31,2.9 12,2.9C8.76,2.9 5.82,4.68 4.38,7.54l4.32,3.36c0.69,-2.07 2.62,-3.61 4.9,-3.61Z" fill="#EA4335" />
               </svg>
-              <span>Register with Google</span>
+              <span>{t.googleRegister}</span>
             </button>
 
             <div className="text-center mt-4">
               <span className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-neutral-300">
-                Already have an account?{" "}
+                {t.hasAccount}{" "}
                 <Link to="/login" className="text-amber-300 hover:text-amber-400 font-bold hover:underline">
-                  Sign in
+                  {t.signIn}
                 </Link>
               </span>
             </div>

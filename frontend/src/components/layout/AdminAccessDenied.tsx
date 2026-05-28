@@ -1,6 +1,18 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { ShieldAlert } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
+
+const DICTIONARY = {
+  id: {
+    title: "Akses Ditolak",
+    message: "Halaman ini hanya untuk admin. Anda akan dialihkan ke beranda dalam beberapa detik."
+  },
+  en: {
+    title: "Access Denied",
+    message: "This page is only for admins. You will be redirected to the homepage in a few seconds."
+  }
+} as const;
 
 /**
  * AdminAccessDenied displays the "Akses Ditolak" message when a non-admin
@@ -18,6 +30,8 @@ export function AdminAccessDenied({
   delayMs?: number;
 }) {
   const [shouldRedirect, setShouldRedirect] = useState(false);
+  const { lang } = useLanguage();
+  const t = DICTIONARY[lang];
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -41,11 +55,10 @@ export function AdminAccessDenied({
         aria-hidden="true"
       />
       <h1 className="font-['Manrope',system-ui,sans-serif] text-xl font-bold text-[#111827] mb-2">
-        Akses Ditolak
+        {t.title}
       </h1>
       <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280] max-w-md">
-        Halaman ini hanya untuk admin. Anda akan dialihkan ke beranda dalam
-        beberapa detik.
+        {t.message}
       </p>
     </div>
   );

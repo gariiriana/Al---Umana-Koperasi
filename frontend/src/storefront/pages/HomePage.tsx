@@ -35,6 +35,7 @@ import {
   loadDemoFromStorage,
   clearDemoStorage,
 } from "@/lib/dummyData";
+import { translateCategory } from "@/constants/categories";
 
 const CATALOG_TIMEOUT_MS = 10_000;
 const SEARCH_MIN_LENGTH = 2;
@@ -183,7 +184,7 @@ export function HomePage() {
       { id: "segera_habis", label: lang === "id" ? "Segera Habis" : "Low Stock" },
       { id: "diskon", label: lang === "id" ? "Diskon Menarik" : "Discounts" },
     ];
-    const categoryTabs = categories.map((cat) => ({ id: cat, label: cat }));
+    const categoryTabs = categories.map((cat) => ({ id: cat, label: translateCategory(cat, lang) }));
     return [...defaultTabs, ...categoryTabs];
   }, [categories, lang]);
 
@@ -293,7 +294,7 @@ export function HomePage() {
                       ? (lang === "id" ? "Produk Segera Habis" : "Low Stock Products") 
                       : selectedTab === "diskon" 
                       ? (lang === "id" ? "Diskon Menarik" : "Discounts") 
-                      : selectedTab
+                      : translateCategory(selectedTab, lang)
                     }
                   </h2>
                   

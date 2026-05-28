@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { subscribeToCart, clearCart, computeCartTotal, CartLineItem } from "@/services/cartService";
 import { createOrder, PaymentMethod } from "@/services/orderService";
 import { formatIDR } from "@/lib/format";
@@ -13,10 +14,123 @@ import { formatIDR } from "@/lib/format";
 const DELIVERY_FEE = 10000;
 const SERVICE_FEE = 2000;
 
+const DICTIONARY = {
+  id: {
+    back: "Kembali",
+    shippingAddress: "Alamat Pengiriman",
+    paymentMethod: "Metode Pembayaran",
+    addressStep: "Alamat",
+    paymentStep: "Pembayaran",
+    emptyCart: "Keranjang Kosong",
+    emptyPrompt: "Keranjang belanja Anda kosong. Silakan tambahkan barang sebelum checkout.",
+    shopNow: "Belanja Sekarang",
+    confirmTitle: "Konfirmasi Alamat Pengiriman",
+    receiverName: "Nama Penerima",
+    fullName: "Nama Lengkap",
+    fullAddress: "Alamat Lengkap",
+    detecting: "Mendeteksi…",
+    detectLocation: "Deteksi Lokasi",
+    detectSupportError: "Browser Anda tidak mendukung GPS.",
+    detectGeocodeError: "Gagal mendapatkan alamat dari GPS. Isi manual ya.",
+    detectAccessDenied: "Akses lokasi ditolak. Izinkan di pengaturan browser.",
+    detectError: "Gagal mendapatkan lokasi. Pastikan GPS aktif.",
+    gpsPlaceholder: "Masukkan alamat pengantaran lengkap Anda (contoh: nomor rumah, jalan, RT/RW, kelurahan, detail patokan)",
+    deliveryTime: "Waktu Pengiriman",
+    timeImmediate: "Segera (30 - 60 Menit)",
+    timeLunch: "Makan Siang (12:00 - 13:00)",
+    timeAfternoon: "Makan Sore (15:00 - 16:00)",
+    timeDinner: "Makan Malam (18:00 - 19:00)",
+    nameError: "Nama penerima tidak boleh kosong.",
+    addressError: "Alamat pengiriman harus antara 10 dan 500 karakter.",
+    saving: "Menyimpan…",
+    proceedToPayment: "Lanjut ke Pembayaran",
+    selectPayment: "Pilih Metode Pembayaran",
+    codTitle: "Bayar di Tempat (COD)",
+    codDesc: "Bayar langsung saat produk sampai",
+    bankTitle: "Transfer Bank",
+    bankDesc: "Kirim ke Bank Syariah Indonesia (BSI)",
+    ewalletTitle: "E-Wallet",
+    ewalletDesc: "Bayar dengan DANA / OVO / GoPay",
+    instructionTitle: "Instruksi Pembayaran Non-COD",
+    instructionBankTitle: "Bank Syariah Indonesia (BSI)",
+    instructionEwalletTitle: "DANA / OVO / GoPay",
+    bankName: "Koperasi Al-Umana",
+    instructionAlert: "* Setelah transfer selesai, Anda diwajibkan **mengambil foto/screenshot bukti transfer** dan mengunggahnya pada langkah berikutnya agar pesanan disetujui oleh admin.",
+    costSummary: "Rincian Biaya",
+    productSubtotal: "Subtotal Produk",
+    shippingFee: "Biaya Pengiriman (Ongkir)",
+    serviceFee: "Biaya Layanan Koperasi",
+    totalPayment: "Total Pembayaran",
+    timeoutError: "Server tidak merespons. Silakan coba lagi.",
+    outOfStockMsg: "Beberapa produk tidak tersedia. Silakan tinjau kembali keranjang Anda.",
+    generalError: "Gagal membuat pesanan. Silakan coba lagi.",
+    processing: "Memproses Pesanan…",
+    placeOrder: "Pesan Sekarang",
+    unknownItem: "Barang tidak dikenal",
+    outOfStockSuffix: " (Habis)",
+  },
+  en: {
+    back: "Back",
+    shippingAddress: "Shipping Address",
+    paymentMethod: "Payment Method",
+    addressStep: "Address",
+    paymentStep: "Payment",
+    emptyCart: "Empty Cart",
+    emptyPrompt: "Your shopping cart is empty. Please add items before checking out.",
+    shopNow: "Shop Now",
+    confirmTitle: "Confirm Shipping Address",
+    receiverName: "Recipient Name",
+    fullName: "Full Name",
+    fullAddress: "Full Address",
+    detecting: "Detecting...",
+    detectLocation: "Detect Location",
+    detectSupportError: "Your browser does not support GPS.",
+    detectGeocodeError: "Failed to get address from GPS. Please fill in manually.",
+    detectAccessDenied: "Location access denied. Please allow it in your browser settings.",
+    detectError: "Failed to get location. Make sure GPS is enabled.",
+    gpsPlaceholder: "Enter your full delivery address (e.g. house number, street, neighborhood, landmark details)",
+    deliveryTime: "Delivery Time",
+    timeImmediate: "Immediate (30 - 60 Minutes)",
+    timeLunch: "Lunch (12:00 - 13:00)",
+    timeAfternoon: "Afternoon (15:00 - 16:00)",
+    timeDinner: "Dinner (18:00 - 19:00)",
+    nameError: "Recipient name cannot be empty.",
+    addressError: "Delivery address must be between 10 and 500 characters.",
+    saving: "Saving...",
+    proceedToPayment: "Proceed to Payment",
+    selectPayment: "Select Payment Method",
+    codTitle: "Cash on Delivery (COD)",
+    codDesc: "Pay directly when the product arrives",
+    bankTitle: "Bank Transfer",
+    bankDesc: "Send to Bank Syariah Indonesia (BSI)",
+    ewalletTitle: "E-Wallet",
+    ewalletDesc: "Pay with DANA / OVO / GoPay",
+    instructionTitle: "Non-COD Payment Instructions",
+    instructionBankTitle: "Bank Syariah Indonesia (BSI)",
+    instructionEwalletTitle: "DANA / OVO / GoPay",
+    bankName: "Al-Umanaa Cooperative",
+    instructionAlert: "* After transfer is complete, you are required to **take a photo/screenshot of the transfer proof** and upload it in the next step so the admin can approve your order.",
+    costSummary: "Fee Details",
+    productSubtotal: "Product Subtotal",
+    shippingFee: "Shipping Fee",
+    serviceFee: "Cooperative Service Fee",
+    totalPayment: "Total Payment",
+    timeoutError: "Server is not responding. Please try again.",
+    outOfStockMsg: "Some products are out of stock. Please review your cart.",
+    generalError: "Failed to create order. Please try again.",
+    processing: "Processing Order...",
+    placeOrder: "Order Now",
+    unknownItem: "Unknown item",
+    outOfStockSuffix: " (Out of stock)",
+  }
+} as const;
+
 export function CheckoutWizard() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { lang } = useLanguage();
+  const t = DICTIONARY[lang];
 
   const [cartItems, setCartItems] = useState<CartLineItem[]>([]);
   const [loadingCart, setLoadingCart] = useState(true);
@@ -81,7 +195,7 @@ export function CheckoutWizard() {
   // Auto-detect location via device GPS + Nominatim reverse geocoding
   const handleDetectLocation = () => {
     if (!navigator.geolocation) {
-      setGeoError("Browser Anda tidak mendukung GPS.");
+      setGeoError(t.detectSupportError);
       return;
     }
     setGeoLoading(true);
@@ -124,7 +238,7 @@ export function CheckoutWizard() {
             : (data.display_name ?? "").split(",").slice(0, 5).join(",").trim();
           setAddress(autoAddress);
         } catch {
-          setGeoError("Gagal mendapatkan alamat dari GPS. Isi manual ya.");
+          setGeoError(t.detectGeocodeError);
         } finally {
           setGeoLoading(false);
         }
@@ -132,9 +246,9 @@ export function CheckoutWizard() {
       (err) => {
         setGeoLoading(false);
         if (err.code === 1) {
-          setGeoError("Akses lokasi ditolak. Izinkan di pengaturan browser.");
+          setGeoError(t.detectAccessDenied);
         } else {
-          setGeoError("Gagal mendapatkan lokasi. Pastikan GPS aktif.");
+          setGeoError(t.detectError);
         }
       },
       { timeout: 10000, maximumAge: 60000 }
@@ -148,12 +262,12 @@ export function CheckoutWizard() {
     const trimmedName = customerName.trim();
 
     if (!trimmedName) {
-      setAddressError("Nama penerima tidak boleh kosong.");
+      setAddressError(t.nameError);
       return;
     }
 
     if (trimmedAddress.length < 10 || trimmedAddress.length > 500) {
-      setAddressError("Alamat pengiriman harus antara 10 dan 500 karakter.");
+      setAddressError(t.addressError);
       return;
     }
 
@@ -232,13 +346,13 @@ export function CheckoutWizard() {
       requestCompleted = true;
       const e = err as { message?: string; status?: number; code?: string; outOfStockItems?: string[] };
       if (e.message === "TIMEOUT") {
-        setSubmitError("Server tidak merespons. Silakan coba lagi.");
+        setSubmitError(t.timeoutError);
       } else if (e.status === 409 && e.code === "OUT_OF_STOCK") {
         // Out of stock returns to cart view per Requirement 6.5
         setOutOfStockItems(e.outOfStockItems || []);
-        setSubmitError("Beberapa produk tidak tersedia. Silakan tinjau kembali keranjang Anda.");
+        setSubmitError(t.outOfStockMsg);
       } else {
-        setSubmitError(e.message || "Gagal membuat pesanan. Silakan coba lagi.");
+        setSubmitError(e.message || t.generalError);
       }
     } finally {
       setSubmittingOrder(false);
@@ -250,7 +364,7 @@ export function CheckoutWizard() {
       {/* Sticky Header */}
       <div className="bg-white border-b border-[#E5E7EB] sticky top-0 z-10 px-4 py-3 flex items-center gap-3">
         <button
-          title="Kembali"
+          title={t.back}
           onClick={() => {
             if (step === "payment") {
               navigate("/checkout/address");
@@ -263,15 +377,15 @@ export function CheckoutWizard() {
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
-          {step === "address" ? "Alamat Pengiriman" : "Metode Pembayaran"}
+          {step === "address" ? t.shippingAddress : t.paymentMethod}
         </h1>
       </div>
 
       {/* Progress Wizard Steps Indicator */}
       <div className="bg-white px-4 py-3 flex items-center justify-center gap-2 border-b border-[#E5E7EB] text-xs font-semibold text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-        <span className={step === "address" ? "text-[#FBBF24]" : "text-[#111827]"}>Alamat</span>
+        <span className={step === "address" ? "text-[#FBBF24]" : "text-[#111827]"}>{t.addressStep}</span>
         <ChevronRight className="h-3 w-3" />
-        <span className={step === "payment" ? "text-[#FBBF24]" : ""}>Pembayaran</span>
+        <span className={step === "payment" ? "text-[#FBBF24]" : ""}>{t.paymentStep}</span>
       </div>
 
       {/* Form Wizard Container */}
@@ -283,12 +397,12 @@ export function CheckoutWizard() {
         ) : cartItems.length === 0 ? (
           <div className="bg-white rounded-3xl p-6 shadow-sm text-center space-y-4">
             <AlertTriangle className="h-12 w-12 mx-auto text-[#F59E0B]" />
-            <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">Keranjang Kosong</h2>
+            <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">{t.emptyCart}</h2>
             <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-              Keranjang belanja Anda kosong. Silakan tambahkan barang sebelum checkout.
+              {t.emptyPrompt}
             </p>
             <Link to="/" className="inline-flex min-h-11 px-6 bg-[#FBBF24] rounded-2xl items-center font-bold text-[#111827]">
-              Belanja Sekarang
+              {t.shopNow}
             </Link>
           </div>
         ) : (
@@ -305,9 +419,9 @@ export function CheckoutWizard() {
                 {/* Step 1: Address */}
                 <div className="bg-white rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-4">
                   <div className="flex items-center gap-2 text-[#FBBF24]">
-                    <MapPin className="h-5 w-5" />
+                     <MapPin className="h-5 w-5" />
                     <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
-                      Konfirmasi Alamat Pengiriman
+                      {t.confirmTitle}
                     </h3>
                   </div>
 
@@ -315,11 +429,11 @@ export function CheckoutWizard() {
                     {/* Receiver Name */}
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-[#4B5563] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                        Nama Penerima
+                        {t.receiverName}
                       </label>
                       <input
                         type="text"
-                        placeholder="Nama Lengkap"
+                        placeholder={t.fullName}
                         className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
@@ -330,7 +444,7 @@ export function CheckoutWizard() {
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-semibold text-[#4B5563] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                          Alamat Lengkap
+                          {t.fullAddress}
                         </label>
                         <button
                           type="button"
@@ -339,9 +453,9 @@ export function CheckoutWizard() {
                           className="flex items-center gap-1.5 text-[10px] font-bold text-[#B45309] bg-amber-50 border border-amber-200 rounded-full px-3 py-1 hover:bg-amber-100 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           {geoLoading ? (
-                            <><Loader2 className="h-3 w-3 animate-spin" /> Mendeteksi…</>
+                            <><Loader2 className="h-3 w-3 animate-spin" /> {t.detecting}</>
                           ) : (
-                            <><Navigation className="h-3 w-3" /> Deteksi Lokasi</>  
+                            <><Navigation className="h-3 w-3" /> {t.detectLocation}</>  
                           )}
                         </button>
                       </div>
@@ -350,7 +464,7 @@ export function CheckoutWizard() {
                       )}
                       <textarea
                         rows={4}
-                        placeholder="Masukkan alamat pengantaran lengkap Anda (contoh: nomor rumah, jalan, RT/RW, kelurahan, detail patokan)"
+                        placeholder={t.gpsPlaceholder}
                         className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] resize-none"
                         value={address}
                         onChange={(e) => setAddress(e.target.value)}
@@ -360,19 +474,19 @@ export function CheckoutWizard() {
                     {/* Delivery Time Option */}
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-[#4B5563] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                        Waktu Pengiriman
+                        {t.deliveryTime}
                       </label>
                       <div className="flex gap-2">
                         <select
-                          title="Pilih Waktu Pengiriman"
+                          title={t.deliveryTime}
                           className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                           value={deliveryTime}
                           onChange={(e) => setDeliveryTime(e.target.value)}
                         >
-                          <option value="Segera (30 - 60 Menit)">Segera (30 - 60 Menit)</option>
-                          <option value="Makan Siang (12:00 - 13:00)">Makan Siang (12:00 - 13:00)</option>
-                          <option value="Makan Sore (15:00 - 16:00)">Makan Sore (15:00 - 16:00)</option>
-                          <option value="Makan Malam (18:00 - 19:00)">Makan Malam (18:00 - 19:00)</option>
+                          <option value="Segera (30 - 60 Menit)">{t.timeImmediate}</option>
+                          <option value="Makan Siang (12:00 - 13:00)">{t.timeLunch}</option>
+                          <option value="Makan Sore (15:00 - 16:00)">{t.timeAfternoon}</option>
+                          <option value="Makan Malam (18:00 - 19:00)">{t.timeDinner}</option>
                         </select>
                       </div>
                     </div>
@@ -393,11 +507,11 @@ export function CheckoutWizard() {
                     {savingAddress ? (
                       <>
                         <Loader2 className="h-5 w-5 animate-spin" />
-                        Menyimpan…
+                        {t.saving}
                       </>
                     ) : (
                       <>
-                        Lanjut ke Pembayaran
+                        {t.proceedToPayment}
                         <ArrowRight className="h-4 w-4" />
                       </>
                     )}
@@ -418,7 +532,7 @@ export function CheckoutWizard() {
                   <div className="flex items-center gap-2 text-[#FBBF24]">
                     <Wallet className="h-5 w-5" />
                     <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
-                      Pilih Metode Pembayaran
+                      {t.selectPayment}
                     </h3>
                   </div>
 
@@ -438,10 +552,10 @@ export function CheckoutWizard() {
                         <CreditCard className="h-5 w-5 text-[#6B7280]" />
                         <div className="space-y-0.5">
                           <p className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
-                            Bayar di Tempat (COD)
+                            {t.codTitle}
                           </p>
                           <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                            Bayar langsung saat produk sampai
+                            {t.codDesc}
                           </p>
                         </div>
                       </div>
@@ -462,10 +576,10 @@ export function CheckoutWizard() {
                         <CreditCard className="h-5 w-5 text-[#6B7280]" />
                         <div className="space-y-0.5">
                           <p className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
-                            Transfer Bank
+                            {t.bankTitle}
                           </p>
                           <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                            Kirim ke Bank Syariah Indonesia (BSI)
+                            {t.bankDesc}
                           </p>
                         </div>
                       </div>
@@ -486,10 +600,10 @@ export function CheckoutWizard() {
                         <CreditCard className="h-5 w-5 text-[#6B7280]" />
                         <div className="space-y-0.5">
                           <p className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
-                            E-Wallet
+                            {t.ewalletTitle}
                           </p>
                           <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                            Bayar dengan DANA / OVO / GoPay
+                            {t.ewalletDesc}
                           </p>
                         </div>
                       </div>
@@ -502,32 +616,32 @@ export function CheckoutWizard() {
                 {(paymentMethod === "bank_transfer" || paymentMethod === "e_wallet") && (
                   <div className="bg-white rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-3 border-l-4 border-[#FBBF24]">
                     <h4 className="font-['Manrope',system-ui,sans-serif] text-xs font-bold text-[#111827]">
-                      Instruksi Pembayaran Non-COD
+                      {t.instructionTitle}
                     </h4>
                     <div className="text-xs text-[#4B5563] font-['Hanken_Grotesk',system-ui,sans-serif] space-y-2 leading-relaxed">
                       {paymentMethod === "bank_transfer" ? (
                         <p>
-                          Silakan transfer total pembayaran sebesar **{formatIDR(grandTotal)}** ke rekening koperasi:
+                          {lang === "en" ? "Please transfer the total payment of" : "Silakan transfer total pembayaran sebesar"} **{formatIDR(grandTotal)}** {lang === "en" ? "to the cooperative bank account:" : "ke rekening koperasi:"}
                           <br />
-                          🏦 **Bank Syariah Indonesia (BSI)**
+                          🏦 **{t.instructionBankTitle}**
                           <br />
-                          Rekening: **123-456-7890**
+                          {lang === "en" ? "Account:" : "Rekening:"} **123-456-7890**
                           <br />
-                          Atas Nama: **Koperasi Al-Umana**
+                          {lang === "en" ? "Account Holder:" : "Atas Nama:"} **{t.bankName}**
                         </p>
                       ) : (
                         <p>
-                          Silakan transfer total pembayaran sebesar **{formatIDR(grandTotal)}** ke E-Wallet koperasi:
+                          {lang === "en" ? "Please transfer the total payment of" : "Silakan transfer total pembayaran sebesar"} **{formatIDR(grandTotal)}** {lang === "en" ? "to the cooperative E-Wallet:" : "ke E-Wallet koperasi:"}
                           <br />
-                          📱 **DANA / OVO / GoPay**
+                          📱 **{t.instructionEwalletTitle}**
                           <br />
-                          Nomor: **0812-3456-7890**
+                          {lang === "en" ? "Number:" : "Nomor:"} **0812-3456-7890**
                           <br />
-                          Atas Nama: **Koperasi Al-Umana**
+                          {lang === "en" ? "Account Holder:" : "Atas Nama:"} **{t.bankName}**
                         </p>
                       )}
                       <p className="text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
-                        * Setelah transfer selesai, Anda diwajibkan **mengambil foto/screenshot bukti transfer** dan mengunggahnya pada langkah berikutnya agar pesanan disetujui oleh admin.
+                        {t.instructionAlert}
                       </p>
                     </div>
                   </div>
@@ -536,24 +650,24 @@ export function CheckoutWizard() {
                 {/* Billing Summary */}
                 <div className="bg-white rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-3">
                   <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
-                    Rincian Biaya
+                    {t.costSummary}
                   </h3>
                   <div className="space-y-2 text-xs font-['Hanken_Grotesk',system-ui,sans-serif] text-[#6B7280]">
                     <div className="flex justify-between">
-                      <span>Subtotal Produk</span>
+                      <span>{t.productSubtotal}</span>
                       <span className="font-semibold text-[#111827]">{formatIDR(subtotal)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Biaya Pengiriman (Ongkir)</span>
+                      <span>{t.shippingFee}</span>
                       <span className="font-semibold text-[#111827]">{formatIDR(DELIVERY_FEE)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Biaya Layanan Koperasi</span>
+                      <span>{t.serviceFee}</span>
                       <span className="font-semibold text-[#111827]">{formatIDR(SERVICE_FEE)}</span>
                     </div>
                     <hr className="border-[#F3F4F6] pt-1" />
                     <div className="flex justify-between text-sm font-bold text-[#111827] font-['Manrope',system-ui,sans-serif]">
-                      <span>Total Pembayaran</span>
+                      <span>{t.totalPayment}</span>
                       <span className="text-base font-extrabold text-[#111827]">{formatIDR(grandTotal)}</span>
                     </div>
                   </div>
@@ -566,7 +680,7 @@ export function CheckoutWizard() {
                       <ul className="list-disc pl-4 space-y-1">
                         {outOfStockItems.map((itemId) => {
                           const matched = cartItems.find((ci) => ci.itemId === itemId);
-                          return <li key={itemId}>{matched?.itemName || "Barang tidak dikenal"} (Habis)</li>;
+                          return <li key={itemId}>{matched?.itemName || t.unknownItem}{t.outOfStockSuffix}</li>;
                         })}
                       </ul>
                     )}
@@ -582,11 +696,11 @@ export function CheckoutWizard() {
                   {submittingOrder ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      Memproses Pesanan…
+                      {t.processing}
                     </>
                   ) : (
                     <>
-                      Pesan Sekarang ({formatIDR(grandTotal)})
+                      {t.placeOrder} ({formatIDR(grandTotal)})
                     </>
                   )}
                 </button>

@@ -5,11 +5,43 @@ import { Lock, Mail, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+
+const DICTIONARY = {
+  id: {
+    brandSubtitle: "Koperasi Al-Umanaa — Masuk untuk melanjutkan",
+    title: "Masuk",
+    subtitle: "Gunakan akun koperasi Anda untuk melanjutkan.",
+    forgotPassword: "Lupa password?",
+    signInBtn: "Masuk",
+    orContinue: "Atau lanjutkan dengan",
+    googleSignIn: "Masuk dengan Google",
+    noAccount: "Belum punya akun?",
+    register: "Daftar",
+    email: "Email",
+    password: "Password",
+  },
+  en: {
+    brandSubtitle: "Al-Umanaa Cooperative — Sign in to continue",
+    title: "Sign in",
+    subtitle: "Use your cooperative account to continue.",
+    forgotPassword: "Forgot password?",
+    signInBtn: "Sign in",
+    orContinue: "Or continue with",
+    googleSignIn: "Sign in with Google",
+    noAccount: "Don't have an account?",
+    register: "Register",
+    email: "Email",
+    password: "Password",
+  }
+} as const;
 
 export function LoginPage() {
   const { signIn, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { lang } = useLanguage();
+  const t = DICTIONARY[lang];
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -96,22 +128,22 @@ export function LoginPage() {
               className="h-20 mx-auto object-contain drop-shadow-md"
             />
             <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-amber-200/90 font-bold mt-2">
-              Koperasi Al-Umanaa — Masuk untuk melanjutkan
+              {t.brandSubtitle}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="border-t border-white/10 pt-4">
               <h2 className="font-['Manrope',system-ui,sans-serif] text-xl font-bold text-white">
-                Sign in
+                {t.title}
               </h2>
               <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-300 mt-1">
-                Use your koperasi account to continue.
+                {t.subtitle}
               </p>
             </div>
 
             <Input
-              label="Email"
+              label={t.email}
               type="email"
               autoComplete="email"
               required
@@ -124,7 +156,7 @@ export function LoginPage() {
 
             <div>
               <Input
-                label="Password"
+                label={t.password}
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
                 required
@@ -149,7 +181,7 @@ export function LoginPage() {
                   to="/forgot-password"
                   className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-amber-300 hover:text-amber-400 font-bold hover:underline"
                 >
-                  Forgot password?
+                  {t.forgotPassword}
                 </Link>
               </div>
             </div>
@@ -170,12 +202,12 @@ export function LoginPage() {
               loading={submitting}
               className="w-full"
             >
-              Sign in
+              {t.signInBtn}
             </Button>
 
             <div className="relative flex items-center my-4">
               <div className="flex-grow border-t border-white/10"></div>
-              <span className="flex-shrink mx-4 text-[10px] text-neutral-300 font-['Hanken_Grotesk'] font-bold uppercase tracking-wider">Or continue with</span>
+              <span className="flex-shrink mx-4 text-[10px] text-neutral-300 font-['Hanken_Grotesk'] font-bold uppercase tracking-wider">{t.orContinue}</span>
               <div className="flex-grow border-t border-white/10"></div>
             </div>
 
@@ -191,14 +223,14 @@ export function LoginPage() {
                 <path d="M7.1,13.3c-0.18,-0.54 -0.28,-1.11 -0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V7.24H2.78c-0.61,1.22 -0.96,2.6 -0.96,4.06c0,1.46 0.35,2.84 0.96,4.06l4.32,-3.36Z" fill="#FBBC05" />
                 <path d="M12,6.22c1.26,0 2.39,0.43 3.28,1.28l2.46,-2.46C16.26,3.64 14.31,2.9 12,2.9C8.76,2.9 5.82,4.68 4.38,7.54l4.32,3.36c0.69,-2.07 2.62,-3.61 4.9,-3.61Z" fill="#EA4335" />
               </svg>
-              <span>Sign in with Google</span>
+              <span>{t.googleSignIn}</span>
             </button>
 
             <div className="text-center mt-4">
               <span className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-neutral-300">
-                Don't have an account?{" "}
+                {t.noAccount}{" "}
                 <Link to="/register" className="text-amber-300 hover:text-amber-400 font-bold hover:underline">
-                  Register
+                  {t.register}
                 </Link>
               </span>
             </div>

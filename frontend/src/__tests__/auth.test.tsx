@@ -28,10 +28,19 @@ vi.mock("firebase/auth", () => ({
   createUserWithEmailAndPassword: vi.fn(),
   sendPasswordResetEmail: vi.fn(),
   updateProfile: vi.fn(),
+  getRedirectResult: vi.fn(() => Promise.resolve(null)),
   onAuthStateChanged: vi.fn((_auth, cb) => {
     cb(mockCurrentUser);
     return () => {};
   }),
+}));
+
+vi.mock("@/contexts/LanguageContext", () => ({
+  useLanguage: () => ({
+    lang: "en",
+    setLang: vi.fn(),
+  }),
+  LanguageProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("firebase/firestore", () => ({
@@ -183,7 +192,7 @@ describe("Authentication UI Features", () => {
     const emailInput = screen.getByPlaceholderText("you@al-umana.id");
     const passwordInput = screen.getByPlaceholderText("Create password");
     const confirmInput = screen.getByPlaceholderText("Confirm password");
-    const submitBtn = screen.getByRole("button", { name: /Register/i });
+    const submitBtn = screen.getByRole("button", { name: /^Register$/ });
 
     fireEvent.change(nameInput, { target: { value: "John Doe" } });
     fireEvent.change(emailInput, { target: { value: "john@example.com" } });
