@@ -89,6 +89,10 @@ h6 {
   100% { transform: scale(1); }
 }
 
+.animate-cart-pop {
+  animation: badgePop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
 /* ── Fly-to-Cart dot element (static styles; left/top/--fly-* set inline) */
 .fly-dot {
   position: fixed;
@@ -100,7 +104,7 @@ h6 {
   box-shadow: 0 2px 8px rgba(245, 158, 11, 0.5);
   z-index: 9999;
   pointer-events: none;
-  animation: flyToCart 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  animation: flyToCart 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
 
 /* ── Stock progress bar fill (width driven by --stock-pct CSS variable) */

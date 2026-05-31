@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Lock, Mail, Eye, EyeOff } from "lucide-react";
+import { doc, getDoc } from "firebase/firestore";
 
+import { db, auth } from "@/lib/firebase";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/contexts/AuthContext";
@@ -55,13 +57,32 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await signIn(email, password);
+      
+      const loggedUser = auth.currentUser;
+      let role = "pelanggan";
+      
+      if (loggedUser) {
+        // Fetch user profile from Firestore to check their role before redirecting
+        const userDocRef = doc(db, "users", loggedUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          role = userDocSnap.data().role || "pelanggan";
+        }
+      }
+
       const state = location.state as {
         from?: {
           pathname: string;
         };
         selectedQty?: unknown;
       } | null;
-      const origin = state?.from?.pathname || "/";
+      let origin = state?.from?.pathname || "/";
+      
+      // If a customer (pelanggan) tries to access any admin area, redirect them to storefront homepage instead
+      if (role === "pelanggan" && origin.startsWith("/admin")) {
+        origin = "/";
+      }
+
       const preservedQty = state?.selectedQty;
       navigate(origin, {
         replace: true,
@@ -79,13 +100,32 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await signInWithGoogle();
+      
+      const loggedUser = auth.currentUser;
+      let role = "pelanggan";
+      
+      if (loggedUser) {
+        // Fetch user profile from Firestore to check their role before redirecting
+        const userDocRef = doc(db, "users", loggedUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          role = userDocSnap.data().role || "pelanggan";
+        }
+      }
+
       const state = location.state as {
         from?: {
           pathname: string;
         };
         selectedQty?: unknown;
       } | null;
-      const origin = state?.from?.pathname || "/";
+      let origin = state?.from?.pathname || "/";
+      
+      // If a customer (pelanggan) tries to access any admin area, redirect them to storefront homepage instead
+      if (role === "pelanggan" && origin.startsWith("/admin")) {
+        origin = "/";
+      }
+
       const preservedQty = state?.selectedQty;
       navigate(origin, {
         replace: true,

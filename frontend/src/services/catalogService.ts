@@ -79,9 +79,11 @@ export async function listAvailableProducts(
       quantity: (data.quantity as number) ?? 0,
       unit: (data.unit as string) ?? "",
       price: (data.price as number) ?? 0,
+      discountPercent: (data.discountPercent as number) ?? 0,
       available: (data.available as boolean) ?? false,
       category: (data.category as string) ?? "",
       imageUrl: (data.imageUrl as string) ?? "",
+      detailImageUrls: Array.isArray(data.detailImageUrls) ? (data.detailImageUrls as string[]) : [],
       updatedAt: formatUpdatedAt(data.updatedAt),
     } as InventoryItem;
   });
@@ -112,9 +114,11 @@ export async function getProduct(id: string): Promise<InventoryItem> {
     quantity: (data.quantity as number) ?? 0,
     unit: (data.unit as string) ?? "",
     price: (data.price as number) ?? 0,
+    discountPercent: (data.discountPercent as number) ?? 0,
     available: (data.available as boolean) ?? false,
     category: (data.category as string) ?? "",
     imageUrl: (data.imageUrl as string) ?? "",
+    detailImageUrls: Array.isArray(data.detailImageUrls) ? (data.detailImageUrls as string[]) : [],
     updatedAt: formatUpdatedAt(data.updatedAt),
   } as InventoryItem;
 }

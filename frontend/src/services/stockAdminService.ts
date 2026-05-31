@@ -64,9 +64,11 @@ export async function listAllItems(
       quantity: (data.quantity as number) ?? 0,
       unit: (data.unit as string) ?? "",
       price: (data.price as number) ?? 0,
+      discountPercent: (data.discountPercent as number) ?? 0,
       available: (data.available as boolean) ?? false,
       category: (data.category as string) ?? "",
       imageUrl: (data.imageUrl as string) ?? "",
+      detailImageUrls: Array.isArray(data.detailImageUrls) ? (data.detailImageUrls as string[]) : [],
       updatedAt: formatUpdatedAt(data.updatedAt),
     } as InventoryItem;
   });
@@ -86,9 +88,11 @@ export async function getItem(id: string): Promise<InventoryItem> {
     quantity: (data.quantity as number) ?? 0,
     unit: (data.unit as string) ?? "",
     price: (data.price as number) ?? 0,
+    discountPercent: (data.discountPercent as number) ?? 0,
     available: (data.available as boolean) ?? false,
     category: (data.category as string) ?? "",
     imageUrl: (data.imageUrl as string) ?? "",
+    detailImageUrls: Array.isArray(data.detailImageUrls) ? (data.detailImageUrls as string[]) : [],
     updatedAt: formatUpdatedAt(data.updatedAt),
   } as InventoryItem;
 }
@@ -101,9 +105,11 @@ export async function createItem(input: InventoryItemInput): Promise<InventoryIt
     quantity: input.quantity,
     unit: input.unit,
     price: input.price,
+    discountPercent: input.discountPercent ?? 0,
     available: input.quantity === 0 ? false : input.available,
     category: input.category ?? "",
     imageUrl: input.imageUrl ?? "",
+    detailImageUrls: input.detailImageUrls ?? [],
     updatedAt: new Date().toISOString(),
   };
   const docRef = await addDoc(colRef, data);
@@ -121,9 +127,11 @@ export async function updateItem(
     quantity: input.quantity,
     unit: input.unit,
     price: input.price,
+    discountPercent: input.discountPercent ?? 0,
     available: input.quantity === 0 ? false : input.available,
     category: input.category ?? "",
     imageUrl: input.imageUrl ?? "",
+    detailImageUrls: input.detailImageUrls ?? [],
     updatedAt: new Date().toISOString(),
   };
   await setDoc(docRef, data, { merge: true });
@@ -146,6 +154,25 @@ export async function patchStock(id: string, quantity: number): Promise<void> {
   await updateDoc(docRef, updates);
 }
 
+/** Permanently delete an image and all its associated chunks from Firestore. */
+export async function deleteImageFileAndChunks(imageUrl: string): Promise<void> {
+  if (imageUrl && imageUrl.startsWith("product_images/")) {
+    const fileId = imageUrl.split("/")[1];
+    if (fileId) {
+      // Cascade delete parent document
+      await deleteDoc(doc(db, "product_images", fileId));
+      // Cascade delete chunk documents (0..30 max limits)
+      const chunkPromises = [];
+      for (let i = 0; i < 30; i++) {
+        chunkPromises.push(
+          deleteDoc(doc(db, "product_images", fileId, "chunks", String(i)))
+        );
+      }
+      await Promise.all(chunkPromises);
+    }
+  }
+}
+
 /** Permanently delete an inventory item and cascade-clean its image file. */
 export async function deleteItem(id: string): Promise<void> {
   const docRef = doc(db, "inventory", id);
@@ -153,20 +180,12 @@ export async function deleteItem(id: string): Promise<void> {
   if (docSnap.exists()) {
     const data = docSnap.data();
     const imageUrl = data.imageUrl as string | undefined;
-    if (imageUrl && imageUrl.startsWith("product_images/")) {
-      const fileId = imageUrl.split("/")[1];
-      if (fileId) {
-        // Cascade delete parent document
-        await deleteDoc(doc(db, "product_images", fileId));
-        // Cascade delete chunk documents (0..30 max limits)
-        const chunkPromises = [];
-        for (let i = 0; i < 30; i++) {
-          chunkPromises.push(
-            deleteDoc(doc(db, "product_images", fileId, "chunks", String(i)))
-          );
-        }
-        await Promise.all(chunkPromises);
-      }
+    if (imageUrl) {
+      await deleteImageFileAndChunks(imageUrl);
+    }
+    const detailImageUrls = data.detailImageUrls as string[] | undefined;
+    if (detailImageUrls && Array.isArray(detailImageUrls)) {
+      await Promise.all(detailImageUrls.map((url) => deleteImageFileAndChunks(url)));
     }
   }
   await deleteDoc(docRef);

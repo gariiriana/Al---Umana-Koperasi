@@ -31,9 +31,43 @@ import {
   STATIC_INFO_NOTIFICATIONS,
 } from "@/services/notificationService";
 
-function formatTimeAgo(dateStr: string, langCode: "id" | "en") {
+function formatTimeAgo(dateInput: unknown, langCode: "id" | "en") {
   try {
-    const date = new Date(dateStr);
+    if (!dateInput) return "";
+    let date: Date;
+    if (typeof dateInput === "string") {
+      date = new Date(dateInput);
+    } else if (dateInput && typeof dateInput === "object") {
+      const inputObj = dateInput as Record<string, unknown>;
+      if ("seconds" in inputObj) {
+        const secondsVal = inputObj.seconds;
+        if (typeof secondsVal === "number") {
+          date = new Date(secondsVal * 1000);
+        } else {
+          date = new Date(String(dateInput));
+        }
+      } else if ("toDate" in inputObj) {
+        const toDateFn = inputObj.toDate;
+        if (typeof toDateFn === "function") {
+          date = (toDateFn as () => Date)();
+        } else {
+          date = new Date(String(dateInput));
+        }
+      } else if (dateInput instanceof Date) {
+        date = dateInput;
+      } else {
+        date = new Date(String(dateInput));
+      }
+    } else if (typeof dateInput === "number") {
+      date = new Date(dateInput);
+    } else {
+      date = new Date(String(dateInput));
+    }
+
+    if (isNaN(date.getTime())) {
+      return String(dateInput);
+    }
+
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -50,18 +84,26 @@ function formatTimeAgo(dateStr: string, langCode: "id" | "en") {
       minute: "2-digit",
     });
   } catch {
-    return dateStr;
+    return String(dateInput);
   }
 }
 
 export function NotificationsPage() {
-  const { user, requestSignOut } = useAuth();
+  const { user, profile, requestSignOut } = useAuth();
   const { lang } = useLanguage();
   const [activeTab, setActiveTab] = useState<"order" | "promo" | "info">("order");
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-
   const [promos, setPromos] = useState<NotificationItem[]>(STATIC_PROMO_NOTIFICATIONS);
+  const [, setTick] = useState(0);
+
+  // Force re-render every 30 seconds to keep relative time-ago descriptions updated in real time
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick((prev) => prev + 1);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Firestore real-time subscription for current user's orders
   useEffect(() => {
@@ -103,11 +145,7 @@ export function NotificationsPage() {
   useEffect(() => {
     listAvailableProducts()
       .then((products) => {
-        const discounted = products.filter((p) => {
-          const discountPercent =
-            p.price % 3 === 0 ? 10 : p.price % 5 === 0 ? 15 : 0;
-          return discountPercent > 0;
-        });
+        const discounted = products.filter((p) => (p.discountPercent ?? 0) > 0);
         const promoNotifs = discounted.map(mapProductToPromoNotification);
         setPromos([...promoNotifs, ...STATIC_PROMO_NOTIFICATIONS]);
       })
@@ -117,13 +155,19 @@ export function NotificationsPage() {
   }, []);
 
   // Map order state transitions to notification items
-  const orderNotifications = orders.map(mapOrderToNotification);
+  const orderNotifications = orders.flatMap(mapOrderToNotification);
 
-  // Combine static and dynamic notifications
+  // Combine static and dynamic notifications and sort chronologically descending
   const getNotificationsList = (): NotificationItem[] => {
-    if (activeTab === "order") return orderNotifications;
-    if (activeTab === "promo") return promos;
-    return STATIC_INFO_NOTIFICATIONS;
+    let list: NotificationItem[] = [];
+    if (activeTab === "order") {
+      list = orderNotifications;
+    } else if (activeTab === "promo") {
+      list = promos;
+    } else {
+      list = STATIC_INFO_NOTIFICATIONS;
+    }
+    return [...list].sort((a, b) => Date.parse(b.time) - Date.parse(a.time));
   };
 
   const currentList = getNotificationsList();
@@ -151,8 +195,16 @@ export function NotificationsPage() {
           <aside className="hidden lg:block w-64 shrink-0 space-y-6">
             {/* User Profile Header */}
             <div className="flex items-center gap-3 px-2">
-              <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-[#FBBF24] to-[#F59E0B] flex items-center justify-center text-white text-base font-extrabold shadow-sm">
-                {(user?.displayName ?? user?.email ?? "?").charAt(0).toUpperCase()}
+              <div className="h-12 w-12 rounded-full overflow-hidden bg-gradient-to-tr from-[#FBBF24] to-[#F59E0B] flex items-center justify-center text-white text-base font-extrabold shadow-sm border border-neutral-200 shrink-0">
+                {profile?.photoURL || user?.photoURL ? (
+                  <img
+                    src={profile?.photoURL || user?.photoURL || ""}
+                    alt="Avatar"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  (user?.displayName ?? user?.email ?? "?").charAt(0).toUpperCase()
+                )}
               </div>
               <div className="space-y-0.5">
                 <span className="text-xs text-neutral-500 font-semibold">{t.userGreeting}</span>

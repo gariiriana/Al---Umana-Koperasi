@@ -120,6 +120,16 @@ func TestValidateInventoryItem_FieldRules(t *testing.T) {
 			mutate:   func(i *InventoryItem) { i.ImageURL = "product_images/foo/bar" },
 			expected: "imageURL",
 		},
+		{
+			name:     "discountPercent negative",
+			mutate:   func(i *InventoryItem) { i.DiscountPercent = -1 },
+			expected: "discountPercent",
+		},
+		{
+			name:     "discountPercent above max",
+			mutate:   func(i *InventoryItem) { i.DiscountPercent = 101 },
+			expected: "discountPercent",
+		},
 	}
 
 	for _, tc := range cases {
@@ -145,24 +155,26 @@ func TestValidateInventoryItem_MultipleViolations(t *testing.T) {
 	t.Parallel()
 
 	item := InventoryItem{
-		ItemName: "",
-		Quantity: -5,
-		Unit:     "",
-		Price:    -100,
-		Category: "",
-		ImageURL: "not-a-product-images-url",
+		ItemName:        "",
+		Quantity:        -5,
+		Unit:            "",
+		Price:           -100,
+		DiscountPercent: -5,
+		Category:        "",
+		ImageURL:        "not-a-product-images-url",
 	}
 
 	errs := ValidateInventoryItem(item)
 	gotFields := fieldsOf(errs)
 
 	wantFields := map[string]bool{
-		"itemName": false,
-		"quantity": false,
-		"unit":     false,
-		"price":    false,
-		"category": false,
-		"imageURL": false,
+		"itemName":        false,
+		"quantity":        false,
+		"unit":            false,
+		"price":           false,
+		"discountPercent": false,
+		"category":        false,
+		"imageURL":        false,
 	}
 
 	for _, f := range gotFields {
@@ -181,4 +193,37 @@ func TestValidateInventoryItem_MultipleViolations(t *testing.T) {
 			t.Errorf("missing error for field %q (got %v)", f, gotFields)
 		}
 	}
+}
+
+func TestValidateInventoryItem_DetailImageUrls(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid detail image urls", func(t *testing.T) {
+		item := validItem()
+		item.DetailImageUrls = []string{"product_images/def456", "product_images/ghi789"}
+		if errs := ValidateInventoryItem(item); len(errs) != 0 {
+			t.Fatalf("expected no errors, got %+v", errs)
+		}
+	})
+
+	t.Run("too many detail image urls", func(t *testing.T) {
+		item := validItem()
+		item.DetailImageUrls = make([]string, 11)
+		for i := 0; i < 11; i++ {
+			item.DetailImageUrls[i] = "product_images/img"
+		}
+		errs := ValidateInventoryItem(item)
+		if len(errs) != 1 || errs[0].Field != "detailImageUrls" {
+			t.Fatalf("expected exactly 1 detailImageUrls error, got: %+v", errs)
+		}
+	})
+
+	t.Run("invalid detail image url format", func(t *testing.T) {
+		item := validItem()
+		item.DetailImageUrls = []string{"product_images/valid1", "invalid-format"}
+		errs := ValidateInventoryItem(item)
+		if len(errs) != 1 || errs[0].Field != "detailImageUrls" {
+			t.Fatalf("expected exactly 1 detailImageUrls error, got: %+v", errs)
+		}
+	})
 }

@@ -10,13 +10,14 @@ import {
   RotateCcw,
   Package,
   CheckCircle2,
+  ShoppingCart,
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getProduct } from "@/services/catalogService";
-import { addToCart } from "@/services/cartService";
+import { addToCart, type CartLineItem } from "@/services/cartService";
 import { formatIDR } from "@/lib/format";
 import { ProductImage } from "@/components/ProductImage";
 import type { InventoryItem } from "@/types/inventory";
@@ -59,9 +60,10 @@ const DICTIONARY = {
     stock: "Stok",
     subtotal: "Subtotal",
     outOfStockMsg: "Produk ini sedang kosong. Dapatkan notifikasi ketika tersedia.",
-    addedSuccess: "Berhasil Ditambahkan ke Keranjang!",
+    addedSuccess: "Berhasil Ditambahkan!",
     adding: "Menambahkan…",
-    addToCart: "Masukkan Keranjang",
+    addToCart: "Keranjang",
+    buyNow: "Beli Sekarang",
   },
   en: {
     invalidId: "Invalid product ID.",
@@ -86,9 +88,10 @@ const DICTIONARY = {
     stock: "Stock",
     subtotal: "Subtotal",
     outOfStockMsg: "This product is currently out of stock. Get notified when available.",
-    addedSuccess: "Successfully Added to Cart!",
+    addedSuccess: "Added Successfully!",
     adding: "Adding...",
     addToCart: "Add to Cart",
+    buyNow: "Buy Now",
   }
 } as const;
 
@@ -110,7 +113,9 @@ export function ProductDetailPage() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [qty, setQty] = useState(1);
   const [adding, setAdding] = useState(false);
+  const [buying, setBuying] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [activeImage, setActiveImage] = useState<string | null>(null);
 
   /** Ref on the "Tambah ke Keranjang" button — used as fly animation source */
   const addBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -126,6 +131,7 @@ export function ProductDetailPage() {
     getProduct(id)
       .then((product) => {
         setState({ status: "ready", product });
+        setActiveImage(product.imageUrl || null);
         // Restore preserved quantity from login-redirect state
         const preservedState = location.state as { selectedQty?: number } | null;
         const preservedQty = preservedState?.selectedQty;
@@ -167,7 +173,12 @@ export function ProductDetailPage() {
     try {
       await addToCart(
         user.uid,
-        { itemId: product.id, itemName: product.itemName, price: product.price, imageUrl: product.imageUrl },
+        {
+          itemId: product.id,
+          itemName: product.itemName,
+          price: product.price,
+          imageUrl: product.imageUrl,
+        },
         qty
       );
       setSuccess(true);
@@ -177,6 +188,36 @@ export function ProductDetailPage() {
     } finally {
       setAdding(false);
     }
+  };
+
+  const handleBuyNow = async () => {
+    if (state.status !== "ready") return;
+    const { product } = state;
+
+    if (!user) {
+      navigate("/login", {
+        state: { from: location, selectedQty: qty },
+      });
+      return;
+    }
+
+    setBuying(true);
+
+    const directItem: CartLineItem = {
+      itemId: product.id,
+      itemName: product.itemName,
+      unitPrice: product.price,
+      quantity: qty,
+      notes: "",
+      imageUrl: product.imageUrl || ""
+    };
+
+    navigate("/checkout/address", {
+      state: {
+        directCheckoutItems: [directItem]
+      }
+    });
+    setBuying(false);
   };
 
   /* ─── Loading / Error states ──────────────────────────────────────── */
@@ -213,6 +254,12 @@ export function ProductDetailPage() {
   const inStock = product.available && product.quantity > 0;
   const totalPrice = product.price * qty;
 
+  const images: string[] = [];
+  if (product.imageUrl) images.push(product.imageUrl);
+  if (product.detailImageUrls && Array.isArray(product.detailImageUrls)) {
+    images.push(...product.detailImageUrls);
+  }
+
   /* ─── Main Render ─────────────────────────────────────────────────── */
 
   return (
@@ -239,12 +286,12 @@ export function ProductDetailPage() {
         {/* ── LEFT: Product Image ──────────────────────────────────── */}
         <div className="lg:sticky lg:top-20 lg:self-start">
           {/* Main Image */}
-          <div className="relative w-full aspect-square bg-white lg:rounded-2xl overflow-hidden shadow-sm border border-[#E5E7EB]">
-            {product.imageUrl ? (
+          <div className="relative w-full aspect-square bg-white lg:rounded-2xl overflow-hidden shadow-sm border border-[#E5E7EB] flex items-center justify-center">
+            {activeImage ? (
               <ProductImage
-                imageUrl={product.imageUrl}
+                imageUrl={activeImage}
                 alt={product.itemName}
-                className="absolute inset-0 h-full w-full object-contain p-4"
+                className="absolute inset-0 h-full w-full object-contain p-4 transition-all duration-300"
                 fallbackClassName="h-20 w-20 text-[#9CA3AF]"
               />
             ) : (
@@ -268,18 +315,29 @@ export function ProductDetailPage() {
             )}
           </div>
 
-          {/* Thumbnail placeholder row (single photo product) */}
-          <div className="hidden lg:flex gap-2 mt-3 justify-center">
-            <div
-              className={`h-16 w-16 rounded-xl border-2 border-[#FBBF24] overflow-hidden bg-white flex items-center justify-center`}
-            >
-              {product.imageUrl ? (
-                <ProductImage imageUrl={product.imageUrl} alt="" className="h-full w-full object-contain p-1" fallbackClassName="h-6 w-6 text-[#9CA3AF]" />
-              ) : (
-                <ImageOff className="h-6 w-6 text-[#9CA3AF]" />
-              )}
+          {/* Interactive Thumbnails Selector Row */}
+          {images.length > 1 && (
+            <div className="flex gap-2.5 mt-3 overflow-x-auto py-1 px-4 lg:px-0 scrollbar-none justify-start lg:justify-center">
+              {images.map((img, index) => {
+                const isSelected = activeImage === img;
+                return (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => setActiveImage(img)}
+                    onMouseEnter={() => setActiveImage(img)}
+                    title={lang === "id" ? `Lihat foto detail ${index + 1}` : `View detail photo ${index + 1}`}
+                    className={
+                      "h-16 w-16 rounded-xl border-2 overflow-hidden bg-white flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-2xs " +
+                      (isSelected ? "border-[#B45309] ring-2 ring-[#FFE8D6]" : "border-[#E5E7EB] hover:border-[#B45309]/50")
+                    }
+                  >
+                    <ProductImage imageUrl={img} alt="" className="h-full w-full object-contain p-1" fallbackClassName="h-6 w-6 text-[#9CA3AF]" />
+                  </button>
+                );
+              })}
             </div>
-          </div>
+          )}
         </div>
 
         {/* ── RIGHT: Product Info ──────────────────────────────────── */}
@@ -298,7 +356,17 @@ export function ProductDetailPage() {
             </h2>
 
             {/* Price block */}
-            <div className="pt-1">
+            <div className="pt-1 flex flex-col gap-1">
+              {product.discountPercent && product.discountPercent > 0 ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-neutral-400 line-through">
+                    {formatIDR(Math.round(product.price / (1 - product.discountPercent / 100)))}
+                  </span>
+                  <span className="bg-[#FFEAEB] text-[#EE4D2D] text-xs font-black px-2 py-0.5 rounded-md animate-pulse">
+                    -{product.discountPercent}%
+                  </span>
+                </div>
+              ) : null}
               <p className="font-['Manrope',system-ui,sans-serif] text-3xl font-black text-[#B45309]">
                 {formatIDR(product.price)}
                 <span className="text-sm font-semibold text-[#6B7280] ml-1">
@@ -392,35 +460,59 @@ export function ProductDetailPage() {
       {/* ── STICKY BOTTOM ACTION BAR ─────────────────────────────────── */}
       <div className="fixed bottom-14 lg:bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] shadow-[0_-4px_16px_rgba(0,0,0,0.08)] z-20 px-4 py-3 max-w-[480px] lg:max-w-7xl mx-auto">
         {inStock ? (
-          <button
-            ref={addBtnRef}
-            type="button"
-            id="add-to-cart-btn"
-            onClick={handleAddToCart}
-            disabled={adding}
-            className={
-              "w-full flex items-center justify-center gap-2.5 min-h-12 rounded-2xl text-sm font-extrabold shadow-sm transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 " +
-              (success
-                ? "bg-emerald-600 text-white focus:ring-emerald-500"
-                : "bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] focus:ring-[#FBBF24]")
-            }
-          >
-            {success ? (
-              <>
-                <CheckCircle2 className="h-5 w-5" />
-                {t.addedSuccess}
-              </>
-            ) : adding ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin" />
-                {t.adding}
-              </>
-            ) : (
-              <>
-                {t.addToCart} — {formatIDR(totalPrice)}
-              </>
-            )}
-          </button>
+          <div className="flex gap-3">
+            {/* Button 1: Masukkan Keranjang */}
+            <button
+              ref={addBtnRef}
+              type="button"
+              id="add-to-cart-btn"
+              onClick={handleAddToCart}
+              disabled={adding || buying}
+              className={
+                "flex-1 flex items-center justify-center gap-2 min-h-12 rounded-2xl text-sm font-extrabold border-2 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 " +
+                (success
+                  ? "bg-emerald-50 border-emerald-500 text-emerald-700 focus:ring-emerald-500"
+                  : "border-[#FBBF24] hover:bg-[#FBBF24]/10 text-[#B45309] focus:ring-[#FBBF24]")
+              }
+            >
+              {success ? (
+                <>
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  {t.addedSuccess}
+                </>
+              ) : adding ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  {t.adding}
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="h-5 w-5" />
+                  {t.addToCart}
+                </>
+              )}
+            </button>
+
+            {/* Button 2: Beli Sekarang */}
+            <button
+              type="button"
+              id="buy-now-btn"
+              onClick={handleBuyNow}
+              disabled={adding || buying}
+              className="flex-[1.5] flex items-center justify-center gap-2 min-h-12 rounded-2xl text-sm font-extrabold bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] shadow-sm transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FBBF24] disabled:opacity-50"
+            >
+              {buying ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  {lang === "id" ? "Memproses…" : "Processing…"}
+                </>
+              ) : (
+                <>
+                  {t.buyNow} — {formatIDR(totalPrice)}
+                </>
+              )}
+            </button>
+          </div>
         ) : (
           <button
             disabled

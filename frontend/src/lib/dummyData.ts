@@ -5,8 +5,8 @@
  * ProductsPage. The data is persisted to localStorage under DEMO_KEY so
  * the storefront HomePage can read it without a backend connection.
  *
- * All image URLs are public Unsplash photos with explicit format/crop
- * parameters so they load quickly on mobile.
+ * All image URLs are from Wikimedia Commons (Creative Commons licensed)
+ * and accurately depict the corresponding Indonesian UMKM/koperasi products.
  */
 
 import type { InventoryItem } from "@/types/inventory";
@@ -23,7 +23,8 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     unit: "karung",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/1/13/Uncooked_ST25_rice_on_bamboo_surface.jpg",
+    detailImageUrls: [],
     updatedAt: new Date().toISOString(),
   },
   {
@@ -35,7 +36,8 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     unit: "botol",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/c/c0/Palm-Oil.jpg",
+    detailImageUrls: [],
     updatedAt: new Date().toISOString(),
   },
   {
@@ -47,7 +49,7 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     unit: "pcs",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1581781870027-04212e231e96?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/6/6d/Gula_Pasir_Dari_Pohon_Tebu.jpg",
     updatedAt: new Date().toISOString(),
   },
   {
@@ -59,7 +61,7 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     unit: "pcs",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/6/64/All-Purpose_Flour_%284107895947%29.jpg",
     updatedAt: new Date().toISOString(),
   },
   {
@@ -67,11 +69,12 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     itemName: "Telur Ayam Negeri Segar (1 kg)",
     category: "Sembako",
     price: 28000,
+    discountPercent: 15,
     quantity: 60,
     unit: "kg",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/c/cc/Telur_Ayam.jpg",
     updatedAt: new Date().toISOString(),
   },
   {
@@ -83,7 +86,7 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     unit: "pcs",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/c/c5/Roasted_coffee_beans.jpg",
     updatedAt: new Date().toISOString(),
   },
   {
@@ -95,7 +98,7 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     unit: "kotak",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/6/6b/ES_TEH_MANIS.jpg",
     updatedAt: new Date().toISOString(),
   },
   {
@@ -103,11 +106,12 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     itemName: "Air Mineral Aqua 600ml (24 botol)",
     category: "Minuman",
     price: 55000,
+    discountPercent: 15,
     quantity: 20,
     unit: "dus",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1548839140-29a749e1cf4d?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/f/fd/A_bottle_of_Aqua_mineral_water.JPG",
     updatedAt: new Date().toISOString(),
   },
   {
@@ -115,11 +119,12 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     itemName: "Sabun Cuci Piring Sunlight 750ml",
     category: "Kebersihan",
     price: 22000,
+    discountPercent: 15,
     quantity: 45,
     unit: "botol",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/f/fa/Dish-soap.jpg",
     updatedAt: new Date().toISOString(),
   },
   {
@@ -131,7 +136,7 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     unit: "pcs",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1584438784894-089d6a62b8fa?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/5/53/A_bar_of_soap.jpg",
     updatedAt: new Date().toISOString(),
   },
   {
@@ -143,7 +148,7 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     unit: "pcs",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1585814226582-b5e459a2e75c?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/c/c2/Laundry_detergents.jpg",
     updatedAt: new Date().toISOString(),
   },
   {
@@ -151,11 +156,12 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     itemName: "Mie Instan Indomie Goreng (5 bungkus)",
     category: "Makanan",
     price: 17500,
+    discountPercent: 15,
     quantity: 90,
     unit: "paket",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/4/4e/Indomie_Mi_goreng_%2803-07-2021%29.jpg",
     updatedAt: new Date().toISOString(),
   },
   {
@@ -167,7 +173,7 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     unit: "kaleng",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1601121141461-9d6647bef0a2?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/3/3a/Canned_sardines.jpg",
     updatedAt: new Date().toISOString(),
   },
   {
@@ -175,11 +181,12 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     itemName: "Kecap Manis ABC Botol 275ml",
     category: "Bumbu & Rempah",
     price: 16000,
+    discountPercent: 15,
     quantity: 40,
     unit: "botol",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1612871689665-f0d97e2c2cb1?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/b/ba/Kecap_manis_%26_kecap_asin.jpg",
     updatedAt: new Date().toISOString(),
   },
   {
@@ -191,7 +198,7 @@ export const DUMMY_PRODUCTS: InventoryItem[] = [
     unit: "botol",
     available: true,
     imageUrl:
-      "https://images.unsplash.com/photo-1637866891046-2a24cf82e7ab?auto=format&fit=crop&q=80&w=600",
+      "https://upload.wikimedia.org/wikipedia/commons/a/a3/Sambal_ulek.JPG",
     updatedAt: new Date().toISOString(),
   },
 ];

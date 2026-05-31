@@ -10,38 +10,18 @@
  */
 
 import {
-  createContext,
   useState,
   useRef,
   useCallback,
   useEffect,
   type ReactNode,
-  type RefObject,
 } from "react";
 import { subscribeToCart, type CartLineItem } from "@/services/cartService";
 import { useAuth } from "@/contexts/AuthContext";
-
-/* ─── Types ──────────────────────────────────────────────────────────── */
-
-export interface FlyDot {
-  id: number;
-  startX: number;
-  startY: number;
-  endX: number;
-  endY: number;
-}
-
-interface CartAnimationContextValue {
-  cartCount: number;
-  cartIconRef: RefObject<HTMLAnchorElement>;
-  triggerFlyAnimation: (sourceBoundingRect: DOMRect) => void;
-  flyDots: FlyDot[];
-  removeFlyDot: (id: number) => void;
-}
-
-/* ─── Context (exported so useCartAnimation.ts can consume it) ──────── */
-
-export const CartAnimationContext = createContext<CartAnimationContextValue | null>(null);
+import {
+  CartAnimationContext,
+  type FlyDot,
+} from "./CartAnimationContextCore";
 
 /* ─── Provider ────────────────────────────────────────────────────────── */
 
@@ -68,11 +48,20 @@ export function CartAnimationProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const triggerFlyAnimation = useCallback((sourceBoundingRect: DOMRect) => {
-    // Get cart icon position — prefer the desktop icon, fall back gracefully
-    const cartIconEl = cartIconRef.current;
-    if (!cartIconEl) return;
+    // Determine target element: on mobile/tablet (< 1024px), target the bottom nav cart button
+    let targetEl: HTMLElement | null = null;
+    if (window.innerWidth < 1024) {
+      targetEl = document.getElementById("mobile-cart-btn");
+    }
+    
+    // Fall back to desktop cart ref
+    if (!targetEl) {
+      targetEl = cartIconRef.current;
+    }
+    
+    if (!targetEl) return;
 
-    const cartRect = cartIconEl.getBoundingClientRect();
+    const cartRect = targetEl.getBoundingClientRect();
 
     // Source: center of the Add-to-Cart button
     const startX = sourceBoundingRect.left + sourceBoundingRect.width / 2;

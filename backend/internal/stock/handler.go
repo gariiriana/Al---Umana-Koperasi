@@ -32,13 +32,15 @@ func NewHandler(service *Service) *Handler {
 // mirrors the user-controlled fields of InventoryItem; `id` and
 // `updatedAt` are server-controlled and ignored on input.
 type InventoryItemInput struct {
-	ItemName  string `json:"itemName"`
-	Quantity  int    `json:"quantity"`
-	Unit      string `json:"unit"`
-	Price     int64  `json:"price"`
-	Available bool   `json:"available"`
-	Category  string `json:"category,omitempty"`
-	ImageURL  string `json:"imageUrl,omitempty"`
+	ItemName        string   `json:"itemName"`
+	Quantity        int      `json:"quantity"`
+	Unit            string   `json:"unit"`
+	Price           int64    `json:"price"`
+	DiscountPercent int      `json:"discountPercent"`
+	Available       bool     `json:"available"`
+	Category        string   `json:"category,omitempty"`
+	ImageURL        string   `json:"imageUrl,omitempty"`
+	DetailImageUrls []string `json:"detailImageUrls,omitempty"`
 }
 
 // toModel converts the wire payload into the domain InventoryItem the
@@ -47,13 +49,15 @@ type InventoryItemInput struct {
 // server-side timestamp on write.
 func (in InventoryItemInput) toModel() InventoryItem {
 	return InventoryItem{
-		ItemName:  in.ItemName,
-		Quantity:  in.Quantity,
-		Unit:      in.Unit,
-		Price:     in.Price,
-		Available: in.Available,
-		Category:  in.Category,
-		ImageURL:  in.ImageURL,
+		ItemName:        in.ItemName,
+		Quantity:        in.Quantity,
+		Unit:            in.Unit,
+		Price:           in.Price,
+		DiscountPercent: in.DiscountPercent,
+		Available:       in.Available,
+		Category:        in.Category,
+		ImageURL:        in.ImageURL,
+		DetailImageUrls: in.DetailImageUrls,
 	}
 }
 

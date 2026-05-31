@@ -98,10 +98,18 @@ const getSteps = (lang: string) => [
     }
   },
   {
+    title: lang === "en" ? "Quality Control (QC)" : "Uji Kelayakan (QC)",
+    desc: (status: string, step: number) => {
+      if (status === "READY") return lang === "en" ? "Order is being quality checked (QC)" : "Pesanan sedang diuji kelayakan (QC) di dapur";
+      if (step > 4) return lang === "en" ? "Passed quality control" : "Lolos uji kelayakan (QC)";
+      return lang === "en" ? "Awaiting quality check" : "Menunggu pengujian kelayakan (QC)";
+    }
+  },
+  {
     title: lang === "en" ? "Ready for Delivery" : "Siap Dikirim",
     desc: (status: string, step: number) => {
-      if (status === "READY" || status === "READY_TO_DELIVER") return lang === "en" ? "Order packed & awaiting courier dispatch" : "Pesanan dikemas & menunggu kurir berangkat";
-      if (step > 4) return lang === "en" ? "Order handed over to courier" : "Pesanan diserahkan ke kurir";
+      if (status === "READY_TO_DELIVER") return lang === "en" ? "Order packed & awaiting courier dispatch" : "Pesanan dikemas & menunggu kurir berangkat";
+      if (step > 5) return lang === "en" ? "Order handed over to courier" : "Pesanan diserahkan ke kurir";
       return lang === "en" ? "Awaiting product readiness" : "Menunggu kesiapan produk";
     }
   },
@@ -109,7 +117,7 @@ const getSteps = (lang: string) => [
     title: lang === "en" ? "Out for Delivery" : "Dalam Pengantaran",
     desc: (status: string, step: number) => {
       if (status === "OUT_FOR_DELIVERY") return lang === "en" ? "Courier is on the way to your address" : "Kurir dalam perjalanan ke alamat Anda";
-      if (step > 5) return lang === "en" ? "Finished delivering to destination" : "Selesai diantar ke lokasi tujuan";
+      if (step > 6) return lang === "en" ? "Finished delivering to destination" : "Selesai diantar ke lokasi tujuan";
       return lang === "en" ? "Awaiting delivery schedule" : "Menunggu jadwal pengiriman";
     }
   },
@@ -117,14 +125,14 @@ const getSteps = (lang: string) => [
     title: lang === "en" ? "Order Delivered" : "Pesanan Terkirim",
     desc: (status: string, step: number) => {
       if (status === "DELIVERED") return lang === "en" ? "Courier confirmed order delivery, awaiting your confirmation" : "Kurir menyatakan pesanan terkirim, menunggu konfirmasi Anda";
-      if (step > 6) return lang === "en" ? "Delivery confirmed" : "Pengiriman dikonfirmasi";
+      if (step > 7) return lang === "en" ? "Delivery confirmed" : "Pengiriman dikonfirmasi";
       return lang === "en" ? "Awaiting order arrival" : "Menunggu pesanan sampai";
     }
   },
   {
     title: lang === "en" ? "Completed" : "Selesai",
     desc: (_status: string, step: number) => {
-      if (step === 7) return lang === "en" ? "Order successfully completed. Thank you!" : "Pesanan telah selesai. Terima kasih!";
+      if (step === 8) return lang === "en" ? "Order successfully completed. Thank you!" : "Pesanan telah selesai. Terima kasih!";
       return lang === "en" ? "Awaiting confirmation and review" : "Menunggu konfirmasi dan ulasan";
     }
   }
@@ -158,14 +166,15 @@ function getStatusStepIndex(status: string): number {
     case "IN_PRODUCTION":
       return 3;
     case "READY":
-    case "READY_TO_DELIVER":
       return 4;
-    case "OUT_FOR_DELIVERY":
+    case "READY_TO_DELIVER":
       return 5;
-    case "DELIVERED":
+    case "OUT_FOR_DELIVERY":
       return 6;
-    case "COMPLETED":
+    case "DELIVERED":
       return 7;
+    case "COMPLETED":
+      return 8;
     default:
       return 1;
   }
@@ -820,6 +829,8 @@ export function OrderDetailPage() {
 
   const [proofImageSrc, setProofImageSrc] = useState<string | null>(null);
   const [loadingProof, setLoadingProof] = useState(false);
+  const [cookingStartImageSrc, setCookingStartImageSrc] = useState<string | null>(null);
+  const [loadingCookingStart, setLoadingCookingStart] = useState(false);
   const progressRef = useRef<HTMLDivElement>(null);
 
   const [courierProfile, setCourierProfile] = useState<{ displayName?: string; phoneNumber?: string; photoURL?: string } | null>(null);
@@ -1029,6 +1040,50 @@ export function OrderDetailPage() {
     loadProof();
   }, [order?.paymentProofFileId]);
 
+  // Dynamic Base64 Chunk Assembler for production start photo (cooking photo)
+  useEffect(() => {
+    const photoId = order?.productionStartPhotoId;
+    if (!photoId) {
+      setCookingStartImageSrc(null);
+      return;
+    }
+
+    const loadCookingPhoto = async () => {
+      setLoadingCookingStart(true);
+      try {
+        const fileId = photoId.replace("delivery_files/", "");
+        const parentRef = doc(db, "delivery_files", fileId);
+        const parentSnap = await getDoc(parentRef);
+        
+        if (parentSnap.exists()) {
+          const meta = parentSnap.data();
+          const totalChunks = meta.totalChunks || 0;
+          
+          const chunkPromises = [];
+          for (let i = 0; i < totalChunks; i++) {
+            const chunkRef = doc(db, "delivery_files", fileId, "chunks", String(i));
+            chunkPromises.push(getDoc(chunkRef));
+          }
+          const chunkSnaps = await Promise.all(chunkPromises);
+          
+          let fullDataUri = "";
+          for (const chunkSnap of chunkSnaps) {
+            if (chunkSnap.exists()) {
+              fullDataUri += chunkSnap.data().data || "";
+            }
+          }
+          setCookingStartImageSrc(fullDataUri);
+        }
+      } catch (err) {
+        console.error("Gagal memuat foto mulai memasak:", err);
+      } finally {
+        setLoadingCookingStart(false);
+      }
+    };
+
+    loadCookingPhoto();
+  }, [order?.productionStartPhotoId]);
+
   useEffect(() => {
     if (!id) {
       setError(t.invalidOrderId);
@@ -1060,7 +1115,7 @@ export function OrderDetailPage() {
 
   useEffect(() => {
     if (progressRef.current) {
-      const widthVal = `${Math.min(84, Math.max(0, (currentStepIndex - 1) * 14))}%`;
+      const widthVal = `${Math.min(84, Math.max(0, (currentStepIndex - 1) * 12))}%`;
       progressRef.current.style.width = widthVal;
     }
   }, [currentStepIndex]);
@@ -1182,8 +1237,8 @@ export function OrderDetailPage() {
 
                     // Short label mappings for horizontal layout to avoid squishing
                     const shortLabels = lang === "en" 
-                      ? ["Created", "Pay", "Kitchen", "Ready", "Ship", "Arrived", "Done"]
-                      : ["Dibuat", "Bayar", "Dapur", "Siap", "Kirim", "Sampai", "Selesai"];
+                      ? ["Created", "Pay", "Kitchen", "QC", "Ready", "Ship", "Arrived", "Done"]
+                      : ["Dibuat", "Bayar", "Dapur", "QC", "Siap", "Kirim", "Sampai", "Selesai"];
 
                     return (
                       <div key={idx} className="flex flex-col items-center flex-1 text-center">
@@ -1210,7 +1265,7 @@ export function OrderDetailPage() {
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">{t.currentStatus}</span>
                   <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                    {t.stepProgress.replace("{current}", String(currentStepIndex)).replace("{total}", "7")}
+                    {t.stepProgress.replace("{current}", String(currentStepIndex)).replace("{total}", "8")}
                   </span>
                 </div>
                 <h4 className="font-bold text-[#111827] text-sm pt-0.5">
@@ -1230,6 +1285,46 @@ export function OrderDetailPage() {
             {/* REAL-TIME ESTIMATED courier DELIVERY COUNTDOWN FOR OUT_FOR_DELIVERY */}
             {order.status === "OUT_FOR_DELIVERY" && (
               <CustomerDeliveryCountdown order={order} />
+            )}
+
+            {/* Foto Mulai Memasak Card */}
+            {order.productionStartPhotoId && (
+              <div className="bg-white rounded-3xl p-5 border border-[#E5E7EB] shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
+                  <h4 className="font-['Manrope',system-ui,sans-serif] text-xs font-bold text-[#111827]">
+                    {lang === "en" ? "Cooking Start Photo Evidence" : "Bukti Foto Mulai Memasak"}
+                  </h4>
+                </div>
+                <p className="text-[10px] text-[#6B7280] font-['Hanken_Grotesk'] leading-relaxed">
+                  {lang === "en"
+                    ? "This photo was taken directly by our chef when they began preparing your order in the kitchen."
+                    : "Foto ini diambil langsung oleh koki kami sesaat sebelum mulai memasak pesanan Anda di dapur."}
+                </p>
+                <div className="relative border border-[#E5E7EB] rounded-2xl overflow-hidden bg-[#F3F4F6] aspect-video flex items-center justify-center text-[#9CA3AF]">
+                  {loadingCookingStart ? (
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
+                      <p className="text-[10px] text-neutral-500 font-['Hanken_Grotesk']">
+                        {lang === "en" ? "Loading cooking photo..." : "Memuat foto memasak…"}
+                      </p>
+                    </div>
+                  ) : cookingStartImageSrc ? (
+                    <img
+                      src={cookingStartImageSrc}
+                      alt="Foto Mulai Memasak"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-4 text-center">
+                      <FileImage className="h-8 w-8 text-[#9CA3AF] mb-2" />
+                      <p className="text-[10px] text-neutral-500 font-['Hanken_Grotesk']">
+                        {lang === "en" ? "Failed to load photo" : "Foto gagal dimuat"}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
 
             {/* DELIVERED state: Delivery Confirmation Banner */}

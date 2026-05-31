@@ -1,10 +1,15 @@
-import { Link } from "react-router-dom";
-import { ImageOff } from "lucide-react";
+import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ImageOff, ShoppingCart } from "lucide-react";
 
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatIDR, truncate } from "@/lib/format";
 import type { InventoryItem } from "@/types/inventory";
 import { ProductImage } from "@/components/ProductImage";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
+import { useCartAnimation } from "@/contexts/useCartAnimation";
+import { addToCart, type CartLineItem } from "@/services/cartService";
 
 /**
  * Mobile-first product card redesigned to look like modern premium e-commerce (Shopee).
@@ -16,10 +21,9 @@ import { ProductImage } from "@/components/ProductImage";
  *   - Premium brand overlays (Mall / Star+ badges).
  *   - Original strikethrough price and red-orange formatted price.
  *   - Dynamic stok progress bars ("Stok Terbatas") for low inventory.
- *   - Coral red "Beli" action button.
+ *   - Direct Beli (Buy Now) checkout button.
+ *   - Inline ShoppingCart button triggering jumping fly animations to the navbar cart.
  */
-
-
 
 const translateUnit = (unit: string, lang: string) => {
   if (lang !== "en") return unit;
@@ -38,24 +42,114 @@ export interface ProductCardProps {
 
 export function ProductCard({ item, className }: ProductCardProps) {
   const { lang } = useLanguage();
-  const inStock = item.available && item.quantity > 0;
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const navigate = useNavigate();
+  const { triggerFlyAnimation } = useCartAnimation();
 
-  const discountPercent = (item.price % 3 === 0) ? 10 : (item.price % 5 === 0) ? 15 : 0;
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [buyingNow, setBuyingNow] = useState(false);
+
+  const cartBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  const inStock = item.available && item.quantity > 0;
+  const discountPercent = item.discountPercent ?? 0;
   const baseSales = (item.price % 97) + 5;
   const salesText = lang === "en" ? `${baseSales} sold` : `${baseSales} terjual`;
 
   // Determine badge type: even prices get Mall, odd prices get Star+
   const isMall = item.price % 2 === 0;
 
+  const handleAddToCart = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    if (!inStock) return;
+
+    if (!user) {
+      navigate("/login", { state: { from: { pathname: "/" } } });
+      return;
+    }
+
+    setAddingToCart(true);
+
+    // Trigger fly animation
+    if (cartBtnRef.current) {
+      triggerFlyAnimation(cartBtnRef.current.getBoundingClientRect());
+    }
+
+    try {
+      await addToCart(
+        user.uid,
+        {
+          itemId: item.id,
+          itemName: item.itemName,
+          price: item.price,
+          imageUrl: item.imageUrl,
+        },
+        1
+      );
+    } catch (err) {
+      console.error(err);
+      showToast({
+        message: lang === "id" 
+          ? "Gagal menambahkan produk ke keranjang." 
+          : "Failed to add product to cart.",
+        variant: "error",
+      });
+    } finally {
+      setAddingToCart(false);
+    }
+  };
+
+  const handleBuyNow = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    if (!inStock) return;
+
+    if (!user) {
+      // Redirect to login, and then direct to the product detail page
+      navigate("/login", { state: { from: { pathname: `/product/${encodeURIComponent(item.id)}` } } });
+      return;
+    }
+
+    setBuyingNow(true);
+
+    const directItem: CartLineItem = {
+      itemId: item.id,
+      itemName: item.itemName,
+      unitPrice: item.price,
+      quantity: 1,
+      notes: "",
+      imageUrl: item.imageUrl || ""
+    };
+
+    navigate("/checkout/address", {
+      state: {
+        directCheckoutItems: [directItem]
+      }
+    });
+    setBuyingNow(false);
+  };
+
   return (
-    <Link
-      to={`/product/${encodeURIComponent(item.id)}`}
+    <div
+      onClick={() => navigate(`/product/${encodeURIComponent(item.id)}`)}
       className={
-        "group block overflow-hidden bg-white rounded-2xl border border-neutral-200 " +
+        "group block overflow-hidden bg-white rounded-2xl border border-neutral-200 cursor-pointer " +
         "hover:border-[#EE4D2D] hover:shadow-md transition-all duration-200 " +
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FBBF24] focus-visible:ring-offset-2 " +
         (className ?? "")
       }
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          navigate(`/product/${encodeURIComponent(item.id)}`);
+        }
+      }}
       aria-label={item.itemName}
     >
       {/* Product Image Wrapper */}
@@ -121,25 +215,44 @@ export function ProductCard({ item, className }: ProductCardProps) {
           </h3>
         </div>
 
-        {/* Price & Buy Button Row */}
-        <div className="flex items-center justify-between pt-1">
-          <div className="flex flex-col min-w-0">
-            {discountPercent > 0 && (
-              <span className="text-[10px] text-neutral-400 line-through leading-tight">
-                {formatIDR(Math.round(item.price * (1 + discountPercent / 100)))}
-              </span>
-            )}
-            <span className="text-sm font-extrabold text-[#EE4D2D] leading-tight truncate">
-              {formatIDR(item.price)}
+        {/* Price Block (Standalone row to prevent truncation) */}
+        <div className="flex flex-col min-w-0 pt-0.5">
+          {discountPercent > 0 && (
+            <span className="text-[10px] text-neutral-400 line-through leading-tight">
+              {formatIDR(Math.round(item.price / (1 - discountPercent / 100)))}
             </span>
-          </div>
-          <button
-            type="button"
-            className="bg-[#EE4D2D] hover:bg-[#D33E20] text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all duration-150 shadow-xs cursor-pointer focus:outline-none shrink-0"
-          >
-            {lang === "en" ? "Buy" : "Beli"}
-          </button>
+          )}
+          <span className="text-sm font-extrabold text-[#EE4D2D] leading-tight">
+            {formatIDR(item.price)}
+          </span>
         </div>
+
+        {/* Action Buttons (Full-width row) */}
+        {inStock && (
+          <div className="flex items-center gap-1.5 pt-1">
+            {/* Cart Icon Button */}
+            <button
+              ref={cartBtnRef}
+              type="button"
+              disabled={addingToCart || buyingNow}
+              onClick={handleAddToCart}
+              className="flex-1 flex items-center justify-center bg-amber-50 border border-amber-200 hover:bg-amber-100/70 text-[#EE4D2D] h-7.5 rounded-lg transition-all duration-150 shadow-2xs cursor-pointer focus:outline-none shrink-0"
+              title={lang === "id" ? "Tambah ke Keranjang" : "Add to Cart"}
+            >
+              <ShoppingCart className="h-3.5 w-3.5" />
+            </button>
+            
+            {/* Beli (Buy Now) Button */}
+            <button
+              type="button"
+              disabled={buyingNow || addingToCart}
+              onClick={handleBuyNow}
+              className="flex-[2] bg-[#EE4D2D] hover:bg-[#D33E20] text-white text-[10px] font-bold h-7.5 rounded-lg transition-all duration-150 shadow-xs cursor-pointer focus:outline-none flex items-center justify-center shrink-0"
+            >
+              {lang === "en" ? "Buy" : "Beli"}
+            </button>
+          </div>
+        )}
 
         {/* Stock status or sales progress bar */}
         <div className="pt-2 border-t border-neutral-100">
@@ -165,7 +278,7 @@ export function ProductCard({ item, className }: ProductCardProps) {
           )}
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
 

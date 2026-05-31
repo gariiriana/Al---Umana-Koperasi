@@ -11,11 +11,13 @@ type InventoryItem struct {
 	Quantity int    `json:"quantity" firestore:"quantity"`
 	Unit     string `json:"unit" firestore:"unit"`
 	// Price is stored in the smallest currency unit (e.g. IDR integer).
-	Price     int64     `json:"price" firestore:"price"`
-	Available bool      `json:"available" firestore:"available"`
-	Category  string    `json:"category,omitempty" firestore:"category,omitempty"`
-	ImageURL  string    `json:"imageUrl,omitempty" firestore:"imageUrl,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt" firestore:"updatedAt"`
+	Price           int64     `json:"price" firestore:"price"`
+	DiscountPercent int       `json:"discountPercent" firestore:"discountPercent"`
+	Available       bool      `json:"available" firestore:"available"`
+	Category        string    `json:"category,omitempty" firestore:"category,omitempty"`
+	ImageURL        string    `json:"imageUrl,omitempty" firestore:"imageUrl,omitempty"`
+	DetailImageUrls []string  `json:"detailImageUrls,omitempty" firestore:"detailImageUrls,omitempty"`
+	UpdatedAt       time.Time `json:"updatedAt" firestore:"updatedAt"`
 }
 
 // StockCheckTimeout is the maximum wall-time the stock service will wait

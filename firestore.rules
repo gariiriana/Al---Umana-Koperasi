@@ -193,5 +193,14 @@ service cloud.firestore {
       // Admins have full access to modify profiles (e.g., assigning internal roles)
       allow write: if isAdmin();
     }
+
+    // -------------------------------------------------------------------
+    // Reviews / Testimonials
+    // -------------------------------------------------------------------
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create, update: if request.auth != null;
+      allow delete: if isAdmin();
+    }
   }
 }

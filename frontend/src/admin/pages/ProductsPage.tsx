@@ -7,7 +7,7 @@ import { translateCategory } from "@/constants/categories";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, deleteDoc } from "firebase/firestore";
 
-import { listAllItems, deleteItem, patchStock, listCategories, updateItem, createItem, getItem } from "@/services/stockAdminService";
+import { listAllItems, deleteItem, patchStock, listCategories, updateItem, createItem, getItem, deleteImageFileAndChunks } from "@/services/stockAdminService";
 import { uploadFileInChunks, ChunkUploadError } from "@/services/chunkUploadService";
 import { validateImageUpload } from "@/lib/validators";
 import type { InventoryItem, InventoryItemInput } from "@/types/inventory";
@@ -25,6 +25,20 @@ function resolveProductImageURL(ref: string | undefined): string | null {
   const fileId = segments[segments.length - 1];
   if (!fileId) return null;
   return `${API_BASE_URL}/api/files/product_images/${encodeURIComponent(fileId)}/download`;
+}
+
+function DetailUploadProgressBar({ progress }: { progress: number }) {
+  const barRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (barRef.current) {
+      barRef.current.style.width = `${progress}%`;
+    }
+  }, [progress]);
+  return (
+    <div className="w-full bg-[#E5E7EB] h-1 rounded-full overflow-hidden">
+      <div ref={barRef} className="bg-[#FBBF24] h-full transition-all duration-200" />
+    </div>
+  );
 }
 
 type SortField = "itemName" | "category" | "price" | "quantity";
@@ -122,6 +136,10 @@ const DICTIONARY = {
     unitValError: "Satuan produk harus di antara 1 and 50 karakter.",
     qtyValError: "Jumlah kuantitas harus di antara 0 dan 99.999",
     priceValError: "Harga produk tidak boleh kurang dari 0.",
+    labelNormalPrice: "Harga Normal (Rupiah)",
+    labelDiscountPercent: "Diskon (%)",
+    labelFinalPrice: "Harga Setelah Diskon",
+    discountValError: "Diskon harus berupa angka antara 0 dan 100.",
     deleteError: "Gagal menghapus produk dari database.",
     stockUpdateError: "Gagal memperbarui jumlah stok.",
     stockToggleError: "Gagal mengubah ketersediaan produk.",
@@ -218,6 +236,10 @@ const DICTIONARY = {
     unitValError: "Product unit must be between 1 and 50 characters.",
     qtyValError: "Quantity must be between 0 and 99,999",
     priceValError: "Product price cannot be less than 0.",
+    labelNormalPrice: "Normal Price (Rupiah)",
+    labelDiscountPercent: "Discount (%)",
+    labelFinalPrice: "Price After Discount",
+    discountValError: "Discount must be a number between 0 and 100.",
     deleteError: "Failed to delete product from database.",
     stockUpdateError: "Failed to update stock quantity.",
     stockToggleError: "Failed to change product availability.",
@@ -252,6 +274,8 @@ export function ProductsPage() {
   // Delete target state
   const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingAll, setDeletingAll] = useState(false);
+  const [seedingDemo, setSeedingDemo] = useState(false);
 
   // Availability Prompt state
   const [promptTarget, setPromptTarget] = useState<{ item: InventoryItem; nextQty: number } | null>(null);
@@ -268,11 +292,37 @@ export function ProductsPage() {
   const [fQty, setFQty] = useState<number | "">("");
   const [fUnit, setFUnit] = useState("pcs");
   const [fPrice, setFPrice] = useState<number | "">("");
+  const [fNormalPrice, setFNormalPrice] = useState<number | "">("");
+  const [fDiscountPercent, setFDiscountPercent] = useState<number>(0);
   const [fAvailable, setFAvailable] = useState(true);
   const [fCategory, setFCategory] = useState("");
   const [fImageURL, setFImageURL] = useState("");
 
-  // Image upload
+  // Multi-image fields
+  const [fDetailImageUrls, setFDetailImageUrls] = useState<string[]>([]);
+  const [fDetailImagePreviews, setFDetailImagePreviews] = useState<string[]>([]);
+
+  interface DetailUploadTask {
+    file: File;
+    progress: number;
+    fileId?: string;
+    failedChunk?: number;
+    error?: string;
+    previewUrl: string;
+  }
+  const [detailUploadTasks, setDetailUploadTasks] = useState<DetailUploadTask[]>([]);
+
+  // Auto-calculate fPrice when fNormalPrice or fDiscountPercent changes
+  useEffect(() => {
+    if (fNormalPrice !== "") {
+      const finalPrice = Math.round(Number(fNormalPrice) * (1 - fDiscountPercent / 100));
+      setFPrice(finalPrice >= 0 ? finalPrice : 0);
+    } else {
+      setFPrice("");
+    }
+  }, [fNormalPrice, fDiscountPercent]);
+
+  // Image upload (Main Photo)
   const [fImagePreview, setFImagePreview] = useState<string | null>(null);
   const [fSelectedFile, setFSelectedFile] = useState<File | null>(null);
   const [fUploading, setFUploading] = useState(false);
@@ -293,8 +343,153 @@ export function ProductsPage() {
       if (fImagePreview && !fImagePreview.startsWith("http")) {
         URL.revokeObjectURL(fImagePreview);
       }
+      fDetailImagePreviews.forEach(p => {
+        if (p && !p.startsWith("http")) URL.revokeObjectURL(p);
+      });
+      detailUploadTasks.forEach(t => {
+        if (t.previewUrl) URL.revokeObjectURL(t.previewUrl);
+      });
     };
-  }, [fImagePreview]);
+  }, [fImagePreview, fDetailImagePreviews, detailUploadTasks]);
+
+  // Upload detail file directly in chunks
+  const uploadDetailFileDirectly = async (file: File, taskIndex: number, isRetry = false) => {
+    setDetailUploadTasks(prev => prev.map((t, idx) => idx === taskIndex ? { ...t, error: undefined, failedChunk: undefined } : t));
+
+    try {
+      let uploadResult;
+      const currentTask = detailUploadTasks[taskIndex];
+      if (isRetry && currentTask?.fileId && currentTask?.failedChunk !== undefined) {
+        uploadResult = await uploadFileInChunks(file, {
+          collection: "product_images",
+          resumeFileId: currentTask.fileId,
+          resumeFromChunk: currentTask.failedChunk,
+          onProgress: (p) => {
+            setDetailUploadTasks(prev => prev.map((t, idx) => idx === taskIndex ? { ...t, progress: p.percent } : t));
+          },
+        });
+      } else {
+        uploadResult = await uploadFileInChunks(file, {
+          collection: "product_images",
+          onProgress: (p) => {
+            setDetailUploadTasks(prev => prev.map((t, idx) => idx === taskIndex ? { ...t, progress: p.percent } : t));
+          },
+        });
+      }
+
+      const newImageUrl = `product_images/${uploadResult.fileId}`;
+      const resolvedUrl = resolveProductImageURL(newImageUrl) || "";
+
+      // Append to detail arrays
+      setFDetailImageUrls(prev => [...prev, newImageUrl]);
+      setFDetailImagePreviews(prev => [...prev, resolvedUrl]);
+
+      // Remove from tasks
+      setDetailUploadTasks(prev => prev.filter((_, idx) => idx !== taskIndex));
+    } catch (err: unknown) {
+      console.error("Gagal mengunggah gambar detail:", err);
+      if (err instanceof ChunkUploadError && err.code === "WRITE_FAILED") {
+        setDetailUploadTasks(prev => prev.map((t, idx) => idx === taskIndex ? {
+          ...t,
+          fileId: err.fileId,
+          failedChunk: err.failedChunkIndex,
+          error: t.error || "Unggah terputus. Coba lanjutkan."
+        } : t));
+      } else {
+        const errorObj = err as { message?: string };
+        setDetailUploadTasks(prev => prev.map((t, idx) => idx === taskIndex ? {
+          ...t,
+          error: errorObj.message || "Gagal mengunggah."
+        } : t));
+      }
+    }
+  };
+
+  // Handle adding detail image files
+  const handleDetailFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    if (fDetailImageUrls.length + detailUploadTasks.length >= 5) {
+      showToast({ message: "Maksimal 5 foto tambahan yang diperbolehkan.", variant: "error" });
+      return;
+    }
+
+    const file = files[0];
+    const validation = validateImageUpload(file.type, file.size);
+    if (!validation.accepted) {
+      if (validation.reason === "mime") {
+        showToast({ message: t.mimeError, variant: "error" });
+      } else {
+        showToast({ message: t.sizeError, variant: "error" });
+      }
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    const newTask: DetailUploadTask = {
+      file,
+      progress: 0,
+      previewUrl
+    };
+
+    setDetailUploadTasks(prev => {
+      const next = [...prev, newTask];
+      const taskIndex = next.length - 1;
+      setTimeout(() => {
+        void uploadDetailFileDirectly(file, taskIndex);
+      }, 0);
+      return next;
+    });
+  };
+
+  // Make detail image the main photo
+  const makeMainPhoto = (index: number) => {
+    const mainUrl = fImageURL;
+    const mainPreview = fImagePreview;
+
+    const secUrl = fDetailImageUrls[index];
+    const secPreview = fDetailImagePreviews[index];
+
+    // Swap main and secondary
+    setFImageURL(secUrl);
+    setFImagePreview(secPreview);
+
+    const nextUrls = [...fDetailImageUrls];
+    const nextPreviews = [...fDetailImagePreviews];
+
+    if (mainUrl) {
+      nextUrls[index] = mainUrl;
+      nextPreviews[index] = mainPreview || "";
+    } else {
+      nextUrls.splice(index, 1);
+      nextPreviews.splice(index, 1);
+    }
+
+    setFDetailImageUrls(nextUrls);
+    setFDetailImagePreviews(nextPreviews);
+  };
+
+  // Delete/remove a secondary photo and clean chunks from Firestore
+  const handleRemoveDetailImage = async (index: number) => {
+    const url = fDetailImageUrls[index];
+    if (confirm(t.confirmRemovePhoto)) {
+      const nextUrls = [...fDetailImageUrls];
+      const nextPreviews = [...fDetailImagePreviews];
+      nextUrls.splice(index, 1);
+      nextPreviews.splice(index, 1);
+      setFDetailImageUrls(nextUrls);
+      setFDetailImagePreviews(nextPreviews);
+
+      try {
+        if (url) {
+          await deleteImageFileAndChunks(url);
+        }
+      } catch (err) {
+        console.error("Gagal menghapus chunks gambar detail:", err);
+      }
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -392,6 +587,147 @@ export function ProductsPage() {
       showToast({ message: t.deleteError, variant: "error" });
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAllProducts = async () => {
+    const confirmMsg = lang === "id" 
+      ? "Apakah Anda yakin ingin menghapus SELURUH produk (termasuk semua foto tambahan) dari database secara permanen?"
+      : "Are you sure you want to permanently delete ALL products (including all additional photos) from the database?";
+      
+    if (confirm(confirmMsg)) {
+      setDeletingAll(true);
+      try {
+        // Fetch all items from database to delete everything globally, ignoring active filters
+        const allItems = await listAllItems();
+        await Promise.all(allItems.map(async (item) => {
+          await deleteItem(item.id);
+        }));
+        
+        showToast({ 
+          message: lang === "id" ? "Semua produk berhasil dihapus secara permanen!" : "All products successfully deleted permanently!", 
+          variant: "success" 
+        });
+        
+        await load();
+      } catch (err) {
+        console.error("Gagal menghapus semua produk:", err);
+        showToast({ 
+          message: lang === "id" ? "Gagal menghapus semua produk." : "Failed to delete all products.", 
+          variant: "error" 
+        });
+      } finally {
+        setDeletingAll(false);
+      }
+    }
+  };
+
+  const handleSeedUMKMData = async () => {
+    const confirmMsg = lang === "id"
+      ? "Apakah Anda yakin ingin memuat data produk dummy khas UMKM Indonesia ke database Firestore?"
+      : "Are you sure you want to load Indonesian UMKM dummy product data into the Firestore database?";
+      
+    if (confirm(confirmMsg)) {
+      setSeedingDemo(true);
+      try {
+        const dummySeeds = [
+          {
+            itemName: "Bakso Sapi Urat Solo",
+            category: "Makanan",
+            price: 18000,
+            discountPercent: 10,
+            quantity: 50,
+            unit: "porsi",
+            available: true,
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/2/27/Bakso_Daging_Sapi.jpg",
+            detailImageUrls: [
+              "https://upload.wikimedia.org/wikipedia/commons/c/c1/Indonesian_bakso%2C_with_noodle_and_bean_sprouts%2C_April_2018_%2801%29.jpg",
+              "https://upload.wikimedia.org/wikipedia/commons/5/55/Bakso_khas_Solo.jpg"
+            ]
+          },
+          {
+            itemName: "Nasi Goreng Spesial UMKM",
+            category: "Makanan",
+            price: 15000,
+            discountPercent: 0,
+            quantity: 40,
+            unit: "porsi",
+            available: true,
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/9/9b/Nasi_goreng-1.JPG",
+            detailImageUrls: [
+              "https://upload.wikimedia.org/wikipedia/commons/8/8b/Nasi-Goreng.jpg",
+              "https://upload.wikimedia.org/wikipedia/commons/3/30/Nasi_goren_%28fried_rice%29_%288618224811%29.jpg"
+            ]
+          },
+          {
+            itemName: "Es Teh Manis Jumbo",
+            category: "Minuman",
+            price: 5000,
+            discountPercent: 0,
+            quantity: 100,
+            unit: "gelas",
+            available: true,
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/6/6b/ES_TEH_MANIS.jpg",
+            detailImageUrls: []
+          },
+          {
+            itemName: "Keripik Singkong Balado",
+            category: "Camilan",
+            price: 12000,
+            discountPercent: 15,
+            quantity: 30,
+            unit: "bungkus",
+            available: true,
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/8/84/Keripik_singkong_balado_cassava_chips.JPG",
+            detailImageUrls: [
+              "https://upload.wikimedia.org/wikipedia/commons/9/97/Keripik_Singkong_Pedas.jpg"
+            ]
+          },
+          {
+            itemName: "Es Jeruk Peras Segar",
+            category: "Minuman",
+            price: 7000,
+            discountPercent: 0,
+            quantity: 60,
+            unit: "gelas",
+            available: true,
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/6/66/Es_jeruk.jpg",
+            detailImageUrls: [
+              "https://upload.wikimedia.org/wikipedia/commons/4/4d/Es_Jeruk_Barokah.jpg"
+            ]
+          },
+          {
+            itemName: "Kerupuk Uyel Putih Kaleng",
+            category: "Camilan",
+            price: 2000,
+            discountPercent: 0,
+            quantity: 80,
+            unit: "pcs",
+            available: true,
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/f/fc/Kerupuk_putih.jpg",
+            detailImageUrls: [
+              "https://upload.wikimedia.org/wikipedia/commons/a/a1/Kroepoek.jpg"
+            ]
+          }
+        ];
+
+        await Promise.all(dummySeeds.map(payload => createItem(payload)));
+        
+        showToast({
+          message: lang === "id" ? "Berhasil memuat data produk UMKM!" : "Successfully seeded UMKM products data!",
+          variant: "success"
+        });
+        
+        await load();
+      } catch (err) {
+        console.error("Gagal melakukan seeding produk UMKM:", err);
+        showToast({
+          message: lang === "id" ? "Gagal memuat data produk UMKM." : "Failed to seed UMKM products.",
+          variant: "error"
+        });
+      } finally {
+        setSeedingDemo(false);
+      }
     }
   };
 
@@ -504,6 +840,12 @@ export function ProductsPage() {
         setFItemName(freshItem.itemName);
         setFQty(freshItem.quantity);
         setFUnit(freshItem.unit);
+        const discountPct = freshItem.discountPercent ?? 0;
+        setFDiscountPercent(discountPct);
+        const normPrice = discountPct > 0 
+          ? Math.round(freshItem.price / (1 - discountPct / 100))
+          : freshItem.price;
+        setFNormalPrice(normPrice);
         setFPrice(freshItem.price);
         setFAvailable(freshItem.available);
         setFCategory(freshItem.category);
@@ -514,6 +856,10 @@ export function ProductsPage() {
         } else {
           setFImagePreview(null);
         }
+
+        const detailUrls = freshItem.detailImageUrls || [];
+        setFDetailImageUrls(detailUrls);
+        setFDetailImagePreviews(detailUrls.map(url => resolveProductImageURL(url) || ""));
       } catch {
         setDrawerError(t.loadDetailError);
       } finally {
@@ -524,11 +870,16 @@ export function ProductsPage() {
       setFItemName("");
       setFQty("");
       setFUnit("pcs");
+      setFDiscountPercent(0);
+      setFNormalPrice("");
       setFPrice("");
       setFAvailable(true);
       setFCategory("");
       setFImageURL("");
       setFImagePreview(null);
+      setFDetailImageUrls([]);
+      setFDetailImagePreviews([]);
+      setDetailUploadTasks([]);
     }
   };
 
@@ -542,6 +893,8 @@ export function ProductsPage() {
     setFItemName("");
     setFQty("");
     setFUnit("pcs");
+    setFNormalPrice("");
+    setFDiscountPercent(0);
     setFPrice("");
     setFAvailable(true);
     setFCategory("");
@@ -552,6 +905,9 @@ export function ProductsPage() {
     setFUploadProgress(0);
     setFFailedFileId(undefined);
     setFFailedChunk(undefined);
+    setFDetailImageUrls([]);
+    setFDetailImagePreviews([]);
+    setDetailUploadTasks([]);
   };
 
   const uploadFileDirectly = async (file: File, isRetry = false) => {
@@ -677,6 +1033,11 @@ export function ProductsPage() {
       return;
     }
 
+    if (fDiscountPercent < 0 || fDiscountPercent > 100) {
+      setDrawerError(t.discountValError);
+      return;
+    }
+
     setDrawerSaving(true);
 
     const payload: InventoryItemInput = {
@@ -684,10 +1045,12 @@ export function ProductsPage() {
       quantity: fQty === "" ? 0 : fQty,
       unit: trimmedUnit,
       price: fPrice === "" ? 0 : fPrice,
+      discountPercent: fDiscountPercent,
       // Rule 12.2: quantity 0 forces available false
       available: (fQty === "" || fQty === 0) ? false : fAvailable,
       category: trimmedCategory,
       imageUrl: fImageURL || undefined,
+      detailImageUrls: fDetailImageUrls,
     };
 
     try {
@@ -720,8 +1083,39 @@ export function ProductsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
+          {items.length > 0 && (
+            <button
+              type="button"
+              disabled={deletingAll || seedingDemo}
+              onClick={() => void handleDeleteAllProducts()}
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 h-9 sm:h-10 px-2.5 sm:px-4 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-[11px] sm:text-xs font-bold text-white shadow-sm transition-all cursor-pointer whitespace-nowrap flex-nowrap"
+              title={lang === "id" ? "Hapus Semua Produk" : "Delete All Products"}
+            >
+              {deletingAll ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              <span>{lang === "id" ? "Hapus Semua" : "Delete All"}</span>
+            </button>
+          )}
           <button
             type="button"
+            disabled={deletingAll || seedingDemo}
+            onClick={() => void handleSeedUMKMData()}
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 h-9 sm:h-10 px-2.5 sm:px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-[11px] sm:text-xs font-bold text-white shadow-sm transition-all cursor-pointer whitespace-nowrap flex-nowrap"
+            title={lang === "id" ? "Muat Data Dummy UMKM" : "Load UMKM Dummy Data"}
+          >
+            {seedingDemo ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            <span>{lang === "id" ? "Muat UMKM" : "Load UMKM"}</span>
+          </button>
+          <button
+            type="button"
+            disabled={deletingAll || seedingDemo}
             onClick={() => void openDrawer()}
             className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 h-9 sm:h-10 px-2.5 sm:px-4 rounded-lg bg-[#FBBF24] hover:bg-[#F59E0B] text-[11px] sm:text-xs font-bold text-[#111827] shadow-sm transition-all cursor-pointer whitespace-nowrap flex-nowrap"
           >
@@ -827,9 +1221,25 @@ export function ProductsPage() {
                       <span className="inline-block text-[9px] font-semibold text-[#6B7280] bg-[#F3F4F6] px-1.5 py-0.5 rounded-md mt-1">
                         {translateCategory(item.category, lang) || "-"}
                       </span>
-                      <p className="font-extrabold text-xs text-[#111827] mt-1.5">
-                        {formatIDR(item.price)}
-                      </p>
+                      {item.discountPercent && item.discountPercent > 0 ? (
+                        <div className="mt-1 flex flex-col">
+                          <span className="text-[9px] text-neutral-400 line-through leading-none">
+                            {formatIDR(Math.round(item.price / (1 - item.discountPercent / 100)))}
+                          </span>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="font-extrabold text-xs text-[#EE4D2D]">
+                              {formatIDR(item.price)}
+                            </span>
+                            <span className="bg-[#FFEAEB] text-[#EE4D2D] text-[8px] font-black px-0.5 rounded-sm">
+                              -{item.discountPercent}%
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="font-extrabold text-xs text-[#111827] mt-1.5">
+                          {formatIDR(item.price)}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -972,8 +1382,28 @@ export function ProductsPage() {
                       </td>
 
                       {/* Price */}
-                      <td className="p-4 font-bold">
-                        {formatIDR(item.price)}
+                      <td className="p-4">
+                        <div className="flex flex-col font-['Hanken_Grotesk']">
+                          {item.discountPercent && item.discountPercent > 0 ? (
+                            <>
+                              <span className="text-[10px] text-neutral-400 line-through leading-none">
+                                {formatIDR(Math.round(item.price / (1 - item.discountPercent / 100)))}
+                              </span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="font-extrabold text-xs text-[#EE4D2D]">
+                                  {formatIDR(item.price)}
+                                </span>
+                                <span className="bg-[#FFEAEB] text-[#EE4D2D] text-[9px] font-black px-1 rounded-sm">
+                                  -{item.discountPercent}%
+                                </span>
+                              </div>
+                            </>
+                          ) : (
+                            <span className="font-bold text-xs text-[#111827]">
+                              {formatIDR(item.price)}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Inline Stock adjustment */}
@@ -1197,60 +1627,193 @@ export function ProductsPage() {
               </div>
             ) : (
               <div className="flex-1 p-6 space-y-6">
-                {/* Image Upload */}
-                <div className="space-y-3">
-                  <label className="text-sm font-bold text-[#111827] font-['Manrope',system-ui,sans-serif]">{t.labelProductPhoto}</label>
-                  <div className="flex flex-col items-center justify-center gap-4 w-full py-2">
-                    <div className="h-36 w-36 rounded-2xl overflow-hidden bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center text-[#9CA3AF] shrink-0">
-                      {fImagePreview ? (
-                        <ProductImage imageUrl={fImagePreview} alt={t.photoPlaceholder} className="h-full w-full object-cover" fallbackClassName="h-8 w-8 text-[#9CA3AF]" />
-                      ) : (
-                        <ImageOff className="h-8 w-8" />
-                      )}
-                    </div>
-                    <div className="flex flex-col items-center justify-center space-y-2 w-full">
-                      <div className="flex flex-wrap items-center justify-center gap-2">
-                        <label className="inline-flex items-center gap-1.5 px-4 py-2 border border-[#E5E7EB] bg-white text-xs font-bold text-[#374151] rounded-xl cursor-pointer hover:bg-[#F9FAFB]">
-                          <Upload className="h-4 w-4" />
-                          {t.btnSelectFile}
-                          <input
-                            type="file"
-                            accept="image/jpeg, image/png, image/webp"
-                            className="hidden"
-                            onChange={handleDrawerFileChange}
-                            disabled={fUploading}
-                          />
-                        </label>
-                        {fImageURL && (
-                          <button
-                            type="button"
-                            onClick={() => void handleRemoveImage()}
-                            disabled={fUploading}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 border border-[#FCA5A5] bg-red-50 text-xs font-bold text-[#DC2626] rounded-xl cursor-pointer hover:bg-red-100"
-                          >
-                            {t.btnDeletePhoto}
-                          </button>
+                {/* Image Upload Gallery */}
+                <div className="space-y-4 font-['Hanken_Grotesk',system-ui,sans-serif]">
+                  <div>
+                    <label className="text-sm font-bold text-[#111827] font-['Manrope',system-ui,sans-serif] block">
+                      {lang === "id" ? "Foto Produk" : "Product Photos"}
+                    </label>
+                    <span className="text-[11px] text-[#6B7280] font-normal block mt-0.5">
+                      {lang === "id" ? "Atur 1 Foto Utama dan maksimal 5 Foto Tambahan." : "Configure 1 Main Photo and up to 5 Additional Photos."}
+                    </span>
+                  </div>
+
+                  {/* Horizontal Grid: Main photo and details side-by-side */}
+                  <div className="flex flex-col sm:flex-row gap-5 items-start">
+                    {/* Foto Utama Slot */}
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <span className="text-xs font-bold text-[#374151]">
+                        {lang === "id" ? "Foto Utama" : "Main Photo"}
+                      </span>
+                      <div className="relative h-32 w-32 rounded-2xl overflow-hidden bg-[#F9FAFB] border border-[#E5E7EB] hover:border-[#FBBF24] transition-all flex items-center justify-center shadow-xs group">
+                        {fImagePreview ? (
+                          <>
+                            <ProductImage imageUrl={fImagePreview} alt="Utama" className="h-full w-full object-cover" fallbackClassName="h-8 w-8 text-[#9CA3AF]" />
+                            <div className="absolute top-1.5 left-1.5 bg-[#FBBF24] text-[#111827] text-[9px] font-black px-1.5 py-0.5 rounded-md shadow-xs uppercase tracking-wider">
+                              Utama
+                            </div>
+                            {/* Hover Overlay */}
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                              <label className="p-2 bg-white/90 hover:bg-white text-neutral-800 rounded-full cursor-pointer transition-all shadow-md">
+                                <Upload className="h-4 w-4" />
+                                <input
+                                  type="file"
+                                  accept="image/jpeg, image/png, image/webp"
+                                  className="hidden"
+                                  onChange={handleDrawerFileChange}
+                                  disabled={fUploading}
+                                  title="Pilih Foto Utama"
+                                  placeholder="Pilih Berkas"
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => void handleRemoveImage()}
+                                className="p-2 bg-red-600/90 hover:bg-red-600 text-white rounded-full cursor-pointer transition-all shadow-md"
+                                title="Hapus Foto Utama"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <label className="flex flex-col items-center justify-center cursor-pointer h-full w-full border-2 border-dashed border-[#D1D5DB] hover:border-[#FBBF24] rounded-2xl transition-all gap-1.5 text-neutral-500 hover:text-[#FBBF24]">
+                            <Upload className="h-5 w-5 animate-pulse" />
+                            <span className="text-[10px] font-bold text-center px-2">
+                              {lang === "id" ? "Pilih Utama" : "Choose Main"}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/jpeg, image/png, image/webp"
+                              className="hidden"
+                              onChange={handleDrawerFileChange}
+                              disabled={fUploading}
+                              title="Pilih Foto Utama"
+                              placeholder="Pilih Berkas"
+                            />
+                          </label>
                         )}
                       </div>
-                      {fFailedChunk !== undefined && fSelectedFile && !fUploading && (
-                        <div className="flex gap-2 pt-2">
-                          <button type="button" onClick={() => void uploadFileDirectly(fSelectedFile, true)}
-                            className="px-3 py-1.5 bg-emerald-600 text-xs font-bold text-white rounded-xl flex items-center gap-1 cursor-pointer">
-                            <RefreshCw className="h-3.5 w-3.5" /> {t.btnResumeChunk.replace("{chunk}", String(fFailedChunk))}
-                          </button>
-                        </div>
-                      )}
+                      
+                      {/* Main photo upload progress */}
                       {fUploading && (
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[10px] font-bold text-[#111827]">
+                        <div className="w-32 space-y-1">
+                          <div className="flex justify-between text-[9px] font-bold text-[#111827]">
                             <span>{t.uploadingText}</span><span>{fUploadProgress}%</span>
                           </div>
-                          <div className="w-full bg-[#E5E7EB] h-1.5 rounded-full overflow-hidden">
+                          <div className="w-full bg-[#E5E7EB] h-1 rounded-full overflow-hidden">
                             <div ref={progressBarRef} className="bg-[#FBBF24] h-full transition-all duration-200" />
                           </div>
                         </div>
                       )}
-                      {fImageError && <p className="text-xs font-semibold text-[#EF4444]">{fImageError}</p>}
+                      
+                      {fFailedChunk !== undefined && fSelectedFile && !fUploading && (
+                        <button
+                          type="button"
+                          onClick={() => void uploadFileDirectly(fSelectedFile, true)}
+                          className="w-32 py-1 px-1.5 bg-emerald-600 text-[9px] font-bold text-white rounded-lg flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+                        >
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                          <span>Resume {fFailedChunk}</span>
+                        </button>
+                      )}
+
+                      {fImageError && <p className="text-[10px] font-semibold text-[#EF4444] max-w-[128px] leading-tight">{fImageError}</p>}
+                    </div>
+
+                    {/* Foto Tambahan Slots */}
+                    <div className="flex flex-col gap-2 w-full">
+                      <span className="text-xs font-bold text-[#374151]">
+                        {lang === "id" ? "Foto Tambahan" : "Detail Photos"} ({fDetailImageUrls.length}/5)
+                      </span>
+                      
+                      <div className="grid grid-cols-3 xs:grid-cols-4 sm:grid-cols-3 gap-2.5 w-full">
+                        {/* 1. Existing detail images */}
+                        {fDetailImagePreviews.map((preview, index) => (
+                          <div key={index} className="relative h-20 w-20 rounded-xl overflow-hidden bg-[#F9FAFB] border border-[#E5E7EB] hover:border-amber-400 transition-all flex items-center justify-center shadow-2xs group shrink-0">
+                            <ProductImage imageUrl={preview} alt="Detail" className="h-full w-full object-cover" fallbackClassName="h-6 w-6 text-[#9CA3AF]" />
+                            
+                            {/* Hover Overlay */}
+                            <div className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-1 select-none text-[8px] font-bold text-white">
+                              <button
+                                type="button"
+                                onClick={() => makeMainPhoto(index)}
+                                className="w-full py-0.5 px-1 bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] rounded-md transition-all shadow-xs shrink-0 cursor-pointer"
+                              >
+                                {lang === "id" ? "Jadi Utama" : "Set Main"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleRemoveDetailImage(index)}
+                                className="w-full py-0.5 px-1 bg-red-600 hover:bg-red-700 text-white rounded-md transition-all shadow-xs shrink-0 cursor-pointer flex items-center justify-center gap-0.5"
+                              >
+                                <Trash2 className="h-2 w-2" />
+                                <span>{lang === "id" ? "Hapus" : "Delete"}</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* 2. Ongoing upload tasks */}
+                        {detailUploadTasks.map((task, index) => (
+                          <div key={index} className="relative h-20 w-20 rounded-xl bg-[#F9FAFB] border border-[#E5E7EB] flex flex-col items-center justify-center p-1.5 shrink-0 text-center">
+                            {task.error ? (
+                              <div className="w-full flex flex-col items-center justify-center gap-1">
+                                <span className="text-[7px] text-[#EF4444] leading-tight line-clamp-2 font-semibold">
+                                  {task.error}
+                                </span>
+                                <div className="flex gap-1">
+                                  {task.failedChunk !== undefined && (
+                                    <button
+                                      type="button"
+                                      onClick={() => void uploadDetailFileDirectly(task.file, index, true)}
+                                      className="p-1 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-md hover:bg-emerald-100 cursor-pointer"
+                                      title="Resume upload"
+                                    >
+                                      <RefreshCw className="h-2.5 w-2.5 animate-spin" />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => setDetailUploadTasks(prev => prev.filter((_, idx) => idx !== index))}
+                                    className="p-1 bg-red-50 text-red-600 border border-red-200 rounded-md hover:bg-red-100 cursor-pointer"
+                                    title="Cancel"
+                                  >
+                                    <X className="h-2.5 w-2.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="w-full space-y-1">
+                                <div className="flex justify-between text-[8px] font-bold text-[#111827] px-0.5">
+                                  <span>{lang === "id" ? "Unggah..." : "Uploading..."}</span>
+                                  <span>{task.progress}%</span>
+                                </div>
+                                <DetailUploadProgressBar progress={task.progress} />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+
+                        {/* 3. Dotted "Tambah Foto" placeholder */}
+                        {fDetailImageUrls.length + detailUploadTasks.length < 5 && (
+                          <label className="h-20 w-20 border-2 border-dashed border-[#D1D5DB] hover:border-[#FBBF24] rounded-xl flex flex-col items-center justify-center bg-white hover:bg-amber-50/20 text-[#6B7280] hover:text-[#FBBF24] cursor-pointer transition-all gap-1 select-none shrink-0">
+                            <Plus className="h-4 w-4" />
+                            <span className="text-[9px] font-bold text-center">
+                              {lang === "id" ? "+ Foto" : "+ Photo"}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/jpeg, image/png, image/webp"
+                              className="hidden"
+                              onChange={handleDetailFileChange}
+                              disabled={fDetailImageUrls.length + detailUploadTasks.length >= 5}
+                              title="Pilih Foto Tambahan"
+                              placeholder="Pilih Berkas"
+                            />
+                          </label>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1276,22 +1839,36 @@ export function ProductsPage() {
                     </datalist>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-[#4B5563]">{t.labelPrice}</label>
-                      <input type="number" required min={0} placeholder={t.placeholderDrawerPrice}
+                      <label className="text-xs font-bold text-[#4B5563]">{t.labelNormalPrice}</label>
+                      <input type="number" required min={0} placeholder="75000"
                          className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-                         value={fPrice || ""} onChange={(e) => setFPrice(Number(e.target.value))} />
+                         value={fNormalPrice || ""} onChange={(e) => setFNormalPrice(Number(e.target.value))} />
                     </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-[#4B5563]">{t.labelDiscountPercent}</label>
+                      <input type="number" required min={0} max={100} placeholder="0"
+                         className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                         value={fDiscountPercent} onChange={(e) => setFDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value))))} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-[#4B5563]">{t.labelFinalPrice}</label>
+                      <input type="text" readOnly
+                         title={t.labelFinalPrice}
+                         placeholder="Rp 0"
+                         className="w-full bg-[#F3F4F6] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#9CA3AF] font-bold cursor-not-allowed"
+                         value={fPrice ? formatIDR(fPrice) : "Rp 0"} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 items-center">
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-[#4B5563]">{t.labelUnit}</label>
                       <input type="text" required placeholder={t.placeholderDrawerUnit}
                          className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                          value={fUnit} onChange={(e) => setFUnit(e.target.value)} />
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 items-center">
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-[#4B5563]">{t.labelInitialStock}</label>
                       <input type="number" required min={0} max={99999} placeholder={t.placeholderDrawerQty}
@@ -1307,7 +1884,7 @@ export function ProductsPage() {
                              disabled={fQty === 0}
                              onChange={(e) => setFAvailable(e.target.checked)} />
                           <div className="relative w-11 h-6 bg-[#E5E7EB] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 disabled:opacity-50" />
-                          <span className="text-xs font-semibold text-[#374151]">
+                          <span className="text-[10px] font-semibold text-[#374151] truncate max-w-[80px]">
                             {fQty === 0 ? t.statusOutOfStock : fAvailable ? t.statusActive : t.statusInactive}
                           </span>
                         </label>

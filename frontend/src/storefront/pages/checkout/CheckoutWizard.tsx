@@ -7,10 +7,11 @@ import { motion, AnimatePresence } from "motion/react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { subscribeToCart, clearCart, computeCartTotal, CartLineItem, removeLineItem, setLineNotes } from "@/services/cartService";
+import { subscribeToCart, computeCartTotal, CartLineItem, removeLineItem, setLineNotes } from "@/services/cartService";
 import { createOrder, PaymentMethod } from "@/services/orderService";
 import { formatIDR } from "@/lib/format";
 import type { ReverseGeoResult } from "@/components/MapLocationPicker";
+import { ProductImage } from "@/components/ProductImage";
 
 const MapLocationPicker = lazy(() =>
   import("@/components/MapLocationPicker").then((m) => ({ default: m.MapLocationPicker }))
@@ -149,14 +150,12 @@ export function CheckoutWizard() {
   const { lang } = useLanguage();
   const t = DICTIONARY[lang];
 
-  const [cartItems, setCartItems] = useState<CartLineItem[]>([]);
+  const [checkoutItems, setCheckoutItems] = useState<CartLineItem[]>([]);
   const [loadingCart, setLoadingCart] = useState(true);
   const step = location.pathname.endsWith("/payment") ? "payment" : "address";
 
   const selectedItemIds = (location.state as { selectedItemIds?: string[] } | null)?.selectedItemIds;
-  const checkoutItems = selectedItemIds
-    ? cartItems.filter((item) => selectedItemIds.includes(item.itemId))
-    : cartItems;
+  const directCheckoutItems = (location.state as { directCheckoutItems?: CartLineItem[] } | null)?.directCheckoutItems;
 
   // Address Step Fields (step-by-step)
   const [customerName, setCustomerName] = useState("");
@@ -268,7 +267,13 @@ export function CheckoutWizard() {
     const unsubscribe = subscribeToCart(
       user.uid,
       (items) => {
-        setCartItems(items);
+        if (!directCheckoutItems) {
+          if (selectedItemIds) {
+            setCheckoutItems(items.filter((item) => selectedItemIds.includes(item.itemId)));
+          } else {
+            setCheckoutItems(items);
+          }
+        }
         setLoadingCart(false);
       },
       (err) => {
@@ -277,7 +282,15 @@ export function CheckoutWizard() {
       }
     );
     return () => unsubscribe();
-  }, [user]);
+  }, [user, selectedItemIds, directCheckoutItems]);
+
+  // Load direct checkout items directly
+  useEffect(() => {
+    if (directCheckoutItems) {
+      setCheckoutItems(directCheckoutItems);
+      setLoadingCart(false);
+    }
+  }, [directCheckoutItems]);
 
   // If unauthenticated or loading profile
   if (!user) {
@@ -370,7 +383,12 @@ export function CheckoutWizard() {
       console.warn("Gagal menyimpan alamat ke profil. Melanjutkan checkout...", err);
     } finally {
       setSavingAddress(false);
-      navigate("/checkout/payment");
+      navigate("/checkout/payment", {
+        state: {
+          directCheckoutItems,
+          selectedItemIds,
+        }
+      });
     }
   };
 
@@ -387,6 +405,7 @@ export function CheckoutWizard() {
       itemName: item.itemName,
       quantity: item.quantity,
       notes: item.notes || "",
+      imageUrl: item.imageUrl || "",
     }));
 
     // Parse Google Maps URL coordinates if present
@@ -435,14 +454,9 @@ export function CheckoutWizard() {
 
       requestCompleted = true;
 
-      // Clean up Cart upon success only for COD (Requirement 6.3 & 6.4)
-      if (paymentMethod === "cod") {
-        if (selectedItemIds) {
-          await Promise.all(selectedItemIds.map((itemId) => removeLineItem(user.uid, itemId)));
-        } else {
-          await clearCart(user.uid);
-        }
-      }
+      // Clean up the purchased items from the shopping cart on success (Requirement 6.3 & 6.4)
+      const purchasedItemIds = checkoutItems.map((item) => item.itemId);
+      await Promise.all(purchasedItemIds.map((itemId) => removeLineItem(user.uid, itemId)));
 
       if (paymentMethod === "cod") {
         // COD goes CONFIRMED immediately
@@ -478,7 +492,12 @@ export function CheckoutWizard() {
           title={t.back}
           onClick={() => {
             if (step === "payment") {
-              navigate("/checkout/address");
+              navigate("/checkout/address", {
+                state: {
+                  directCheckoutItems,
+                  selectedItemIds,
+                }
+              });
             } else {
               navigate("/cart");
             }
@@ -764,10 +783,11 @@ export function CheckoutWizard() {
                           <div key={item.itemId} className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 space-y-2">
                             <div className="flex gap-3">
                               {item.imageUrl && (
-                                <img
-                                  src={item.imageUrl}
+                                <ProductImage
+                                  imageUrl={item.imageUrl}
                                   alt={item.itemName}
                                   className="h-12 w-12 rounded-xl object-cover bg-white border border-neutral-200 shrink-0"
+                                  fallbackClassName="h-5 w-5 text-[#9CA3AF]"
                                 />
                               )}
                               <div className="flex-1 min-w-0">
@@ -792,8 +812,15 @@ export function CheckoutWizard() {
                                 className="w-full bg-transparent border-none text-xs text-[#374151] placeholder-[#9CA3AF] focus:outline-none"
                                 value={item.notes ?? ""}
                                 onChange={async (e) => {
-                                  if (!user) return;
-                                  try { await setLineNotes(user.uid, item.itemId, e.target.value); } catch { /* silent */ }
+                                  const val = e.target.value;
+                                  setCheckoutItems((prev) =>
+                                    prev.map((it) =>
+                                      it.itemId === item.itemId ? { ...it, notes: val } : it
+                                    )
+                                  );
+                                  if (!directCheckoutItems && user) {
+                                    try { await setLineNotes(user.uid, item.itemId, val); } catch { /* silent */ }
+                                  }
                                 }}
                               />
                             </div>

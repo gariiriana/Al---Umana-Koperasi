@@ -17,21 +17,19 @@ export const ProductImage: React.FC<ProductImageProps> = ({
 }) => {
   const { src, loading, error } = useProductImage(imageUrl);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full w-full bg-[#F3F4F6] animate-pulse">
-        <Loader2 className="h-4 w-4 animate-spin text-[#FBBF24]" />
-      </div>
-    );
-  }
-
-  if (error || !src) {
-    return (
-      <div className="flex items-center justify-center h-full w-full bg-[#F3F4F6]">
-        <ImageOff className={fallbackClassName} />
-      </div>
-    );
-  }
-
-  return <img src={src} alt={alt} className={className} />;
+  return (
+    <div className={`relative overflow-hidden flex items-center justify-center ${className}`}>
+      {loading ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#F3F4F6] animate-pulse">
+          <Loader2 className="h-4 w-4 animate-spin text-[#FBBF24]" />
+        </div>
+      ) : error || !src ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#F3F4F6]">
+          <ImageOff className={fallbackClassName} />
+        </div>
+      ) : (
+        <img src={src} alt={alt} className="h-full w-full object-cover" />
+      )}
+    </div>
+  );
 };

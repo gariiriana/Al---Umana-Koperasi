@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft, Camera, AlertCircle, Loader2, Navigation } from "lucide-react";
+import { MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft, Camera, AlertCircle, Loader2, Navigation, Phone, MessageCircle } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeOrders } from "@/services/realtimeService";
@@ -9,7 +9,7 @@ import { PICConfirmation } from "@/components/delivery/PICConfirmation";
 import { ProofCapture } from "@/components/delivery/ProofCapture";
 
 import { db } from "@/lib/firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
 import { uploadFileInChunks } from "@/services/chunkUploadService";
 import { validateImageUpload } from "@/lib/validators";
 import { dispatchOrder } from "@/services/orderService";
@@ -312,6 +312,48 @@ export function DeliveryPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [step, setStep] = useState<DeliveryStep>("list");
 
+  const active = activeId ? orders.find((o) => o.id === activeId) ?? null : null;
+
+  // Fetch active customer details
+  const [customerProfile, setCustomerProfile] = useState<{ displayName?: string; phoneNumber?: string } | null>(null);
+  const [loadingCustomer, setLoadingCustomer] = useState(false);
+
+  useEffect(() => {
+    const customerId = active?.customerId;
+    if (!customerId) {
+      setCustomerProfile(null);
+      return;
+    }
+
+    const loadCustomerProfile = async () => {
+      setLoadingCustomer(true);
+      try {
+        const userRef = doc(db, "users", customerId);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          setCustomerProfile({
+            displayName: data.displayName || active.customerName,
+            phoneNumber: data.phoneNumber || "",
+          });
+        } else {
+          setCustomerProfile({
+            displayName: active.customerName,
+          });
+        }
+      } catch (err) {
+        console.error("Gagal memuat profil pelanggan:", err);
+        setCustomerProfile({
+          displayName: active.customerName,
+        });
+      } finally {
+        setLoadingCustomer(false);
+      }
+    };
+
+    loadCustomerProfile();
+  }, [activeId, active?.customerId, active?.customerName]);
+
   useEffect(() => subscribeOrders(setOrders, console.error), []);
 
   const myDeliveries = useMemo(
@@ -367,7 +409,7 @@ export function DeliveryPage() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, [activeEnRouteId]);
 
-  const active = activeId ? orders.find((o) => o.id === activeId) ?? null : null;
+
 
   const reset = () => {
     setActiveId(null);
@@ -419,6 +461,15 @@ export function DeliveryPage() {
             </>
           )}
         </div>
+      )}
+
+      {/* Customer Info Card (placed when in any active delivery step) */}
+      {active && step !== "list" && (
+        <CustomerInfoCard
+          profile={customerProfile}
+          loading={loadingCustomer}
+          order={active}
+        />
       )}
 
       {/* Step progress (only when active and not starting) */}
@@ -606,6 +657,100 @@ export function DeliveryPage() {
           />
         </motion.div>
       )}
+    </div>
+  );
+}
+
+function CustomerInfoCard({
+  profile,
+  loading,
+  order,
+}: {
+  profile: { displayName?: string; phoneNumber?: string } | null;
+  loading: boolean;
+  order: Order;
+}) {
+  if (loading) {
+    return (
+      <div className="bg-white rounded-lg p-4 border border-[#E5E7EB] shadow-xs flex items-center justify-center py-4">
+        <Loader2 className="h-4 w-4 animate-spin text-[#FBBF24]" />
+        <span className="text-xs text-[#6B7280] font-['Hanken_Grotesk'] ml-2">
+          Memuat detail pelanggan...
+        </span>
+      </div>
+    );
+  }
+
+  // Fallback to order fields if profile is not loaded or missing phone number
+  const displayName = profile?.displayName || order.customerName;
+  const phoneNumber = profile?.phoneNumber || "";
+
+  const shortId = order.id.length > 6 ? order.id.slice(-6).toUpperCase() : order.id.toUpperCase();
+  const cleanPhone = phoneNumber ? phoneNumber.replace(/\D/g, "") : "";
+  // Ensure indonesian prefix
+  const whatsappNumber = cleanPhone.startsWith("0") 
+    ? "62" + cleanPhone.slice(1) 
+    : cleanPhone.startsWith("8") 
+      ? "62" + cleanPhone 
+      : cleanPhone;
+
+  const templateMsg = encodeURIComponent(
+    `Halo Kak ${displayName},\n\nSaya kurir Koperasi Al-Umanaa ingin mengantarkan pesanan Anda dengan nomor #${shortId}.`
+  );
+  const waUrl = whatsappNumber ? `https://wa.me/${whatsappNumber}?text=${templateMsg}` : "";
+
+  return (
+    <div className="bg-white rounded-lg p-4 border border-[#E5E7EB] shadow-xs space-y-3 font-['Hanken_Grotesk'] text-xs">
+      <div className="flex items-center justify-between">
+        <h4 className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">
+          Informasi Pelanggan
+        </h4>
+        <span className="text-[9px] font-extrabold text-[#B45309] bg-amber-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+          Aktif
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="font-bold text-[#111827] text-sm">
+            {displayName}
+          </p>
+          {phoneNumber ? (
+            <p className="text-[10px] text-[#6B7280] font-medium mt-0.5">
+              No. HP: {phoneNumber}
+            </p>
+          ) : (
+            <p className="text-[10px] text-red-500 font-semibold mt-0.5">
+              Nomor handphone tidak tersedia
+            </p>
+          )}
+        </div>
+
+        {phoneNumber && (
+          <div className="flex gap-2 shrink-0">
+            <a
+              href={`tel:${phoneNumber}`}
+              className="flex items-center justify-center p-2 border border-[#D1D5DB] rounded-xl hover:bg-[#F9FAFB] transition cursor-pointer"
+              title="Telepon Pelanggan"
+              aria-label="Telepon Pelanggan"
+            >
+              <Phone className="h-4 w-4 text-[#4B5563]" />
+            </a>
+            {whatsappNumber && (
+              <a
+                href={waUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center p-2 bg-[#10B981] hover:bg-[#059669] text-white rounded-xl transition cursor-pointer"
+                title="Kirim WhatsApp"
+                aria-label="Kirim WhatsApp"
+              >
+                <MessageCircle className="h-4 w-4" />
+              </a>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

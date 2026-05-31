@@ -9,6 +9,7 @@ import {
 import type { User } from "firebase/auth";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { getRedirectResult } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 
 import { db, auth } from "@/lib/firebase";
 import {
@@ -75,6 +76,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Process redirect result if returning from Google OAuth redirect flow
@@ -173,7 +175,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       sendPasswordReset: async (email) => {
         await authSendPasswordReset(email);
       },
-      signOut: () => authSignOut(),
+      signOut: async () => {
+        await authSignOut();
+        navigate("/login");
+      },
       isSignOutConfirmOpen,
       requestSignOut: () => {
         setIsSignOutConfirmOpen(true);
@@ -184,9 +189,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       confirmSignOut: async () => {
         setIsSignOutConfirmOpen(false);
         await authSignOut();
+        navigate("/login");
       },
     }),
-    [user, profile, loading, isSignOutConfirmOpen]
+    [user, profile, loading, isSignOutConfirmOpen, navigate]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

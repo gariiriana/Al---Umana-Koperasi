@@ -18,12 +18,16 @@ export interface InventoryItem {
   unit: string;
   /** Price in IDR, integer rupiah ≥ 0. */
   price: number;
+  /** Discount percentage, 0–100. */
+  discountPercent?: number;
   /** Admin-controlled visibility flag. `true` ⇒ `quantity > 0`. */
   available: boolean;
   /** Required category, 1–50 chars after trim. */
   category: string;
   /** `product_images/{fileId}` reference; absent when no image is attached. */
   imageUrl?: string;
+  /** Secondary image references. */
+  detailImageUrls?: string[];
   /** ISO-8601 server timestamp of the last update. */
   updatedAt: string;
 }
@@ -34,7 +38,9 @@ export interface InventoryItemInput {
   quantity: number;
   unit: string;
   price: number;
+  discountPercent?: number;
   available: boolean;
   category: string;
   imageUrl?: string;
+  detailImageUrls?: string[];
 }

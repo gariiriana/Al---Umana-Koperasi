@@ -20,6 +20,9 @@ const (
 
 	MinPrice = 0
 
+	MinDiscountPercent = 0
+	MaxDiscountPercent = 100
+
 	MinCategoryLen = 1
 	MaxCategoryLen = 50
 
@@ -31,16 +34,17 @@ const (
 // Reason strings returned in field-specific validation errors. Keeping these
 // as constants makes them easy to assert in tests and easy to translate.
 const (
-	reasonItemNameRequired   = "item name must not be empty"
-	reasonItemNameTooLong    = "item name must be at most 200 characters"
-	reasonQuantityOutOfRange = "quantity must be between 0 and 99999"
-	reasonUnitRequired       = "unit must not be empty"
-	reasonUnitTooLong        = "unit must be at most 50 characters"
-	reasonPriceNegative      = "price must be greater than or equal to 0"
-	reasonCategoryRequired   = "category must not be empty"
-	reasonCategoryTooLong    = "category must be at most 50 characters"
-	reasonImageURLTooLong    = "imageURL must be at most 2048 characters"
-	reasonImageURLFormat     = "imageURL must have the format product_images/{fileId}"
+	reasonItemNameRequired          = "item name must not be empty"
+	reasonItemNameTooLong           = "item name must be at most 200 characters"
+	reasonQuantityOutOfRange        = "quantity must be between 0 and 99999"
+	reasonUnitRequired              = "unit must not be empty"
+	reasonUnitTooLong               = "unit must be at most 50 characters"
+	reasonPriceNegative             = "price must be greater than or equal to 0"
+	reasonDiscountPercentOutOfRange = "discountPercent must be between 0 and 100"
+	reasonCategoryRequired          = "category must not be empty"
+	reasonCategoryTooLong           = "category must be at most 50 characters"
+	reasonImageURLTooLong           = "imageURL must be at most 2048 characters"
+	reasonImageURLFormat            = "imageURL must have the format product_images/{fileId}"
 )
 
 // ValidateInventoryItem validates an InventoryItem and returns a slice of
@@ -51,6 +55,7 @@ const (
 //   - quantity: integer in the range [0, 99,999]
 //   - unit: 1–50 characters after trimming whitespace
 //   - price: int64 ≥ 0
+//   - discountPercent: integer in the range [0, 100]
 //   - category: 1–50 characters after trimming whitespace
 //   - imageURL: ≤ 2048 characters; when non-empty, must match the format
 //     "product_images/{fileId}" with a non-empty fileId that does not
@@ -58,7 +63,7 @@ const (
 //
 // At most one entry per violated field is returned, named after the field.
 func ValidateInventoryItem(item InventoryItem) []common.FieldError {
-	errs := make([]common.FieldError, 0, 6)
+	errs := make([]common.FieldError, 0, 7)
 
 	name := strings.TrimSpace(item.ItemName)
 	switch {
@@ -84,6 +89,10 @@ func ValidateInventoryItem(item InventoryItem) []common.FieldError {
 		errs = append(errs, common.FieldError{Field: "price", Reason: reasonPriceNegative})
 	}
 
+	if item.DiscountPercent < MinDiscountPercent || item.DiscountPercent > MaxDiscountPercent {
+		errs = append(errs, common.FieldError{Field: "discountPercent", Reason: reasonDiscountPercentOutOfRange})
+	}
+
 	category := strings.TrimSpace(item.Category)
 	switch {
 	case len(category) < MinCategoryLen:
@@ -96,7 +105,39 @@ func ValidateInventoryItem(item InventoryItem) []common.FieldError {
 		errs = append(errs, e)
 	}
 
+	if len(item.DetailImageUrls) > 10 {
+		errs = append(errs, common.FieldError{Field: "detailImageUrls", Reason: "detailImageUrls must contain at most 10 items"})
+	} else {
+		for _, url := range item.DetailImageUrls {
+			if e, ok := validateDetailImageURL(url); !ok {
+				errs = append(errs, e)
+				break
+			}
+		}
+	}
+
 	return errs
+}
+
+// validateDetailImageURL is a helper to validate secondary detail image URLs.
+func validateDetailImageURL(url string) (common.FieldError, bool) {
+	if len(url) > MaxImageURLLen {
+		return common.FieldError{Field: "detailImageUrls", Reason: "each detailImageUrls must be at most 2048 characters"}, false
+	}
+	if url == "" {
+		return common.FieldError{}, true
+	}
+	if strings.HasPrefix(url, "https://images.unsplash.com/") {
+		return common.FieldError{}, true
+	}
+	if !strings.HasPrefix(url, imageURLPrefix) {
+		return common.FieldError{Field: "detailImageUrls", Reason: "each detailImageUrls must have the format product_images/{fileId}"}, false
+	}
+	fileID := url[len(imageURLPrefix):]
+	if fileID == "" || strings.Contains(fileID, "/") {
+		return common.FieldError{Field: "detailImageUrls", Reason: "each detailImageUrls must have the format product_images/{fileId}"}, false
+	}
+	return common.FieldError{}, true
 }
 
 // validateImageURL applies Requirement 11.7 / 10.1 imageURL formatting rules:

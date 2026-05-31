@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { NavLink, Link, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import {
   Home,
@@ -23,7 +23,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ToastProvider, useToast } from "@/contexts/ToastContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Footer } from "@/components/layout/Footer";
-import { CartAnimationProvider, type FlyDot } from "@/contexts/CartAnimationContext";
+import { CartAnimationProvider } from "@/contexts/CartAnimationContext";
+import { type FlyDot } from "@/contexts/CartAnimationContextCore";
 import { useCartAnimation } from "@/contexts/useCartAnimation";
 
 import { collection, query, where, onSnapshot, DocumentData } from "firebase/firestore";
@@ -172,12 +173,30 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
 
   // CartAnimation context — provides realtime cart count + fly animation
   const { cartCount: cartBadgeCount, cartIconRef, flyDots, removeFlyDot } = useCartAnimation();
+  const [isBouncing, setIsBouncing] = useState(false);
+  const prevCountRef = useRef(cartBadgeCount);
+
+  // Trigger pop/bounce animation when cart count increases (timed to dot arrival)
+  useEffect(() => {
+    if (cartBadgeCount > prevCountRef.current) {
+      const delayTimer = setTimeout(() => {
+        setIsBouncing(true);
+        const bounceTimer = setTimeout(() => setIsBouncing(false), 400);
+        return () => clearTimeout(bounceTimer);
+      }, 350); // Starts right when the dot arrives (350ms)
+      
+      prevCountRef.current = cartBadgeCount;
+      return () => clearTimeout(delayTimer);
+    } else {
+      prevCountRef.current = cartBadgeCount;
+    }
+  }, [cartBadgeCount]);
 
   // Animate fly dots: auto-remove after animation completes
   useEffect(() => {
     if (flyDots.length === 0) return;
     const timers = flyDots.map((dot) =>
-      window.setTimeout(() => removeFlyDot(dot.id), 700)
+      window.setTimeout(() => removeFlyDot(dot.id), 450)
     );
     return () => timers.forEach(clearTimeout);
   }, [flyDots, removeFlyDot]);
@@ -202,7 +221,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
         setUnreadCount(0);
         return;
       }
-      const orderNotifs = ordersList.map(mapOrderToNotification);
+      const orderNotifs = ordersList.flatMap(mapOrderToNotification);
       const allNotifs = [...orderNotifs, ...promoList, ...STATIC_INFO_NOTIFICATIONS];
       const count = allNotifs.filter((n) => Date.parse(n.time) > lastRead).length;
       setUnreadCount(count);
@@ -280,6 +299,9 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                   statusTextEn = "in production";
                   break;
                 case "READY":
+                  statusTextId = "sedang diuji kelayakan (QC)";
+                  statusTextEn = "being quality checked (QC)";
+                  break;
                 case "READY_TO_DELIVER":
                   statusTextId = "siap dikirim";
                   statusTextEn = "ready to deliver";
@@ -341,11 +363,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
 
     // 2. Load promo products
     listAvailableProducts().then((products) => {
-      const discounted = products.filter((p) => {
-        const discountPercent =
-          p.price % 3 === 0 ? 10 : p.price % 5 === 0 ? 15 : 0;
-        return discountPercent > 0;
-      });
+      const discounted = products.filter((p) => (p.discountPercent ?? 0) > 0);
       promoList = [...discounted.map(mapProductToPromoNotification), ...STATIC_PROMO_NOTIFICATIONS];
       updateUnreadCount();
     }).catch((err) => {
@@ -598,6 +616,10 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                 </div>
               </div>
               <div className="flex items-center gap-4">
+                <Link to="/testimoni" className="flex items-center gap-1 hover:opacity-85 transition-opacity">
+                  <Star className="h-3.5 w-3.5" />
+                  <span>{getLocalizedLabel("Testimoni", lang)}</span>
+                </Link>
                 <Link to="/notifications" className="flex items-center gap-1 hover:opacity-85 transition-opacity relative">
                   <Bell className="h-3.5 w-3.5" />
                   <span>{t.notifications}</span>
@@ -734,6 +756,8 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
               </span>
             </Link>
 
+
+
             {/* Search Bar */}
             <div className="flex-1 max-w-2xl">
               <form onSubmit={handleSearchSubmit} className="flex bg-white rounded-lg overflow-hidden shadow-xs border border-transparent focus-within:border-[#B45309]">
@@ -767,7 +791,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
               <Link
                 ref={cartIconRef}
                 to="/cart"
-                className="relative p-2 text-white hover:opacity-85 transition-opacity"
+                className={`relative p-2 text-white hover:opacity-85 transition-opacity ${isBouncing ? "animate-cart-pop" : ""}`}
                 aria-label="Keranjang Belanja"
               >
                 <ShoppingCart className="h-6 w-6" />
@@ -813,11 +837,12 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                   <NavLink
                     to={to}
                     end={end}
+                    id={badgeKey === "cart" ? "mobile-cart-btn" : undefined}
                     className={({ isActive }) =>
                       `${BOTTOM_ITEM_BASE} ${isActive ? BOTTOM_ACTIVE : BOTTOM_INACTIVE}`
                     }
                   >
-                    <span className="relative inline-flex h-6 w-6 items-center justify-center">
+                    <span className={`relative inline-flex h-6 w-6 items-center justify-center ${badgeKey === "cart" && isBouncing ? "animate-cart-pop" : ""}`}>
                       <Icon className="h-6 w-6" aria-hidden="true" />
                       {badgeKey === "cart" && cartBadgeCount > 0 && (
                         <span

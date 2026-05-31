@@ -16,6 +16,7 @@ export interface OrderLineItem {
   itemId: string;
   itemName: string;
   quantity: number;
+  imageUrl?: string;
 }
 
 export interface Order {

@@ -6,7 +6,7 @@
  */
 
 import { useContext } from "react";
-import { CartAnimationContext } from "@/contexts/CartAnimationContext";
+import { CartAnimationContext } from "@/contexts/CartAnimationContextCore";
 
 export function useCartAnimation() {
   const ctx = useContext(CartAnimationContext);

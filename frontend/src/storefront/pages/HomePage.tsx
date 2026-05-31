@@ -210,7 +210,7 @@ export function HomePage() {
       return state.products.filter((p) => p.quantity <= 15);
     }
     if (selectedTab === "diskon") {
-      return state.products.filter((p) => p.price % 3 === 0 || p.price % 5 === 0);
+      return state.products.filter((p) => (p.discountPercent ?? 0) > 0);
     }
     return state.products.filter((p) => p.category.trim() === selectedTab);
   }, [state, selectedTab, isSearching, filtered]);
