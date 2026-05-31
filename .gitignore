@@ -60,3 +60,7 @@ backend/vendor/
 
 # Scratch
 scratch/
+
+# WhatsApp Web.js session and cache
+wa-gateway/.wwebjs_auth/
+wa-gateway/.wwebjs_cache/

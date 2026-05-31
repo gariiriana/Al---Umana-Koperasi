@@ -10,37 +10,44 @@ The **Order Fulfillment & Delivery Tracking System** is a secure, full-stack ent
 
 ---
 
-## 🌟 Premium Features (Upgraded)
+## Premium Features (Upgraded)
 
-### 🛍️ Cart Cleanup & Direct Checkout Isolation
+### Cart Cleanup & Direct Checkout Isolation
+
 - **Direct Checkout Isolation ("Beli Sekarang")**: Tapping "Beli Sekarang" dynamically bypasses the persistent shopping cart, preserving separate cart contents (e.g. buying 1 iced tea while keeping 3 fried rice items safe in the cart).
 - **Instant Selective Cart Cleanup**: Upon placing a COD or transfer-proof order, the exact purchased items are instantly cleared from the Firestore database shopping cart, leaving unrelated items completely untouched.
 - **Wizard Route State Retention**: Step-back and step-forward transitions (`/checkout/address` $\leftrightarrow$ `/checkout/payment`) preserve checkout items list and total pricing, preventing state resets.
 
-### 📸 Multi-Image Product Gallery & Cascade Deletion
+### Multi-Image Product Gallery & Cascade Deletion
+
 - **Foto Tambahan Widget**: Administrators can upload up to 5 detailed secondary product photos with active progress bars and chunk-resumable uploading.
 - **Set Main (Jadikan Utama)**: Dynamic swap action instantly makes any secondary photo the primary display image.
 - **Garbage collection (Cascade Purge)**: Deleting a product or a single detailed photo recursively purges the master document and all associated numbered chunks from Firestore (`product_images/{fileId}/chunks/*`) to prevent orphan file storage leaks.
 
-### 🏷️ Dynamic Discount Pricing System
+### Dynamic Discount Pricing System
+
 - **Backend-Validated Percentages**: Enforces a strict `[0, 100]` discount range in the Go backend and Firestore layers.
 - **Live Markdown Formulas**: Storefront automatically displays computed original base price, dynamic discounted price, and premium red-coral discount badges (e.g. `-15%`).
 
-### 📦 Premium Tabbed Orders History View (`/orders`)
+### Premium Tabbed Orders History View (`/orders`)
+
 - **Iconic Category Tabs**: Premium responsive tab bar divided into `Belum Bayar` (Wallet), `Dikemas` (Package), `Dikirim` (Truck), and `Beri Penilaian` (Star in circular outline).
 - **Live Counter Badges**: Red notification circles displaying the dynamic count of active orders within each lifecycle stage.
 - **Itemized Listing Layout**: Cards list every product row (with image thumbnail, item name, and exact quantity multiplier `× Qty`) inside the preview card, replacing generic text summaries.
 
-### 🔔 Smart Notification Center (`/notifications`)
+### Smart Notification Center (`/notifications`)
+
 - **Milestone Timeline Splits**: Separated cooking complete (`READY` - kitchen QC check) from dispatch readiness (`READY_TO_DELIVER` - ready for courier), fitting the 8-step tracking sequence.
 - **Historical Milestone Logs**: Displays historical stages sequentially so older order updates are not overwritten when status advances.
 - **Timestamp to ISO Parser**: Safely handles Firestore raw `Timestamp` objects, eliminating "Invalid Date" UI bugs.
 - **Auto-Ticking Refresher**: Real-time interval timer triggers UI relative time recalculation (e.g. *"Baru saja"*, *"3 menit lalu"*) every 30 seconds.
 
-### 👤 Responsive Desktop Account Sidebar
+### Responsive Desktop Account Sidebar
+
 - **Synced Profile Avatar**: Sidebar menu header retrieves and renders the logged-in user's custom photo URL (Google Account Avatar / custom profile picture) with a graceful letter-badge fallback.
 
-### 🧑‍🍳 8-Step Cooking & Dispatch Tracking Stepper
+### 8-Step Cooking & Dispatch Tracking Stepper
+
 - **Extended Order Stepper**: Fully interactive 8-step tracking timeline for customers:
   1. Pesanan Dibuat
   2. Persetujuan Pembayaran
@@ -53,13 +60,14 @@ The **Order Fulfillment & Delivery Tracking System** is a secure, full-stack ent
 - **Base64 Assembly Evidence**: Assembles and displays the kitchen's "Bukti Foto Mulai Memasak" photo on the customer tracking page in real-time.
 - **Courier Dashboard Integrations**: Displays customer's delivery information card, phone contact link, and custom-templated WhatsApp dispatch shortcut button.
 
-### 🚜 Indonesian UMKM Dummy Seed Generator & Global Purge
+### Indonesian UMKM Dummy Seed Generator & Global Purge
+
 - **Verified Photographic Seeds ("Muat UMKM")**: Seeds representative Sembako, Makanan, Minuman, and Camilan products with exact, verified food images from Wikimedia Commons.
 - **Global Purge ("Hapus Semua")**: Clears the entire product catalog and cascade-deletes all associated image file chunks globally, resetting the demo presentation instantly.
 
 ---
 
-## 📐 System Architecture
+## System Architecture
 
 The following diagram illustrates the high-level architecture and data-flow across the React frontend, Go backend, and Google Firebase services:
 
@@ -103,7 +111,7 @@ graph TB
 
 ---
 
-## 📈 Order State Machine
+## Order State Machine
 
 Status transitions are strictly validated in the Go backend. Any invalid status transitions are rejected:
 
@@ -125,7 +133,7 @@ stateDiagram-v2
 
 ---
 
-## 📊 Data Models
+## Data Models
 
 The system defines the following schemas within Firestore:
 
@@ -168,7 +176,7 @@ interface CourierGPS {
 
 ---
 
-## 🧪 Correctness Properties and PBT
+## Correctness Properties and PBT
 
 The codebase integrates 18 distinct correctness properties verified via Property-Based Testing (PBT). All tests compile and run entirely offline with mock databases.
 
@@ -198,7 +206,7 @@ The codebase integrates 18 distinct correctness properties verified via Property
 
 ---
 
-## 🚀 Local Development Setup
+## Local Development Setup
 
 ### Prerequisites
 
@@ -238,7 +246,7 @@ npm run test
 
 ---
 
-## 🐳 Running with Docker
+## Running with Docker
 
 This project includes a Docker setup supporting both development and production environments.
 
