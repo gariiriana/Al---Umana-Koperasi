@@ -19,6 +19,8 @@ import {
 import { db } from "@/lib/firebase";
 import type { InventoryItem } from "@/types/inventory";
 
+import { loadDemoFromStorage } from "@/lib/dummyData";
+
 export interface ListAvailableProductsOptions {
   /** Optional category filter; omitted when undefined or empty. */
   category?: string;
@@ -49,6 +51,16 @@ function formatUpdatedAt(val: unknown): string {
 export async function listAvailableProducts(
   opts: ListAvailableProductsOptions = {}
 ): Promise<InventoryItem[]> {
+  const demoProducts = loadDemoFromStorage();
+  if (demoProducts && demoProducts.length > 0) {
+    let filtered = demoProducts.filter((item) => item.available && item.quantity > 0);
+    if (opts.category && opts.category.trim() !== "") {
+      filtered = filtered.filter((item) => item.category?.trim() === opts.category?.trim());
+    }
+    filtered.sort((a, b) => a.quantity - b.quantity);
+    return filtered;
+  }
+
   const colRef = collection(db, "inventory");
   
   // Construct a query that only uses equality filters to avoid index requirements
@@ -82,6 +94,12 @@ export async function listAvailableProducts(
 
 /** Fetch a single product by document ID. */
 export async function getProduct(id: string): Promise<InventoryItem> {
+  const demoProducts = loadDemoFromStorage();
+  if (demoProducts && demoProducts.length > 0) {
+    const item = demoProducts.find((p) => p.id === id);
+    if (item) return item;
+  }
+
   const docRef = doc(db, "inventory", id);
   const docSnap = await getDoc(docRef);
   if (!docSnap.exists()) {
@@ -106,6 +124,17 @@ export async function getProduct(id: string): Promise<InventoryItem> {
  * (Requirement 13.6).
  */
 export async function listCategories(): Promise<string[]> {
+  const demoProducts = loadDemoFromStorage();
+  if (demoProducts && demoProducts.length > 0) {
+    const categories = new Set<string>();
+    demoProducts.forEach((p) => {
+      if (p.category && p.category.trim() !== "") {
+        categories.add(p.category.trim());
+      }
+    });
+    return Array.from(categories).sort();
+  }
+
   const colRef = collection(db, "inventory");
   const snap = await getDocs(colRef);
   const categories = new Set<string>();

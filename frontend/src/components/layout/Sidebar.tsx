@@ -67,6 +67,7 @@ export interface SidebarProps {
   userName?: string;
   userEmail?: string;
   userRole?: string;
+  userPhotoUrl?: string;
   onSignOut?: () => void;
   searchValue?: string;
   onSearchChange?: (value: string) => void;
@@ -88,12 +89,14 @@ const roleBadge: Record<string, string> = {
   tim_produksi: "Produksi",
   distribusi: "Distribusi",
   monitoring: "Monitor",
+  kurir: "Kurir",
 };
 
 export function Sidebar({
   userName,
   userEmail,
   userRole,
+  userPhotoUrl,
   onSignOut,
   searchValue,
   onSearchChange,
@@ -182,8 +185,12 @@ export function Sidebar({
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             className="w-full flex items-center gap-3 p-1.5 rounded-xl hover:bg-[#F3F4F6] transition-colors text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
           >
-            <div className="h-9 w-9 rounded-full bg-[#FBBF24] flex items-center justify-center text-sm font-bold text-[#111827] shrink-0">
-              {initial}
+            <div className="h-9 w-9 rounded-full bg-[#FBBF24] flex items-center justify-center text-sm font-bold text-[#111827] shrink-0 overflow-hidden">
+              {userPhotoUrl ? (
+                <img src={userPhotoUrl} alt="Avatar" className="h-full w-full object-cover" />
+              ) : (
+                initial
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-[#111827] truncate">{userName || userEmail || "Pengguna"}</p>

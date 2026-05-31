@@ -12,6 +12,7 @@ export const STATUS_LABELS: Record<"id" | "en", Record<OrderStatus, string>> = {
     READY_TO_DELIVER: "Siap Dikirim",
     OUT_FOR_DELIVERY: "Dalam Pengiriman",
     DELIVERED: "Terkirim",
+    COMPLETED: "Selesai",
     FAILED: "Gagal",
   },
   en: {
@@ -25,6 +26,7 @@ export const STATUS_LABELS: Record<"id" | "en", Record<OrderStatus, string>> = {
     READY_TO_DELIVER: "Ready to Deliver",
     OUT_FOR_DELIVERY: "Out for Delivery",
     DELIVERED: "Delivered",
+    COMPLETED: "Completed",
     FAILED: "Failed",
   }
 };
@@ -32,6 +34,7 @@ export const STATUS_LABELS: Record<"id" | "en", Record<OrderStatus, string>> = {
 export function getStatusBadgeClass(status: OrderStatus): string {
   switch (status) {
     case "DELIVERED":
+    case "COMPLETED":
       return "bg-emerald-50 border-emerald-200 text-emerald-700";
     case "FAILED":
     case "PAYMENT_REJECTED":

@@ -1,11 +1,14 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Loader2, ArrowLeft, MapPin, Clock, FileImage, ShieldAlert } from "lucide-react";
+import { Loader2, ArrowLeft, MapPin, Clock, FileImage, ShieldAlert, Navigation, Phone, MessageCircle, Star, Camera, CheckCircle2, Send, AlertCircle } from "lucide-react";
 import { doc, getDoc } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
+import type * as LType from "leaflet";
 import { useAuth } from "@/contexts/AuthContext";
-import { subscribeToOrder } from "@/services/orderService";
+import { subscribeToOrder, customerConfirmDelivery, submitReview } from "@/services/orderService";
+import { uploadFileInChunks } from "@/services/chunkUploadService";
+import { validateImageUpload } from "@/lib/validators";
 import type { Order } from "@/types/order";
 import { STATUS_LABELS, getStatusBadgeClass } from "@/lib/orderHelpers";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -111,10 +114,18 @@ const getSteps = (lang: string) => [
     }
   },
   {
-    title: lang === "en" ? "Order Received" : "Pesanan Diterima",
-    desc: (_status: string, step: number) => {
-      if (step === 6) return lang === "en" ? "Order successfully received. Thank you!" : "Pesanan telah sukses diterima. Terima kasih!";
+    title: lang === "en" ? "Order Delivered" : "Pesanan Terkirim",
+    desc: (status: string, step: number) => {
+      if (status === "DELIVERED") return lang === "en" ? "Courier confirmed order delivery, awaiting your confirmation" : "Kurir menyatakan pesanan terkirim, menunggu konfirmasi Anda";
+      if (step > 6) return lang === "en" ? "Delivery confirmed" : "Pengiriman dikonfirmasi";
       return lang === "en" ? "Awaiting order arrival" : "Menunggu pesanan sampai";
+    }
+  },
+  {
+    title: lang === "en" ? "Completed" : "Selesai",
+    desc: (_status: string, step: number) => {
+      if (step === 7) return lang === "en" ? "Order successfully completed. Thank you!" : "Pesanan telah selesai. Terima kasih!";
+      return lang === "en" ? "Awaiting confirmation and review" : "Menunggu konfirmasi dan ulasan";
     }
   }
 ];
@@ -153,9 +164,176 @@ function getStatusStepIndex(status: string): number {
       return 5;
     case "DELIVERED":
       return 6;
+    case "COMPLETED":
+      return 7;
     default:
       return 1;
   }
+}
+
+const renderFormattedAddress = (address: string) => {
+  if (!address) return null;
+  const parts = address.split(" | ");
+
+  if (parts.length === 7) {
+    const [kabupaten, kecamatan, desa, rtRw, postalCode, mapsUrl, specDetails] = parts;
+    return (
+      <div className="space-y-1 text-xs text-[#374151] font-['Hanken_Grotesk'] leading-relaxed">
+        <p className="font-extrabold text-[#111827]">Desa/Kel. {desa}, RT/RW {rtRw}</p>
+        <p className="font-semibold">Kec. {kecamatan}, {kabupaten}</p>
+        <p className="text-[11px] font-medium text-neutral-500">Kode Pos: {postalCode}</p>
+        <div className="text-[#6B7280] bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 mt-1 text-[11px] leading-relaxed">
+          <span className="font-bold text-[#374151] block text-[9px] uppercase tracking-wide mb-0.5">Detail Patokan</span>
+          {specDetails}
+        </div>
+        {mapsUrl && (
+          <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
+            onClick={(e) => e.stopPropagation()}>
+            <Navigation className="h-3 w-3 text-blue-500 shrink-0" />
+            <span>Buka Link Peta ↗</span>
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  if (parts.length === 3) {
+    const [fullAddr, mapsUrl, specAddr] = parts;
+    return (
+      <div className="space-y-1 text-xs text-[#374151] font-['Hanken_Grotesk'] leading-relaxed">
+        <p className="font-semibold text-[#111827]">{fullAddr}</p>
+        <div className="text-[#6B7280] bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 mt-1 text-[11px] leading-relaxed">
+          <span className="font-bold text-[#374151] block text-[9px] uppercase tracking-wide mb-0.5">Detail Patokan</span>
+          {specAddr}
+        </div>
+        {mapsUrl && (
+          <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
+            onClick={(e) => e.stopPropagation()}>
+            <Navigation className="h-3 w-3 text-blue-500 shrink-0" />
+            <span>Buka Link Peta ↗</span>
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  const mapsUrlMatch = address.match(/https?:\/\/[^\s]+/);
+  const mapsUrl = mapsUrlMatch ? mapsUrlMatch[0] : null;
+  const cleanAddress = mapsUrl ? address.replace(mapsUrl, "").replace(/\s+/g, " ").trim() : address;
+
+  return (
+    <div className="space-y-0.5">
+      {cleanAddress && <p className="text-xs text-[#374151] leading-relaxed font-medium">{cleanAddress}</p>}
+      {mapsUrl && (
+        <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline cursor-pointer font-['Hanken_Grotesk']"
+          onClick={(e) => e.stopPropagation()}>
+          <Navigation className="h-3 w-3 text-blue-500 shrink-0" />
+          <span>Buka Link Peta ↗</span>
+        </a>
+      )}
+    </div>
+  );
+};
+
+interface CourierProfile {
+  displayName?: string;
+  phoneNumber?: string;
+  photoURL?: string;
+}
+
+function CourierInfoCard({
+  profile,
+  loading,
+  orderId,
+  lang,
+}: {
+  profile: CourierProfile | null;
+  loading: boolean;
+  orderId: string;
+  lang: "id" | "en";
+}) {
+  if (loading) {
+    return (
+      <div className="bg-white rounded-3xl p-5 border border-[#E5E7EB] shadow-[0_1px_3px_rgba(0,0,0,0.04)] flex items-center justify-center py-6">
+        <Loader2 className="h-5 w-5 animate-spin text-[#FBBF24]" />
+        <span className="text-xs text-[#6B7280] font-['Hanken_Grotesk'] ml-2">
+          {lang === "en" ? "Loading courier profile..." : "Memuat profil kurir..."}
+        </span>
+      </div>
+    );
+  }
+
+  if (!profile) return null;
+
+  const shortId = orderId.length > 6 ? orderId.slice(-6).toUpperCase() : orderId.toUpperCase();
+  const cleanPhone = profile.phoneNumber ? profile.phoneNumber.replace(/\D/g, "") : "";
+  const whatsappNumber = cleanPhone.startsWith("0") ? "62" + cleanPhone.slice(1) : cleanPhone;
+  
+  const templateMsg = encodeURIComponent(
+    lang === "en"
+      ? `Hello ${profile.displayName || "Courier"},\n\nI want to ask about my order #${shortId} delivery.`
+      : `Halo Kak ${profile.displayName || "Kurir"},\n\nSaya ingin menanyakan tentang pengantaran pesanan #${shortId} saya.`
+  );
+  const waUrl = `https://wa.me/${whatsappNumber}?text=${templateMsg}`;
+
+  return (
+    <div className="bg-white rounded-3xl p-5 border border-[#E5E7EB] shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
+          {lang === "en" ? "Delivery Courier Info" : "Informasi Kurir Pengantar"}
+        </h3>
+        <span className="text-[10px] font-extrabold text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+          {lang === "en" ? "Courier Assigned" : "Kurir Ditugaskan"}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-3">
+        {profile.photoURL ? (
+          <img
+            src={profile.photoURL}
+            alt={profile.displayName || "Kurir"}
+            className="h-12 w-12 rounded-2xl object-cover border border-[#E5E7EB] shrink-0"
+          />
+        ) : (
+          <div className="h-12 w-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0 text-amber-600 font-extrabold text-lg">
+            {(profile.displayName || "K")[0].toUpperCase()}
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-bold text-[#111827] truncate">
+            {profile.displayName || (lang === "en" ? "Courier" : "Kurir")}
+          </p>
+          <p className="text-[10px] text-[#6B7280] font-['Hanken_Grotesk'] font-medium">
+            {lang === "en" ? "Official Al-Umanaa Courier" : "Kurir Resmi Al-Umanaa"}
+          </p>
+        </div>
+      </div>
+
+      {profile.phoneNumber && (
+        <div className="flex gap-2 pt-1">
+          <a
+            href={`tel:${profile.phoneNumber}`}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 border border-[#D1D5DB] rounded-xl text-xs font-bold text-[#374151] hover:bg-[#F9FAFB] transition cursor-pointer"
+          >
+            <Phone className="h-3.5 w-3.5 text-[#6B7280]" />
+            <span>{lang === "en" ? "Call" : "Hubungi"}</span>
+          </a>
+          <a
+            href={waUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-[#10B981] hover:bg-[#059669] rounded-xl text-xs font-bold text-white transition cursor-pointer"
+          >
+            <MessageCircle className="h-3.5 w-3.5 text-white" />
+            <span>WhatsApp</span>
+          </a>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── DYNAMIC LEAFLET COURIER TRACKING MAP ───────────────────────
@@ -206,10 +384,10 @@ function CourierTrackingMap({
   customerLng?: number | null;
 }) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
-  const courierMarkerRef = useRef<any>(null);
-  const polylineRef = useRef<any>(null);
-  const destMarkerRef = useRef<any>(null);
+  const mapRef = useRef<LType.Map | null>(null);
+  const courierMarkerRef = useRef<LType.Marker | null>(null);
+  const polylineRef = useRef<LType.Polyline | null>(null);
+  const destMarkerRef = useRef<LType.Marker | null>(null);
   const routeRef = useRef<[number, number][]>([]);
 
   // Determine destination coordinates
@@ -220,7 +398,7 @@ function CourierTrackingMap({
   // Initialize map once
   useEffect(() => {
     if (!mapContainerRef.current) return;
-    const L = (window as any).L;
+    const L = (window as unknown as { L: typeof LType }).L;
     if (!L) return;
 
     if (!mapRef.current) {
@@ -284,13 +462,14 @@ function CourierTrackingMap({
 
   // Update route + destination marker when customer location changes
   useEffect(() => {
-    const L = (window as any).L;
+    const L = (window as unknown as { L: typeof LType }).L;
     if (!L || !mapRef.current || !polylineRef.current || !destMarkerRef.current) return;
 
-    const newRoute = buildRoute(ORIGIN, dest);
+    const destCoord: [number, number] = [destLat, destLng];
+    const newRoute = buildRoute(ORIGIN, destCoord);
     routeRef.current = newRoute;
     polylineRef.current.setLatLngs(newRoute);
-    destMarkerRef.current.setLatLng(dest);
+    destMarkerRef.current.setLatLng(destCoord);
     mapRef.current.fitBounds(newRoute, { padding: [40, 40] });
   }, [destLat, destLng]);
 
@@ -643,6 +822,169 @@ export function OrderDetailPage() {
   const [loadingProof, setLoadingProof] = useState(false);
   const progressRef = useRef<HTMLDivElement>(null);
 
+  const [courierProfile, setCourierProfile] = useState<{ displayName?: string; phoneNumber?: string; photoURL?: string } | null>(null);
+  const [loadingCourier, setLoadingCourier] = useState(false);
+
+  // Delivery confirm & review states
+  const [confirming, setConfirming] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [hoveredRating, setHoveredRating] = useState(0);
+  const [reviewText, setReviewText] = useState("");
+  const [reviewPhotoFile, setReviewPhotoFile] = useState<File | null>(null);
+  const [reviewPhotoPreview, setReviewPhotoPreview] = useState<string | null>(null);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewUploadProgress, setReviewUploadProgress] = useState(0);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewPhotoSrc, setReviewPhotoSrc] = useState<string | null>(null);
+  const [loadingReviewPhoto, setLoadingReviewPhoto] = useState(false);
+
+  const handleConfirmDelivery = async () => {
+    if (!order) return;
+    setConfirming(true);
+    try {
+      await customerConfirmDelivery(order.id);
+    } catch (err) {
+      console.error("Gagal mengonfirmasi penerimaan pesanan:", err);
+      alert(lang === "en" ? "Failed to confirm delivery. Please try again." : "Gagal mengonfirmasi pengiriman. Silakan coba lagi.");
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const handleReviewFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const validation = validateImageUpload(file.type, file.size);
+    if (!validation.accepted) {
+      if (validation.reason === "mime") {
+        setReviewError(lang === "en" ? "Allowed types: JPG, PNG, WebP." : "MIME tipe tidak diijinkan. Gunakan JPG, PNG, atau WebP.");
+      } else {
+        setReviewError(lang === "en" ? "File size limit: 15 MB." : "Ukuran file terlalu besar. Maksimal 15 MB.");
+      }
+      return;
+    }
+    setReviewPhotoFile(file);
+    setReviewPhotoPreview(URL.createObjectURL(file));
+    setReviewError(null);
+  };
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    if (rating === 0) {
+      setReviewError(lang === "en" ? "Please select a rating (1-5 stars)." : "Silakan pilih rating (1-5 bintang).");
+      return;
+    }
+    setSubmittingReview(true);
+    setReviewError(null);
+    try {
+      let photoId = "";
+      if (reviewPhotoFile) {
+        const result = await uploadFileInChunks(reviewPhotoFile, {
+          collection: "delivery_files",
+          orderId: order.id,
+          onProgress: (p) => setReviewUploadProgress(Math.round(p.fraction * 100)),
+        });
+        photoId = "delivery_files/" + result.fileId;
+      }
+      await submitReview(order.id, rating, reviewText, photoId);
+      // Reset review form state
+      setRating(0);
+      setReviewText("");
+      setReviewPhotoFile(null);
+      setReviewPhotoPreview(null);
+    } catch (err) {
+      console.error("Gagal mengirim ulasan:", err);
+      setReviewError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmittingReview(false);
+      setReviewUploadProgress(0);
+    }
+  };
+
+  // Load review photo chunks if review contains a photo
+  useEffect(() => {
+    const photoId = order?.reviewPhotoId;
+    if (!photoId) {
+      setReviewPhotoSrc(null);
+      return;
+    }
+
+    const loadReviewPhoto = async () => {
+      setLoadingReviewPhoto(true);
+      try {
+        const fileId = photoId.replace("delivery_files/", "");
+        const parentRef = doc(db, "delivery_files", fileId);
+        const parentSnap = await getDoc(parentRef);
+        
+        if (parentSnap.exists()) {
+          const meta = parentSnap.data();
+          const totalChunks = meta.totalChunks || 0;
+          
+          const chunkPromises = [];
+          for (let i = 0; i < totalChunks; i++) {
+            const chunkRef = doc(db, "delivery_files", fileId, "chunks", String(i));
+            chunkPromises.push(getDoc(chunkRef));
+          }
+          const chunkSnaps = await Promise.all(chunkPromises);
+          
+          let fullDataUri = "";
+          for (const chunkSnap of chunkSnaps) {
+            if (chunkSnap.exists()) {
+              fullDataUri += chunkSnap.data().data || "";
+            }
+          }
+          setReviewPhotoSrc(fullDataUri);
+        }
+      } catch (err) {
+        console.error("Gagal memuat foto ulasan:", err);
+      } finally {
+        setLoadingReviewPhoto(false);
+      }
+    };
+
+    loadReviewPhoto();
+  }, [order?.reviewPhotoId]);
+
+  // Fetch courier profile details for display
+  useEffect(() => {
+    const courierId = order?.assignedCourierId;
+    if (!courierId) {
+      setCourierProfile(null);
+      return;
+    }
+
+    const loadCourierProfile = async () => {
+      setLoadingCourier(true);
+      try {
+        const courierRef = doc(db, "users", courierId);
+        const courierSnap = await getDoc(courierRef);
+        if (courierSnap.exists()) {
+          const data = courierSnap.data();
+          setCourierProfile({
+            displayName: data.displayName || "",
+            phoneNumber: data.phoneNumber || "",
+            photoURL: data.photoURL || "",
+          });
+        } else {
+          // Fallback if the assignedCourierId is not a doc ID or doesn't exist (e.g. legacy name string)
+          setCourierProfile({
+            displayName: courierId,
+          });
+        }
+      } catch (err) {
+        console.error("Gagal memuat profil kurir:", err);
+        setCourierProfile({
+          displayName: courierId,
+        });
+      } finally {
+        setLoadingCourier(false);
+      }
+    };
+
+    loadCourierProfile();
+  }, [order?.assignedCourierId]);
+
   // Dynamic Base64 Chunk Assembler for Firestore direct storage (Requirement 7.6–7.7)
   useEffect(() => {
     const proofFileId = order?.paymentProofFileId;
@@ -718,7 +1060,7 @@ export function OrderDetailPage() {
 
   useEffect(() => {
     if (progressRef.current) {
-      const widthVal = `${Math.min(84, Math.max(0, (currentStepIndex - 1) * 16.8))}%`;
+      const widthVal = `${Math.min(84, Math.max(0, (currentStepIndex - 1) * 14))}%`;
       progressRef.current.style.width = widthVal;
     }
   }, [currentStepIndex]);
@@ -840,8 +1182,8 @@ export function OrderDetailPage() {
 
                     // Short label mappings for horizontal layout to avoid squishing
                     const shortLabels = lang === "en" 
-                      ? ["Created", "Pay", "Kitchen", "Ready", "Ship", "Done"]
-                      : ["Dibuat", "Bayar", "Dapur", "Siap", "Kirim", "Selesai"];
+                      ? ["Created", "Pay", "Kitchen", "Ready", "Ship", "Arrived", "Done"]
+                      : ["Dibuat", "Bayar", "Dapur", "Siap", "Kirim", "Sampai", "Selesai"];
 
                     return (
                       <div key={idx} className="flex flex-col items-center flex-1 text-center">
@@ -868,7 +1210,7 @@ export function OrderDetailPage() {
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">{t.currentStatus}</span>
                   <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                    {t.stepProgress.replace("{current}", String(currentStepIndex)).replace("{total}", "6")}
+                    {t.stepProgress.replace("{current}", String(currentStepIndex)).replace("{total}", "7")}
                   </span>
                 </div>
                 <h4 className="font-bold text-[#111827] text-sm pt-0.5">
@@ -888,6 +1230,230 @@ export function OrderDetailPage() {
             {/* REAL-TIME ESTIMATED courier DELIVERY COUNTDOWN FOR OUT_FOR_DELIVERY */}
             {order.status === "OUT_FOR_DELIVERY" && (
               <CustomerDeliveryCountdown order={order} />
+            )}
+
+            {/* DELIVERED state: Delivery Confirmation Banner */}
+            {order.status === "DELIVERED" && (
+              <div className="bg-emerald-50/50 border border-emerald-200 rounded-3xl p-5 shadow-[0_4px_12px_rgba(16,185,129,0.08)] space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-emerald-950">
+                      {lang === "en" ? "Order Has Arrived!" : "Pesanan Anda Sudah Sampai!"}
+                    </h4>
+                    <p className="text-xs text-emerald-700 font-['Hanken_Grotesk'] mt-0.5">
+                      {lang === "en" 
+                        ? "Please verify and confirm that you have received your order." 
+                        : "Silakan periksa dan konfirmasi bahwa barang sudah Anda terima dengan baik."}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleConfirmDelivery}
+                  disabled={confirming}
+                  className="w-full min-h-11 flex items-center justify-center gap-2 bg-[#10B981] hover:bg-[#059669] text-white text-xs font-bold rounded-2xl shadow-md transition disabled:opacity-50 cursor-pointer"
+                >
+                  {confirming ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-white" />
+                  ) : (
+                    <span>{lang === "en" ? "Confirm Received" : "Konfirmasi Barang Diterima"}</span>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* COMPLETED state: Review submission form / details */}
+            {order.status === "COMPLETED" && (
+              <div className="bg-white rounded-3xl p-5 border border-[#E5E7EB] shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-4">
+                {order.rating ? (
+                  /* Show submitted review */
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
+                        {lang === "en" ? "Your Review" : "Ulasan Anda"}
+                      </h4>
+                      <span className="text-[10px] text-neutral-400 font-['Hanken_Grotesk']">
+                        {order.reviewedAt ? new Date(order.reviewedAt).toLocaleDateString(lang === "en" ? "en" : "id") : ""}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`h-5 w-5 ${
+                            star <= (order.rating ?? 0)
+                              ? "fill-[#FBBF24] text-[#FBBF24]"
+                              : "text-neutral-200"
+                          }`}
+                        />
+                      ))}
+                    </div>
+
+                    {order.review && (
+                      <p className="text-xs text-[#374151] italic leading-relaxed font-['Hanken_Grotesk'] bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3">
+                        "{order.review}"
+                      </p>
+                    )}
+
+                    {order.reviewPhotoId && (
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-neutral-400 block font-['Hanken_Grotesk'] uppercase tracking-wider">Foto Ulasan</span>
+                        <div className="relative border border-[#E5E7EB] rounded-2xl overflow-hidden bg-[#F3F4F6] aspect-video max-w-xs flex items-center justify-center">
+                          {loadingReviewPhoto ? (
+                            <Loader2 className="h-5 w-5 animate-spin text-[#FBBF24]" />
+                          ) : reviewPhotoSrc ? (
+                            <img
+                              src={reviewPhotoSrc}
+                              alt="Foto Ulasan"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center p-4">
+                              <FileImage className="h-6 w-6 text-[#9CA3AF] mb-1" />
+                              <span className="text-[10px] text-neutral-400 font-['Hanken_Grotesk']">Foto gagal dimuat</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Show review form */
+                  <form onSubmit={handleSubmitReview} className="space-y-4">
+                    <div className="space-y-1">
+                      <h4 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
+                        {lang === "en" ? "Review Your Order" : "Berikan Ulasan Anda"}
+                      </h4>
+                      <p className="text-[11px] text-[#6B7280] font-['Hanken_Grotesk'] leading-relaxed">
+                        {lang === "en" 
+                          ? "Rate your experience to help us improve." 
+                          : "Bagikan pengalaman belanja Anda untuk membantu kami menjadi lebih baik."}
+                      </p>
+                    </div>
+
+                    {/* Star selection */}
+                    <div className="flex items-center gap-2 py-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setRating(star)}
+                          onMouseEnter={() => setHoveredRating(star)}
+                          onMouseLeave={() => setHoveredRating(0)}
+                          className="p-1 focus:outline-none transition-transform hover:scale-110 cursor-pointer"
+                          aria-label={lang === "en" ? `Rate ${star} star${star > 1 ? "s" : ""}` : `Beri rating ${star} bintang`}
+                          title={lang === "en" ? `Rate ${star} star${star > 1 ? "s" : ""}` : `Beri rating ${star} bintang`}
+                        >
+                          <Star
+                            className={`h-7 w-7 ${
+                              star <= (hoveredRating || rating)
+                                ? "fill-[#FBBF24] text-[#FBBF24]"
+                                : "text-neutral-300"
+                            }`}
+                          />
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Review text comment */}
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-bold text-[#374151] font-['Hanken_Grotesk']">
+                        {lang === "en" ? "Comment (Optional)" : "Komentar / Ulasan (Opsional)"}
+                      </label>
+                      <textarea
+                        value={reviewText}
+                        onChange={(e) => setReviewText(e.target.value)}
+                        placeholder={lang === "en" ? "How was the service, delivery, and food?" : "Bagaimana rasa makanan, kecepatan pengiriman, dan pelayanan kurir?"}
+                        rows={3}
+                        className="w-full text-xs p-3 border border-[#D1D5DB] rounded-2xl focus:ring-1 focus:ring-amber-400 focus:outline-none placeholder-neutral-400 font-['Hanken_Grotesk'] resize-none leading-relaxed"
+                      />
+                    </div>
+
+                    {/* Optional Photo Upload */}
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-bold text-[#374151] font-['Hanken_Grotesk']">
+                        {lang === "en" ? "Add Photo (Optional)" : "Tambahkan Foto (Opsional)"}
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <label className="inline-flex min-h-9 px-4 bg-white border border-[#D1D5DB] rounded-xl items-center text-xs font-bold text-[#374151] hover:bg-[#F9FAFB] cursor-pointer transition">
+                          <Camera className="h-4 w-4 text-[#6B7280] mr-1.5 shrink-0" />
+                          <span>{lang === "en" ? "Choose Photo" : "Pilih Foto"}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleReviewFileChange}
+                            className="hidden"
+                          />
+                        </label>
+                        {reviewPhotoPreview && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReviewPhotoFile(null);
+                              setReviewPhotoPreview(null);
+                            }}
+                            className="text-[10px] font-bold text-red-500 hover:underline cursor-pointer"
+                          >
+                            {lang === "en" ? "Remove" : "Hapus"}
+                          </button>
+                        )}
+                      </div>
+                      
+                      {reviewPhotoPreview && (
+                        <div className="relative border border-[#E5E7EB] rounded-2xl overflow-hidden bg-[#F3F4F6] aspect-video max-w-xs mt-2">
+                          <img
+                            src={reviewPhotoPreview}
+                            alt="Preview ulasan"
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {reviewError && (
+                      <div className="bg-red-50 border border-red-200 text-red-700 p-2.5 rounded-2xl text-[11px] font-medium flex items-center gap-1.5">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {reviewError}
+                      </div>
+                    )}
+
+                    {submittingReview && reviewUploadProgress > 0 && (
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[10px] text-neutral-500 font-bold font-['Hanken_Grotesk']">
+                          <span>{lang === "en" ? "Uploading photo..." : "Mengunggah foto..."}</span>
+                          <span>{reviewUploadProgress}%</span>
+                        </div>
+                        <div className="w-full bg-[#E5E7EB] h-1.5 rounded-full overflow-hidden">
+                          <div
+                            ref={(el) => {
+                              if (el) el.style.width = `${reviewUploadProgress}%`;
+                            }}
+                            className="bg-[#F59E0B] h-full transition-all duration-300"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={submittingReview}
+                      className="w-full min-h-11 flex items-center justify-center gap-2 bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-extrabold text-[#111827] rounded-2xl shadow-md transition disabled:opacity-50 cursor-pointer"
+                    >
+                      {submittingReview ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-[#111827]" />
+                      ) : (
+                        <>
+                          <Send className="h-4 w-4" />
+                          <span>{lang === "en" ? "Submit Review" : "Kirim Ulasan"}</span>
+                        </>
+                      )}
+                    </button>
+                  </form>
+                )}
+              </div>
             )}
 
             {/* Product Items List Card */}
@@ -1004,7 +1570,7 @@ export function OrderDetailPage() {
                 <MapPin className="h-5 w-5 text-[#9CA3AF] shrink-0" />
                 <div>
                   <span className="font-bold block text-[#111827] mb-0.5">{t.deliveryAddress}</span>
-                  <p className="leading-relaxed">{order.deliveryAddress}</p>
+                  {renderFormattedAddress(order.deliveryAddress)}
                 </div>
               </div>
 
@@ -1016,6 +1582,16 @@ export function OrderDetailPage() {
                 </div>
               </div>
             </div>
+
+            {/* Courier Info Card */}
+            {order.assignedCourierId && (
+              <CourierInfoCard
+                profile={courierProfile}
+                loading={loadingCourier}
+                orderId={order.id}
+                lang={lang}
+              />
+            )}
           </div>
         </div>
       </div>

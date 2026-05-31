@@ -40,11 +40,12 @@ import { PaymentProofUploadPage } from "@/storefront/pages/checkout/PaymentProof
 import { OrderListPage } from "@/storefront/pages/OrderListPage";
 import { OrderDetailPage } from "@/storefront/pages/OrderDetailPage";
 import { HelpCenterPage } from "@/storefront/pages/HelpCenterPage";
+import { TestimoniPage } from "@/storefront/pages/TestimoniPage";
 import { NotificationsPage } from "@/storefront/pages/NotificationsPage";
 import { ProfilePage } from "@/storefront/pages/ProfilePage";
+import { CategoryPage } from "@/storefront/pages/CategoryPage";
 import {
   CategoryIndexStub,
-  CategoryPageStub,
 } from "@/storefront/pages/stubs";
 
 interface ProtectedProps {
@@ -164,6 +165,7 @@ function ShelledRoute({
       userName={profile?.displayName ?? user?.displayName ?? undefined}
       userEmail={user?.email ?? undefined}
       userRole={profile?.role}
+      userPhotoUrl={profile?.photoURL ?? user?.photoURL ?? undefined}
       onSignOut={requestSignOut}
     >
       {children}
@@ -224,7 +226,7 @@ function RoutesTree() {
         path="/category/:name"
         element={
           <Storefront>
-            <CategoryPageStub />
+            <CategoryPage />
           </Storefront>
         }
       />
@@ -297,6 +299,14 @@ function RoutesTree() {
         element={
           <Storefront>
             <HelpCenterPage />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/testimoni"
+        element={
+          <Storefront>
+            <TestimoniPage />
           </Storefront>
         }
       />
@@ -390,7 +400,7 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Delivery"
-              allowedRoles={["distribusi"]}
+              allowedRoles={["kurir"]}
             >
               <DeliveryPage />
             </ShelledRoute>
@@ -421,6 +431,7 @@ function RoutesTree() {
                 "monitoring",
                 "tim_produksi",
                 "distribusi",
+                "kurir",
                 "pelanggan",
               ]}
             >

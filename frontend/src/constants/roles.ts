@@ -31,6 +31,9 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
    */
   distribusi: [
     "/distribusi/dispatch",
+  ],
+
+  kurir: [
     "/distribusi/delivery",
   ],
 
@@ -49,6 +52,7 @@ export const ADMIN_SHELL_ROLES = [
   "monitoring",
   "tim_produksi",
   "distribusi",
+  "kurir",
 ] as const;
 
 /**
@@ -60,5 +64,6 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   monitoring: "/admin/dashboard",
   tim_produksi: "/admin/production",
   distribusi: "/distribusi/dispatch",
+  kurir: "/distribusi/delivery",
   pelanggan: "/",
 };

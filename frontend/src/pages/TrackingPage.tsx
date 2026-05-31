@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { MapPin, Pause, Play } from "lucide-react";
+import { MapPin, Pause, Play, Navigation } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -22,6 +22,73 @@ const courierIcon = new L.DivIcon({
   iconSize: [30, 30],
   iconAnchor: [15, 15],
 });
+
+const renderFormattedAddress = (address: string) => {
+  if (!address) return null;
+  const parts = address.split(" | ");
+
+  if (parts.length === 7) {
+    const [kabupaten, kecamatan, desa, rtRw, postalCode, mapsUrl, specDetails] = parts;
+    return (
+      <div className="space-y-1 text-xs text-[#374151] font-['Hanken_Grotesk'] leading-relaxed">
+        <p className="font-extrabold text-[#111827]">Desa/Kel. {desa}, RT/RW {rtRw}</p>
+        <p className="font-semibold">Kec. {kecamatan}, {kabupaten}</p>
+        <p className="text-[11px] font-medium text-neutral-500">Kode Pos: {postalCode}</p>
+        <div className="text-[#6B7280] bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 mt-1 text-[11px] leading-relaxed">
+          <span className="font-bold text-[#374151] block text-[9px] uppercase tracking-wide mb-0.5">Detail Patokan</span>
+          {specDetails}
+        </div>
+        {mapsUrl && (
+          <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
+            onClick={(e) => e.stopPropagation()}>
+            <Navigation className="h-3 w-3 text-blue-500 shrink-0" />
+            <span>Buka Link Peta ↗</span>
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  if (parts.length === 3) {
+    const [fullAddr, mapsUrl, specAddr] = parts;
+    return (
+      <div className="space-y-1 text-xs text-[#374151] font-['Hanken_Grotesk'] leading-relaxed">
+        <p className="font-semibold text-[#111827]">{fullAddr}</p>
+        <div className="text-[#6B7280] bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 mt-1 text-[11px] leading-relaxed">
+          <span className="font-bold text-[#374151] block text-[9px] uppercase tracking-wide mb-0.5">Detail Patokan</span>
+          {specAddr}
+        </div>
+        {mapsUrl && (
+          <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
+            onClick={(e) => e.stopPropagation()}>
+            <Navigation className="h-3 w-3 text-blue-500 shrink-0" />
+            <span>Buka Link Peta ↗</span>
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  const mapsUrlMatch = address.match(/https?:\/\/[^\s]+/);
+  const mapsUrl = mapsUrlMatch ? mapsUrlMatch[0] : null;
+  const cleanAddress = mapsUrl ? address.replace(mapsUrl, "").replace(/\s+/g, " ").trim() : address;
+
+  return (
+    <div className="space-y-0.5">
+      {cleanAddress && <p className="text-xs text-[#374151] leading-relaxed font-medium">{cleanAddress}</p>}
+      {mapsUrl && (
+        <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline cursor-pointer font-['Hanken_Grotesk']"
+          onClick={(e) => e.stopPropagation()}>
+          <Navigation className="h-3 w-3 text-blue-500 shrink-0" />
+          <span>Buka Link Peta ↗</span>
+        </a>
+      )}
+    </div>
+  );
+};
 
 export function TrackingPage() {
   const { user } = useAuth();
@@ -97,9 +164,7 @@ export function TrackingPage() {
                     <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm font-semibold text-[#111827]">
                       {o.customerName}
                     </p>
-                    <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-[#6B7280]">
-                      {o.deliveryAddress}
-                    </p>
+                    {renderFormattedAddress(o.deliveryAddress)}
                   </div>
                   <StatusBadge status={o.status} />
                   {isActive ? (
@@ -134,12 +199,12 @@ export function TrackingPage() {
               Current position
             </h3>
           </div>
-          <div style={{ height: 380 }}>
+          <div className="h-[380px]">
             <MapContainer
               center={pos ?? [-6.2088, 106.8456]}
               zoom={pos ? 16 : 12}
               scrollWheelZoom={false}
-              style={{ width: "100%", height: "100%" }}
+              className="w-full h-full"
             >
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, ArrowLeft, ClipboardList, AlertCircle, RefreshCw } from "lucide-react";
 
@@ -58,7 +58,7 @@ export function OrderListPage() {
   const [nextCursor, setNextCursor] = useState<string | null | undefined>(undefined);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const load = async (cursor?: string) => {
+  const load = useCallback(async (cursor?: string) => {
     if (!cursor) {
       setLoading(true);
       setError(null);
@@ -102,13 +102,13 @@ export function OrderListPage() {
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, [t.timeoutError, t.fetchError]);
 
   useEffect(() => {
     if (user) {
       load();
     }
-  }, [user]);
+  }, [user, load]);
 
   if (!user) {
     return (

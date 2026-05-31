@@ -161,7 +161,17 @@ export function HomePage() {
     if (!isSearching) return state.products;
     const needle = trimmedQuery.toLowerCase();
     return state.products
-      .filter((item) => item.itemName.toLowerCase().includes(needle))
+      .filter((item) => {
+        const nameMatch = item.itemName.toLowerCase().includes(needle);
+        const categoryMatch = item.category?.toLowerCase().includes(needle);
+        
+        // Match translations of category name (e.g., matching "Sembako" or "Groceries")
+        const transId = translateCategory(item.category || "", "id").toLowerCase();
+        const transEn = translateCategory(item.category || "", "en").toLowerCase();
+        const categoryTransMatch = transId.includes(needle) || transEn.includes(needle);
+
+        return nameMatch || categoryMatch || categoryTransMatch;
+      })
       .sort((a, b) =>
         a.itemName.localeCompare(b.itemName, "id-ID", { sensitivity: "base" }),
       );

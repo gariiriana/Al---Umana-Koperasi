@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft, Camera, AlertCircle, Loader2 } from "lucide-react";
+import { MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft, Camera, AlertCircle, Loader2, Navigation } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeOrders } from "@/services/realtimeService";
@@ -13,6 +13,73 @@ import { doc, updateDoc } from "firebase/firestore";
 import { uploadFileInChunks } from "@/services/chunkUploadService";
 import { validateImageUpload } from "@/lib/validators";
 import { dispatchOrder } from "@/services/orderService";
+
+const renderFormattedAddress = (address: string) => {
+  if (!address) return null;
+  const parts = address.split(" | ");
+
+  if (parts.length === 7) {
+    const [kabupaten, kecamatan, desa, rtRw, postalCode, mapsUrl, specDetails] = parts;
+    return (
+      <div className="space-y-1 text-xs text-[#374151] font-['Hanken_Grotesk'] leading-relaxed">
+        <p className="font-extrabold text-[#111827]">Desa/Kel. {desa}, RT/RW {rtRw}</p>
+        <p className="font-semibold">Kec. {kecamatan}, {kabupaten}</p>
+        <p className="text-[11px] font-medium text-neutral-500">Kode Pos: {postalCode}</p>
+        <div className="text-[#6B7280] bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 mt-1 text-[11px] leading-relaxed">
+          <span className="font-bold text-[#374151] block text-[9px] uppercase tracking-wide mb-0.5">Detail Patokan</span>
+          {specDetails}
+        </div>
+        {mapsUrl && (
+          <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
+            onClick={(e) => e.stopPropagation()}>
+            <Navigation className="h-3 w-3 text-blue-500 shrink-0" />
+            <span>Buka Link Peta ↗</span>
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  if (parts.length === 3) {
+    const [fullAddr, mapsUrl, specAddr] = parts;
+    return (
+      <div className="space-y-1 text-xs text-[#374151] font-['Hanken_Grotesk'] leading-relaxed">
+        <p className="font-semibold text-[#111827]">{fullAddr}</p>
+        <div className="text-[#6B7280] bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 mt-1 text-[11px] leading-relaxed">
+          <span className="font-bold text-[#374151] block text-[9px] uppercase tracking-wide mb-0.5">Detail Patokan</span>
+          {specAddr}
+        </div>
+        {mapsUrl && (
+          <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
+            onClick={(e) => e.stopPropagation()}>
+            <Navigation className="h-3 w-3 text-blue-500 shrink-0" />
+            <span>Buka Link Peta ↗</span>
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  const mapsUrlMatch = address.match(/https?:\/\/[^\s]+/);
+  const mapsUrl = mapsUrlMatch ? mapsUrlMatch[0] : null;
+  const cleanAddress = mapsUrl ? address.replace(mapsUrl, "").replace(/\s+/g, " ").trim() : address;
+
+  return (
+    <div className="space-y-0.5">
+      {cleanAddress && <p className="text-xs text-[#374151] leading-relaxed font-medium">{cleanAddress}</p>}
+      {mapsUrl && (
+        <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline cursor-pointer font-['Hanken_Grotesk']"
+          onClick={(e) => e.stopPropagation()}>
+          <Navigation className="h-3 w-3 text-blue-500 shrink-0" />
+          <span>Buka Link Peta ↗</span>
+        </a>
+      )}
+    </div>
+  );
+};
 
 type DeliveryStep = "list" | "start" | "pic" | "proof";
 
@@ -126,6 +193,15 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
       <p className="text-[#6B7280] leading-relaxed">
         Unggah foto saat kurir akan berangkat dan pilih estimasi waktu perjalanan untuk pesanan <span className="font-bold text-[#111827]">{order.customerName}</span>.
       </p>
+
+      {/* Address Details for Courier */}
+      <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-3 flex gap-2">
+        <MapPin className="h-4 w-4 text-[#6B7280] shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <span className="font-bold text-[#111827] block mb-0.5">Alamat Pengantaran</span>
+          {renderFormattedAddress(order.deliveryAddress)}
+        </div>
+      </div>
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 p-2.5 rounded-lg font-medium flex items-center gap-1.5">
@@ -256,8 +332,10 @@ export function DeliveryPage() {
     return myDeliveries.find((o) => o.status === "OUT_FOR_DELIVERY") ?? null;
   }, [myDeliveries]);
 
+  const activeEnRouteId = activeEnRouteOrder?.id;
+
   useEffect(() => {
-    if (!activeEnRouteOrder) return;
+    if (!activeEnRouteId) return;
 
     if (!navigator.geolocation) {
       console.warn("Geolocation is not supported by this browser.");
@@ -268,7 +346,7 @@ export function DeliveryPage() {
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {
-          await updateDoc(doc(db, "orders", activeEnRouteOrder.id), {
+          await updateDoc(doc(db, "orders", activeEnRouteId), {
             courierLat: latitude,
             courierLng: longitude,
           });
@@ -287,7 +365,7 @@ export function DeliveryPage() {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [activeEnRouteOrder?.id]);
+  }, [activeEnRouteId]);
 
   const active = activeId ? orders.find((o) => o.id === activeId) ?? null : null;
 
@@ -407,7 +485,7 @@ export function DeliveryPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.05, duration: 0.2 }}
                   >
-                    <button
+                    <div
                       onClick={() => open(o)}
                       className="w-full text-left bg-white rounded-lg border border-[#E5E7EB] shadow-xs overflow-hidden hover:border-[#FBBF24] hover:shadow-sm transition-all active:scale-[0.99] cursor-pointer"
                     >
@@ -454,11 +532,9 @@ export function DeliveryPage() {
                                 <Package className="h-3 w-3" />{o.items.length} item
                               </span>
                             </div>
-                            <div className="flex items-center gap-1 mt-1">
-                              <MapPin className="h-3 w-3 text-[#9CA3AF] shrink-0" />
-                              <span className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] truncate">
-                                {o.deliveryAddress}
-                              </span>
+                            <div className="flex items-start gap-1 mt-1">
+                              <MapPin className="h-3 w-3 text-[#9CA3AF] shrink-0 mt-0.5" />
+                              {renderFormattedAddress(o.deliveryAddress)}
                             </div>
                           </div>
 
@@ -466,7 +542,7 @@ export function DeliveryPage() {
                           <ChevronRight className="h-5 w-5 text-[#D1D5DB] shrink-0" />
                         </div>
                       </div>
-                    </button>
+                    </div>
                   </motion.div>
                 ))}
               </AnimatePresence>

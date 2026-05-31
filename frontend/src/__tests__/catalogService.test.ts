@@ -57,6 +57,7 @@ const mockDocSnap = (id: string, data: unknown) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 interface MockQuery {
@@ -104,6 +105,20 @@ describe("catalogService (Firestore direct)", () => {
       );
       expect(categoryFilter).toBeUndefined();
     });
+
+    it("uses demo storage when demo products are available", async () => {
+      const demoItems = [
+        makeItem({ id: "demo-1", itemName: "Demo Beras", category: "Sembako" }),
+      ];
+      vi.spyOn(Storage.prototype, "getItem").mockReturnValue(
+        JSON.stringify(demoItems)
+      );
+
+      const result = await listAvailableProducts();
+
+      expect(result).toEqual(demoItems);
+      expect(mockGetDocs).not.toHaveBeenCalled();
+    });
   });
 
   describe("getProduct", () => {
@@ -120,6 +135,20 @@ describe("catalogService (Firestore direct)", () => {
       await expect(getProduct("abc/xyz")).rejects.toThrow(
         /Invalid document reference/
       );
+    });
+
+    it("retrieves product from demo storage when available", async () => {
+      const demoItems = [
+        makeItem({ id: "demo-1", itemName: "Demo Beras", category: "Sembako" }),
+      ];
+      vi.spyOn(Storage.prototype, "getItem").mockReturnValue(
+        JSON.stringify(demoItems)
+      );
+
+      const result = await getProduct("demo-1");
+
+      expect(result).toEqual(demoItems[0]);
+      expect(mockGetDoc).not.toHaveBeenCalled();
     });
   });
 
@@ -138,6 +167,21 @@ describe("catalogService (Firestore direct)", () => {
       const result = await listCategories();
 
       expect(result).toEqual(["Makanan", "Minuman"]);
+    });
+
+    it("returns unique sorted categories from demo storage when available", async () => {
+      const demoItems = [
+        makeItem({ id: "demo-1", category: "Sembako" }),
+        makeItem({ id: "demo-2", category: "Minuman" }),
+      ];
+      vi.spyOn(Storage.prototype, "getItem").mockReturnValue(
+        JSON.stringify(demoItems)
+      );
+
+      const result = await listCategories();
+
+      expect(result).toEqual(["Minuman", "Sembako"]);
+      expect(mockGetDocs).not.toHaveBeenCalled();
     });
   });
 

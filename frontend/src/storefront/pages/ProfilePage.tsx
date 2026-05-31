@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ChangeEvent } from "react";
+import { useState, useEffect, useRef, type ChangeEvent, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   User,
@@ -8,6 +8,9 @@ import {
   Camera,
   Eye,
   EyeOff,
+  Plus,
+  Trash2,
+  Navigation,
 } from "lucide-react";
 import { updateProfile, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
@@ -15,6 +18,11 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/contexts/ToastContext";
+import type { ReverseGeoResult } from "@/components/MapLocationPicker";
+
+const MapLocationPicker = lazy(() =>
+  import("@/components/MapLocationPicker").then((m) => ({ default: m.MapLocationPicker }))
+);
 
 const DICTIONARY = {
   id: {
@@ -169,12 +177,25 @@ const DICTIONARY = {
 
 
 
+interface SavedAddress {
+  id: string;
+  label: string;
+  kabupaten: string;
+  kecamatan: string;
+  desa: string;
+  rtRw: string;
+  postalCode: string;
+  mapsUrl: string;
+  specificDetails: string;
+}
+
 interface ExtendedUserProfile {
   phoneNumber?: string;
   shopName?: string;
   gender?: string;
   birthDate?: string;
   photoURL?: string;
+  savedAddresses?: SavedAddress[];
   notifications?: {
     whatsapp?: boolean;
     promo?: boolean;
@@ -220,9 +241,27 @@ export function ProfilePage() {
   const [photoURL, setPhotoURL] = useState("");
   const [loadingSave, setLoadingSave] = useState(false);
 
-  // Address Form States
-  const [address, setAddress] = useState("");
+  // Address Template States
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [addrLabel, setAddrLabel] = useState("");
+  const [addrKabupaten, setAddrKabupaten] = useState("");
+  const [addrKecamatan, setAddrKecamatan] = useState("");
+  const [addrDesa, setAddrDesa] = useState("");
+  const [addrRtRw, setAddrRtRw] = useState("");
+  const [addrPostalCode, setAddrPostalCode] = useState("");
+  const [addrMapsUrl, setAddrMapsUrl] = useState("");
+  const [addrSpecificDetails, setAddrSpecificDetails] = useState("");
+  const [isAddingNewAddr, setIsAddingNewAddr] = useState(false);
   const [loadingAddress, setLoadingAddress] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+
+  const handleMapLocationSelected = (result: ReverseGeoResult) => {
+    setAddrKabupaten(result.kabupaten);
+    setAddrKecamatan(result.kecamatan);
+    setAddrDesa(result.desa);
+    setAddrPostalCode(result.postalCode);
+    setAddrMapsUrl(result.mapsUrl);
+  };
 
 
 
@@ -245,10 +284,10 @@ export function ProfilePage() {
   useEffect(() => {
     if (profile) {
       setFullName(profile.displayName || "");
-      setAddress(profile.savedDeliveryAddress || "");
       
       // Fallbacks or Firestore extended attributes
       const ext = profile as unknown as ExtendedUserProfile;
+      setSavedAddresses(ext.savedAddresses || []);
       setPhoneNumber(ext.phoneNumber || "");
       setShopName(ext.shopName || "");
       setGender(ext.gender || "");
@@ -317,26 +356,109 @@ export function ProfilePage() {
     }
   };
 
-  // Handle Address Update
-  const handleSaveAddress = async (e: React.FormEvent) => {
+  // Handle Address Addition
+  const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    const trimmedLabel = addrLabel.trim();
+    const trimmedKabupaten = addrKabupaten.trim();
+    const trimmedKecamatan = addrKecamatan.trim();
+    const trimmedDesa = addrDesa.trim();
+    const trimmedRtRw = addrRtRw.trim();
+    const trimmedPostalCode = addrPostalCode.trim();
+    const trimmedMapsUrl = addrMapsUrl.trim();
+    const trimmedSpecificDetails = addrSpecificDetails.trim();
+
+    if (!trimmedLabel || !trimmedKabupaten || !trimmedKecamatan || !trimmedDesa || !trimmedRtRw || !trimmedPostalCode || !trimmedMapsUrl || !trimmedSpecificDetails) {
+      showToast({
+        message: lang === "id" ? "Semua kolom wajib diisi!" : "All fields are required!",
+        variant: "error",
+      });
+      return;
+    }
+
+    if (!trimmedMapsUrl.startsWith("http")) {
+      showToast({
+        message: lang === "id" ? "Link Google Maps harus diawali http/https." : "Google Maps link must start with http/https.",
+        variant: "error",
+      });
+      return;
+    }
+
     setLoadingAddress(true);
 
     try {
+      const newAddress: SavedAddress = {
+        id: Date.now().toString(),
+        label: trimmedLabel,
+        kabupaten: trimmedKabupaten,
+        kecamatan: trimmedKecamatan,
+        desa: trimmedDesa,
+        rtRw: trimmedRtRw,
+        postalCode: trimmedPostalCode,
+        mapsUrl: trimmedMapsUrl,
+        specificDetails: trimmedSpecificDetails,
+      };
+
+      const updated = [...savedAddresses, newAddress];
       const userRef = doc(db, "users", user.uid);
+      
+      const isDefaultEmpty = !profile?.savedDeliveryAddress;
+      const combinedFormat = `${trimmedKabupaten} | ${trimmedKecamatan} | ${trimmedDesa} | ${trimmedRtRw} | ${trimmedPostalCode} | ${trimmedMapsUrl} | ${trimmedSpecificDetails}`;
+
       await updateDoc(userRef, {
-        savedDeliveryAddress: address
+        savedAddresses: updated,
+        ...(isDefaultEmpty ? { savedDeliveryAddress: combinedFormat } : {})
       });
 
+      setSavedAddresses(updated);
       showToast({
-        message: t.addressSuccess,
+        message: lang === "id" ? "Alamat baru berhasil ditambahkan!" : "New address added successfully!",
+        variant: "success",
+      });
+
+      setAddrLabel("");
+      setAddrKabupaten("");
+      setAddrKecamatan("");
+      setAddrDesa("");
+      setAddrRtRw("");
+      setAddrPostalCode("");
+      setAddrMapsUrl("");
+      setAddrSpecificDetails("");
+      setIsAddingNewAddr(false);
+    } catch (err) {
+      console.error(err);
+      showToast({
+        message: t.saveError,
+        variant: "error",
+      });
+    } finally {
+      setLoadingAddress(false);
+    }
+  };
+
+  // Handle Address Deletion
+  const handleDeleteAddress = async (id: string) => {
+    if (!user) return;
+    if (!window.confirm(lang === "id" ? "Apakah Anda yakin ingin menghapus alamat ini?" : "Are you sure you want to delete this address?")) return;
+
+    setLoadingAddress(true);
+    try {
+      const updated = savedAddresses.filter(addr => addr.id !== id);
+      const userRef = doc(db, "users", user.uid);
+      await updateDoc(userRef, {
+        savedAddresses: updated
+      });
+      setSavedAddresses(updated);
+      showToast({
+        message: lang === "id" ? "Alamat berhasil dihapus!" : "Address deleted successfully!",
         variant: "success",
       });
     } catch (err) {
       console.error(err);
       showToast({
-        message: t.saveError,
+        message: lang === "id" ? "Gagal menghapus alamat." : "Failed to delete address.",
         variant: "error",
       });
     } finally {
@@ -726,7 +848,28 @@ export function ProfilePage() {
                         id="phoneNumber"
                         type="tel"
                         value={phoneNumber}
-                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
+                        onKeyDown={(e) => {
+                          if (
+                            !/[0-9]/.test(e.key) &&
+                            e.key !== "Backspace" &&
+                            e.key !== "Delete" &&
+                            e.key !== "Tab" &&
+                            e.key !== "Escape" &&
+                            e.key !== "Enter" &&
+                            e.key !== "ArrowLeft" &&
+                            e.key !== "ArrowRight" &&
+                            e.key !== "ArrowUp" &&
+                            e.key !== "ArrowDown" &&
+                            e.key !== "Home" &&
+                            e.key !== "End" &&
+                            !e.metaKey &&
+                            !e.ctrlKey &&
+                            !e.altKey
+                          ) {
+                            e.preventDefault();
+                          }
+                        }}
                         placeholder="e.g. 08123456789"
                         className="w-full text-sm font-semibold bg-white border border-[#D1D5DB] rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition-all"
                       />
@@ -848,34 +991,329 @@ export function ProfilePage() {
             {/* ── TAB 3: ALAMAT ────────────────────────────────────── */}
             {activeTab === "address" && (
               <div>
-                <div className="pb-5 border-b border-neutral-100">
-                  <h2 className="font-['Manrope',system-ui,sans-serif] text-xl font-extrabold text-[#111827]">{t.addressTitle}</h2>
-                  <p className="text-sm text-[#6B7280] mt-1">{t.addressSubtitle}</p>
+                <div className="pb-5 border-b border-neutral-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <h2 className="font-['Manrope',system-ui,sans-serif] text-xl font-extrabold text-[#111827]">
+                      {lang === "id" ? "Alamat Saya" : "My Addresses"}
+                    </h2>
+                    <p className="text-sm text-[#6B7280] mt-1">
+                      {lang === "id" ? "Kelola daftar alamat pengiriman untuk mempercepat proses checkout belanja Anda" : "Manage your delivery addresses to speed up your checkout process"}
+                    </p>
+                  </div>
+                  {!isAddingNewAddr && (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingNewAddr(true)}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#B45309] hover:bg-[#92400E] text-white text-xs font-bold shadow-sm transition-colors cursor-pointer self-start sm:self-center"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>{lang === "id" ? "Tambah Alamat Baru" : "Add New Address"}</span>
+                    </button>
+                  )}
                 </div>
 
-                <form onSubmit={handleSaveAddress} className="mt-8 space-y-6">
-                  <div>
-                    <label className="text-sm font-bold text-[#4B5563] block mb-2" htmlFor="addressInput">
-                      {t.addressLabel}
-                    </label>
-                    <textarea
-                      id="addressInput"
-                      rows={4}
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder={t.addressPlaceholder}
-                      className="w-full text-sm font-semibold bg-white border border-[#D1D5DB] rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition-all leading-relaxed"
-                    />
-                  </div>
+                {isAddingNewAddr ? (
+                  <form onSubmit={handleAddAddress} className="mt-8 space-y-5 max-w-2xl">
+                    <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-[#111827] flex items-center gap-2 pb-2 border-b border-neutral-100">
+                      <MapPin className="h-4 w-4 text-[#B45309]" />
+                      <span>{lang === "id" ? "Formulir Alamat Baru" : "New Address Form"}</span>
+                    </h3>
 
-                  <button
-                    type="submit"
-                    disabled={loadingAddress}
-                    className="min-h-11 px-8 rounded-2xl bg-[#B45309] hover:bg-[#92400E] text-white text-sm font-bold shadow-md cursor-pointer transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {loadingAddress ? t.saving : t.save}
-                  </button>
-                </form>
+                    {/* Pick from Map button */}
+                    <button
+                      type="button"
+                      onClick={() => setShowMapPicker(true)}
+                      className="w-full flex items-center justify-center gap-2 min-h-12 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-xs md:text-sm font-bold shadow-md transition-all cursor-pointer"
+                    >
+                      <MapPin className="h-4 w-4" />
+                      {lang === "id" ? "📍 Pilih Lokasi di Peta (Auto-Isi Alamat)" : "📍 Pick Location on Map (Auto-Fill Address)"}
+                    </button>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 h-px bg-neutral-200" />
+                      <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest">
+                        {lang === "id" ? "atau isi manual" : "or fill manually"}
+                      </span>
+                      <div className="flex-1 h-px bg-neutral-200" />
+                    </div>
+
+                    {showMapPicker && (
+                      <Suspense fallback={
+                        <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center">
+                          <div className="bg-white rounded-2xl p-6 flex items-center gap-3 shadow-2xl">
+                            <div className="h-5 w-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                            <span className="text-sm font-semibold text-neutral-700">{lang === "id" ? "Memuat peta..." : "Loading map..."}</span>
+                          </div>
+                        </div>
+                      }>
+                        <MapLocationPicker
+                          lang={lang}
+                          onLocationSelected={handleMapLocationSelected}
+                          onClose={() => setShowMapPicker(false)}
+                        />
+                      </Suspense>
+                    )}
+
+                    {/* Label Alamat */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 md:items-center">
+                      <label className="text-xs font-bold text-[#4B5563]" htmlFor="addrLabel">
+                        {lang === "id" ? "Label Alamat" : "Address Label"} <span className="text-red-500">*</span>
+                      </label>
+                      <div className="md:col-span-2">
+                        <input
+                          id="addrLabel"
+                          type="text"
+                          required
+                          placeholder={lang === "id" ? "contoh: Rumah, Kantor, Sekolah" : "e.g. Home, Office, School"}
+                          value={addrLabel}
+                          onChange={(e) => setAddrLabel(e.target.value)}
+                          className="w-full text-xs md:text-sm font-semibold bg-white border border-[#D1D5DB] rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Kabupaten / Kota */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 md:items-center">
+                      <label className="text-xs font-bold text-[#4B5563]" htmlFor="addrKabupaten">
+                        {lang === "id" ? "Kabupaten / Kota" : "District / City"} <span className="text-red-500">*</span>
+                      </label>
+                      <div className="md:col-span-2">
+                        <input
+                          id="addrKabupaten"
+                          type="text"
+                          required
+                          placeholder={lang === "id" ? "contoh: Kabupaten Sukabumi" : "e.g. Sukabumi Regency"}
+                          value={addrKabupaten}
+                          onChange={(e) => setAddrKabupaten(e.target.value)}
+                          className="w-full text-xs md:text-sm font-semibold bg-white border border-[#D1D5DB] rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Kecamatan */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 md:items-center">
+                      <label className="text-xs font-bold text-[#4B5563]" htmlFor="addrKecamatan">
+                        {lang === "id" ? "Kecamatan" : "Subdistrict"} <span className="text-red-500">*</span>
+                      </label>
+                      <div className="md:col-span-2">
+                        <input
+                          id="addrKecamatan"
+                          type="text"
+                          required
+                          placeholder={lang === "id" ? "contoh: Kecamatan Cisaat" : "e.g. Cisaat Subdistrict"}
+                          value={addrKecamatan}
+                          onChange={(e) => setAddrKecamatan(e.target.value)}
+                          className="w-full text-xs md:text-sm font-semibold bg-white border border-[#D1D5DB] rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Desa / Kelurahan */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 md:items-center">
+                      <label className="text-xs font-bold text-[#4B5563]" htmlFor="addrDesa">
+                        {lang === "id" ? "Desa / Kelurahan" : "Village"} <span className="text-red-500">*</span>
+                      </label>
+                      <div className="md:col-span-2">
+                        <input
+                          id="addrDesa"
+                          type="text"
+                          required
+                          placeholder={lang === "id" ? "contoh: Desa Sukamanah" : "e.g. Sukamanah Village"}
+                          value={addrDesa}
+                          onChange={(e) => setAddrDesa(e.target.value)}
+                          className="w-full text-xs md:text-sm font-semibold bg-white border border-[#D1D5DB] rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* RT / RW */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 md:items-center">
+                      <label className="text-xs font-bold text-[#4B5563]" htmlFor="addrRtRw">
+                        {lang === "id" ? "RT / RW" : "RT / RW"} <span className="text-red-500">*</span>
+                      </label>
+                      <div className="md:col-span-2">
+                        <input
+                          id="addrRtRw"
+                          type="text"
+                          required
+                          placeholder={lang === "id" ? "contoh: RT 03/RW 05" : "e.g. RT 03/RW 05"}
+                          value={addrRtRw}
+                          onChange={(e) => setAddrRtRw(e.target.value)}
+                          className="w-full text-xs md:text-sm font-semibold bg-white border border-[#D1D5DB] rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Kode Pos */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 md:items-center">
+                      <label className="text-xs font-bold text-[#4B5563]" htmlFor="addrPostalCode">
+                        {lang === "id" ? "Kode Pos" : "Postal Code"} <span className="text-red-500">*</span>
+                      </label>
+                      <div className="md:col-span-2">
+                        <input
+                          id="addrPostalCode"
+                          type="text"
+                          required
+                          placeholder={lang === "id" ? "contoh: 43152" : "e.g. 43152"}
+                          value={addrPostalCode}
+                          onChange={(e) => setAddrPostalCode(e.target.value)}
+                          className="w-full text-xs md:text-sm font-semibold bg-white border border-[#D1D5DB] rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Link Google Maps */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 md:items-center">
+                      <label className="text-xs font-bold text-[#4B5563]" htmlFor="addrMapsUrl">
+                        {lang === "id" ? "Link Google Maps" : "Google Maps Link"} <span className="text-red-500">*</span>
+                      </label>
+                      <div className="md:col-span-2">
+                        <input
+                          id="addrMapsUrl"
+                          type="text"
+                          required
+                          placeholder={lang === "id" ? "contoh: https://maps.app.goo.gl/..." : "e.g. https://maps.app.goo.gl/..."}
+                          value={addrMapsUrl}
+                          onChange={(e) => setAddrMapsUrl(e.target.value)}
+                          className="w-full text-xs md:text-sm font-semibold bg-white border border-[#D1D5DB] rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition-all"
+                        />
+                        {addrMapsUrl.trim().startsWith("http") && (
+                          <div className="mt-1.5 flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-xl px-3 py-1.5">
+                            <Navigation className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                            <a
+                              href={addrMapsUrl.trim()}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] md:text-xs font-bold text-blue-600 hover:underline transition cursor-pointer"
+                            >
+                              {lang === "id" ? "Buka Link Google Maps Terdeteksi ↗" : "Open Detected Google Maps Link ↗"}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Detail Spesifik & Patokan */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4">
+                      <label className="text-xs font-bold text-[#4B5563] pt-2" htmlFor="addrSpecificDetails">
+                        {lang === "id" ? "Detail Spesifik & Patokan" : "Landmarks & Specific Details"} <span className="text-red-500">*</span>
+                      </label>
+                      <div className="md:col-span-2">
+                        <textarea
+                          id="addrSpecificDetails"
+                          required
+                          rows={3}
+                          placeholder={lang === "id" ? "contoh: Rumah warna cat hijau, pagar hitam, samping warung bakso" : "e.g. Green house paint, black gate, next to meatball stall"}
+                          value={addrSpecificDetails}
+                          onChange={(e) => setAddrSpecificDetails(e.target.value)}
+                          className="w-full text-xs md:text-sm font-semibold bg-white border border-[#D1D5DB] rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition-all resize-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Buttons */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 pt-4">
+                      <div className="hidden md:block" />
+                      <div className="md:col-span-2 flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingNewAddr(false)}
+                          className="flex-1 md:flex-none min-h-11 px-6 rounded-2xl border border-neutral-300 hover:bg-neutral-50 text-neutral-700 text-xs md:text-sm font-bold transition-all cursor-pointer flex items-center justify-center"
+                        >
+                          {lang === "id" ? "Batal" : "Cancel"}
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={loadingAddress}
+                          className="flex-2 md:flex-none min-h-11 px-8 rounded-2xl bg-[#B45309] hover:bg-[#92400E] text-white text-xs md:text-sm font-bold shadow-md cursor-pointer transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                          {loadingAddress ? t.saving : (lang === "id" ? "Tambah Alamat" : "Add Address")}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="mt-8">
+                    {savedAddresses.length === 0 ? (
+                      <div className="bg-neutral-50 rounded-2xl md:rounded-3xl border border-neutral-100 p-8 text-center space-y-4 max-w-lg mx-auto">
+                        <div className="h-12 w-12 rounded-full bg-[#FEF3C7] text-[#B45309] flex items-center justify-center mx-auto shadow-sm">
+                          <MapPin className="h-6 w-6" />
+                        </div>
+                        <h4 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
+                          {lang === "id" ? "Belum Ada Alamat Tersimpan" : "No Saved Addresses Yet"}
+                        </h4>
+                        <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk'] leading-relaxed max-w-sm mx-auto">
+                          {lang === "id" ? "Anda dapat menyimpan beberapa alamat pengiriman di sini untuk proses checkout belanja yang instan dan simpel." : "You can save multiple delivery addresses here for instant and simple checkout."}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingNewAddr(true)}
+                          className="inline-flex min-h-10 px-6 rounded-xl bg-[#B45309] hover:bg-[#92400E] text-white text-xs font-bold transition-colors cursor-pointer items-center justify-center gap-1.5"
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span>{lang === "id" ? "Tambah Alamat Pertama Anda" : "Add Your First Address"}</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {savedAddresses.map((addr) => (
+                          <div
+                            key={addr.id}
+                            className="bg-white border border-neutral-200 hover:border-amber-300 hover:shadow-md rounded-2xl p-4 transition-all duration-200 flex flex-col justify-between gap-4 group"
+                          >
+                            <div className="space-y-2">
+                              {/* Address Label Header */}
+                              <div className="flex items-center justify-between">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF3C7] text-[#B45309] uppercase tracking-wider">
+                                  {addr.label}
+                                </span>
+                                <button
+                                  type="button"
+                                  title="Hapus Alamat"
+                                  onClick={() => handleDeleteAddress(addr.id)}
+                                  className="h-8 w-8 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-full flex items-center justify-center transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+
+                              {/* Structured address details */}
+                              <div className="text-xs text-[#374151] font-['Hanken_Grotesk'] space-y-1 leading-relaxed pt-1">
+                                <p className="font-extrabold text-[#111827]">
+                                  Desa/Kel. {addr.desa}, RT/RW {addr.rtRw}
+                                </p>
+                                <p className="font-semibold">
+                                  Kec. {addr.kecamatan}, {addr.kabupaten}
+                                </p>
+                                <p className="text-[11px] font-medium text-neutral-500">
+                                  {lang === "id" ? "Kode Pos" : "Postal Code"}: {addr.postalCode}
+                                </p>
+                                
+                                <div className="mt-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[11px] leading-relaxed">
+                                  <span className="font-bold text-[#374151] block text-[9px] uppercase tracking-wide mb-0.5">Detail Patokan</span>
+                                  {addr.specificDetails}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="pt-2 border-t border-neutral-100 flex items-center">
+                              {addr.mapsUrl && (
+                                <a
+                                  href={addr.mapsUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[10px] font-extrabold text-blue-600 hover:underline cursor-pointer transition-colors"
+                                >
+                                  <Navigation className="h-3 w-3 text-blue-500 shrink-0" />
+                                  <span>{lang === "id" ? "Buka Link Peta ↗" : "Open Maps Link ↗"}</span>
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

@@ -21,6 +21,7 @@ export const ORDER_STATUS_LABELS_ID: Record<OrderStatus, string> = {
   READY_TO_DELIVER: "Siap Dikirim",
   OUT_FOR_DELIVERY: "Dalam Pengiriman",
   DELIVERED: "Terkirim",
+  COMPLETED: "Selesai",
   FAILED: "Gagal",
 };
 
@@ -36,6 +37,7 @@ export const ORDER_STATUS_LABELS_EN: Record<OrderStatus, string> = {
   READY_TO_DELIVER: "Ready to Deliver",
   OUT_FOR_DELIVERY: "Out for Delivery",
   DELIVERED: "Delivered",
+  COMPLETED: "Completed",
   FAILED: "Failed",
 };
 

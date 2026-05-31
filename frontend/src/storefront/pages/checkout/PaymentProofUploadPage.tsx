@@ -10,6 +10,8 @@ import { uploadFileInChunks, ChunkUploadError } from "@/services/chunkUploadServ
 import { validateImageUpload } from "@/lib/validators";
 import type { Order } from "@/types/order";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { removeLineItem } from "@/services/cartService";
 
 const DICTIONARY = {
   id: {
@@ -73,6 +75,7 @@ export function PaymentProofUploadPage() {
   const navigate = useNavigate();
   const { lang } = useLanguage();
   const t = DICTIONARY[lang];
+  const { user } = useAuth();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loadingOrder, setLoadingOrder] = useState(true);
@@ -236,6 +239,13 @@ export function PaymentProofUploadPage() {
       }
 
       setSuccess(true);
+
+      // Clear the items in this order from the shopping cart on success (Requirement 6.3 & 6.4)
+      if (user && order.items) {
+        const itemIdsToRemove = order.items.map((item) => item.itemId);
+        await Promise.all(itemIdsToRemove.map((itemId) => removeLineItem(user.uid, itemId)));
+      }
+
       setTimeout(() => {
         navigate("/orders");
       }, 2000);

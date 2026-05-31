@@ -9,6 +9,7 @@ export type OrderStatus =
   | 'READY_TO_DELIVER'
   | 'OUT_FOR_DELIVERY'
   | 'DELIVERED'
+  | 'COMPLETED'
   | 'FAILED';
 
 export interface OrderLineItem {
@@ -52,6 +53,13 @@ export interface Order {
   deliveryDurationMinutes?: number;
   courierLat?: number;
   courierLng?: number;
+  deliveryLat?: number;
+  deliveryLng?: number;
+  customerConfirmedAt?: string;
+  rating?: number;
+  review?: string;
+  reviewPhotoId?: string;
+  reviewedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

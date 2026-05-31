@@ -43,6 +43,13 @@ vi.mock("@/contexts/LanguageContext", () => ({
   LanguageProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
+vi.mock("@/contexts/ToastContext", () => ({
+  useToast: () => ({
+    showToast: vi.fn(),
+  }),
+  ToastProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
 vi.mock("firebase/firestore", () => ({
   getFirestore: vi.fn(() => ({})),
   doc: vi.fn(),

@@ -167,7 +167,7 @@ export function ProductDetailPage() {
     try {
       await addToCart(
         user.uid,
-        { itemId: product.id, itemName: product.itemName, price: product.price },
+        { itemId: product.id, itemName: product.itemName, price: product.price, imageUrl: product.imageUrl },
         qty
       );
       setSuccess(true);

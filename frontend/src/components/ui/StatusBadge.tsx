@@ -6,47 +6,41 @@ export interface StatusBadgeProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 interface StatusStyle {
-  background: string;
-  color: string;
+  classes: string;
   label: string;
 }
 
 const STATUS_STYLES: Record<OrderStatus, StatusStyle> = {
-  PLACING: { background: "#FEF3C7", color: "#92400E", label: "Placing" },
+  PLACING: { classes: "bg-[#FEF3C7] text-[#92400E]", label: "Placing" },
   AWAITING_PAYMENT_PROOF: {
-    background: "#FEF3C7",
-    color: "#92400E",
+    classes: "bg-[#FEF3C7] text-[#92400E]",
     label: "Awaiting Payment Proof",
   },
   AWAITING_PAYMENT_APPROVAL: {
-    background: "#FED7AA",
-    color: "#9A3412",
+    classes: "bg-[#FED7AA] text-[#9A3412]",
     label: "Awaiting Payment Approval",
   },
   PAYMENT_REJECTED: {
-    background: "#FEE2E2",
-    color: "#991B1B",
+    classes: "bg-[#FEE2E2] text-[#991B1B]",
     label: "Payment Rejected",
   },
-  CONFIRMED: { background: "#DBEAFE", color: "#1E40AF", label: "Confirmed" },
+  CONFIRMED: { classes: "bg-[#DBEAFE] text-[#1E40AF]", label: "Confirmed" },
   IN_PRODUCTION: {
-    background: "#E0E7FF",
-    color: "#3730A3",
+    classes: "bg-[#E0E7FF] text-[#3730A3]",
     label: "In Production",
   },
-  READY: { background: "#D1FAE5", color: "#065F46", label: "Ready" },
+  READY: { classes: "bg-[#D1FAE5] text-[#065F46]", label: "Ready" },
   READY_TO_DELIVER: {
-    background: "#FDE68A",
-    color: "#78350F",
+    classes: "bg-[#FDE68A] text-[#78350F]",
     label: "Ready to Deliver",
   },
   OUT_FOR_DELIVERY: {
-    background: "#BFDBFE",
-    color: "#1E3A8A",
+    classes: "bg-[#BFDBFE] text-[#1E3A8A]",
     label: "Out for Delivery",
   },
-  DELIVERED: { background: "#A7F3D0", color: "#064E3B", label: "Delivered" },
-  FAILED: { background: "#FEE2E2", color: "#991B1B", label: "Failed" },
+  DELIVERED: { classes: "bg-[#A7F3D0] text-[#064E3B]", label: "Delivered" },
+  COMPLETED: { classes: "bg-[#D1FAE5] text-[#065F46]", label: "Completed" },
+  FAILED: { classes: "bg-[#FEE2E2] text-[#991B1B]", label: "Failed" },
 };
 
 const BASE_CLASSES =
@@ -60,12 +54,11 @@ export function StatusBadge({
   ...rest
 }: StatusBadgeProps) {
   const style = STATUS_STYLES[status];
-  const composed = [BASE_CLASSES, className ?? ""].join(" ").trim();
+  const composed = [BASE_CLASSES, style.classes, className ?? ""].join(" ").trim();
 
   return (
     <span
       className={composed}
-      style={{ backgroundColor: style.background, color: style.color }}
       data-status={status}
       {...rest}
     >

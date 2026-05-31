@@ -15,6 +15,7 @@ export interface AppShellProps {
   userName?: string;
   userEmail?: string;
   userRole?: string;
+  userPhotoUrl?: string;
   onSignOut?: () => void;
   headerActions?: ReactNode;
 }
@@ -28,6 +29,7 @@ export function AppShell({
   userName,
   userEmail,
   userRole,
+  userPhotoUrl,
   onSignOut,
   headerActions,
 }: AppShellProps) {
@@ -53,6 +55,7 @@ export function AppShell({
         userName={userName}
         userEmail={userEmail}
         userRole={userRole}
+        userPhotoUrl={userPhotoUrl}
         onSignOut={onSignOut}
         searchValue={searchValue}
         onSearchChange={onSearchChange}
@@ -137,11 +140,15 @@ export function AppShell({
                   type="button"
                   id="profile-menu-button"
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className="h-9 w-9 rounded-full bg-[#FBBF24] hover:bg-[#F59E0B] flex items-center justify-center text-[#111827] font-bold text-sm shrink-0 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:ring-offset-2"
+                  className="h-9 w-9 rounded-full bg-[#FBBF24] hover:bg-[#F59E0B] flex items-center justify-center text-[#111827] font-bold text-sm shrink-0 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:ring-offset-2 overflow-hidden"
                   aria-label={userName ? `Masuk sebagai ${userName}` : "Menu pengguna"}
                   title={userName ?? userEmail}
                 >
-                  {initial}
+                  {userPhotoUrl ? (
+                    <img src={userPhotoUrl} alt="Avatar" className="h-full w-full object-cover" />
+                  ) : (
+                    initial
+                  )}
                 </button>
 
                 {isDropdownOpen && (
@@ -153,8 +160,12 @@ export function AppShell({
                     <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-[#E5E7EB] shadow-xl py-2 z-50 font-['Hanken_Grotesk',system-ui,sans-serif]">
                       <div className="px-4 py-3 border-b border-[#F3F4F6]">
                         <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-[#FBBF24] flex items-center justify-center text-sm font-bold text-[#111827] shrink-0">
-                            {initial}
+                          <div className="h-9 w-9 rounded-full bg-[#FBBF24] flex items-center justify-center text-sm font-bold text-[#111827] shrink-0 overflow-hidden">
+                            {userPhotoUrl ? (
+                              <img src={userPhotoUrl} alt="Avatar" className="h-full w-full object-cover" />
+                            ) : (
+                              initial
+                            )}
                           </div>
                           <div className="min-w-0">
                             <p className="text-sm font-bold text-[#111827] truncate">{userName || "Pengguna"}</p>

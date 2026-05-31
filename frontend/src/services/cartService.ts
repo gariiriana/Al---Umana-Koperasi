@@ -21,7 +21,6 @@ import {
   doc,
   getDocs,
   onSnapshot,
-  orderBy,
   query,
   runTransaction,
   serverTimestamp,
@@ -57,6 +56,8 @@ export interface CartLineItem {
   quantity: number;
   /** Optional customer note, truncated to ≤ 200 chars on write. */
   notes?: string;
+  /** Optional product image URL snapshot. */
+  imageUrl?: string;
   /** Server timestamp of the last write. Populated by Firestore. */
   // Using `unknown` keeps the call sites SDK-agnostic; consumers that need
   // the underlying `Timestamp` can cast.
@@ -91,6 +92,9 @@ function snapshotToLine(snap: QueryDocumentSnapshot<DocumentData>): CartLineItem
   };
   if (typeof data.notes === "string") {
     line.notes = data.notes;
+  }
+  if (typeof data.imageUrl === "string") {
+    line.imageUrl = data.imageUrl;
   }
   return line;
 }
@@ -153,11 +157,13 @@ export function subscribeToCart(
   onChange: (items: CartLineItem[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
-  const q = query(itemsCollection(uid), orderBy("updatedAt", "desc"));
+  const q = query(itemsCollection(uid));
   return onSnapshot(
     q,
     (snap) => {
       const items: CartLineItem[] = snap.docs.map(snapshotToLine);
+      // Sort alphabetically by product name to keep cart card order perfectly stable on quantity updates
+      items.sort((a, b) => a.itemName.localeCompare(b.itemName));
       onChange(items);
     },
     onError
@@ -179,7 +185,7 @@ export function subscribeToCart(
  */
 export async function addToCart(
   uid: string,
-  item: { itemId: string; itemName: string; price: number },
+  item: { itemId: string; itemName: string; price: number; imageUrl?: string },
   qty: number,
   notes?: string
 ): Promise<void> {
@@ -207,6 +213,9 @@ export async function addToCart(
       quantity: nextQty,
       updatedAt: serverTimestamp(),
     };
+    if (item.imageUrl !== undefined) {
+      data.imageUrl = item.imageUrl;
+    }
     if (trimmedNotes !== undefined) {
       data.notes = trimmedNotes;
     } else if (!existing.exists()) {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { NavLink, Link, useNavigate, useSearchParams } from "react-router-dom";
+import { NavLink, Link, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import {
   Home,
   LayoutGrid,
@@ -14,6 +14,7 @@ import {
   Settings,
   Instagram,
   User,
+  Star,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -24,6 +25,18 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Footer } from "@/components/layout/Footer";
 import { CartAnimationProvider, type FlyDot } from "@/contexts/CartAnimationContext";
 import { useCartAnimation } from "@/contexts/useCartAnimation";
+
+import { collection, query, where, onSnapshot, DocumentData } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { listAvailableProducts } from "@/services/catalogService";
+import type { Order } from "@/types/order";
+import {
+  type NotificationItem,
+  mapOrderToNotification,
+  mapProductToPromoNotification,
+  STATIC_PROMO_NOTIFICATIONS,
+  STATIC_INFO_NOTIFICATIONS,
+} from "@/services/notificationService";
 
 /**
  * Responsive shell for the customer-facing Storefront.
@@ -52,6 +65,7 @@ interface StorefrontNavItem {
 export const STOREFRONT_NAV_ITEMS: readonly StorefrontNavItem[] = [
   { to: "/", label: "Beranda", icon: Home, end: true },
   { to: "/category", label: "Kategori", icon: LayoutGrid },
+  { to: "/testimoni", label: "Testimoni", icon: Star },
   { to: "/cart", label: "Keranjang", icon: ShoppingCart, badgeKey: "cart" },
   { to: "/orders", label: "Pesanan", icon: Receipt },
 ] as const;
@@ -126,6 +140,7 @@ const DICTIONARY = {
 const getLocalizedLabel = (key: string, langCode: "id" | "en") => {
   if (key === "Beranda") return langCode === "id" ? "Beranda" : "Home";
   if (key === "Kategori") return langCode === "id" ? "Kategori" : "Category";
+  if (key === "Testimoni") return langCode === "id" ? "Testimoni" : "Reviews";
   if (key === "Keranjang") return langCode === "id" ? "Keranjang" : "Cart";
   if (key === "Pesanan") return langCode === "id" ? "Pesanan" : "Orders";
   return key;
@@ -145,6 +160,7 @@ export function StorefrontLayout({
 function StorefrontLayoutInner({ children }: { children: ReactNode }) {
   const { user, profile, requestSignOut } = useAuth();
   const { showToast } = useToast();
+  const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [searchVal, setSearchVal] = useState(searchParams.get("search") || "");
@@ -152,6 +168,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
   
   const { lang, setLang } = useLanguage();
   const [isLangOpen, setIsLangOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // CartAnimation context — provides realtime cart count + fly animation
   const { cartCount: cartBadgeCount, cartIconRef, flyDots, removeFlyDot } = useCartAnimation();
@@ -164,6 +181,191 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
     );
     return () => timers.forEach(clearTimeout);
   }, [flyDots, removeFlyDot]);
+
+  // Real-time order status change Toast notifications & Unread count calculation
+  useEffect(() => {
+    if (!user) {
+      setUnreadCount(0);
+      return;
+    }
+
+    let isInitialLoad = true;
+    const previousStatuses: Record<string, { status: string; paymentStatus?: string }> = {};
+    let ordersList: Order[] = [];
+    let promoList: NotificationItem[] = [];
+
+    const lastReadStr = localStorage.getItem("al-umana-last-read-notifications");
+    const lastRead = lastReadStr ? Date.parse(lastReadStr) : 0;
+
+    const updateUnreadCount = () => {
+      if (location.pathname === "/notifications") {
+        setUnreadCount(0);
+        return;
+      }
+      const orderNotifs = ordersList.map(mapOrderToNotification);
+      const allNotifs = [...orderNotifs, ...promoList, ...STATIC_INFO_NOTIFICATIONS];
+      const count = allNotifs.filter((n) => Date.parse(n.time) > lastRead).length;
+      setUnreadCount(count);
+    };
+
+    const mapDocToOrder = (id: string, data: DocumentData): Order => {
+      return {
+        id,
+        customerId: data.customerId || "",
+        customerName: data.customerName || "",
+        items: data.items || [],
+        deliveryAddress: data.deliveryAddress || "",
+        deliveryTime: data.deliveryTime || "",
+        status: data.status || "PLACING",
+        paymentMethod: data.paymentMethod || "cod",
+        paymentStatus: data.paymentStatus,
+        paymentProofFileId: data.paymentProofFileId,
+        rejectionReason: data.rejectionReason,
+        paymentRejectionReason: data.paymentRejectionReason,
+        createdAt: data.createdAt
+          ? typeof data.createdAt.toDate === "function"
+            ? data.createdAt.toDate().toISOString()
+            : data.createdAt
+          : new Date().toISOString(),
+        updatedAt: data.updatedAt
+          ? typeof data.updatedAt.toDate === "function"
+            ? data.updatedAt.toDate().toISOString()
+            : data.updatedAt
+          : new Date().toISOString(),
+      } as unknown as Order;
+    };
+
+    // 1. Subscribe to Orders
+    const q = query(
+      collection(db, "orders"),
+      where("customerId", "==", user.uid)
+    );
+
+    const unsubscribeOrders = onSnapshot(q, (snapshot) => {
+      const currentOrders: Order[] = [];
+      
+      snapshot.docChanges().forEach((change) => {
+        const orderId = change.doc.id;
+        const data = change.doc.data();
+        const orderObj = mapDocToOrder(orderId, data);
+        currentOrders.push(orderObj);
+
+        const status = orderObj.status;
+        const paymentStatus = orderObj.paymentStatus;
+        const shortId = orderId.slice(-6).toUpperCase();
+
+        if (change.type === "added") {
+          if (!isInitialLoad) {
+            showToast({
+              message: lang === "id"
+                ? `Pesanan #${shortId} berhasil ditempatkan!`
+                : `Order #${shortId} successfully placed!`,
+              variant: "success",
+            });
+          }
+          previousStatuses[orderId] = { status, paymentStatus };
+        } else if (change.type === "modified") {
+          const prev = previousStatuses[orderId];
+          if (prev) {
+            if (prev.status !== status) {
+              let statusTextId = "";
+              let statusTextEn = "";
+              switch (status) {
+                case "CONFIRMED":
+                  statusTextId = "dikonfirmasi";
+                  statusTextEn = "confirmed";
+                  break;
+                case "IN_PRODUCTION":
+                  statusTextId = "sedang diproduksi";
+                  statusTextEn = "in production";
+                  break;
+                case "READY":
+                case "READY_TO_DELIVER":
+                  statusTextId = "siap dikirim";
+                  statusTextEn = "ready to deliver";
+                  break;
+                case "OUT_FOR_DELIVERY":
+                  statusTextId = "sedang dikirim oleh kurir";
+                  statusTextEn = "out for delivery";
+                  break;
+                case "DELIVERED":
+                  statusTextId = "telah diterima";
+                  statusTextEn = "delivered";
+                  break;
+                case "FAILED":
+                  statusTextId = `dibatalkan: ${orderObj.rejectionReason || "stok habis"}`;
+                  statusTextEn = `cancelled: ${orderObj.rejectionReason || "out of stock"}`;
+                  break;
+                default:
+                  statusTextId = status.toLowerCase();
+                  statusTextEn = status.toLowerCase();
+              }
+
+              showToast({
+                message: lang === "id"
+                  ? `Pesanan #${shortId} ${statusTextId}!`
+                  : `Order #${shortId} is ${statusTextEn}!`,
+                variant: status === "FAILED" ? "error" : "info",
+              });
+            }
+
+            if (prev.paymentStatus !== paymentStatus && paymentStatus) {
+              if (paymentStatus === "approved") {
+                showToast({
+                  message: lang === "id"
+                    ? `Pembayaran Pesanan #${shortId} disetujui!`
+                    : `Payment for Order #${shortId} approved!`,
+                  variant: "success",
+                });
+              } else if (paymentStatus === "rejected") {
+                showToast({
+                  message: lang === "id"
+                    ? `Pembayaran Pesanan #${shortId} ditolak: ${orderObj.paymentRejectionReason || ""}`
+                    : `Payment for Order #${shortId} rejected: ${orderObj.paymentRejectionReason || ""}`,
+                  variant: "error",
+                });
+              }
+            }
+          }
+          previousStatuses[orderId] = { status, paymentStatus };
+        } else if (change.type === "removed") {
+          delete previousStatuses[orderId];
+        }
+      });
+
+      // Update local orders list and unread count
+      ordersList = snapshot.docs.map((docSnap) => mapDocToOrder(docSnap.id, docSnap.data()));
+      isInitialLoad = false;
+      updateUnreadCount();
+    });
+
+    // 2. Load promo products
+    listAvailableProducts().then((products) => {
+      const discounted = products.filter((p) => {
+        const discountPercent =
+          p.price % 3 === 0 ? 10 : p.price % 5 === 0 ? 15 : 0;
+        return discountPercent > 0;
+      });
+      promoList = [...discounted.map(mapProductToPromoNotification), ...STATIC_PROMO_NOTIFICATIONS];
+      updateUnreadCount();
+    }).catch((err) => {
+      console.error("Failed to load catalog products for layout notifications:", err);
+      promoList = STATIC_PROMO_NOTIFICATIONS;
+      updateUnreadCount();
+    });
+
+    return () => {
+      unsubscribeOrders();
+    };
+  }, [user, lang, showToast, location.pathname]);
+
+  // Reset unread count to 0 when navigating to /notifications page
+  useEffect(() => {
+    if (location.pathname === "/notifications") {
+      localStorage.setItem("al-umana-last-read-notifications", new Date().toISOString());
+      setUnreadCount(0);
+    }
+  }, [location.pathname]);
 
   const t = DICTIONARY[lang];
 
@@ -211,6 +413,19 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
 
           {/* Right side: Language + Auth / Profile */}
           <div className="flex items-center gap-3">
+            {/* Notification Bell for Mobile */}
+            {user && (
+              <Link to="/notifications" className="relative p-1 text-white hover:opacity-85 transition-opacity">
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 bg-red-600 text-white text-[9px] font-bold h-4 min-w-4 px-1 rounded-full flex items-center justify-center border border-[#F59E0B] shadow-xs">
+                    {unreadCount}
+                  </span>
+                )}
+              </Link>
+            )}
+            {user && <span className="text-amber-100 opacity-40">|</span>}
+
             {/* Language Switcher */}
             <div className="relative">
               <button
@@ -295,7 +510,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                         <Receipt className="h-4 w-4 text-neutral-500" />
                         <span>{t.myOrders}</span>
                       </Link>
-                      {profile && ["admin", "monitoring", "tim_produksi", "distribusi"].includes(profile.role) && (
+                      {profile && ["admin", "monitoring", "tim_produksi", "distribusi", "kurir"].includes(profile.role) && (
                         <Link
                           to="/admin/dashboard"
                           onClick={() => setIsProfileOpen(false)}
@@ -383,9 +598,14 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <Link to="/notifications" className="flex items-center gap-1 hover:opacity-85 transition-opacity">
+                <Link to="/notifications" className="flex items-center gap-1 hover:opacity-85 transition-opacity relative">
                   <Bell className="h-3.5 w-3.5" />
                   <span>{t.notifications}</span>
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[9px] font-bold h-4 min-w-4 px-1 rounded-full flex items-center justify-center border border-white shadow-xs">
+                      {unreadCount}
+                    </span>
+                  )}
                 </Link>
                 <Link to="/help" className="flex items-center gap-1 hover:opacity-85 transition-opacity">
                   <HelpCircle className="h-3.5 w-3.5" />
@@ -464,7 +684,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                             <Receipt className="h-4 w-4 text-neutral-500" />
                             <span>{t.myOrders}</span>
                           </Link>
-                          {profile && ["admin", "monitoring", "tim_produksi", "distribusi"].includes(profile.role) && (
+                          {profile && ["admin", "monitoring", "tim_produksi", "distribusi", "kurir"].includes(profile.role) && (
                             <Link
                               to="/admin/dashboard"
                               onClick={() => setIsProfileOpen(false)}

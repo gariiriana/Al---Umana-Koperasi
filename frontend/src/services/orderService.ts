@@ -33,6 +33,7 @@ import {
 import { db } from "@/lib/firebase";
 import { currentUser } from "@/services/authService";
 import type { Order, OrderLineItem, OrderStatus } from "@/types/order";
+import { sendWhatsAppNotification, WA_MESSAGES } from "./whatsappService";
 
 /** Payment method identifiers accepted by the order creation. */
 export type PaymentMethod = "cod" | "bank_transfer" | "e_wallet";
@@ -116,6 +117,13 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     deliveryDurationMinutes: data.deliveryDurationMinutes as number | undefined,
     courierLat: data.courierLat as number | undefined,
     courierLng: data.courierLng as number | undefined,
+    deliveryLat: data.deliveryLat as number | undefined,
+    deliveryLng: data.deliveryLng as number | undefined,
+    customerConfirmedAt: toIsoStringOrUndefined(data.customerConfirmedAt),
+    rating: data.rating as number | undefined,
+    review: data.review as string | undefined,
+    reviewPhotoId: data.reviewPhotoId as string | undefined,
+    reviewedAt: toIsoStringOrUndefined(data.reviewedAt),
   };
 }
 
@@ -204,7 +212,28 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
   });
 
   const finalSnap = await getDoc(orderDocRef);
-  return snapshotToOrder(finalSnap);
+  const order = snapshotToOrder(finalSnap);
+
+  // Trigger WhatsApp notification asynchronously
+  if (order.status !== "FAILED") {
+    const shortId = order.id.length > 6 ? order.id.slice(-6).toUpperCase() : order.id.toUpperCase();
+    if (order.paymentMethod === "cod") {
+      sendWhatsAppNotification(
+        order.customerId,
+        shortId,
+        WA_MESSAGES.placedCOD(order.customerName, shortId)
+      ).catch((e) => console.error("[createOrder WA Notif Error]", e));
+    } else {
+      const payMethod = order.paymentMethod === "e_wallet" ? "E-Wallet" : "Transfer Bank";
+      sendWhatsAppNotification(
+        order.customerId,
+        shortId,
+        WA_MESSAGES.placedNonCOD(order.customerName, shortId, payMethod)
+      ).catch((e) => console.error("[createOrder WA Notif Error]", e));
+    }
+  }
+
+  return order;
 }
 
 export async function listOrders(filter: ListOrdersFilter = {}): Promise<Order[]> {
@@ -376,7 +405,30 @@ export async function transitionOrder(
     tx.update(docRef, updates);
   });
 
-  return getOrder(id);
+  const updatedOrder = await getOrder(id);
+  const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
+
+  if (payload.action === "start-production") {
+    sendWhatsAppNotification(
+      updatedOrder.customerId,
+      shortId,
+      WA_MESSAGES.inProduction(updatedOrder.customerName, shortId)
+    ).catch((e) => console.error("[transitionOrder start-production WA Notif Error]", e));
+  } else if (payload.action === "complete-production") {
+    sendWhatsAppNotification(
+      updatedOrder.customerId,
+      shortId,
+      WA_MESSAGES.ready(updatedOrder.customerName, shortId)
+    ).catch((e) => console.error("[transitionOrder complete-production WA Notif Error]", e));
+  } else if (payload.action === "qc-pass") {
+    sendWhatsAppNotification(
+      updatedOrder.customerId,
+      shortId,
+      WA_MESSAGES.readyToDeliver(updatedOrder.customerName, shortId)
+    ).catch((e) => console.error("[transitionOrder qc-pass WA Notif Error]", e));
+  }
+
+  return updatedOrder;
 }
 
 /** Assign a courier to a READY_TO_DELIVER order. */
@@ -396,7 +448,16 @@ export async function dispatchOrder(id: string): Promise<Order> {
     status: "OUT_FOR_DELIVERY",
     updatedAt: new Date(),
   });
-  return getOrder(id);
+
+  const updatedOrder = await getOrder(id);
+  const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
+  sendWhatsAppNotification(
+    updatedOrder.customerId,
+    shortId,
+    WA_MESSAGES.outForDelivery(updatedOrder.customerName, shortId)
+  ).catch((e) => console.error("[dispatchOrder WA Notif Error]", e));
+
+  return updatedOrder;
 }
 
 /** Mark an OUT_FOR_DELIVERY order as DELIVERED. */
@@ -414,7 +475,86 @@ export async function confirmDelivery(
     updates.proofFileIds = proofFileIds;
   }
   await updateDocAndReturn(docRef, updates);
+
+  const updatedOrder = await getOrder(id);
+  const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
+  sendWhatsAppNotification(
+    updatedOrder.customerId,
+    shortId,
+    WA_MESSAGES.delivered(updatedOrder.customerName, shortId)
+  ).catch((e) => console.error("[confirmDelivery WA Notif Error]", e));
+
+  return updatedOrder;
+}
+
+/** Customer: confirm that the delivered order has been received. */
+export async function customerConfirmDelivery(id: string): Promise<Order> {
+  const user = currentUser();
+  if (!user) {
+    throw new Error("Unauthorized to confirm delivery");
+  }
+
+  const docRef = doc(db, "orders", id);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(docRef);
+    if (!snap.exists()) throw new Error("Order not found");
+    const currentStatus = snap.data().status as OrderStatus;
+    if (currentStatus !== "DELIVERED") {
+      throw new Error(`Invalid transition: ${currentStatus} → COMPLETED`);
+    }
+    tx.update(docRef, {
+      status: "COMPLETED",
+      customerConfirmedAt: new Date(),
+      updatedAt: new Date(),
+    });
+  });
+
   return getOrder(id);
+}
+
+/** Customer: submit a rating and optional review for a completed order. */
+export async function submitReview(
+  orderId: string,
+  rating: number,
+  reviewText?: string,
+  reviewPhotoId?: string
+): Promise<Order> {
+  const user = currentUser();
+  if (!user) {
+    throw new Error("Unauthorized to submit review");
+  }
+
+  const now = new Date();
+  const orderDocRef = doc(db, "orders", orderId);
+
+  // Update the order document with review data
+  const orderUpdates: Record<string, unknown> = {
+    rating,
+    reviewedAt: now,
+    updatedAt: now,
+  };
+  if (reviewText && reviewText.trim()) {
+    orderUpdates.review = reviewText.trim();
+  }
+  if (reviewPhotoId) {
+    orderUpdates.reviewPhotoId = reviewPhotoId;
+  }
+  await updateDocAndReturn(orderDocRef, orderUpdates);
+
+  // Also write to a dedicated "reviews" collection for public querying
+  const order = await getOrder(orderId);
+  const reviewDocRef = doc(db, "reviews", orderId);
+  await updateDocAndReturn(reviewDocRef, {
+    orderId,
+    customerId: user.uid,
+    customerName: order.customerName,
+    rating,
+    review: reviewText?.trim() || "",
+    reviewPhotoId: reviewPhotoId || null,
+    createdAt: now,
+  });
+
+  return order;
 }
 
 /* ------------------------------------------------------------------ */
@@ -469,7 +609,15 @@ export async function attachPaymentProof(
     }
   }
 
-  return getOrder(orderId);
+  const updatedOrder = await getOrder(orderId);
+  const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
+  sendWhatsAppNotification(
+    updatedOrder.customerId,
+    shortId,
+    WA_MESSAGES.paymentUploaded(updatedOrder.customerName, shortId)
+  ).catch((e) => console.error("[attachPaymentProof WA Notif Error]", e));
+
+  return updatedOrder;
 }
 
 /** Admin: approve a payment proof, transitioning to CONFIRMED. */
@@ -485,7 +633,15 @@ export async function approvePayment(orderId: string): Promise<Order> {
     paymentApprovedAt: new Date(),
     updatedAt: new Date(),
   });
-  return getOrder(orderId);
+  const updatedOrder = await getOrder(orderId);
+  const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
+  sendWhatsAppNotification(
+    updatedOrder.customerId,
+    shortId,
+    WA_MESSAGES.paymentApproved(updatedOrder.customerName, shortId)
+  ).catch((e) => console.error("[approvePayment WA Notif Error]", e));
+
+  return updatedOrder;
 }
 
 /**
@@ -507,7 +663,16 @@ export async function rejectPayment(
     paymentRejectedAt: new Date(),
     updatedAt: new Date(),
   });
-  return getOrder(orderId);
+
+  const updatedOrder = await getOrder(orderId);
+  const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
+  sendWhatsAppNotification(
+    updatedOrder.customerId,
+    shortId,
+    WA_MESSAGES.paymentRejected(updatedOrder.customerName, shortId, reason)
+  ).catch((e) => console.error("[rejectPayment WA Notif Error]", e));
+
+  return updatedOrder;
 }
 
 /* Helper to update doc directly */

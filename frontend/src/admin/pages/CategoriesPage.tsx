@@ -31,22 +31,22 @@ export function CategoriesPage() {
   const { lang } = useLanguage();
   const t = DICTIONARY[lang];
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const allCategories = await listCategories();
-      setCategories(allCategories);
-    } catch {
-      setError(t.error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const allCategories = await listCategories();
+        setCategories(allCategories);
+      } catch {
+        setError(t.error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     load();
-  }, []);
+  }, [t.error]);
 
   if (loading) {
     return (

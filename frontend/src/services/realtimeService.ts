@@ -71,6 +71,22 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     paymentRejectedBy: data.paymentRejectedBy as string | undefined,
     paymentRejectedAt: data.paymentRejectedAt ? toIsoString(data.paymentRejectedAt) : undefined,
     paymentRejectionReason: data.paymentRejectionReason as string | undefined,
+    productionStartPhotoId: data.productionStartPhotoId as string | undefined,
+    productionTimerEnd: data.productionTimerEnd ? toIsoString(data.productionTimerEnd) : undefined,
+    productionDurationMinutes: data.productionDurationMinutes as number | undefined,
+    deliveryStartPhotoId: data.deliveryStartPhotoId as string | undefined,
+    deliveryTimerEnd: data.deliveryTimerEnd ? toIsoString(data.deliveryTimerEnd) : undefined,
+    deliveryStartedAt: data.deliveryStartedAt ? toIsoString(data.deliveryStartedAt) : undefined,
+    deliveryDurationMinutes: data.deliveryDurationMinutes as number | undefined,
+    courierLat: data.courierLat as number | undefined,
+    courierLng: data.courierLng as number | undefined,
+    deliveryLat: data.deliveryLat as number | undefined,
+    deliveryLng: data.deliveryLng as number | undefined,
+    customerConfirmedAt: data.customerConfirmedAt ? toIsoString(data.customerConfirmedAt) : undefined,
+    rating: data.rating as number | undefined,
+    review: data.review as string | undefined,
+    reviewPhotoId: data.reviewPhotoId as string | undefined,
+    reviewedAt: data.reviewedAt ? toIsoString(data.reviewedAt) : undefined,
   };
 }
 
