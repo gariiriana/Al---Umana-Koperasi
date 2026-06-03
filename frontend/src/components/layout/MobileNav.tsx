@@ -35,11 +35,20 @@ export interface MobileNavProps {
 }
 
 export function MobileNav({ userRole }: MobileNavProps) {
-  const allowedItems = MOBILE_NAV_ITEMS.filter((item) => {
+  let allowedItems = MOBILE_NAV_ITEMS.filter((item) => {
     if (!userRole) return false;
     const allowedPaths = ROLE_PERMISSIONS[userRole] || [];
     return allowedPaths.includes(item.to);
   });
+
+  if (userRole === "monitoring") {
+    allowedItems = allowedItems
+      .filter((item) => item.to === "/admin/dashboard")
+      .map((item) => ({
+        ...item,
+        label: "Performa",
+      }));
+  }
 
   if (allowedItems.length === 0) return null;
 

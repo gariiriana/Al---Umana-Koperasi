@@ -12,7 +12,6 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AdminAccessDenied } from "@/components/layout/AdminAccessDenied";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { LoginPage } from "@/pages/LoginPage";
-import { RegisterPage } from "@/pages/RegisterPage";
 import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { OrdersPage } from "@/pages/OrdersPage";
@@ -25,7 +24,11 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { ProductsPage } from "@/admin/pages/ProductsPage";
 import { ProductFormPage } from "@/admin/pages/ProductFormPage";
 import { CategoriesPage } from "@/admin/pages/CategoriesPage";
-import { PaymentApprovalPage } from "@/admin/pages/PaymentApprovalPage";
+import { OrderInputPage } from "@/admin/pages/OrderInputPage";
+import { InvoicesPage } from "@/admin/pages/InvoicesPage";
+import { FoodSchedulePage } from "@/admin/pages/FoodSchedulePage";
+import { DeliverySchedulerPage } from "@/pages/DeliverySchedulerPage";
+import { InvoicePage } from "@/pages/InvoicePage";
 import {
   ADMIN_SHELL_ROLES,
   ROLE_DEFAULT_REDIRECT,
@@ -33,16 +36,7 @@ import {
 import { StorefrontLayout } from "@/storefront/layouts/StorefrontLayout";
 import { HomePage } from "@/storefront/pages/HomePage";
 import { ProductDetailPage } from "@/storefront/pages/ProductDetailPage";
-import { CartPage } from "@/storefront/pages/CartPage";
-import { CheckoutWizard } from "@/storefront/pages/checkout/CheckoutWizard";
-import { OrderConfirmationPage } from "@/storefront/pages/checkout/OrderConfirmationPage";
-import { PaymentProofUploadPage } from "@/storefront/pages/checkout/PaymentProofUploadPage";
-import { OrderListPage } from "@/storefront/pages/OrderListPage";
-import { OrderDetailPage } from "@/storefront/pages/OrderDetailPage";
 import { HelpCenterPage } from "@/storefront/pages/HelpCenterPage";
-import { TestimoniPage } from "@/storefront/pages/TestimoniPage";
-import { NotificationsPage } from "@/storefront/pages/NotificationsPage";
-import { ProfilePage } from "@/storefront/pages/ProfilePage";
 import { CategoryPage } from "@/storefront/pages/CategoryPage";
 import {
   CategoryIndexStub,
@@ -196,14 +190,6 @@ function RoutesTree() {
         }
       />
       <Route
-        path="/register"
-        element={
-          <PublicRoute>
-            <RegisterPage />
-          </PublicRoute>
-        }
-      />
-      <Route
         path="/forgot-password"
         element={
           <PublicRoute>
@@ -212,7 +198,10 @@ function RoutesTree() {
         }
       />
 
-      {/* Storefront (public + customer) */}
+      {/* Public Invoice Page (No authentication required) */}
+      <Route path="/invoice/:token" element={<InvoicePage />} />
+
+      {/* Storefront (public catalog browsing only) */}
       <Route path="/" element={<RootRoute />} />
       <Route
         path="/category"
@@ -239,62 +228,6 @@ function RoutesTree() {
         }
       />
       <Route
-        path="/cart"
-        element={
-          <Storefront>
-            <CartPage />
-          </Storefront>
-        }
-      />
-      <Route
-        path="/checkout/address"
-        element={
-          <Storefront>
-            <CheckoutWizard />
-          </Storefront>
-        }
-      />
-      <Route
-        path="/checkout/payment"
-        element={
-          <Storefront>
-            <CheckoutWizard />
-          </Storefront>
-        }
-      />
-      <Route
-        path="/checkout/payment-proof/:orderId"
-        element={
-          <Storefront>
-            <PaymentProofUploadPage />
-          </Storefront>
-        }
-      />
-      <Route
-        path="/checkout/confirmation"
-        element={
-          <Storefront>
-            <OrderConfirmationPage />
-          </Storefront>
-        }
-      />
-      <Route
-        path="/orders"
-        element={
-          <Storefront>
-            <OrderListPage />
-          </Storefront>
-        }
-      />
-      <Route
-        path="/orders/:id"
-        element={
-          <Storefront>
-            <OrderDetailPage />
-          </Storefront>
-        }
-      />
-      <Route
         path="/help"
         element={
           <Storefront>
@@ -302,36 +235,8 @@ function RoutesTree() {
           </Storefront>
         }
       />
-      <Route
-        path="/testimoni"
-        element={
-          <Storefront>
-            <TestimoniPage />
-          </Storefront>
-        }
-      />
-      <Route
-        path="/notifications"
-        element={
-          <Protected>
-            <Storefront>
-              <NotificationsPage />
-            </Storefront>
-          </Protected>
-        }
-      />
-      <Route
-        path="/profile"
-        element={
-          <Protected>
-            <Storefront>
-              <ProfilePage />
-            </Storefront>
-          </Protected>
-        }
-      />
 
-      {/* Admin shell routes (existing) */}
+      {/* Admin shell routes */}
       <Route
         path="/admin/dashboard"
         element={
@@ -351,9 +256,35 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Orders"
-              allowedRoles={["monitoring"]}
+              allowedRoles={["admin", "monitoring"]}
             >
               <OrdersPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/admin/orders/new"
+        element={
+          <Protected>
+            <ShelledRoute
+              pageTitle="Input Pesanan Baru"
+              allowedRoles={["admin"]}
+            >
+              <OrderInputPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/admin/invoices"
+        element={
+          <Protected>
+            <ShelledRoute
+              pageTitle="Daftar Invoice"
+              allowedRoles={["admin"]}
+            >
+              <InvoicesPage />
             </ShelledRoute>
           </Protected>
         }
@@ -382,6 +313,16 @@ function RoutesTree() {
         }
       />
       <Route
+        path="/admin/food-schedule"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Jadwal Makanan" allowedRoles={["tim_produksi"]}>
+              <FoodSchedulePage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
         path="/distribusi/dispatch"
         element={
           <Protected>
@@ -390,6 +331,19 @@ function RoutesTree() {
               allowedRoles={["distribusi"]}
             >
               <DispatchPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/distribusi/scheduler"
+        element={
+          <Protected>
+            <ShelledRoute
+              pageTitle="Delivery Scheduler"
+              allowedRoles={["distribusi"]}
+            >
+              <DeliverySchedulerPage />
             </ShelledRoute>
           </Protected>
         }
@@ -413,7 +367,7 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Tracking"
-              allowedRoles={["monitoring"]}
+              allowedRoles={["admin", "monitoring"]}
             >
               <TrackingPage />
             </ShelledRoute>
@@ -432,7 +386,6 @@ function RoutesTree() {
                 "tim_produksi",
                 "distribusi",
                 "kurir",
-                "pelanggan",
               ]}
             >
               <SettingsPage />
@@ -441,12 +394,12 @@ function RoutesTree() {
         }
       />
 
-      {/* Admin-only stock & payment management (task 11) */}
+      {/* Tim Produksi menu CRUD management */}
       <Route
         path="/admin/products"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Daftar Produk" allowedRoles={["admin"]}>
+            <ShelledRoute pageTitle="Daftar Produk" allowedRoles={["tim_produksi"]}>
               <ProductsPage />
             </ShelledRoute>
           </Protected>
@@ -456,7 +409,7 @@ function RoutesTree() {
         path="/admin/products/new"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Tambah Produk" allowedRoles={["admin"]}>
+            <ShelledRoute pageTitle="Tambah Produk" allowedRoles={["tim_produksi"]}>
               <ProductFormPage />
             </ShelledRoute>
           </Protected>
@@ -466,7 +419,7 @@ function RoutesTree() {
         path="/admin/products/:id/edit"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Ubah Produk" allowedRoles={["admin"]}>
+            <ShelledRoute pageTitle="Ubah Produk" allowedRoles={["tim_produksi"]}>
               <ProductFormPage />
             </ShelledRoute>
           </Protected>
@@ -476,29 +429,14 @@ function RoutesTree() {
         path="/admin/categories"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Kategori" allowedRoles={["admin"]}>
+            <ShelledRoute pageTitle="Kategori" allowedRoles={["tim_produksi"]}>
               <CategoriesPage />
             </ShelledRoute>
           </Protected>
         }
       />
-      <Route
-        path="/admin/payment-approvals"
-        element={
-          <Protected>
-            <ShelledRoute
-              pageTitle="Persetujuan Pembayaran"
-              allowedRoles={["admin"]}
-            >
-              <PaymentApprovalPage />
-            </ShelledRoute>
-          </Protected>
-        }
-      />
 
-      {/* Legacy redirects: keep the previous admin URLs pointing at the
-          new /admin/* prefix so any bookmarked or hard-linked locations
-          keep working after the rename. */}
+      {/* Legacy redirects */}
       <Route
         path="/dashboard"
         element={<Navigate to="/admin/dashboard" replace />}

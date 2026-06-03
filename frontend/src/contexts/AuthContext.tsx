@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type { User } from "firebase/auth";
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { getRedirectResult } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 
@@ -15,7 +15,6 @@ import { db, auth } from "@/lib/firebase";
 import {
   onAuthStateChanged,
   signIn as authSignIn,
-  signUp as authSignUp,
   sendPasswordReset as authSendPasswordReset,
   signOut as authSignOut,
   signInWithGoogle as authSignInWithGoogle,
@@ -26,7 +25,7 @@ export interface UserProfile {
   uid?: string;
   email: string;
   displayName: string;
-  role: "admin" | "tim_produksi" | "distribusi" | "monitoring" | "pelanggan" | "kurir";
+  role: "admin" | "tim_produksi" | "distribusi" | "monitoring" | "kurir";
   createdAt?: unknown;
   /** Optional delivery address saved during checkout for auto-fill. */
   savedDeliveryAddress?: string;
@@ -45,8 +44,7 @@ export interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>;
   /** Sign in with Google provider. Throws on failure. */
   signInWithGoogle: () => Promise<void>;
-  /** Register a new customer user. Throws on failure. */
-  signUp: (email: string, password: string, displayName: string) => Promise<void>;
+
   /** Send password reset link to email. Throws on failure. */
   sendPasswordReset: (email: string) => Promise<void>;
   /** Sign out the current user. */
@@ -111,30 +109,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
               setProfile(docSnap.data() as UserProfile);
               setLoading(false);
             } else {
-              // Automatically provision missing Firestore document on first login
-              const fallbackDisplayName = nextUser.displayName ?? nextUser.email?.split("@")[0] ?? "User";
-
-              try {
-                await setDoc(userDocRef, {
-                  email: nextUser.email ?? "",
-                  displayName: fallbackDisplayName,
-                  role: "pelanggan", // Selalu default ke pelanggan
-                  createdAt: new Date(),
-                });
-                // NOTE: setLoading(false) will be called by the onSnapshot callback
-                // when the document creation is confirmed. However, we set a fallback
-                // profile here so the UI doesn't get stuck if onSnapshot is slow.
-                setProfile({
-                  email: nextUser.email ?? "",
-                  displayName: fallbackDisplayName,
-                  role: "pelanggan",
-                });
-                setLoading(false);
-              } catch (err) {
-                console.error("Failed to automatically create user profile:", err);
-                setProfile(null);
-                setLoading(false);
-              }
+              // Internal accounts only: deny access if no Firestore user profile is found
+              console.warn(`No user profile found for UID: ${nextUser.uid}`);
+              setProfile(null);
+              setLoading(false);
             }
           },
           (error) => {
@@ -169,9 +147,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       signInWithGoogle: async () => {
         await authSignInWithGoogle();
       },
-      signUp: async (email, password, displayName) => {
-        await authSignUp(email, password, displayName);
-      },
+
       sendPasswordReset: async (email) => {
         await authSendPasswordReset(email);
       },

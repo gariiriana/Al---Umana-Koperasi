@@ -88,6 +88,49 @@ export async function sendWhatsAppNotification(
 }
 
 /**
+ * Sends a WhatsApp notification to a specific phone number directly.
+ */
+export async function sendWhatsAppNotificationDirect(
+  phone: string,
+  shortId: string,
+  message: string
+): Promise<boolean> {
+  try {
+    const targetPhone = normalizePhoneNumber(phone);
+    if (!targetPhone) {
+      console.log(`[whatsappService] Normalized phone number is empty.`);
+      return false;
+    }
+
+    const payload: WAPayload = {
+      number: targetPhone,
+      message: message,
+    };
+
+    console.log(`[whatsappService] Triggering WA message to ${targetPhone}...`);
+
+    const response = await fetch("http://localhost:8000/send-message", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gateway returned HTTP ${response.status}`);
+    }
+
+    console.log(`[whatsappService] WhatsApp notification sent successfully for Order #${shortId}.`);
+    return true;
+  } catch (err) {
+    console.error(`[whatsappService] Failed to send WhatsApp notification:`, err);
+    return false;
+  }
+}
+
+
+/**
  * Pre-defined notification messages for status transitions.
  */
 export const WA_MESSAGES = {

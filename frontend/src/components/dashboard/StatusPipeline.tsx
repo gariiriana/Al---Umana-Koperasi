@@ -2,13 +2,13 @@ import { motion } from "motion/react";
 import type { Order, OrderStatus } from "@/types/order";
 
 const STATUSES: { key: OrderStatus; label: string; color: string; bg: string }[] = [
-  { key: "PLACING",            label: "Menunggu",   color: "text-gray-600",   bg: "bg-gray-100" },
-  { key: "CONFIRMED",          label: "Dikonfirmasi", color: "text-emerald-700", bg: "bg-emerald-50" },
-  { key: "IN_PRODUCTION",      label: "Diproduksi", color: "text-amber-700",  bg: "bg-amber-50" },
-  { key: "READY",              label: "Selesai QC", color: "text-purple-700", bg: "bg-purple-50" },
-  { key: "READY_TO_DELIVER",   label: "Siap Kirim", color: "text-blue-700",   bg: "bg-blue-50" },
-  { key: "OUT_FOR_DELIVERY",   label: "Dalam Jalan",color: "text-orange-700", bg: "bg-orange-50" },
-  { key: "DELIVERED",          label: "Terkirim",   color: "text-teal-700",   bg: "bg-teal-50" },
+  { key: "PENDING",            label: "Menunggu",     color: "text-gray-600",   bg: "bg-gray-100" },
+  { key: "IN_PRODUCTION",      label: "Diproduksi",   color: "text-amber-700",  bg: "bg-amber-50" },
+  { key: "QC",                 label: "Uji QC",       color: "text-purple-700", bg: "bg-purple-50" },
+  { key: "READY_TO_DELIVER",   label: "Siap Kirim",   color: "text-blue-700",   bg: "bg-blue-50" },
+  { key: "OUT_FOR_DELIVERY",   label: "Pengiriman",   color: "text-orange-700", bg: "bg-orange-50" },
+  { key: "COMPLETED",          label: "Selesai",      color: "text-emerald-700", bg: "bg-emerald-50" },
+  { key: "DELIVERY_FAILED",    label: "Gagal Kirim",  color: "text-red-700",    bg: "bg-red-50" },
 ];
 
 export interface StatusPipelineProps {

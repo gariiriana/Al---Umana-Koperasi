@@ -32,8 +32,8 @@ import {
 
 import { db } from "@/lib/firebase";
 import { currentUser } from "@/services/authService";
-import type { Order, OrderLineItem, OrderStatus } from "@/types/order";
-import { sendWhatsAppNotification, WA_MESSAGES } from "./whatsappService";
+import type { Order, OrderLineItem, OrderStatus, OrderType, PaymentStatus } from "@/types/order";
+import { sendWhatsAppNotification, sendWhatsAppNotificationDirect, WA_MESSAGES } from "./whatsappService";
 
 /** Payment method identifiers accepted by the order creation. */
 export type PaymentMethod = "cod" | "bank_transfer" | "e_wallet";
@@ -82,12 +82,28 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
   const data = snap.data() ?? {};
   return {
     id: snap.id,
+    orderType: (data.orderType as Order["orderType"]) ?? "event",
+    institutionName: (data.institutionName as string) ?? "",
+    recipientName: (data.recipientName as string) ?? "",
+    recipientPhone: (data.recipientPhone as string) ?? "",
+    recipientNotes: data.recipientNotes as string | undefined,
+    eventDate: (data.eventDate as string) ?? "",
+    foodDetails: (data.foodDetails as string) ?? "",
+    drinkDetails: (data.drinkDetails as string) ?? "",
+    totalPrice: (data.totalPrice as number) ?? 0,
+    additionalNotes: data.additionalNotes as string | undefined,
+    paymentStatus: (data.paymentStatus as Order["paymentStatus"]) ?? "BELUM_DIBAYAR",
+    paymentDueDate: (data.paymentDueDate as string) ?? "",
+    invoiceToken: data.invoiceToken as string | undefined,
+    invoiceSignedAt: toIsoStringOrUndefined(data.invoiceSignedAt),
+    invoiceSignatureData: data.invoiceSignatureData as string | undefined,
+    manualValidation: data.manualValidation as Order["manualValidation"],
+    status: ((data.status as string) ?? "PENDING") as OrderStatus,
     customerId: (data.customerId as string) ?? "",
     customerName: (data.customerName as string) ?? "",
     items: (data.items as OrderLineItem[]) ?? [],
     deliveryAddress: (data.deliveryAddress as string) ?? "",
     deliveryTime: (data.deliveryTime as string) ?? "",
-    status: ((data.status as string) ?? "PLACING") as OrderStatus,
     rejectionReason: data.rejectionReason as string | undefined,
     outOfStockItems: data.outOfStockItems as string[] | undefined,
     assignedCourierId: data.assignedCourierId as string | undefined,
@@ -101,7 +117,6 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     createdAt: toIsoString(data.createdAt),
     updatedAt: toIsoString(data.updatedAt),
     paymentMethod: ((data.paymentMethod as string) ?? "cod") as Order["paymentMethod"],
-    paymentStatus: data.paymentStatus as string | undefined,
     paymentProofFileId: data.paymentProofFileId as string | undefined,
     paymentApprovedBy: data.paymentApprovedBy as string | undefined,
     paymentApprovedAt: toIsoStringOrUndefined(data.paymentApprovedAt),
@@ -215,20 +230,20 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
   const order = snapshotToOrder(finalSnap);
 
   // Trigger WhatsApp notification asynchronously
-  if (order.status !== "FAILED") {
+  if (order.status !== "DELIVERY_FAILED") {
     const shortId = order.id.length > 6 ? order.id.slice(-6).toUpperCase() : order.id.toUpperCase();
     if (order.paymentMethod === "cod") {
       sendWhatsAppNotification(
-        order.customerId,
+        order.customerId || "",
         shortId,
-        WA_MESSAGES.placedCOD(order.customerName, shortId)
+        WA_MESSAGES.placedCOD(order.customerName || "", shortId)
       ).catch((e) => console.error("[createOrder WA Notif Error]", e));
     } else {
       const payMethod = order.paymentMethod === "e_wallet" ? "E-Wallet" : "Transfer Bank";
       sendWhatsAppNotification(
-        order.customerId,
+        order.customerId || "",
         shortId,
-        WA_MESSAGES.placedNonCOD(order.customerName, shortId, payMethod)
+        WA_MESSAGES.placedNonCOD(order.customerName || "", shortId, payMethod)
       ).catch((e) => console.error("[createOrder WA Notif Error]", e));
     }
   }
@@ -324,7 +339,8 @@ export type TransitionAction =
   | "complete-production"
   | "qc-pass"
   | "qc-fail"
-  | "reschedule";
+  | "reschedule"
+  | "fail-delivery";
 
 export interface TransitionPayload {
   action: TransitionAction;
@@ -354,8 +370,8 @@ export async function transitionOrder(
 
     switch (payload.action) {
       case "start-production":
-        if (currentStatus !== "CONFIRMED") {
-          throw new Error(`Invalid transition CONFIRMED -> IN_PRODUCTION`);
+        if (currentStatus !== "PENDING") {
+          throw new Error(`Invalid transition ${currentStatus} -> IN_PRODUCTION`);
         }
         updates.status = "IN_PRODUCTION";
         updates.productionStartedBy = actorUid;
@@ -364,14 +380,14 @@ export async function transitionOrder(
 
       case "complete-production":
         if (currentStatus !== "IN_PRODUCTION") {
-          throw new Error(`Invalid transition IN_PRODUCTION -> READY`);
+          throw new Error(`Invalid transition ${currentStatus} -> QC`);
         }
-        updates.status = "READY";
+        updates.status = "QC";
         break;
 
       case "qc-pass":
-        if (currentStatus !== "READY") {
-          throw new Error(`Invalid transition READY -> READY_TO_DELIVER`);
+        if (currentStatus !== "QC") {
+          throw new Error(`Invalid transition ${currentStatus} -> READY_TO_DELIVER`);
         }
         updates.status = "READY_TO_DELIVER";
         updates.qcReviewedBy = actorUid;
@@ -379,13 +395,13 @@ export async function transitionOrder(
         break;
 
       case "qc-fail":
-        if (currentStatus !== "READY") {
-          throw new Error(`Invalid transition READY -> CONFIRMED (QC_FAIL)`);
+        if (currentStatus !== "QC") {
+          throw new Error(`Invalid transition ${currentStatus} -> PENDING (QC_FAIL)`);
         }
         if (!payload.reason || payload.reason.trim() === "") {
           throw new Error("QC fail reason is required");
         }
-        updates.status = "CONFIRMED";
+        updates.status = "PENDING";
         updates.qcReviewedBy = actorUid;
         updates.qcReviewedAt = now;
         updates.qcFailReason = payload.reason.trim();
@@ -393,9 +409,17 @@ export async function transitionOrder(
 
       case "reschedule":
         if (currentStatus !== "OUT_FOR_DELIVERY") {
-          throw new Error(`Invalid transition OUT_FOR_DELIVERY -> READY_TO_DELIVER`);
+          throw new Error(`Invalid transition ${currentStatus} -> READY_TO_DELIVER`);
         }
         updates.status = "READY_TO_DELIVER";
+        break;
+
+      case "fail-delivery":
+        if (currentStatus !== "OUT_FOR_DELIVERY") {
+          throw new Error(`Invalid transition ${currentStatus} -> DELIVERY_FAILED`);
+        }
+        updates.status = "DELIVERY_FAILED";
+        updates.rejectionReason = payload.reason?.trim() || "Delivery failed";
         break;
 
       default:
@@ -408,24 +432,24 @@ export async function transitionOrder(
   const updatedOrder = await getOrder(id);
   const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
 
-  if (payload.action === "start-production") {
-    sendWhatsAppNotification(
-      updatedOrder.customerId,
-      shortId,
-      WA_MESSAGES.inProduction(updatedOrder.customerName, shortId)
-    ).catch((e) => console.error("[transitionOrder start-production WA Notif Error]", e));
-  } else if (payload.action === "complete-production") {
-    sendWhatsAppNotification(
-      updatedOrder.customerId,
-      shortId,
-      WA_MESSAGES.ready(updatedOrder.customerName, shortId)
-    ).catch((e) => console.error("[transitionOrder complete-production WA Notif Error]", e));
-  } else if (payload.action === "qc-pass") {
-    sendWhatsAppNotification(
-      updatedOrder.customerId,
-      shortId,
-      WA_MESSAGES.readyToDeliver(updatedOrder.customerName, shortId)
-    ).catch((e) => console.error("[transitionOrder qc-pass WA Notif Error]", e));
+  if (updatedOrder.recipientPhone) {
+    let msg = "";
+    if (payload.action === "start-production") {
+      msg = `Halo ${updatedOrder.recipientName},\n\nPesanan Anda #${shortId} saat ini sedang diproses oleh Tim Produksi Koperasi.`;
+    } else if (payload.action === "complete-production") {
+      msg = `Halo ${updatedOrder.recipientName},\n\nPesanan Anda #${shortId} telah selesai diproduksi dan sedang memasuki proses Quality Control (QC).`;
+    } else if (payload.action === "qc-pass") {
+      msg = `Halo ${updatedOrder.recipientName},\n\nPesanan Anda #${shortId} telah lolos uji QC dan siap diserahkan ke Kurir untuk dikirim.`;
+    } else if (payload.action === "qc-fail") {
+      msg = `Halo ${updatedOrder.recipientName},\n\nPesanan Anda #${shortId} tidak lolos uji QC dengan alasan: "${payload.reason}". Pesanan akan diproduksi ulang.`;
+    } else if (payload.action === "fail-delivery") {
+      msg = `Halo ${updatedOrder.recipientName},\n\nPesanan Anda #${shortId} gagal terkirim karena: "${payload.reason}". Kami akan menjadwalkan ulang.`;
+    }
+
+    if (msg) {
+      sendWhatsAppNotificationDirect(updatedOrder.recipientPhone, shortId, msg)
+        .catch((e) => console.error("[transitionOrder WA Notif Error]", e));
+    }
   }
 
   return updatedOrder;
@@ -451,23 +475,24 @@ export async function dispatchOrder(id: string): Promise<Order> {
 
   const updatedOrder = await getOrder(id);
   const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
-  sendWhatsAppNotification(
-    updatedOrder.customerId,
-    shortId,
-    WA_MESSAGES.outForDelivery(updatedOrder.customerName, shortId)
-  ).catch((e) => console.error("[dispatchOrder WA Notif Error]", e));
+  
+  if (updatedOrder.recipientPhone) {
+    const msg = `Halo ${updatedOrder.recipientName},\n\nPesanan Anda #${shortId} sedang dikirim oleh Kurir.`;
+    sendWhatsAppNotificationDirect(updatedOrder.recipientPhone, shortId, msg)
+      .catch((e) => console.error("[dispatchOrder WA Notif Error]", e));
+  }
 
   return updatedOrder;
 }
 
-/** Mark an OUT_FOR_DELIVERY order as DELIVERED. */
+/** Mark an OUT_FOR_DELIVERY order as COMPLETED. */
 export async function confirmDelivery(
   id: string,
   proofFileIds: string[]
 ): Promise<Order> {
   const docRef = doc(db, "orders", id);
   const updates: Record<string, unknown> = {
-    status: "DELIVERED",
+    status: "COMPLETED",
     deliveredAt: new Date(),
     updatedAt: new Date(),
   };
@@ -478,11 +503,12 @@ export async function confirmDelivery(
 
   const updatedOrder = await getOrder(id);
   const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
-  sendWhatsAppNotification(
-    updatedOrder.customerId,
-    shortId,
-    WA_MESSAGES.delivered(updatedOrder.customerName, shortId)
-  ).catch((e) => console.error("[confirmDelivery WA Notif Error]", e));
+  
+  if (updatedOrder.recipientPhone) {
+    const msg = `Halo ${updatedOrder.recipientName},\n\nHore! Pesanan Anda #${shortId} telah berhasil diserahterimakan dengan selamat. Terima kasih!`;
+    sendWhatsAppNotificationDirect(updatedOrder.recipientPhone, shortId, msg)
+      .catch((e) => console.error("[confirmDelivery WA Notif Error]", e));
+  }
 
   return updatedOrder;
 }
@@ -499,7 +525,7 @@ export async function customerConfirmDelivery(id: string): Promise<Order> {
     const snap = await tx.get(docRef);
     if (!snap.exists()) throw new Error("Order not found");
     const currentStatus = snap.data().status as OrderStatus;
-    if (currentStatus !== "DELIVERED") {
+    if (currentStatus !== "COMPLETED") {
       throw new Error(`Invalid transition: ${currentStatus} → COMPLETED`);
     }
     tx.update(docRef, {
@@ -612,9 +638,9 @@ export async function attachPaymentProof(
   const updatedOrder = await getOrder(orderId);
   const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
   sendWhatsAppNotification(
-    updatedOrder.customerId,
+    updatedOrder.customerId || "",
     shortId,
-    WA_MESSAGES.paymentUploaded(updatedOrder.customerName, shortId)
+    WA_MESSAGES.paymentUploaded(updatedOrder.customerName || "", shortId)
   ).catch((e) => console.error("[attachPaymentProof WA Notif Error]", e));
 
   return updatedOrder;
@@ -636,9 +662,9 @@ export async function approvePayment(orderId: string): Promise<Order> {
   const updatedOrder = await getOrder(orderId);
   const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
   sendWhatsAppNotification(
-    updatedOrder.customerId,
+    updatedOrder.customerId || "",
     shortId,
-    WA_MESSAGES.paymentApproved(updatedOrder.customerName, shortId)
+    WA_MESSAGES.paymentApproved(updatedOrder.customerName || "", shortId)
   ).catch((e) => console.error("[approvePayment WA Notif Error]", e));
 
   return updatedOrder;
@@ -667,9 +693,9 @@ export async function rejectPayment(
   const updatedOrder = await getOrder(orderId);
   const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
   sendWhatsAppNotification(
-    updatedOrder.customerId,
+    updatedOrder.customerId || "",
     shortId,
-    WA_MESSAGES.paymentRejected(updatedOrder.customerName, shortId, reason)
+    WA_MESSAGES.paymentRejected(updatedOrder.customerName || "", shortId, reason)
   ).catch((e) => console.error("[rejectPayment WA Notif Error]", e));
 
   return updatedOrder;
@@ -723,3 +749,185 @@ export function subscribeToPaymentApprovalQueue(
     onError
   );
 }
+
+/* ------------------------------------------------------------------ */
+/*  Admin Actions & Multi-Assign                                       */
+/* ------------------------------------------------------------------ */
+
+function calculateDueDate(date: Date, type: OrderType): string {
+  const result = new Date(date);
+  if (type === 'event') {
+    result.setDate(result.getDate() + 7);
+  } else {
+    result.setMonth(result.getMonth() + 1);
+  }
+  return result.toISOString();
+}
+
+export interface CreateAdminOrderPayload {
+  orderType: OrderType;
+  institutionName: string;
+  recipientName: string;
+  recipientPhone: string;
+  recipientNotes?: string;
+  eventDate: string;
+  deliveryAddress: string;
+  deliveryTime: string;
+  foodDetails: string;
+  drinkDetails: string;
+  items: OrderLineItem[];
+  totalPrice: number;
+  additionalNotes?: string;
+}
+
+export async function createAdminOrder(payload: CreateAdminOrderPayload): Promise<Order> {
+  const user = currentUser();
+  if (!user) {
+    throw new Error("Unauthorized to create order");
+  }
+
+  const colRef = collection(db, "orders");
+  const orderDocRef = doc(colRef);
+  const invoiceToken = crypto.randomUUID();
+  const now = new Date();
+  const dueDate = calculateDueDate(now, payload.orderType);
+
+  await runTransaction(db, async (tx) => {
+    const outOfStockItems: string[] = [];
+    const inventoryDataMap = new Map<string, { quantity: number; available?: boolean }>();
+
+    // 1. Fetch and verify stock for all items
+    for (const item of payload.items) {
+      if (!item.itemId) continue;
+      const itemRef = doc(db, "inventory", item.itemId);
+      const itemSnap = await tx.get(itemRef);
+      if (!itemSnap.exists()) {
+        outOfStockItems.push(item.itemId);
+        continue;
+      }
+      const data = itemSnap.data();
+      const currentQty = (data.quantity as number) ?? 0;
+      inventoryDataMap.set(item.itemId, {
+        quantity: currentQty,
+        available: data.available as boolean | undefined,
+      });
+
+      if (currentQty < item.quantity) {
+        outOfStockItems.push(item.itemId);
+      }
+    }
+
+    if (outOfStockItems.length > 0) {
+      throw new Error("Stok tidak mencukupi untuk item: " + outOfStockItems.join(", "));
+    }
+
+    // Deduct stock
+    for (const item of payload.items) {
+      if (!item.itemId) continue;
+      const itemRef = doc(db, "inventory", item.itemId);
+      const data = inventoryDataMap.get(item.itemId);
+      const currentQty = data?.quantity ?? 0;
+      const newQty = currentQty - item.quantity;
+      tx.update(itemRef, {
+        quantity: newQty,
+        available: newQty > 0 ? (data?.available ?? true) : false,
+        updatedAt: now.toISOString(),
+      });
+    }
+
+    const orderData: Record<string, unknown> = {
+      orderType: payload.orderType,
+      institutionName: payload.institutionName,
+      recipientName: payload.recipientName,
+      recipientPhone: payload.recipientPhone,
+      recipientNotes: payload.recipientNotes || "",
+      eventDate: payload.eventDate,
+      deliveryAddress: payload.deliveryAddress,
+      deliveryTime: payload.deliveryTime,
+      foodDetails: payload.foodDetails,
+      drinkDetails: payload.drinkDetails,
+      totalPrice: payload.totalPrice,
+      additionalNotes: payload.additionalNotes || "",
+      paymentStatus: "BELUM_DIBAYAR",
+      paymentDueDate: dueDate,
+      invoiceToken: invoiceToken,
+      status: "PENDING",
+      items: payload.items,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    tx.set(orderDocRef, orderData);
+  });
+
+  const finalSnap = await getDoc(orderDocRef);
+  const order = snapshotToOrder(finalSnap);
+
+  // Send WhatsApp notification
+  const shortId = order.id.length > 6 ? order.id.slice(-6).toUpperCase() : order.id.toUpperCase();
+  const invoiceUrl = `${window.location.origin}/invoice/${invoiceToken}`;
+  const msg = `Halo ${order.recipientName},\n\nPesanan Anda #${shortId} dari ${order.institutionName} telah berhasil dibuat!\nTotal Tagihan: Rp ${order.totalPrice.toLocaleString()}\nJatuh Tempo: ${new Date(order.paymentDueDate).toLocaleDateString()}\n\nSilakan konfirmasi pesanan dan lakukan tanda tangan digital melalui tautan invoice berikut:\n${invoiceUrl}`;
+  
+  sendWhatsAppNotificationDirect(order.recipientPhone, shortId, msg)
+    .catch((e) => console.error("[createAdminOrder WA Notif Error]", e));
+
+  return order;
+}
+
+export async function updatePaymentStatus(orderId: string, status: PaymentStatus): Promise<Order> {
+  const docRef = doc(db, "orders", orderId);
+  await updateDocAndReturn(docRef, {
+    paymentStatus: status,
+    updatedAt: new Date(),
+  });
+  return getOrder(orderId);
+}
+
+export async function manuallyValidateOrder(
+  orderId: string,
+  validationData: {
+    screenshotFileIds: string[];
+    contactPhone: string;
+    notes: string;
+  }
+): Promise<Order> {
+  const user = currentUser();
+  const adminName = user?.email?.split("@")[0] ?? "Admin";
+  
+  const docRef = doc(db, "orders", orderId);
+  await updateDocAndReturn(docRef, {
+    manualValidation: {
+      validatedBy: adminName,
+      validatedAt: new Date().toISOString(),
+      screenshotFileIds: validationData.screenshotFileIds,
+      contactPhone: validationData.contactPhone,
+      notes: validationData.notes,
+    },
+    updatedAt: new Date(),
+  });
+  return getOrder(orderId);
+}
+
+export async function generateInvoiceToken(orderId: string): Promise<string> {
+  const invoiceToken = crypto.randomUUID();
+  const docRef = doc(db, "orders", orderId);
+  await updateDocAndReturn(docRef, {
+    invoiceToken,
+    updatedAt: new Date(),
+  });
+  return invoiceToken;
+}
+
+export async function assignMultipleOrders(courierId: string, orderIds: string[]): Promise<void> {
+  await runTransaction(db, async (tx) => {
+    const now = new Date();
+    for (const id of orderIds) {
+      const docRef = doc(db, "orders", id);
+      tx.update(docRef, {
+        assignedCourierId: courierId,
+        updatedAt: now,
+      });
+    }
+  });
+}
+

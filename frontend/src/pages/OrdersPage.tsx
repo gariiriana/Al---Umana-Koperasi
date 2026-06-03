@@ -1,343 +1,408 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
-
+import { Link } from "react-router-dom";
+import { Plus, Search, Calendar, Copy, ExternalLink, AlertTriangle, ShieldCheck, CheckCircle2, User, Phone } from "lucide-react";
+import { useToast } from "@/contexts/ToastContext";
+import { subscribeOrders } from "@/services/realtimeService";
+import { transitionOrder, updatePaymentStatus, manuallyValidateOrder, type TransitionAction } from "@/services/orderService";
+import type { Order, OrderStatus, PaymentStatus } from "@/types/order";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { ApiError } from "@/services/apiClient";
-import { createOrder, type PaymentMethod } from "@/services/orderService";
-import { subscribeOrders } from "@/services/realtimeService";
-import type { Order, OrderLineItem } from "@/types/order";
-
-interface FormItem extends OrderLineItem {
-  uid: string;
-}
-
-const newItem = (): FormItem => ({
-  uid: crypto.randomUUID(),
-  itemId: "",
-  itemName: "",
-  quantity: 1,
-});
+import { ManualValidationModal } from "@/admin/pages/ManualValidationModal";
+import { formatIDR } from "@/lib/format";
 
 export function OrdersPage() {
+  const { showToast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [customerName, setCustomerName] = useState("");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [deliveryTime, setDeliveryTime] = useState("");
-  const [items, setItems] = useState<FormItem[]>([newItem()]);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cod");
-  const [submitting, setSubmitting] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [bannerError, setBannerError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | "ALL">("ALL");
+  const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | "ALL">("ALL");
+  
+  // Modal states
+  const [validationTargetId, setValidationTargetId] = useState<string | null>(null);
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+  const [transitioningId, setTransitioningId] = useState<string | null>(null);
 
   useEffect(() => {
-    return subscribeOrders(setOrders, console.error);
-  }, []);
+    return subscribeOrders(setOrders, (err) => {
+      console.error(err);
+      showToast({ message: "Gagal menyambung ke Firestore", variant: "error" });
+    });
+  }, [showToast]);
 
-  const reset = () => {
-    setCustomerName("");
-    setDeliveryAddress("");
-    setDeliveryTime("");
-    setItems([newItem()]);
-    setPaymentMethod("cod");
-    setErrors({});
-    setBannerError(null);
+  const handleCopyLink = (order: Order) => {
+    if (!order.invoiceToken) {
+      showToast({ message: "Invoice token tidak ditemukan untuk pesanan ini.", variant: "error" });
+      return;
+    }
+    const url = `${window.location.origin}/invoice/${order.invoiceToken}`;
+    navigator.clipboard.writeText(url);
+    setCopiedOrderId(order.id);
+    showToast({ message: "Link invoice disalin ke clipboard", variant: "success" });
+    setTimeout(() => setCopiedOrderId(null), 2000);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setErrors({});
-    setBannerError(null);
-    setSuccess(null);
+  const handleUpdatePaymentStatus = async (orderId: string, status: PaymentStatus) => {
     try {
-      const created = await createOrder({
-        customerName: customerName.trim(),
-        deliveryAddress: deliveryAddress.trim(),
-        deliveryTime: deliveryTime.trim(),
-        items: items.map((item) => ({
-          itemId: item.itemId,
-          itemName: item.itemName,
-          quantity: item.quantity,
-        })),
-        paymentMethod,
-      });
-      setSuccess(`Order ${created.id.slice(0, 8)}… created with status ${created.status}`);
-      reset();
+      await updatePaymentStatus(orderId, status);
+      showToast({ message: `Status pembayaran diperbarui ke ${status}`, variant: "success" });
     } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.details && err.details.length > 0) {
-          const map: Record<string, string> = {};
-          for (const d of err.details) map[d.field] = d.reason;
-          setErrors(map);
-        }
-        setBannerError(err.message);
-      } else {
-        setBannerError(err instanceof Error ? err.message : "Failed to create order");
-      }
-    } finally {
-      setSubmitting(false);
+      console.error(err);
+      showToast({ message: "Gagal memperbarui status pembayaran", variant: "error" });
     }
   };
 
+  const handleTransition = async (orderId: string, action: TransitionAction, reason?: string) => {
+    setTransitioningId(orderId);
+    try {
+      await transitionOrder(orderId, { action, reason });
+      showToast({ message: `Aksi ${action} sukses diproses`, variant: "success" });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: err instanceof Error ? err.message : "Gagal memproses aksi status", variant: "error" });
+    } finally {
+      setTransitioningId(null);
+    }
+  };
+
+  const handleManualValidationConfirm = async (data: { contactPhone: string; screenshotFileIds: string[]; notes: string }) => {
+    if (!validationTargetId) return;
+    try {
+      await manuallyValidateOrder(validationTargetId, data);
+      showToast({ message: "Verifikasi manual berhasil disimpan!", variant: "success" });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: "Gagal menyimpan verifikasi manual", variant: "error" });
+    }
+  };
+
+  // Due date warnings logic
+  const getDueDateInfo = (order: Order) => {
+    if (order.paymentStatus === "SUDAH_DIBAYAR") return { isOverdue: false, isWarning: false, label: "Lunas" };
+    const dueDate = new Date(order.paymentDueDate);
+    const now = new Date();
+    const isOverdue = dueDate < now;
+    
+    // Warning if less than 24 hours away
+    const diffHours = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+    const isWarning = !isOverdue && diffHours <= 24;
+
+    return {
+      isOverdue,
+      isWarning,
+      label: isOverdue ? "Terlambat" : isWarning ? "Jatuh tempo segera" : "Belum Dibayar"
+    };
+  };
+
+  // Filter logic
+  const filteredOrders = orders.filter((o) => {
+    const query = search.toLowerCase();
+    const matchSearch =
+      o.institutionName.toLowerCase().includes(query) ||
+      o.recipientName.toLowerCase().includes(query) ||
+      o.recipientPhone.includes(query) ||
+      o.id.toLowerCase().includes(query);
+
+    const matchStatus = statusFilter === "ALL" ? true : o.status === statusFilter;
+    const matchPayment = paymentFilter === "ALL" ? true : o.paymentStatus === paymentFilter;
+
+    return matchSearch && matchStatus && matchPayment;
+  });
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Orders"
-        subtitle="Submit a new order or browse the full order list."
-      />
-
-      <Card>
-        <h3 className="font-['Manrope',system-ui,sans-serif] text-lg font-bold text-[#111827] mb-4">
-          New order
-        </h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="Customer name"
-              required
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              error={errors.customerName}
-              placeholder="e.g. Budi Santoso"
-            />
-            <Input
-              label="Delivery address"
-              required
-              value={deliveryAddress}
-              onChange={(e) => setDeliveryAddress(e.target.value)}
-              error={errors.deliveryAddress}
-              placeholder="Jl. Merdeka No.1, Jakarta"
-            />
-            <Input
-              label="Delivery time"
-              required
-              value={deliveryTime}
-              onChange={(e) => setDeliveryTime(e.target.value)}
-              error={errors.deliveryTime}
-              placeholder="e.g. 12:00 PM or Lunch"
-            />
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm font-medium text-[#374151]">
-                Items
-              </label>
-              <Button
-                type="button"
-                variant="outlined"
-                size="sm"
-                leftIcon={<Plus className="h-3 w-3" />}
-                onClick={() => setItems((s) => [...s, newItem()])}
-              >
-                Add item
-              </Button>
-            </div>
-            <div className="hidden md:grid grid-cols-[1fr_2fr_120px_auto] gap-2 mb-1.5 px-1 font-['Hanken_Grotesk',system-ui,sans-serif] text-xs font-medium text-[#374151]">
-              <div>Item ID</div>
-              <div>Item name</div>
-              <div>Qty</div>
-              <div className="w-[38px]"></div>
-            </div>
-            <div className="space-y-3">
-              {items.map((it, idx) => (
-                <div
-                  key={it.uid}
-                  className="p-3 bg-[#F9FAFB] md:bg-transparent border border-[#E5E7EB] md:border-0 rounded-2xl md:rounded-none flex flex-col md:grid md:grid-cols-[1fr_2fr_120px_auto] gap-3 md:gap-2 md:items-center"
-                >
-                  {/* Row 1 (Mobile: ID + Qty + Delete) */}
-                  <div className="flex md:contents gap-2 items-start">
-                    <div className="flex-1 md:w-auto">
-                      <label className="block md:hidden mb-1 text-[10px] font-bold text-[#6B7280] uppercase tracking-wide">
-                        Item ID
-                      </label>
-                      <Input
-                        placeholder="SKU-001"
-                        value={it.itemId}
-                        onChange={(e) =>
-                          setItems((s) =>
-                            s.map((x) =>
-                              x.uid === it.uid ? { ...x, itemId: e.target.value } : x
-                            )
-                          )
-                        }
-                        error={errors[`items[${idx}].itemId`]}
-                      />
-                    </div>
-                    
-                    <div className="w-20 md:w-auto">
-                      <label className="block md:hidden mb-1 text-[10px] font-bold text-[#6B7280] uppercase tracking-wide">
-                        Qty
-                      </label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={String(it.quantity)}
-                        onChange={(e) =>
-                          setItems((s) =>
-                            s.map((x) =>
-                              x.uid === it.uid
-                                ? { ...x, quantity: parseInt(e.target.value, 10) || 0 }
-                                : x
-                            )
-                          )
-                        }
-                        error={errors[`items[${idx}].quantity`]}
-                      />
-                    </div>
-                    
-                    <div className="md:hidden flex items-center pt-5">
-                      <Button
-                        type="button"
-                        variant="outlined"
-                        size="sm"
-                        className="!p-3 border border-[#E5E7EB] text-[#EF4444] hover:bg-red-50 hover:border-red-200"
-                        onClick={() =>
-                          setItems((s) =>
-                            s.length > 1 ? s.filter((x) => x.uid !== it.uid) : s
-                          )
-                        }
-                        aria-label="Remove item"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Row 2 (Mobile: Item Name) */}
-                  <div className="w-full md:w-auto md:contents">
-                    <div className="w-full">
-                      <label className="block md:hidden mb-1 text-[10px] font-bold text-[#6B7280] uppercase tracking-wide">
-                        Item Name
-                      </label>
-                      <Input
-                        placeholder="e.g. Beras 5kg"
-                        value={it.itemName}
-                        onChange={(e) =>
-                          setItems((s) =>
-                            s.map((x) =>
-                              x.uid === it.uid ? { ...x, itemName: e.target.value } : x
-                            )
-                          )
-                        }
-                        error={errors[`items[${idx}].itemName`]}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Desktop Delete Button */}
-                  <div className="hidden md:block">
-                    <Button
-                      type="button"
-                      variant="outlined"
-                      size="sm"
-                      className="p-3"
-                      onClick={() =>
-                        setItems((s) =>
-                          s.length > 1 ? s.filter((x) => x.uid !== it.uid) : s
-                        )
-                      }
-                      aria-label="Remove item"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {errors.items && (
-              <p
-                role="alert"
-                className="mt-2 text-xs text-[#EF4444] font-['Hanken_Grotesk',system-ui,sans-serif]"
-              >
-                {errors.items}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label
-              htmlFor="payment-method"
-              className="block mb-1.5 font-['Hanken_Grotesk',system-ui,sans-serif] text-sm font-medium text-[#374151]"
-            >
-              Payment method
-            </label>
-            <select
-              id="payment-method"
-              value={paymentMethod}
-              onChange={(e) =>
-                setPaymentMethod(e.target.value as PaymentMethod)
-              }
-              className="w-full rounded-lg border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-[#111827] font-['Hanken_Grotesk',system-ui,sans-serif] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40"
-            >
-              <option value="cod">Bayar di Tempat (COD)</option>
-              <option value="bank_transfer">Transfer Bank</option>
-              <option value="e_wallet">E-Wallet</option>
-            </select>
-            {errors.paymentMethod && (
-              <p
-                role="alert"
-                className="mt-1 text-xs text-[#EF4444] font-['Hanken_Grotesk',system-ui,sans-serif]"
-              >
-                {errors.paymentMethod}
-              </p>
-            )}
-          </div>
-
-          {bannerError && (
-            <div className="rounded-lg bg-[#FEE2E2] border border-[#FCA5A5] px-4 py-3 text-sm text-[#991B1B] font-['Hanken_Grotesk',system-ui,sans-serif]">
-              {bannerError}
-            </div>
-          )}
-          {success && (
-            <div className="rounded-lg bg-[#D1FAE5] border border-[#A7F3D0] px-4 py-3 text-sm text-[#065F46] font-['Hanken_Grotesk',system-ui,sans-serif]">
-              {success}
-            </div>
-          )}
-
-          <div className="flex items-center gap-2">
-            <Button type="submit" variant="primary" loading={submitting}>
-              Submit order
-            </Button>
-            <Button type="button" variant="outlined" onClick={reset}>
-              Reset
-            </Button>
-          </div>
-        </form>
-      </Card>
-
-      <Card className="!p-0 overflow-hidden">
-        <div className="px-6 pt-6 pb-3 border-b border-[#E5E7EB]">
-          <h3 className="font-['Manrope',system-ui,sans-serif] text-lg font-bold text-[#111827]">
-            Recent orders
-          </h3>
+    <div className="space-y-6 max-w-7xl mx-auto p-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-2xl border border-[#E5E7EB] shadow-xs">
+        <div>
+          <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]">
+            Daftar Pesanan & Invoice
+          </h1>
+          <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk'] mt-1">
+            Pantau status operasional pesanan, jatuh tempo invoice, dan verifikasi tanda tangan digital.
+          </p>
         </div>
-        <ul className="divide-y divide-[#E5E7EB]">
-          {orders.slice(0, 25).map((o) => (
-            <li key={o.id} className="px-6 py-3 flex items-center gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm font-semibold text-[#111827] truncate">
-                  {o.customerName}
-                </p>
-                <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-[#6B7280]">
-                  {o.items.length} item(s) · {new Date(o.createdAt).toLocaleString()}
-                </p>
-              </div>
-              <StatusBadge status={o.status} />
-            </li>
-          ))}
-          {orders.length === 0 && (
-            <li className="px-6 py-8 text-center text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-              No orders yet.
-            </li>
-          )}
-        </ul>
+        <Link to="/admin/orders/new">
+          <Button variant="primary" className="bg-[#D97706] hover:bg-[#B45309] text-white border-none rounded-xl font-bold flex items-center gap-2">
+            <Plus className="w-5 h-5" />
+            Input Pesanan Baru
+          </Button>
+        </Link>
+      </div>
+
+      {/* Filters & Search */}
+      <Card className="p-4 bg-white border border-[#E5E7EB] rounded-2xl shadow-xs">
+        <div className="flex flex-col md:flex-row gap-4 items-center">
+          <div className="relative flex-1 w-full">
+            <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-[#9CA3AF]" />
+            <input
+              type="text"
+              placeholder="Cari berdasarkan instansi, penerima, nomor telepon, atau ID..."
+              className="pl-10 w-full rounded-xl border border-[#D1D5DB] bg-white px-4 py-2 text-sm text-[#111827] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-wrap sm:flex-nowrap gap-3 w-full md:w-auto">
+            <div className="flex-1 sm:flex-initial">
+              <select
+                className="w-full rounded-xl border border-[#D1D5DB] bg-white px-3 py-2 text-xs font-semibold text-[#374151] focus:border-[#FBBF24] focus:outline-none"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as OrderStatus | "ALL")}
+                aria-label="Filter Status Operasional"
+              >
+                <option value="ALL">Semua Status Operasional</option>
+                <option value="PENDING">Pending</option>
+                <option value="IN_PRODUCTION">Dalam Produksi</option>
+                <option value="QC">QC</option>
+                <option value="READY_TO_DELIVER">Siap Dikirim</option>
+                <option value="OUT_FOR_DELIVERY">Dalam Pengiriman</option>
+                <option value="COMPLETED">Selesai</option>
+                <option value="DELIVERY_FAILED">Gagal Kirim</option>
+              </select>
+            </div>
+
+            <div className="flex-1 sm:flex-initial">
+              <select
+                className="w-full rounded-xl border border-[#D1D5DB] bg-white px-3 py-2 text-xs font-semibold text-[#374151] focus:border-[#FBBF24] focus:outline-none"
+                value={paymentFilter}
+                onChange={(e) => setPaymentFilter(e.target.value as PaymentStatus | "ALL")}
+                aria-label="Filter Status Pembayaran"
+              >
+                <option value="ALL">Semua Status Pembayaran</option>
+                <option value="BELUM_DIBAYAR">Belum Dibayar</option>
+                <option value="SUDAH_DIBAYAR">Sudah Dibayar</option>
+                <option value="JATUH_TEMPO">Jatuh Tempo</option>
+              </select>
+            </div>
+          </div>
+        </div>
       </Card>
+
+      {/* Orders Table */}
+      <Card className="!p-0 overflow-hidden border border-[#E5E7EB] rounded-2xl shadow-sm bg-white">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB] text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">
+                <th className="py-4 px-6">ID / Tipe</th>
+                <th className="py-4 px-6">Instansi & Penerima</th>
+                <th className="py-4 px-6">Detail Pesanan & Harga</th>
+                <th className="py-4 px-6">Tanggal Acara / Jatuh Tempo</th>
+                <th className="py-4 px-6">Status Operasional</th>
+                <th className="py-4 px-6">Status Pembayaran</th>
+                <th className="py-4 px-6 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E5E7EB] text-sm text-[#374151]">
+              {filteredOrders.map((o) => {
+                const dueInfo = getDueDateInfo(o);
+                const isSigned = !!o.invoiceSignedAt;
+                const isManuallyValidated = !!o.manualValidation;
+                const shortId = o.id.slice(-6).toUpperCase();
+
+                return (
+                  <tr key={o.id} className="hover:bg-neutral-50/50 transition-colors">
+                    {/* ID / Tipe */}
+                    <td className="py-4 px-6 font-['Hanken_Grotesk']">
+                      <div className="font-mono font-bold text-[#111827]">#{shortId}</div>
+                      <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                        o.orderType === "event" ? "bg-purple-100 text-purple-700" : "bg-cyan-100 text-cyan-700"
+                      }`}>
+                        {o.orderType}
+                      </span>
+                    </td>
+
+                    {/* Instansi & Penerima */}
+                    <td className="py-4 px-6">
+                      <div className="font-bold text-[#111827]">{o.institutionName}</div>
+                      <div className="text-xs text-[#6B7280] flex items-center gap-1.5 mt-1 font-medium">
+                        <User className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                        {o.recipientName}
+                      </div>
+                      <div className="text-xs text-[#6B7280] flex items-center gap-1.5 mt-0.5 font-mono">
+                        <Phone className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                        {o.recipientPhone}
+                      </div>
+                    </td>
+
+                    {/* Detail Pesanan & Harga */}
+                    <td className="py-4 px-6">
+                      <div className="text-xs max-w-xs truncate text-[#4B5563]" title={o.foodDetails}>
+                        {o.foodDetails}
+                      </div>
+                      {o.drinkDetails && (
+                        <div className="text-[11px] text-[#6B7280] italic truncate mt-0.5" title={o.drinkDetails}>
+                          Minuman: {o.drinkDetails}
+                        </div>
+                      )}
+                      <div className="font-extrabold text-[#B45309] mt-1.5">
+                        {formatIDR(o.totalPrice)}
+                      </div>
+                    </td>
+
+                    {/* Tanggal Acara / Jatuh Tempo */}
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-1 text-xs text-[#374151]">
+                        <Calendar className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
+                        Acara: {new Date(o.eventDate).toLocaleDateString("id-ID")}
+                      </div>
+                      <div className={`flex items-center gap-1 text-xs font-semibold mt-1.5 ${
+                        dueInfo.isOverdue ? "text-[#EF4444]" : dueInfo.isWarning ? "text-[#F59E0B]" : "text-[#6B7280]"
+                      }`}>
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        Tempo: {new Date(o.paymentDueDate).toLocaleDateString("id-ID")}
+                        {dueInfo.isOverdue && <span className="text-[9px] font-extrabold bg-red-100 text-red-700 px-1.5 py-0.5 rounded ml-1 uppercase">Overdue</span>}
+                      </div>
+                    </td>
+
+                    {/* Status Operasional */}
+                    <td className="py-4 px-6">
+                      <StatusBadge status={o.status} />
+                    </td>
+
+                    {/* Status Pembayaran */}
+                    <td className="py-4 px-6">
+                      <select
+                        className={`text-xs font-bold rounded-lg px-2.5 py-1.5 border focus:outline-none cursor-pointer ${
+                          o.paymentStatus === "SUDAH_DIBAYAR"
+                            ? "bg-[#D1FAE5] text-[#065F46] border-[#A7F3D0]"
+                            : o.paymentStatus === "JATUH_TEMPO"
+                            ? "bg-[#FEE2E2] text-[#991B1B] border-[#FCA5A5]"
+                            : "bg-[#FEF3C7] text-[#92400E] border-[#FDE047]"
+                        }`}
+                        value={o.paymentStatus}
+                        onChange={(e) => handleUpdatePaymentStatus(o.id, e.target.value as PaymentStatus)}
+                        aria-label="Ubah Status Pembayaran"
+                      >
+                        <option value="BELUM_DIBAYAR">Belum Dibayar</option>
+                        <option value="SUDAH_DIBAYAR">Sudah Dibayar</option>
+                        <option value="JATUH_TEMPO">Jatuh Tempo</option>
+                      </select>
+
+                      {/* Digital signature / manual validation badge */}
+                      <div className="mt-2">
+                        {isSigned ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#10B981] bg-emerald-50 border border-emerald-200 rounded-md px-1.5 py-0.5">
+                            <ShieldCheck className="w-3 h-3" /> TTD Digital
+                          </span>
+                        ) : isManuallyValidated ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-1.5 py-0.5">
+                            <CheckCircle2 className="w-3 h-3" /> Validasi Manual
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#6B7280] bg-neutral-100 rounded-md px-1.5 py-0.5">
+                            Belum Valid
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Aksi */}
+                    <td className="py-4 px-6 text-center">
+                      <div className="flex flex-col gap-1.5 items-center justify-center">
+                        {/* Status Transition buttons */}
+                        {o.status === "PENDING" && (
+                          <Button
+                            size="sm"
+                            className="bg-[#D97706] hover:bg-[#B45309] text-white border-none w-28 h-8 rounded-lg text-xs"
+                            onClick={() => handleTransition(o.id, "start-production")}
+                            disabled={transitioningId === o.id}
+                          >
+                            Mulai Masak
+                          </Button>
+                        )}
+                        {o.status === "IN_PRODUCTION" && (
+                          <Button
+                            size="sm"
+                            className="bg-purple-600 hover:bg-purple-700 text-white border-none w-28 h-8 rounded-lg text-xs"
+                            onClick={() => handleTransition(o.id, "complete-production")}
+                            disabled={transitioningId === o.id}
+                          >
+                            Kirim ke QC
+                          </Button>
+                        )}
+                        {o.status === "QC" && (
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white border-none h-8 px-2 rounded-lg text-xs"
+                              onClick={() => handleTransition(o.id, "qc-pass")}
+                              disabled={transitioningId === o.id}
+                            >
+                              Pass
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="bg-red-600 hover:bg-red-700 text-white border-none h-8 px-2 rounded-lg text-xs"
+                              onClick={() => {
+                                const reason = prompt("Masukkan alasan kegagalan QC:");
+                                if (reason) handleTransition(o.id, "qc-fail", reason);
+                              }}
+                              disabled={transitioningId === o.id}
+                            >
+                              Fail
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Invoice & Validation actions */}
+                        <div className="flex gap-1.5 items-center">
+                          <button
+                            onClick={() => handleCopyLink(o)}
+                            className="text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 border border-[#D1D5DB] rounded-lg p-1.5 transition-all text-xs font-semibold flex items-center gap-1"
+                            title="Salin Link Invoice"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            {copiedOrderId === o.id ? "Tersalin!" : "Link"}
+                          </button>
+
+                          {!isSigned && !isManuallyValidated && (
+                            <button
+                              onClick={() => setValidationTargetId(o.id)}
+                              className="text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg p-1.5 transition-all text-xs font-bold"
+                              title="Validasi Bukti Manual"
+                            >
+                              Validasi
+                            </button>
+                          )}
+
+                          {o.invoiceToken && (
+                            <Link
+                              to={`/invoice/${o.invoiceToken}`}
+                              target="_blank"
+                              className="text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-lg p-1.5 transition-all"
+                              title="Buka Invoice"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {filteredOrders.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-sm text-[#6B7280] font-['Hanken_Grotesk']">
+                    Tidak ada pesanan ditemukan.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Manual Validation Modal */}
+      <ManualValidationModal
+        isOpen={validationTargetId !== null}
+        onClose={() => setValidationTargetId(null)}
+        orderId={validationTargetId || ""}
+        onConfirm={handleManualValidationConfirm}
+      />
     </div>
   );
 }

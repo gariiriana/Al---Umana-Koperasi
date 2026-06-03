@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Loader2, ArrowLeft, MapPin, Clock, FileImage, ShieldAlert, Navigation, Phone, MessageCircle, Star, Camera, CheckCircle2, Send, AlertCircle } from "lucide-react";
+import { Loader2, ArrowLeft, MapPin, Clock, FileImage, ShieldAlert, Navigation, Phone, MessageCircle, Star, Camera, Send, AlertCircle } from "lucide-react";
 import { doc, getDoc } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
 import type * as LType from "leaflet";
 import { useAuth } from "@/contexts/AuthContext";
-import { subscribeToOrder, customerConfirmDelivery, submitReview } from "@/services/orderService";
+import { subscribeToOrder, submitReview } from "@/services/orderService";
 import { uploadFileInChunks } from "@/services/chunkUploadService";
 import { validateImageUpload } from "@/lib/validators";
 import type { Order } from "@/types/order";
@@ -77,31 +77,22 @@ const getSteps = (lang: string) => [
     title: lang === "en" ? "Order Placed" : "Pesanan Dibuat",
     desc: (_status: string, step: number) => 
       step > 1 
-        ? (lang === "en" ? "Order successfully placed" : "Pesanan berhasil dibuat") 
-        : (lang === "en" ? "Awaiting order details completion" : "Menunggu kelengkapan data pesanan"),
-  },
-  {
-    title: lang === "en" ? "Payment Approval" : "Persetujuan Pembayaran",
-    desc: (status: string, step: number) => {
-      if (status === "PAYMENT_REJECTED") return lang === "en" ? "Transfer proof rejected by admin" : "Bukti transfer ditolak oleh pengurus";
-      if (status === "AWAITING_PAYMENT_APPROVAL") return lang === "en" ? "Proof uploaded, awaiting approval" : "Bukti bayar diunggah, menunggu persetujuan";
-      if (step > 2) return lang === "en" ? "Payment successfully verified" : "Pembayaran berhasil diverifikasi";
-      return lang === "en" ? "Awaiting transfer proof payment" : "Menunggu pembayaran bukti transfer";
-    }
+        ? (lang === "en" ? "Order accepted" : "Pesanan dikonfirmasi") 
+        : (lang === "en" ? "Awaiting kitchen processing" : "Menunggu diproses dapur"),
   },
   {
     title: lang === "en" ? "Kitchen Processing" : "Proses Dapur",
     desc: (status: string, step: number) => {
       if (status === "IN_PRODUCTION") return lang === "en" ? "Order is being prepared in the kitchen" : "Pesanan sedang dimasak di dapur koperasi";
-      if (step > 3) return lang === "en" ? "Finished processing & packaging" : "Selesai diproses & dikemas";
+      if (step > 2) return lang === "en" ? "Finished processing & packaging" : "Selesai diproses & dikemas";
       return lang === "en" ? "Awaiting kitchen queue" : "Menunggu antrean masuk dapur";
     }
   },
   {
     title: lang === "en" ? "Quality Control (QC)" : "Uji Kelayakan (QC)",
     desc: (status: string, step: number) => {
-      if (status === "READY") return lang === "en" ? "Order is being quality checked (QC)" : "Pesanan sedang diuji kelayakan (QC) di dapur";
-      if (step > 4) return lang === "en" ? "Passed quality control" : "Lolos uji kelayakan (QC)";
+      if (status === "QC") return lang === "en" ? "Order is being quality checked (QC)" : "Pesanan sedang diuji kelayakan (QC) di dapur";
+      if (step > 3) return lang === "en" ? "Passed quality control" : "Lolos uji kelayakan (QC)";
       return lang === "en" ? "Awaiting quality check" : "Menunggu pengujian kelayakan (QC)";
     }
   },
@@ -109,7 +100,7 @@ const getSteps = (lang: string) => [
     title: lang === "en" ? "Ready for Delivery" : "Siap Dikirim",
     desc: (status: string, step: number) => {
       if (status === "READY_TO_DELIVER") return lang === "en" ? "Order packed & awaiting courier dispatch" : "Pesanan dikemas & menunggu kurir berangkat";
-      if (step > 5) return lang === "en" ? "Order handed over to courier" : "Pesanan diserahkan ke kurir";
+      if (step > 4) return lang === "en" ? "Order handed over to courier" : "Pesanan diserahkan ke kurir";
       return lang === "en" ? "Awaiting product readiness" : "Menunggu kesiapan produk";
     }
   },
@@ -117,22 +108,14 @@ const getSteps = (lang: string) => [
     title: lang === "en" ? "Out for Delivery" : "Dalam Pengantaran",
     desc: (status: string, step: number) => {
       if (status === "OUT_FOR_DELIVERY") return lang === "en" ? "Courier is on the way to your address" : "Kurir dalam perjalanan ke alamat Anda";
-      if (step > 6) return lang === "en" ? "Finished delivering to destination" : "Selesai diantar ke lokasi tujuan";
+      if (step > 5) return lang === "en" ? "Finished delivering to destination" : "Selesai diantar ke lokasi tujuan";
       return lang === "en" ? "Awaiting delivery schedule" : "Menunggu jadwal pengiriman";
-    }
-  },
-  {
-    title: lang === "en" ? "Order Delivered" : "Pesanan Terkirim",
-    desc: (status: string, step: number) => {
-      if (status === "DELIVERED") return lang === "en" ? "Courier confirmed order delivery, awaiting your confirmation" : "Kurir menyatakan pesanan terkirim, menunggu konfirmasi Anda";
-      if (step > 7) return lang === "en" ? "Delivery confirmed" : "Pengiriman dikonfirmasi";
-      return lang === "en" ? "Awaiting order arrival" : "Menunggu pesanan sampai";
     }
   },
   {
     title: lang === "en" ? "Completed" : "Selesai",
     desc: (_status: string, step: number) => {
-      if (step === 8) return lang === "en" ? "Order successfully completed. Thank you!" : "Pesanan telah selesai. Terima kasih!";
+      if (step === 6) return lang === "en" ? "Order successfully completed. Thank you!" : "Pesanan telah selesai. Terima kasih!";
       return lang === "en" ? "Awaiting confirmation and review" : "Menunggu konfirmasi dan ulasan";
     }
   }
@@ -156,25 +139,18 @@ const translateTime = (time: string, lang: string) => {
 
 function getStatusStepIndex(status: string): number {
   switch (status) {
-    case "PLACING":
-    case "AWAITING_PAYMENT_PROOF":
+    case "PENDING":
       return 1;
-    case "AWAITING_PAYMENT_APPROVAL":
-    case "PAYMENT_REJECTED":
-      return 2;
-    case "CONFIRMED":
     case "IN_PRODUCTION":
+      return 2;
+    case "QC":
       return 3;
-    case "READY":
-      return 4;
     case "READY_TO_DELIVER":
-      return 5;
+      return 4;
     case "OUT_FOR_DELIVERY":
-      return 6;
-    case "DELIVERED":
-      return 7;
+      return 5;
     case "COMPLETED":
-      return 8;
+      return 6;
     default:
       return 1;
   }
@@ -837,7 +813,6 @@ export function OrderDetailPage() {
   const [loadingCourier, setLoadingCourier] = useState(false);
 
   // Delivery confirm & review states
-  const [confirming, setConfirming] = useState(false);
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [reviewText, setReviewText] = useState("");
@@ -848,19 +823,6 @@ export function OrderDetailPage() {
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewPhotoSrc, setReviewPhotoSrc] = useState<string | null>(null);
   const [loadingReviewPhoto, setLoadingReviewPhoto] = useState(false);
-
-  const handleConfirmDelivery = async () => {
-    if (!order) return;
-    setConfirming(true);
-    try {
-      await customerConfirmDelivery(order.id);
-    } catch (err) {
-      console.error("Gagal mengonfirmasi penerimaan pesanan:", err);
-      alert(lang === "en" ? "Failed to confirm delivery. Please try again." : "Gagal mengonfirmasi pengiriman. Silakan coba lagi.");
-    } finally {
-      setConfirming(false);
-    }
-  };
 
   const handleReviewFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1115,7 +1077,7 @@ export function OrderDetailPage() {
 
   useEffect(() => {
     if (progressRef.current) {
-      const widthVal = `${Math.min(84, Math.max(0, (currentStepIndex - 1) * 12))}%`;
+      const widthVal = `${Math.min(84, Math.max(0, (currentStepIndex - 1) * 16.8))}%`;
       progressRef.current.style.width = widthVal;
     }
   }, [currentStepIndex]);
@@ -1162,10 +1124,9 @@ export function OrderDetailPage() {
         minute: "2-digit"
       });
 
-  const totalQty = order.items.reduce((sum, item) => sum + item.quantity, 0);
-
   // If the status is AWAITING_PAYMENT_PROOF or PAYMENT_REJECTED, let them upload proof
-  const needsProofUpload = order.status === "AWAITING_PAYMENT_PROOF" || order.status === "PAYMENT_REJECTED";
+  const needsProofUpload = false;
+  const totalQty = order.items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <div className="bg-[#F3F4F6] min-h-screen pb-28">
@@ -1221,7 +1182,7 @@ export function OrderDetailPage() {
                       textColor = "text-[#10B981]";
                       labelFont = "font-semibold";
                     } else if (isActive) {
-                      if (order.status === "PAYMENT_REJECTED" || order.status === "FAILED") {
+                      if (order.status === "DELIVERY_FAILED") {
                         circleBg = "bg-red-500 text-white border-transparent";
                         textColor = "text-red-500";
                         ringColor = "ring-4 ring-red-100";
@@ -1237,8 +1198,8 @@ export function OrderDetailPage() {
 
                     // Short label mappings for horizontal layout to avoid squishing
                     const shortLabels = lang === "en" 
-                      ? ["Created", "Pay", "Kitchen", "QC", "Ready", "Ship", "Arrived", "Done"]
-                      : ["Dibuat", "Bayar", "Dapur", "QC", "Siap", "Kirim", "Sampai", "Selesai"];
+                      ? ["Created", "Kitchen", "QC", "Ready", "Ship", "Done"]
+                      : ["Dibuat", "Dapur", "QC", "Siap", "Kirim", "Selesai"];
 
                     return (
                       <div key={idx} className="flex flex-col items-center flex-1 text-center">
@@ -1265,7 +1226,7 @@ export function OrderDetailPage() {
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">{t.currentStatus}</span>
                   <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                    {t.stepProgress.replace("{current}", String(currentStepIndex)).replace("{total}", "8")}
+                    {t.stepProgress.replace("{current}", String(currentStepIndex)).replace("{total}", "6")}
                   </span>
                 </div>
                 <h4 className="font-bold text-[#111827] text-sm pt-0.5">
@@ -1327,37 +1288,6 @@ export function OrderDetailPage() {
               </div>
             )}
 
-            {/* DELIVERED state: Delivery Confirmation Banner */}
-            {order.status === "DELIVERED" && (
-              <div className="bg-emerald-50/50 border border-emerald-200 rounded-3xl p-5 shadow-[0_4px_12px_rgba(16,185,129,0.08)] space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
-                    <CheckCircle2 className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h4 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-emerald-950">
-                      {lang === "en" ? "Order Has Arrived!" : "Pesanan Anda Sudah Sampai!"}
-                    </h4>
-                    <p className="text-xs text-emerald-700 font-['Hanken_Grotesk'] mt-0.5">
-                      {lang === "en" 
-                        ? "Please verify and confirm that you have received your order." 
-                        : "Silakan periksa dan konfirmasi bahwa barang sudah Anda terima dengan baik."}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={handleConfirmDelivery}
-                  disabled={confirming}
-                  className="w-full min-h-11 flex items-center justify-center gap-2 bg-[#10B981] hover:bg-[#059669] text-white text-xs font-bold rounded-2xl shadow-md transition disabled:opacity-50 cursor-pointer"
-                >
-                  {confirming ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-white" />
-                  ) : (
-                    <span>{lang === "en" ? "Confirm Received" : "Konfirmasi Barang Diterima"}</span>
-                  )}
-                </button>
-              </div>
-            )}
 
             {/* COMPLETED state: Review submission form / details */}
             {order.status === "COMPLETED" && (
@@ -1628,14 +1558,14 @@ export function OrderDetailPage() {
                 {t.createdOn} <span className="font-semibold text-[#111827]">{formattedDate}</span>
               </div>
 
-              {order.status === "PAYMENT_REJECTED" && (order.paymentRejectionReason || order.rejectionReason) && (
+              {order.status === "DELIVERY_FAILED" && (order.paymentRejectionReason || order.rejectionReason) && (
                 <div className="bg-red-50 border border-red-200 text-red-900 p-3.5 rounded-2xl text-xs font-['Hanken_Grotesk',system-ui,sans-serif] space-y-1">
                   <span className="font-bold">{t.rejectionTitle}</span>
                   <p className="leading-relaxed">{order.paymentRejectionReason || order.rejectionReason}</p>
                 </div>
               )}
 
-              {order.status === "FAILED" && order.outOfStockItems && order.outOfStockItems.length > 0 && (
+              {order.status === "DELIVERY_FAILED" && order.outOfStockItems && order.outOfStockItems.length > 0 && (
                 <div className="bg-red-50 border border-red-200 text-red-900 p-3.5 rounded-2xl text-xs font-['Hanken_Grotesk',system-ui,sans-serif] space-y-1">
                   <span className="font-bold">{t.outOfStockTitle}</span>
                   <p className="leading-relaxed">{t.outOfStockDesc}</p>

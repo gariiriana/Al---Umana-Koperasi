@@ -205,8 +205,7 @@ export function DispatchPage() {
   }, [enRoute.length]);
 
   const onAssign = async (o: Order) => {
-    const defaultCourierVal = user?.uid || "";
-    const cid = (courierIds[o.id] ?? "").trim() || o.assignedCourierId || defaultCourierVal;
+    const cid = (courierIds[o.id] ?? o.assignedCourierId ?? "").trim();
     
     if (!cid) { setError("Kurir wajib dipilih."); return; }
     setBusyId(o.id); setError(null);
@@ -274,10 +273,10 @@ export function DispatchPage() {
           <div className="space-y-3">
             <AnimatePresence>
               {ready.map((o) => {
-                const defaultCourierVal = user?.uid || "";
-                const courierValue = courierIds[o.id] ?? o.assignedCourierId ?? defaultCourierVal;
+                const courierValue = courierIds[o.id] ?? o.assignedCourierId ?? "";
 
                 const isBusy = busyId === o.id;
+                const isAlreadyAssigned = !!o.assignedCourierId && o.assignedCourierId === courierValue;
 
                 return (
                   <motion.div
@@ -295,8 +294,13 @@ export function DispatchPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="font-['Manrope',system-ui,sans-serif] font-extrabold text-[#111827] text-base truncate">
-                              {o.customerName}
+                              {o.institutionName || o.customerName}
                             </p>
+                            {o.recipientName && (
+                              <p className="text-xs text-[#4B5563] font-semibold mt-0.5">
+                                Penerima: {o.recipientName}
+                              </p>
+                            )}
                             <p className="font-mono text-[10px] text-[#9CA3AF] mt-0.5">#{o.id.slice(0, 10)}…</p>
                           </div>
                           <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-blue-100 text-blue-700">
@@ -366,10 +370,20 @@ export function DispatchPage() {
                             </div>
                             <button
                               onClick={() => onAssign(o)}
-                              disabled={isBusy}
-                              className="px-4 py-2 border border-[#D1D5DB] bg-white hover:bg-[#F3F4F6] text-sm font-bold text-[#374151] font-['Hanken_Grotesk',system-ui,sans-serif] rounded-lg transition cursor-pointer disabled:opacity-50"
+                              disabled={isBusy || isAlreadyAssigned}
+                              className={`px-4 py-2 border text-sm font-bold font-['Hanken_Grotesk',system-ui,sans-serif] rounded-lg transition cursor-pointer disabled:opacity-50 ${
+                                isAlreadyAssigned
+                                  ? "bg-emerald-50 border-emerald-200 text-emerald-700 cursor-default"
+                                  : "bg-white hover:bg-[#F3F4F6] border-[#D1D5DB] text-[#374151] active:scale-[0.98]"
+                              }`}
                             >
-                              {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Tugaskan"}
+                              {isBusy ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : isAlreadyAssigned ? (
+                                "✓ Ditugaskan"
+                              ) : (
+                                "Tugaskan"
+                              )}
                             </button>
                           </div>
                           {courierValue && busyCourierIds.has(courierValue) && (
@@ -460,7 +474,7 @@ export function DispatchPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-['Manrope',system-ui,sans-serif] font-extrabold text-[#111827] truncate">
-                          {o.customerName}
+                          {o.institutionName || o.customerName}
                         </p>
                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                           <span className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] flex items-center gap-1">

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { signUp } from "@/services/authService";
 
 const DICTIONARY = {
   id: {
@@ -47,7 +48,7 @@ const DICTIONARY = {
 } as const;
 
 export function RegisterPage() {
-  const { signUp, signInWithGoogle } = useAuth();
+  const { signInWithGoogle } = useAuth();
   const navigate = useNavigate();
   const { lang } = useLanguage();
   const t = DICTIONARY[lang];

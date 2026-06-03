@@ -7,14 +7,13 @@ import { Input } from "@/components/ui/Input";
 
 const STATUS_OPTIONS: Array<{ value: "" | OrderStatus; label: string }> = [
   { value: "", label: "All statuses" },
-  { value: "PLACING", label: "Placing" },
-  { value: "CONFIRMED", label: "Confirmed" },
+  { value: "PENDING", label: "Pending" },
   { value: "IN_PRODUCTION", label: "In Production" },
-  { value: "READY", label: "Ready" },
+  { value: "QC", label: "QC" },
   { value: "READY_TO_DELIVER", label: "Ready to Deliver" },
   { value: "OUT_FOR_DELIVERY", label: "Out for Delivery" },
-  { value: "DELIVERED", label: "Delivered" },
-  { value: "FAILED", label: "Failed" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "DELIVERY_FAILED", label: "Delivery Failed" },
 ];
 
 export interface FilterState {

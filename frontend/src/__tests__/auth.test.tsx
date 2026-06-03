@@ -145,7 +145,7 @@ describe("Authentication UI Features", () => {
     expect(passwordInput.type).toBe("password");
   });
 
-  it("should render links to register and forgot-password on LoginPage", () => {
+  it("should render link to forgot-password on LoginPage", () => {
     render(
       <BrowserRouter>
         <AuthProvider>
@@ -155,7 +155,6 @@ describe("Authentication UI Features", () => {
     );
 
     expect(screen.getByText("Forgot password?")).toBeDefined();
-    expect(screen.getByText("Register")).toBeDefined();
   });
 
   it("should toggle password visibility on RegisterPage", () => {
@@ -407,7 +406,7 @@ describe("Authentication UI Features", () => {
       expect(document.querySelector('a[href="/admin/tracking"]')).toBeNull();
     });
 
-    it("should allow admin role to access all pages and see all links", async () => {
+    it("should allow admin role to access allowed pages and see corresponding links", async () => {
       mockUserProfileData = {
         email: "admin@alumana.id",
         displayName: "Admin User",
@@ -424,16 +423,15 @@ describe("Authentication UI Features", () => {
       await waitFor(() => {
         // Admin sees allowed links
         expect(document.querySelector('a[href="/admin/dashboard"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/admin/products"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/admin/payment-approvals"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/orders"]')).not.toBeNull();
+        expect(document.querySelector('a[href="/admin/tracking"]')).not.toBeNull();
         
         // Admin does not see production/delivery/etc.
-        expect(document.querySelector('a[href="/admin/orders"]')).toBeNull();
+        expect(document.querySelector('a[href="/admin/products"]')).toBeNull();
         expect(document.querySelector('a[href="/admin/production"]')).toBeNull();
         expect(document.querySelector('a[href="/admin/qc"]')).toBeNull();
-        expect(document.querySelector('a[href="/admin/dispatch"]')).toBeNull();
-        expect(document.querySelector('a[href="/admin/delivery"]')).toBeNull();
-        expect(document.querySelector('a[href="/admin/tracking"]')).toBeNull();
+        expect(document.querySelector('a[href="/distribusi/dispatch"]')).toBeNull();
+        expect(document.querySelector('a[href="/distribusi/delivery"]')).toBeNull();
       });
 
       // Open profile dropdown to check Settings link
@@ -459,7 +457,7 @@ describe("Authentication UI Features", () => {
       mockDocSnapshotExists = true;
     });
 
-    it("should auto-provision new users with role 'pelanggan' regardless of their email containing 'admin'", async () => {
+    it("should deny access and not auto-provision new users when Firestore profile is missing", async () => {
       const { setDoc } = await import("firebase/firestore");
 
       render(
@@ -470,17 +468,8 @@ describe("Authentication UI Features", () => {
         </BrowserRouter>
       );
 
-      await waitFor(() => {
-        expect(setDoc).toHaveBeenCalledWith(
-          undefined,
-          expect.objectContaining({
-            email: "admin@alumana.id",
-            displayName: "Admin User",
-            role: "pelanggan",
-            createdAt: expect.any(Date),
-          })
-        );
-      });
+      await new Promise(resolve => setTimeout(resolve, 100)); // wait a bit
+      expect(setDoc).not.toHaveBeenCalled();
     });
   });
 });

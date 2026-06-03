@@ -39,7 +39,7 @@ const DICTIONARY = {
 } as const;
 
 export function LoginPage() {
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { lang } = useLanguage();
@@ -90,50 +90,6 @@ export function LoginPage() {
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    setError(null);
-    setSubmitting(true);
-    try {
-      await signInWithGoogle();
-      
-      const loggedUser = auth.currentUser;
-      let role = "pelanggan";
-      
-      if (loggedUser) {
-        // Fetch user profile from Firestore to check their role before redirecting
-        const userDocRef = doc(db, "users", loggedUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          role = userDocSnap.data().role || "pelanggan";
-        }
-      }
-
-      const state = location.state as {
-        from?: {
-          pathname: string;
-        };
-        selectedQty?: unknown;
-      } | null;
-      let origin = state?.from?.pathname || "/";
-      
-      // If a customer (pelanggan) tries to access any admin area, redirect them to storefront homepage instead
-      if (role === "pelanggan" && origin.startsWith("/admin")) {
-        origin = "/";
-      }
-
-      const preservedQty = state?.selectedQty;
-      navigate(origin, {
-        replace: true,
-        state: { selectedQty: preservedQty }
-      });
-    } catch (err) {
-      console.error(err);
-      setError(err instanceof Error ? err.message : "Google sign-in failed");
     } finally {
       setSubmitting(false);
     }
@@ -245,35 +201,7 @@ export function LoginPage() {
               {t.signInBtn}
             </Button>
 
-            <div className="relative flex items-center my-4">
-              <div className="flex-grow border-t border-white/10"></div>
-              <span className="flex-shrink mx-4 text-[10px] text-neutral-300 font-['Hanken_Grotesk'] font-bold uppercase tracking-wider">{t.orContinue}</span>
-              <div className="flex-grow border-t border-white/10"></div>
-            </div>
 
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              disabled={submitting}
-              className="w-full min-h-11 flex items-center justify-center gap-3 px-4 py-2.5 border border-[#D1D5DB] rounded-2xl bg-white hover:bg-[#F9FAFB] text-sm font-bold text-[#374151] transition-all cursor-pointer shadow-xs focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:ring-offset-2 disabled:opacity-50"
-            >
-              <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.57h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.47c0,-0.61 -0.06,-1.2 -0.16,-1.73Z" fill="#4285F4" />
-                <path d="M12,20.6c2.32,0 4.27,-0.77 5.7,-2.1l-3.3,-2.57c-0.91,0.61 -2.08,0.98 -3.3,0.98c-2.28,0 -4.21,-1.54 -4.9,-3.61H2.78v2.66c1.44,2.86 4.38,4.64 7.62,4.64Z" fill="#34A853" />
-                <path d="M7.1,13.3c-0.18,-0.54 -0.28,-1.11 -0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V7.24H2.78c-0.61,1.22 -0.96,2.6 -0.96,4.06c0,1.46 0.35,2.84 0.96,4.06l4.32,-3.36Z" fill="#FBBC05" />
-                <path d="M12,6.22c1.26,0 2.39,0.43 3.28,1.28l2.46,-2.46C16.26,3.64 14.31,2.9 12,2.9C8.76,2.9 5.82,4.68 4.38,7.54l4.32,3.36c0.69,-2.07 2.62,-3.61 4.9,-3.61Z" fill="#EA4335" />
-              </svg>
-              <span>{t.googleSignIn}</span>
-            </button>
-
-            <div className="text-center mt-4">
-              <span className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-neutral-300">
-                {t.noAccount}{" "}
-                <Link to="/register" className="text-amber-300 hover:text-amber-400 font-bold hover:underline">
-                  {t.register}
-                </Link>
-              </span>
-            </div>
           </form>
         </div>
       </div>

@@ -11,36 +11,22 @@ interface StatusStyle {
 }
 
 const STATUS_STYLES: Record<OrderStatus, StatusStyle> = {
-  PLACING: { classes: "bg-[#FEF3C7] text-[#92400E]", label: "Placing" },
-  AWAITING_PAYMENT_PROOF: {
-    classes: "bg-[#FEF3C7] text-[#92400E]",
-    label: "Awaiting Payment Proof",
-  },
-  AWAITING_PAYMENT_APPROVAL: {
-    classes: "bg-[#FED7AA] text-[#9A3412]",
-    label: "Awaiting Payment Approval",
-  },
-  PAYMENT_REJECTED: {
-    classes: "bg-[#FEE2E2] text-[#991B1B]",
-    label: "Payment Rejected",
-  },
-  CONFIRMED: { classes: "bg-[#DBEAFE] text-[#1E40AF]", label: "Confirmed" },
+  PENDING: { classes: "bg-[#FEF3C7] text-[#92400E]", label: "Pending" },
   IN_PRODUCTION: {
     classes: "bg-[#E0E7FF] text-[#3730A3]",
-    label: "In Production",
+    label: "Dalam Produksi",
   },
-  READY: { classes: "bg-[#D1FAE5] text-[#065F46]", label: "Ready" },
+  QC: { classes: "bg-[#F3E8FF] text-[#6B21A8]", label: "Quality Control" },
   READY_TO_DELIVER: {
-    classes: "bg-[#FDE68A] text-[#78350F]",
-    label: "Ready to Deliver",
+    classes: "bg-[#D1FAE5] text-[#065F46]",
+    label: "Siap Dikirim",
   },
   OUT_FOR_DELIVERY: {
-    classes: "bg-[#BFDBFE] text-[#1E3A8A]",
-    label: "Out for Delivery",
+    classes: "bg-[#DBEAFE] text-[#1E40AF]",
+    label: "Dalam Pengiriman",
   },
-  DELIVERED: { classes: "bg-[#A7F3D0] text-[#064E3B]", label: "Delivered" },
-  COMPLETED: { classes: "bg-[#D1FAE5] text-[#065F46]", label: "Completed" },
-  FAILED: { classes: "bg-[#FEE2E2] text-[#991B1B]", label: "Failed" },
+  COMPLETED: { classes: "bg-[#D1FAE5] text-[#065F46]", label: "Selesai" },
+  DELIVERY_FAILED: { classes: "bg-[#FEE2E2] text-[#991B1B]", label: "Gagal Kirim" },
 };
 
 const BASE_CLASSES =

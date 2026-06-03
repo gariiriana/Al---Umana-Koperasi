@@ -316,7 +316,7 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
           </AnimatePresence>
 
           {/* Action button */}
-          {order.status === "CONFIRMED" && !showStartForm && (
+          {order.status === "PENDING" && !showStartForm && (
             <button
               onClick={() => setShowStartForm(true)}
               disabled={isBusy}
@@ -350,7 +350,7 @@ export function ProductionPage() {
 
   useEffect(() => subscribeOrders(setOrders, console.error), []);
 
-  const confirmed = orders.filter((o) => o.status === "CONFIRMED").sort(
+  const confirmed = orders.filter((o) => o.status === "PENDING").sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
   const inProduction = orders.filter((o) => o.status === "IN_PRODUCTION").sort(

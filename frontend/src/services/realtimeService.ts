@@ -18,7 +18,7 @@ import {
   type DocumentSnapshot,
   type QuerySnapshot,
   type Unsubscribe,
-  Timestamp,
+  Timestamp
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
@@ -41,12 +41,28 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
   const data = snap.data() ?? {};
   return {
     id: snap.id,
+    orderType: (data.orderType as Order["orderType"]) ?? "event",
+    institutionName: (data.institutionName as string) ?? "",
+    recipientName: (data.recipientName as string) ?? "",
+    recipientPhone: (data.recipientPhone as string) ?? "",
+    recipientNotes: data.recipientNotes as string | undefined,
+    eventDate: (data.eventDate as string) ?? "",
+    foodDetails: (data.foodDetails as string) ?? "",
+    drinkDetails: (data.drinkDetails as string) ?? "",
+    totalPrice: (data.totalPrice as number) ?? 0,
+    additionalNotes: data.additionalNotes as string | undefined,
+    paymentStatus: (data.paymentStatus as Order["paymentStatus"]) ?? "BELUM_DIBAYAR",
+    paymentDueDate: (data.paymentDueDate as string) ?? "",
+    invoiceToken: data.invoiceToken as string | undefined,
+    invoiceSignedAt: data.invoiceSignedAt ? toIsoString(data.invoiceSignedAt) : undefined,
+    invoiceSignatureData: data.invoiceSignatureData as string | undefined,
+    manualValidation: data.manualValidation as Order["manualValidation"],
+    status: ((data.status as string) ?? "PENDING") as OrderStatus,
     customerId: (data.customerId as string) ?? "",
     customerName: (data.customerName as string) ?? "",
     items: (data.items as Order["items"]) ?? [],
     deliveryAddress: (data.deliveryAddress as string) ?? "",
     deliveryTime: (data.deliveryTime as string) ?? "",
-    status: ((data.status as string) ?? "PLACING") as OrderStatus,
     rejectionReason: data.rejectionReason as string | undefined,
     outOfStockItems: data.outOfStockItems as string[] | undefined,
     assignedCourierId: data.assignedCourierId as string | undefined,
@@ -64,7 +80,6 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     createdAt: toIsoString(data.createdAt),
     updatedAt: toIsoString(data.updatedAt),
     paymentMethod: ((data.paymentMethod as string) ?? "cod") as Order["paymentMethod"],
-    paymentStatus: data.paymentStatus as string | undefined,
     paymentProofFileId: data.paymentProofFileId as string | undefined,
     paymentApprovedBy: data.paymentApprovedBy as string | undefined,
     paymentApprovedAt: data.paymentApprovedAt ? toIsoString(data.paymentApprovedAt) : undefined,

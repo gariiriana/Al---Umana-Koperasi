@@ -9,7 +9,7 @@ import { PICConfirmation } from "@/components/delivery/PICConfirmation";
 import { ProofCapture } from "@/components/delivery/ProofCapture";
 
 import { db } from "@/lib/firebase";
-import { doc, updateDoc, getDoc } from "firebase/firestore";
+import { doc, updateDoc } from "firebase/firestore";
 import { uploadFileInChunks } from "@/services/chunkUploadService";
 import { validateImageUpload } from "@/lib/validators";
 import { dispatchOrder } from "@/services/orderService";
@@ -314,46 +314,6 @@ export function DeliveryPage() {
 
   const active = activeId ? orders.find((o) => o.id === activeId) ?? null : null;
 
-  // Fetch active customer details
-  const [customerProfile, setCustomerProfile] = useState<{ displayName?: string; phoneNumber?: string } | null>(null);
-  const [loadingCustomer, setLoadingCustomer] = useState(false);
-
-  useEffect(() => {
-    const customerId = active?.customerId;
-    if (!customerId) {
-      setCustomerProfile(null);
-      return;
-    }
-
-    const loadCustomerProfile = async () => {
-      setLoadingCustomer(true);
-      try {
-        const userRef = doc(db, "users", customerId);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          setCustomerProfile({
-            displayName: data.displayName || active.customerName,
-            phoneNumber: data.phoneNumber || "",
-          });
-        } else {
-          setCustomerProfile({
-            displayName: active.customerName,
-          });
-        }
-      } catch (err) {
-        console.error("Gagal memuat profil pelanggan:", err);
-        setCustomerProfile({
-          displayName: active.customerName,
-        });
-      } finally {
-        setLoadingCustomer(false);
-      }
-    };
-
-    loadCustomerProfile();
-  }, [activeId, active?.customerId, active?.customerName]);
-
   useEffect(() => subscribeOrders(setOrders, console.error), []);
 
   const myDeliveries = useMemo(
@@ -370,14 +330,12 @@ export function DeliveryPage() {
     [orders, user, profile]
   );
 
-  const activeEnRouteOrder = useMemo(() => {
-    return myDeliveries.find((o) => o.status === "OUT_FOR_DELIVERY") ?? null;
+  const activeEnRouteOrderIds = useMemo(() => {
+    return myDeliveries.filter((o) => o.status === "OUT_FOR_DELIVERY").map((o) => o.id);
   }, [myDeliveries]);
 
-  const activeEnRouteId = activeEnRouteOrder?.id;
-
   useEffect(() => {
-    if (!activeEnRouteId) return;
+    if (activeEnRouteOrderIds.length === 0) return;
 
     if (!navigator.geolocation) {
       console.warn("Geolocation is not supported by this browser.");
@@ -388,10 +346,14 @@ export function DeliveryPage() {
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {
-          await updateDoc(doc(db, "orders", activeEnRouteId), {
-            courierLat: latitude,
-            courierLng: longitude,
-          });
+          await Promise.all(
+            activeEnRouteOrderIds.map((id) =>
+              updateDoc(doc(db, "orders", id), {
+                courierLat: latitude,
+                courierLng: longitude,
+              })
+            )
+          );
         } catch (err) {
           console.error("Gagal mengupdate lokasi kurir:", err);
         }
@@ -407,9 +369,7 @@ export function DeliveryPage() {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [activeEnRouteId]);
-
-
+  }, [activeEnRouteOrderIds]);
 
   const reset = () => {
     setActiveId(null);
@@ -456,7 +416,7 @@ export function DeliveryPage() {
             <>
               <span className="text-[#D1D5DB]">/</span>
               <span className="text-sm font-bold text-[#111827] truncate font-['Hanken_Grotesk',system-ui,sans-serif]">
-                {active.customerName}
+                {active.institutionName || active.customerName}
               </span>
             </>
           )}
@@ -466,8 +426,6 @@ export function DeliveryPage() {
       {/* Customer Info Card (placed when in any active delivery step) */}
       {active && step !== "list" && (
         <CustomerInfoCard
-          profile={customerProfile}
-          loading={loadingCustomer}
           order={active}
         />
       )}
@@ -564,7 +522,7 @@ export function DeliveryPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
                               <p className="font-['Manrope',system-ui,sans-serif] font-extrabold text-[#111827] text-base truncate">
-                                {o.customerName}
+                                {o.institutionName || o.customerName}
                               </p>
                               <span className={
                                 "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold " +
@@ -575,6 +533,11 @@ export function DeliveryPage() {
                                 {o.status === "READY_TO_DELIVER" ? "Siap Diambil" : "Sedang Jalan"}
                               </span>
                             </div>
+                            {o.recipientName && (
+                              <p className="text-xs text-[#4B5563] font-semibold mt-0.5">
+                                Penerima: {o.recipientName}
+                              </p>
+                            )}
                             <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                               <span className="inline-flex items-center gap-1 text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
                                 <Clock className="h-3 w-3" />{o.deliveryTime}
@@ -636,7 +599,7 @@ export function DeliveryPage() {
           transition={{ duration: 0.2 }}
         >
           <PICConfirmation
-            customerName={active.customerName}
+            customerName={(active.recipientName || active.customerName || "") as string}
             onConfirm={() => setStep("proof")}
             onCancel={reset}
           />
@@ -652,7 +615,7 @@ export function DeliveryPage() {
         >
           <ProofCapture
             orderId={active.id}
-            customerName={active.customerName}
+            customerName={(active.recipientName || active.customerName || "") as string}
             onComplete={reset}
           />
         </motion.div>
@@ -662,32 +625,17 @@ export function DeliveryPage() {
 }
 
 function CustomerInfoCard({
-  profile,
-  loading,
   order,
 }: {
-  profile: { displayName?: string; phoneNumber?: string } | null;
-  loading: boolean;
   order: Order;
 }) {
-  if (loading) {
-    return (
-      <div className="bg-white rounded-lg p-4 border border-[#E5E7EB] shadow-xs flex items-center justify-center py-4">
-        <Loader2 className="h-4 w-4 animate-spin text-[#FBBF24]" />
-        <span className="text-xs text-[#6B7280] font-['Hanken_Grotesk'] ml-2">
-          Memuat detail pelanggan...
-        </span>
-      </div>
-    );
-  }
-
-  // Fallback to order fields if profile is not loaded or missing phone number
-  const displayName = profile?.displayName || order.customerName;
-  const phoneNumber = profile?.phoneNumber || "";
+  const displayName = order.recipientName || order.customerName || "Penerima";
+  const institutionName = order.institutionName;
+  const phoneNumber = order.recipientPhone;
+  const recipientNotes = order.recipientNotes;
 
   const shortId = order.id.length > 6 ? order.id.slice(-6).toUpperCase() : order.id.toUpperCase();
   const cleanPhone = phoneNumber ? phoneNumber.replace(/\D/g, "") : "";
-  // Ensure indonesian prefix
   const whatsappNumber = cleanPhone.startsWith("0") 
     ? "62" + cleanPhone.slice(1) 
     : cleanPhone.startsWith("8") 
@@ -703,26 +651,37 @@ function CustomerInfoCard({
     <div className="bg-white rounded-lg p-4 border border-[#E5E7EB] shadow-xs space-y-3 font-['Hanken_Grotesk'] text-xs">
       <div className="flex items-center justify-between">
         <h4 className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">
-          Informasi Pelanggan
+          Detail Penerima & Instansi
         </h4>
         <span className="text-[9px] font-extrabold text-[#B45309] bg-amber-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
-          Aktif
+          {order.orderType === "event" ? "Event" : "Rutin"}
         </span>
       </div>
 
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="font-bold text-[#111827] text-sm">
-            {displayName}
+        <div className="space-y-1">
+          {institutionName && (
+            <p className="font-black text-[#111827] text-sm">
+              {institutionName}
+            </p>
+          )}
+          <p className="font-bold text-[#4B5563] text-xs">
+            Penerima: {displayName}
           </p>
           {phoneNumber ? (
-            <p className="text-[10px] text-[#6B7280] font-medium mt-0.5">
+            <p className="text-[10px] text-[#6B7280] font-medium">
               No. HP: {phoneNumber}
             </p>
           ) : (
-            <p className="text-[10px] text-red-500 font-semibold mt-0.5">
+            <p className="text-[10px] text-red-500 font-semibold">
               Nomor handphone tidak tersedia
             </p>
+          )}
+          {recipientNotes && (
+            <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-2 mt-1">
+              <span className="font-bold text-amber-800 text-[10px] block mb-0.5">Catatan Penerima:</span>
+              <p className="text-[11px] text-amber-900 leading-relaxed font-medium">{recipientNotes}</p>
+            </div>
           )}
         </div>
 

@@ -1,16 +1,18 @@
+// Status Operasional
 export type OrderStatus =
-  | 'PLACING'
-  | 'AWAITING_PAYMENT_PROOF'
-  | 'AWAITING_PAYMENT_APPROVAL'
-  | 'PAYMENT_REJECTED'
-  | 'CONFIRMED'
+  | 'PENDING'
   | 'IN_PRODUCTION'
-  | 'READY'
+  | 'QC'
   | 'READY_TO_DELIVER'
   | 'OUT_FOR_DELIVERY'
-  | 'DELIVERED'
   | 'COMPLETED'
-  | 'FAILED';
+  | 'DELIVERY_FAILED';
+
+// Status Pembayaran (jalur terpisah)
+export type PaymentStatus = 'BELUM_DIBAYAR' | 'SUDAH_DIBAYAR' | 'JATUH_TEMPO';
+
+// Jenis Pesanan
+export type OrderType = 'event' | 'rutin';
 
 export interface OrderLineItem {
   itemId: string;
@@ -19,14 +21,40 @@ export interface OrderLineItem {
   imageUrl?: string;
 }
 
+export interface ManualValidation {
+  validatedBy: string;
+  validatedAt: string;
+  screenshotFileIds: string[];
+  contactPhone: string;
+  notes: string;
+}
+
 export interface Order {
   id: string;
-  customerId: string;
-  customerName: string;
+  orderType: OrderType;
+  institutionName: string;
+  recipientName: string;
+  recipientPhone: string;
+  recipientNotes?: string;
+  eventDate: string;
+  foodDetails: string;
+  drinkDetails: string;
+  totalPrice: number;
+  additionalNotes?: string;
+  paymentStatus: PaymentStatus;
+  paymentDueDate: string;
+  invoiceToken?: string;
+  invoiceSignedAt?: string;
+  invoiceSignatureData?: string;
+  manualValidation?: ManualValidation;
+  status: OrderStatus;
   items: OrderLineItem[];
   deliveryAddress: string;
   deliveryTime: string;
-  status: OrderStatus;
+
+  // Optional/Legacy fields (kept for backward compatibility and references)
+  customerId?: string;
+  customerName?: string;
   rejectionReason?: string;
   outOfStockItems?: string[];
   assignedCourierId?: string;
@@ -37,8 +65,7 @@ export interface Order {
   qcFailReason?: string;
   deliveredAt?: string;
   proofFileIds?: string[];
-  paymentMethod: 'cod' | 'bank_transfer' | 'e_wallet';
-  paymentStatus?: string;
+  paymentMethod?: 'cod' | 'bank_transfer' | 'e_wallet';
   paymentProofFileId?: string;
   paymentApprovedBy?: string;
   paymentApprovedAt?: string;
@@ -64,3 +91,4 @@ export interface Order {
   createdAt: string;
   updatedAt: string;
 }
+

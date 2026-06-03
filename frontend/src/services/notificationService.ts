@@ -63,11 +63,7 @@ export const mapOrderToNotification = (order: Order): NotificationItem[] => {
 
   // Define logical sequential baseline times
   const timePlaced = parseToIsoString(order.createdAt);
-  const timeStage2 = adjustTime(timePlaced, 2);
-  
-  const timeConfirmed = order.paymentApprovedAt 
-    ? parseToIsoString(order.paymentApprovedAt) 
-    : adjustTime(timePlaced, 4);
+  const timeConfirmed = adjustTime(timePlaced, 4);
 
   const timeInProduction = order.productionStartedAt 
     ? parseToIsoString(order.productionStartedAt) 
@@ -75,7 +71,7 @@ export const mapOrderToNotification = (order: Order): NotificationItem[] => {
 
   const timeReady = order.qcReviewedAt 
     ? adjustTime(parseToIsoString(order.qcReviewedAt), -60) 
-    : (order.status === "READY" ? parseToIsoString(order.updatedAt) : adjustTime(timeInProduction, 8));
+    : (order.status === "QC" ? parseToIsoString(order.updatedAt) : adjustTime(timeInProduction, 8));
 
   const timeReadyToDeliver = order.qcReviewedAt 
     ? parseToIsoString(order.qcReviewedAt) 
@@ -87,7 +83,7 @@ export const mapOrderToNotification = (order: Order): NotificationItem[] => {
 
   const timeDelivered = order.deliveredAt 
     ? parseToIsoString(order.deliveredAt) 
-    : (order.status === "DELIVERED" ? parseToIsoString(order.updatedAt) : adjustTime(timeOutForDelivery, 10));
+    : (order.status === "COMPLETED" ? parseToIsoString(order.updatedAt) : adjustTime(timeOutForDelivery, 10));
 
   const timeCompleted = order.customerConfirmedAt 
     ? parseToIsoString(order.customerConfirmedAt) 
@@ -95,67 +91,18 @@ export const mapOrderToNotification = (order: Order): NotificationItem[] => {
 
   // Stage 1: Order Placed
   list.push({
-    id: `order-notif-${order.id}-PLACING`,
+    id: `order-notif-${order.id}-PENDING`,
     type: "order",
     title: { id: `Pesanan Baru #${shortId}`, en: `New Order #${shortId}` },
     message: {
-      id: `Pesanan sedang ditempatkan. Silakan selesaikan proses checkout Anda.`,
-      en: `Order is being placed. Please complete your checkout process.`,
+      id: `Pesanan baru sedang diproses.`,
+      en: `New order is being processed.`,
     },
     time: timePlaced,
     orderId: order.id,
   });
 
-  // Stage 2: Payment Proof needed / Uploaded / Approved / Rejected
-  if (order.status === "AWAITING_PAYMENT_PROOF") {
-    list.push({
-      id: `order-notif-${order.id}-AWAITING_PAYMENT_PROOF`,
-      type: "order",
-      title: { id: `Pembayaran Pesanan #${shortId}`, en: `Payment for Order #${shortId}` },
-      message: {
-        id: `Selesaikan transfer pembayaran pesanan #${shortId} Anda dan unggah bukti transfer.`,
-        en: `Complete transfer for order #${shortId} and upload your payment proof.`,
-      },
-      time: timeStage2,
-      orderId: order.id,
-    });
-  }
-
-  if (order.status === "AWAITING_PAYMENT_APPROVAL") {
-    list.push({
-      id: `order-notif-${order.id}-AWAITING_PAYMENT_APPROVAL`,
-      type: "order",
-      title: { id: `Verifikasi Pembayaran #${shortId}`, en: `Payment Verification #${shortId}` },
-      message: {
-        id: `Bukti transfer pesanan #${shortId} Anda telah diterima dan sedang ditinjau oleh Admin.`,
-        en: `Your transfer proof for order #${shortId} has been received and is under review by Admin.`,
-      },
-      time: timeStage2,
-      orderId: order.id,
-    });
-  }
-
-  if (order.status === "PAYMENT_REJECTED") {
-    list.push({
-      id: `order-notif-${order.id}-PAYMENT_REJECTED`,
-      type: "order",
-      title: { id: `Pembayaran Ditolak #${shortId}`, en: `Payment Rejected #${shortId}` },
-      message: {
-        id: `Bukti transfer ditolak: "${order.paymentRejectionReason || "-"}". Silakan unggah bukti baru yang valid.`,
-        en: `Transfer proof rejected: "${order.paymentRejectionReason || "-"}". Please upload a new valid proof.`,
-      },
-      time: order.paymentRejectedAt ? parseToIsoString(order.paymentRejectedAt) : timeStage2,
-      orderId: order.id,
-    });
-  }
-
-  // If payment is approved (status is CONFIRMED or beyond)
-  const isConfirmedOrBeyond = ![
-    "PLACING",
-    "AWAITING_PAYMENT_PROOF",
-    "AWAITING_PAYMENT_APPROVAL",
-    "PAYMENT_REJECTED",
-  ].includes(order.status);
+  const isConfirmedOrBeyond = order.status !== "PENDING";
 
   if (isConfirmedOrBeyond) {
     list.push({
@@ -172,7 +119,7 @@ export const mapOrderToNotification = (order: Order): NotificationItem[] => {
   }
 
   // Stage 3: In Production (Cooking)
-  const isInProductionOrBeyond = isConfirmedOrBeyond && order.status !== "CONFIRMED";
+  const isInProductionOrBeyond = !["PENDING"].includes(order.status);
   if (isInProductionOrBeyond) {
     list.push({
       id: `order-notif-${order.id}-IN_PRODUCTION`,
@@ -188,10 +135,10 @@ export const mapOrderToNotification = (order: Order): NotificationItem[] => {
   }
 
   // Stage 4: Quality Control (QC)
-  const isReadyOrBeyond = isInProductionOrBeyond && order.status !== "IN_PRODUCTION";
+  const isReadyOrBeyond = !["PENDING", "IN_PRODUCTION"].includes(order.status);
   if (isReadyOrBeyond) {
     list.push({
-      id: `order-notif-${order.id}-READY`,
+      id: `order-notif-${order.id}-QC`,
       type: "order",
       title: { id: `Uji Kelayakan (QC) #${shortId}`, en: `Quality Control (QC) #${shortId}` },
       message: {
@@ -204,7 +151,7 @@ export const mapOrderToNotification = (order: Order): NotificationItem[] => {
   }
 
   // Stage 5: Ready to Deliver
-  const isReadyToDeliverOrBeyond = isReadyOrBeyond && order.status !== "READY";
+  const isReadyToDeliverOrBeyond = !["PENDING", "IN_PRODUCTION", "QC"].includes(order.status);
   if (isReadyToDeliverOrBeyond) {
     list.push({
       id: `order-notif-${order.id}-READY_TO_DELIVER`,
@@ -220,7 +167,7 @@ export const mapOrderToNotification = (order: Order): NotificationItem[] => {
   }
 
   // Stage 6: Out for Delivery
-  const isOutForDeliveryOrBeyond = isReadyToDeliverOrBeyond && order.status !== "READY_TO_DELIVER";
+  const isOutForDeliveryOrBeyond = !["PENDING", "IN_PRODUCTION", "QC", "READY_TO_DELIVER"].includes(order.status);
   if (isOutForDeliveryOrBeyond) {
     list.push({
       id: `order-notif-${order.id}-OUT_FOR_DELIVERY`,
@@ -236,7 +183,7 @@ export const mapOrderToNotification = (order: Order): NotificationItem[] => {
   }
 
   // Stage 7: Delivered (Courier confirmed)
-  const isDeliveredOrBeyond = isOutForDeliveryOrBeyond && order.status !== "OUT_FOR_DELIVERY";
+  const isDeliveredOrBeyond = !["PENDING", "IN_PRODUCTION", "QC", "READY_TO_DELIVER", "OUT_FOR_DELIVERY"].includes(order.status);
   if (isDeliveredOrBeyond) {
     list.push({
       id: `order-notif-${order.id}-DELIVERED`,
@@ -266,14 +213,14 @@ export const mapOrderToNotification = (order: Order): NotificationItem[] => {
     });
   }
 
-  if (order.status === "FAILED") {
+  if (order.status === "DELIVERY_FAILED") {
     list.push({
       id: `order-notif-${order.id}-FAILED`,
       type: "order",
       title: { id: `Pesanan Gagal #${shortId}`, en: `Order Failed #${shortId}` },
       message: {
-        id: `Pesanan #${shortId} dibatalkan karena stok habis atau kendala lain: "${order.rejectionReason || "-"}".`,
-        en: `Order #${shortId} cancelled due to out-of-stock or issues: "${order.rejectionReason || "-"}".`,
+        id: `Pesanan #${shortId} gagal dikirim: "${order.rejectionReason || "-"}".`,
+        en: `Order #${shortId} delivery failed: "${order.rejectionReason || "-"}".`,
       },
       time: parseToIsoString(order.updatedAt),
       orderId: order.id,
@@ -281,7 +228,7 @@ export const mapOrderToNotification = (order: Order): NotificationItem[] => {
   }
 
   return list;
-};
+};;
 
 export const mapProductToPromoNotification = (item: InventoryItem): NotificationItem => {
   const discountPercent = item.discountPercent ?? 0;

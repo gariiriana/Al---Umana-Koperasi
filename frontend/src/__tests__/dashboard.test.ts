@@ -23,14 +23,13 @@ function filterOrders(orders: Order[], filter: FilterState): Order[] {
 
 describe("Dashboard Filter AND Logic (Property 17)", () => {
   const statuses: OrderStatus[] = [
-    "PLACING",
-    "CONFIRMED",
+    "PENDING",
     "IN_PRODUCTION",
-    "READY",
+    "QC",
     "READY_TO_DELIVER",
     "OUT_FOR_DELIVERY",
-    "DELIVERED",
-    "FAILED",
+    "COMPLETED",
+    "DELIVERY_FAILED",
   ];
 
   it("should ensure filtered results satisfy ALL selected criteria simultaneously (AND logic)", () => {

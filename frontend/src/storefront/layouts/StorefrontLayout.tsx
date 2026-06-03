@@ -290,7 +290,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
               let statusTextId = "";
               let statusTextEn = "";
               switch (status) {
-                case "CONFIRMED":
+                case "PENDING":
                   statusTextId = "dikonfirmasi";
                   statusTextEn = "confirmed";
                   break;
@@ -298,7 +298,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                   statusTextId = "sedang diproduksi";
                   statusTextEn = "in production";
                   break;
-                case "READY":
+                case "QC":
                   statusTextId = "sedang diuji kelayakan (QC)";
                   statusTextEn = "being quality checked (QC)";
                   break;
@@ -310,40 +310,40 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                   statusTextId = "sedang dikirim oleh kurir";
                   statusTextEn = "out for delivery";
                   break;
-                case "DELIVERED":
-                  statusTextId = "telah diterima";
-                  statusTextEn = "delivered";
+                case "COMPLETED":
+                  statusTextId = "selesai";
+                  statusTextEn = "completed";
                   break;
-                case "FAILED":
-                  statusTextId = `dibatalkan: ${orderObj.rejectionReason || "stok habis"}`;
-                  statusTextEn = `cancelled: ${orderObj.rejectionReason || "out of stock"}`;
+                case "DELIVERY_FAILED":
+                  statusTextId = `gagal dikirim: ${orderObj.rejectionReason || "-"}`;
+                  statusTextEn = `delivery failed: ${orderObj.rejectionReason || "-"}`;
                   break;
                 default:
-                  statusTextId = status.toLowerCase();
-                  statusTextEn = status.toLowerCase();
+                  statusTextId = (status as string).toLowerCase();
+                  statusTextEn = (status as string).toLowerCase();
               }
 
               showToast({
                 message: lang === "id"
                   ? `Pesanan #${shortId} ${statusTextId}!`
                   : `Order #${shortId} is ${statusTextEn}!`,
-                variant: status === "FAILED" ? "error" : "info",
+                variant: status === "DELIVERY_FAILED" ? "error" : "info",
               });
             }
 
             if (prev.paymentStatus !== paymentStatus && paymentStatus) {
-              if (paymentStatus === "approved") {
+              if (paymentStatus === "SUDAH_DIBAYAR") {
                 showToast({
                   message: lang === "id"
                     ? `Pembayaran Pesanan #${shortId} disetujui!`
                     : `Payment for Order #${shortId} approved!`,
                   variant: "success",
                 });
-              } else if (paymentStatus === "rejected") {
+              } else if (paymentStatus === "JATUH_TEMPO") {
                 showToast({
                   message: lang === "id"
-                    ? `Pembayaran Pesanan #${shortId} ditolak: ${orderObj.paymentRejectionReason || ""}`
-                    : `Payment for Order #${shortId} rejected: ${orderObj.paymentRejectionReason || ""}`,
+                    ? `Pembayaran Pesanan #${shortId} telah jatuh tempo!`
+                    : `Payment for Order #${shortId} is overdue!`,
                   variant: "error",
                 });
               }

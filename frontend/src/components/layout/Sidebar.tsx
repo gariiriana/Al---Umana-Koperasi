@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import { ROLE_PERMISSIONS } from "@/constants/roles";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
-  BadgeCheck,
+  Calendar,
   CheckCircle2,
   ChevronUp,
   Factory,
@@ -31,11 +31,11 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
   { to: "/admin/production", label: "Production", icon: Factory },
   { to: "/admin/qc", label: "Quality Control", icon: CheckCircle2 },
+  { to: "/distribusi/scheduler", label: "Delivery Scheduler", icon: Calendar },
   { to: "/distribusi/dispatch", label: "Dispatch", icon: Truck },
   { to: "/distribusi/delivery", label: "Delivery", icon: Package },
   { to: "/admin/tracking", label: "Tracking", icon: MapPin },
   { to: "/admin/products", label: "Daftar Produk", icon: Package2 },
-  { to: "/admin/payment-approvals", label: "Persetujuan Pembayaran", icon: BadgeCheck },
 ] as const;
 
 const LABELS_DICT = {
@@ -44,22 +44,22 @@ const LABELS_DICT = {
     "/admin/orders": "Pesanan",
     "/admin/production": "Produksi",
     "/admin/qc": "Kontrol Kualitas",
+    "/distribusi/scheduler": "Penjadwal Pengiriman",
     "/distribusi/dispatch": "Pengiriman",
     "/distribusi/delivery": "Pengantaran",
     "/admin/tracking": "Pelacakan",
     "/admin/products": "Daftar Produk",
-    "/admin/payment-approvals": "Persetujuan Pembayaran",
   },
   en: {
     "/admin/dashboard": "Dashboard",
     "/admin/orders": "Orders",
     "/admin/production": "Production",
     "/admin/qc": "Quality Control",
+    "/distribusi/scheduler": "Delivery Scheduler",
     "/distribusi/dispatch": "Dispatch",
     "/distribusi/delivery": "Delivery",
     "/admin/tracking": "Tracking",
     "/admin/products": "Product List",
-    "/admin/payment-approvals": "Payment Approval",
   }
 } as const;
 
@@ -151,7 +151,10 @@ export function Sidebar({
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="space-y-1">
           {allowedItems.map(({ to, label, icon: Icon }) => {
-            const translatedLabel = LABELS_DICT[lang][to as keyof typeof LABELS_DICT["en"]] || label;
+            let translatedLabel: string = LABELS_DICT[lang][to as keyof typeof LABELS_DICT["en"]] || label;
+            if (userRole === "monitoring" && to === "/admin/dashboard") {
+              translatedLabel = lang === "id" ? "Performa" : "Performance";
+            }
             return (
               <li key={to}>
                 <NavLink

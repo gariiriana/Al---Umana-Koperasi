@@ -21,7 +21,7 @@ export function QCReviewPage() {
   const queue = useMemo(
     () =>
       orders
-        .filter((o) => o.status === "READY")
+        .filter((o) => o.status === "QC")
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
     [orders]
   );

@@ -41,9 +41,11 @@ function makeItem(over: Partial<InventoryItem> = {}): InventoryItem {
     quantity: 10,
     unit: "porsi",
     price: 25_000,
+    discountPercent: 0,
     available: true,
     category: "Makanan",
     imageUrl: "",
+    detailImageUrls: [],
     updatedAt: "2026-01-01T00:00:00Z",
     ...over,
   };

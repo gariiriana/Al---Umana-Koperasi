@@ -5,7 +5,6 @@ import {
   collection,
   query,
   where,
-  orderBy,
   onSnapshot,
 } from "firebase/firestore";
 import {
@@ -105,7 +104,6 @@ export function NotificationsPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Firestore real-time subscription for current user's orders
   useEffect(() => {
     if (!user) {
       setLoading(false);
@@ -114,8 +112,7 @@ export function NotificationsPage() {
 
     const q = query(
       collection(db, "orders"),
-      where("customerId", "==", user.uid),
-      orderBy("updatedAt", "desc")
+      where("customerId", "==", user.uid)
     );
 
     const unsubscribe = onSnapshot(
@@ -129,6 +126,8 @@ export function NotificationsPage() {
             ...data,
           } as Order);
         });
+        // Sort client-side by updatedAt descending to mimic Firestore orderBy without requiring a composite index
+        list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
         setOrders(list);
         setLoading(false);
       },

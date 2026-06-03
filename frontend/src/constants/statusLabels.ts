@@ -11,34 +11,24 @@ import type { OrderStatus } from "@/types/order";
 
 /** Complete mapping from `OrderStatus` to its Bahasa Indonesian label. */
 export const ORDER_STATUS_LABELS_ID: Record<OrderStatus, string> = {
-  PLACING: "Menunggu Konfirmasi",
-  AWAITING_PAYMENT_PROOF: "Menunggu Bukti Pembayaran",
-  AWAITING_PAYMENT_APPROVAL: "Menunggu Persetujuan Pembayaran",
-  PAYMENT_REJECTED: "Pembayaran Ditolak",
-  CONFIRMED: "Sudah Dibayar, Menunggu Proses Memasak",
-  IN_PRODUCTION: "Sedang Diproses",
-  READY: "Siap",
+  PENDING: "Pending",
+  IN_PRODUCTION: "Dalam Produksi",
+  QC: "Uji Kelayakan (QC)",
   READY_TO_DELIVER: "Siap Dikirim",
   OUT_FOR_DELIVERY: "Dalam Pengiriman",
-  DELIVERED: "Terkirim",
   COMPLETED: "Selesai",
-  FAILED: "Gagal",
+  DELIVERY_FAILED: "Gagal Kirim",
 };
 
 /** Complete mapping from `OrderStatus` to its English label. */
 export const ORDER_STATUS_LABELS_EN: Record<OrderStatus, string> = {
-  PLACING: "Awaiting Confirmation",
-  AWAITING_PAYMENT_PROOF: "Awaiting Payment Proof",
-  AWAITING_PAYMENT_APPROVAL: "Awaiting Payment Approval",
-  PAYMENT_REJECTED: "Payment Rejected",
-  CONFIRMED: "Paid, Awaiting Cooking Process",
-  IN_PRODUCTION: "Processing",
-  READY: "Ready",
+  PENDING: "Pending",
+  IN_PRODUCTION: "In Production",
+  QC: "Quality Control (QC)",
   READY_TO_DELIVER: "Ready to Deliver",
   OUT_FOR_DELIVERY: "Out for Delivery",
-  DELIVERED: "Delivered",
   COMPLETED: "Completed",
-  FAILED: "Failed",
+  DELIVERY_FAILED: "Delivery Failed",
 };
 
 export const ORDER_STATUS_LABELS = ORDER_STATUS_LABELS_ID;
