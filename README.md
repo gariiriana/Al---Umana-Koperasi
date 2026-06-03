@@ -10,60 +10,29 @@ The **Order Fulfillment & Delivery Tracking System** is a secure, full-stack ent
 
 ---
 
-## Premium Features (Upgraded)
+## Pembaruan Fitur Sistem Koperasi (Upgraded Features)
 
-### Cart Cleanup & Direct Checkout Isolation
+### 1. Manajemen Peran & Pengguna Internal (RBAC)
+- **Akses Khusus Staf**: Sistem sepenuhnya beroperasi untuk 5 peran internal: **Admin (Super Admin)**, **Tim Dapur (Produksi)**, **Distribusi**, **Kurir**, dan **Monitoring**. Pendaftaran mandiri umum dan login Google dinonaktifkan demi keamanan.
+- **Akses Terbatas Monitoring**: Peran Monitoring bersifat *read-only* (hanya memantau) untuk melihat performa pengiriman, KPI, keterlambatan, dan grafik performa tim tanpa hak mengubah data.
 
-- **Direct Checkout Isolation ("Beli Sekarang")**: Tapping "Beli Sekarang" dynamically bypasses the persistent shopping cart, preserving separate cart contents (e.g. buying 1 iced tea while keeping 3 fried rice items safe in the cart).
-- **Instant Selective Cart Cleanup**: Upon placing a COD or transfer-proof order, the exact purchased items are instantly cleared from the Firestore database shopping cart, leaving unrelated items completely untouched.
-- **Wizard Route State Retention**: Step-back and step-forward transitions (`/checkout/address` $\leftrightarrow$ `/checkout/payment`) preserve checkout items list and total pricing, preventing state resets.
+### 2. Alur Pesanan & Pembayaran Baru
+- **Input Pesanan oleh Admin**: Pembuatan pesanan dilakukan sepenuhnya secara terpusat oleh Admin/Super Admin.
+- **Penghapusan Bukti Bayar Manual**: Alur pengunggahan bukti bayar dan persetujuan transfer pelanggan telah dihapus sepenuhnya dari aplikasi.
+- **Dua Jalur Status Independen**: 
+  - **Status Operasional**: `Pending` ➔ `Produksi` ➔ `QC` ➔ `Siap Dikirim` ➔ `Dalam Pengiriman` ➔ `Selesai` / `Gagal`.
+  - **Status Keuangan**: `Belum Dibayar` ➔ `Sudah Dibayar` ➔ `Jatuh Tempo` (otomatis 7 hari untuk Event, 1 bulan untuk Rutin).
 
-### Multi-Image Product Gallery & Cascade Deletion
+### 3. Tautan Nota (Invoice Link) & Tanda Tangan Digital
+- **Invoice Link WhatsApp**: Admin membagikan tautan nota unik kepada pelanggan melalui WhatsApp. Pelanggan membuka tautan untuk melihat rincian nota tanpa harus login.
+- **Tanda Tangan Elektronik**: Pelanggan dapat membubuhkan tanda tangan penerimaan barang langsung di layar HP/tablet sebagai konfirmasi barang diterima.
+- **Validasi Manual**: Jika pelanggan tidak menandatangani secara digital, Admin dapat memvalidasi secara manual dengan mengunggah bukti komunikasi alternatif (misalnya screenshot chat WhatsApp).
 
-- **Foto Tambahan Widget**: Administrators can upload up to 5 detailed secondary product photos with active progress bars and chunk-resumable uploading.
-- **Set Main (Jadikan Utama)**: Dynamic swap action instantly makes any secondary photo the primary display image.
-- **Garbage collection (Cascade Purge)**: Deleting a product or a single detailed photo recursively purges the master document and all associated numbered chunks from Firestore (`product_images/{fileId}/chunks/*`) to prevent orphan file storage leaks.
-
-### Dynamic Discount Pricing System
-
-- **Backend-Validated Percentages**: Enforces a strict `[0, 100]` discount range in the Go backend and Firestore layers.
-- **Live Markdown Formulas**: Storefront automatically displays computed original base price, dynamic discounted price, and premium red-coral discount badges (e.g. `-15%`).
-
-### Premium Tabbed Orders History View (`/orders`)
-
-- **Iconic Category Tabs**: Premium responsive tab bar divided into `Belum Bayar` (Wallet), `Dikemas` (Package), `Dikirim` (Truck), and `Beri Penilaian` (Star in circular outline).
-- **Live Counter Badges**: Red notification circles displaying the dynamic count of active orders within each lifecycle stage.
-- **Itemized Listing Layout**: Cards list every product row (with image thumbnail, item name, and exact quantity multiplier `× Qty`) inside the preview card, replacing generic text summaries.
-
-### Smart Notification Center (`/notifications`)
-
-- **Milestone Timeline Splits**: Separated cooking complete (`READY` - kitchen QC check) from dispatch readiness (`READY_TO_DELIVER` - ready for courier), fitting the 8-step tracking sequence.
-- **Historical Milestone Logs**: Displays historical stages sequentially so older order updates are not overwritten when status advances.
-- **Timestamp to ISO Parser**: Safely handles Firestore raw `Timestamp` objects, eliminating "Invalid Date" UI bugs.
-- **Auto-Ticking Refresher**: Real-time interval timer triggers UI relative time recalculation (e.g. *"Baru saja"*, *"3 menit lalu"*) every 30 seconds.
-
-### Responsive Desktop Account Sidebar
-
-- **Synced Profile Avatar**: Sidebar menu header retrieves and renders the logged-in user's custom photo URL (Google Account Avatar / custom profile picture) with a graceful letter-badge fallback.
-
-### 8-Step Cooking & Dispatch Tracking Stepper
-
-- **Extended Order Stepper**: Fully interactive 8-step tracking timeline for customers:
-  1. Pesanan Dibuat
-  2. Persetujuan Pembayaran
-  3. Proses Memasak
-  4. Uji Kelayakan (QC)
-  5. Siap Dikirim
-  6. Dalam Pengantaran
-  7. Pesanan Terkirim
-  8. Selesai
-- **Base64 Assembly Evidence**: Assembles and displays the kitchen's "Bukti Foto Mulai Memasak" photo on the customer tracking page in real-time.
-- **Courier Dashboard Integrations**: Displays customer's delivery information card, phone contact link, and custom-templated WhatsApp dispatch shortcut button.
-
-### Indonesian UMKM Dummy Seed Generator & Global Purge
-
-- **Verified Photographic Seeds ("Muat UMKM")**: Seeds representative Sembako, Makanan, Minuman, and Camilan products with exact, verified food images from Wikimedia Commons.
-- **Global Purge ("Hapus Semua")**: Clears the entire product catalog and cascade-deletes all associated image file chunks globally, resetting the demo presentation instantly.
+### 4. Manajemen Dapur & Distribusi
+- **Stok & Menu oleh Tim Dapur**: Hak mengelola menu dan memperbarui stok bahan kini dialihkan langsung ke Tim Produksi (Dapur) agar sesuai dengan kapasitas dapur yang sebenarnya.
+- **Jadwal Makanan Dapur**: Tim Dapur dapat mengatur jadwal menu harian asatidzah pesantren.
+- **Multi-Order Courier Assignment**: Tim Distribusi dapat menugaskan satu kurir untuk membawa beberapa pesanan sekaligus dalam sekali perjalanan.
+- **Delivery Scheduler**: Kalender pengiriman untuk memetakan tugas kurir harian dan mingguan guna mendeteksi serta mencegah konflik penugasan kurir (bentrok waktu < 2 jam).
 
 ---
 
@@ -113,22 +82,20 @@ graph TB
 
 ## Order State Machine
 
-Status transitions are strictly validated in the Go backend. Any invalid status transitions are rejected:
+Status transitions are strictly validated. The operational workflow is structured as follows:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PLACING: Order submitted
-    PLACING --> CONFIRMED: Stock available
-    PLACING --> FAILED: Out of stock / Timeout
-    CONFIRMED --> IN_PRODUCTION: Production started
-    IN_PRODUCTION --> READY: Production complete
-    READY --> READY_TO_DELIVER: QC passed
-    READY --> CONFIRMED: QC failed (re-queue)
-    READY_TO_DELIVER --> OUT_FOR_DELIVERY: Dispatched
-    OUT_FOR_DELIVERY --> READY_TO_DELIVER: Rescheduled
-    OUT_FOR_DELIVERY --> DELIVERED: Proof submitted
-    DELIVERED --> [*]
-    FAILED --> [*]
+    [*] --> PENDING: Order created by Admin
+    PENDING --> IN_PRODUCTION: Production started
+    IN_PRODUCTION --> QC: Production completed
+    QC --> READY_TO_DELIVER: QC passed
+    QC --> IN_PRODUCTION: QC failed (re-cook)
+    READY_TO_DELIVER --> OUT_FOR_DELIVERY: Dispatched to Courier
+    OUT_FOR_DELIVERY --> COMPLETED: Delivery completed & signed
+    OUT_FOR_DELIVERY --> DELIVERY_FAILED: Handover failed
+    COMPLETED --> [*]
+    DELIVERY_FAILED --> [*]
 ```
 
 ---
@@ -142,21 +109,33 @@ The system defines the following schemas within Firestore:
 ```typescript
 interface Order {
   id: string;                    // Document ID (auto-generated)
-  customerId: string;            // Firebase Auth UID of the ordering client
-  customerName: string;          // Display name (≤ 200 chars)
-  items: OrderLineItem[];        // Array of line items
-  deliveryAddress: string;       // Delivery address (≤ 500 chars)
-  status: OrderStatus;           // Current status in the pipeline
-  rejectionReason?: string;      // Reason if FAILED (e.g. out of stock items)
-  outOfStockItems?: string[];    // Item IDs that were out of stock
-  assignedCourierId?: string;    // Courier UID when assigned
-  productionStartedBy?: string;  // UID of production team member
-  productionStartedAt?: string;  // ISO 8601 timestamp
-  qcReviewedBy?: string;         // UID of QC reviewer
-  qcReviewedAt?: string;         // ISO 8601 timestamp
-  qcFailReason?: string;         // Reason if QC failed
-  deliveredAt?: string;          // ISO 8601 timestamp of delivery
-  proofFileIds?: string[];       // References to delivery_files documents
+  orderType: OrderType;          // 'event' | 'routine'
+  institutionName: string;       // Name of ordering school / institution
+  recipientName: string;         // Recipient PIC name
+  recipientPhone: string;        // Recipient PIC phone number
+  recipientNotes?: string;       // Delivery/handover details
+  eventDate: string;             // Event date string
+  deliveryAddress: string;       // Delivery address
+  deliveryTime: string;          // Dispatch target time slot
+  foodDetails: string;           // Cooking recipe/details
+  drinkDetails: string;          // Beverage preparation details
+  totalPrice: number;            // Computed grand total
+  additionalNotes?: string;      // Optional admin guidelines
+  paymentStatus: PaymentStatus;  // 'BELUM_DIBAYAR' | 'SUDAH_DIBAYAR' | 'JATUH_TEMPO'
+  paymentDueDate: string;        // Automated calculated due date (ISO string)
+  status: OrderStatus;           // 'PENDING' | 'IN_PRODUCTION' | 'QC' | 'READY_TO_DELIVER' | 'OUT_FOR_DELIVERY' | 'COMPLETED' | 'DELIVERY_FAILED'
+  items: OrderLineItem[];        // Array of items quantity
+  invoiceToken?: string;         // Shared unauthenticated invoice token
+  invoiceSignedAt?: string;      // Handover signature timestamp
+  invoiceSignatureData?: string; // Digital signature base64 canvas path
+  manualValidation?: {           // Log if verified manually by admin
+    screenshotFileIds: string[];
+    contactPhone: string;
+    notes: string;
+    validatedBy: string;
+    validatedAt: string;
+  };
+  assignedCourierId?: string;    // Courier ID assigned for delivery
   createdAt: string;             // ISO 8601 server timestamp
   updatedAt: string;             // ISO 8601 server timestamp
 }
