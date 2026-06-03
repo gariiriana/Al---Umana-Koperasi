@@ -13,22 +13,26 @@ The **Order Fulfillment & Delivery Tracking System** is a secure, full-stack ent
 ## Pembaruan Fitur Sistem Koperasi (Upgraded Features)
 
 ### 1. Manajemen Peran & Pengguna Internal (RBAC)
+
 - **Akses Khusus Staf**: Sistem sepenuhnya beroperasi untuk 5 peran internal: **Admin (Super Admin)**, **Tim Dapur (Produksi)**, **Distribusi**, **Kurir**, dan **Monitoring**. Pendaftaran mandiri umum dan login Google dinonaktifkan demi keamanan.
 - **Akses Terbatas Monitoring**: Peran Monitoring bersifat *read-only* (hanya memantau) untuk melihat performa pengiriman, KPI, keterlambatan, dan grafik performa tim tanpa hak mengubah data.
 
 ### 2. Alur Pesanan & Pembayaran Baru
+
 - **Input Pesanan oleh Admin**: Pembuatan pesanan dilakukan sepenuhnya secara terpusat oleh Admin/Super Admin.
 - **Penghapusan Bukti Bayar Manual**: Alur pengunggahan bukti bayar dan persetujuan transfer pelanggan telah dihapus sepenuhnya dari aplikasi.
-- **Dua Jalur Status Independen**: 
+- **Dua Jalur Status Independen**:
   - **Status Operasional**: `Pending` ➔ `Produksi` ➔ `QC` ➔ `Siap Dikirim` ➔ `Dalam Pengiriman` ➔ `Selesai` / `Gagal`.
   - **Status Keuangan**: `Belum Dibayar` ➔ `Sudah Dibayar` ➔ `Jatuh Tempo` (otomatis 7 hari untuk Event, 1 bulan untuk Rutin).
 
 ### 3. Tautan Nota (Invoice Link) & Tanda Tangan Digital
+
 - **Invoice Link WhatsApp**: Admin membagikan tautan nota unik kepada pelanggan melalui WhatsApp. Pelanggan membuka tautan untuk melihat rincian nota tanpa harus login.
 - **Tanda Tangan Elektronik**: Pelanggan dapat membubuhkan tanda tangan penerimaan barang langsung di layar HP/tablet sebagai konfirmasi barang diterima.
 - **Validasi Manual**: Jika pelanggan tidak menandatangani secara digital, Admin dapat memvalidasi secara manual dengan mengunggah bukti komunikasi alternatif (misalnya screenshot chat WhatsApp).
 
 ### 4. Manajemen Dapur & Distribusi
+
 - **Stok & Menu oleh Tim Dapur**: Hak mengelola menu dan memperbarui stok bahan kini dialihkan langsung ke Tim Produksi (Dapur) agar sesuai dengan kapasitas dapur yang sebenarnya.
 - **Jadwal Makanan Dapur**: Tim Dapur dapat mengatur jadwal menu harian asatidzah pesantren.
 - **Multi-Order Courier Assignment**: Tim Distribusi dapat menugaskan satu kurir untuk membawa beberapa pesanan sekaligus dalam sekali perjalanan.
