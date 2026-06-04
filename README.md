@@ -4,7 +4,7 @@ An enterprise-grade, high-performance, and secure hybrid-serverless system custo
 
 ---
 
-## 🚀 System Badges & Architecture Metrics
+## System Badges and Architecture Metrics
 
 [![Go Version](https://img.shields.io/badge/Go-1.24-blue.svg?style=for-the-badge&logo=go&logoColor=white&color=00ADD8)](https://golang.org/)
 [![React Version](https://img.shields.io/badge/React-18.3.1-blue.svg?style=for-the-badge&logo=react&logoColor=white&color=61DAFB)](https://react.dev/)
@@ -16,32 +16,39 @@ An enterprise-grade, high-performance, and secure hybrid-serverless system custo
 
 ---
 
-## 🏛️ Core Architectural Pillars
+## Core Architectural Pillars
 
 ### 1. Serverless Direct-to-Firestore (Decoupled Client Design)
+
 The web application utilizes a modern serverless model. The React SPA communicates **directly** with Google Cloud Firestore and Firebase Authentication client-side. This design completely eliminates API gateway latency, reduces cold-start overheads, and provides auto-scaling to accommodate peak pesantren events.
 
 ### 2. Edge WAF & Proxy Layer (Cloudflare Integration)
+
 Security is enforced at the network edge using **Cloudflare DNS Proxying (Orange Cloud)**:
+
 - **IP Masking**: The underlying Google Firebase Hosting IPs are completely hidden from public view to prevent direct target exploits.
 - **DDoS Mitigation**: Built-in edge challenge-response screens block massive automated spam/bot nets.
 - **Strict HTTPS/SSL**: Enforced connection encryption prevents middleman packet sniffing on mobile networks.
 
 ### 3. Asynchronous Base64 Chunk-loading Protocol
+
 To handle large uploads (delivery photos, digital signatures, and product catalog pictures) without exceeding memory or document limits:
+
 - Files are sliced client-side into binary chunks of $\le 512$ KB.
 - Each chunk is base64-encoded and written sequentially to a Firestore sub-collection: `/{collection}/{fileId}/chunks/{index}`.
 - When all chunks are written, the parent document status shifts to `completed`.
 - Downloads are parsed in parallel directly inside custom React hooks (`useProductImage.ts`), bypassing server bottlenecks and loading media dynamically.
 
 ### 4. Code-Splitting & Route Laziness Optimization
+
 Using dynamic React wrappers (`React.lazy` and `<Suspense>`), the initial client bundle was optimized to ensure performance on low-end smartphones (used by kurir/drivers):
+
 - Heavy libraries (`jspdf`, `leaflet` maps, `html2canvas`) are completely code-split into distinct chunks.
 - The index bundle was reduced by **53%** (from **2.18 MB** to **1.07 MB**), resulting in rapid page render cycles and reduced mobile battery drain.
 
 ---
 
-## 🛰️ High-Level System Architecture
+## High-Level System Architecture
 
 The following diagram details the interaction between the React SPA, Google Firebase, and the local WhatsApp microservices:
 
@@ -77,7 +84,7 @@ graph TB
 
 ---
 
-## 🚦 Transactional State Machine
+## Transactional State Machine
 
 Order operations and transitions are strictly locked down. The system enforces the following state transitions:
 
@@ -97,10 +104,12 @@ stateDiagram-v2
 
 ---
 
-## 🔒 Security Configuration & Firestore Rules
+## Security Configuration and Firestore Rules
 
 ### Role-Based Access Control (RBAC)
+
 Database collections are strictly gated in [firestore.rules](file:///c:/Users/Gari%20Iriana/OneDrive/Documents/Al%20umana/firestore.rules). Users are validated against custom claims:
+
 - **Admin**: Full database management, order creation, categories setup, and configuration rights.
 - **Tim Dapur**: Read-write access restricted to inventory stock quantities and production schedules.
 - **Distribusi**: Allowed to allocate courier tasks, update order statuses, and monitor delivery queues.
@@ -109,11 +118,12 @@ Database collections are strictly gated in [firestore.rules](file:///c:/Users/Ga
 
 ---
 
-## 🧪 Correctness Properties and PBT
+## Correctness Properties and PBT
 
 The codebase incorporates **18 distinct correctness properties** verified via offline Property-Based Testing (PBT). All tests pass successfully and can be executed offline.
 
 ### Frontend Correctness Properties (Fast-Check)
+
 - **Property 5**: The kitchen queue filter outputs only active `PENDING` or `IN_PRODUCTION` orders, sorted chronologically.
 - **Property 9**: Geolocation coordinates are range-validated ($[-90, 90]$ for latitude, $[-180, 180]$ for longitude) before database insertion.
 - **Property 10**: Checks for GPS staleness trigger alerts if updates stop for $> 5$ minutes during transit.
@@ -125,21 +135,26 @@ The codebase incorporates **18 distinct correctness properties** verified via of
 
 ---
 
-## 🛠️ Local Development & Deployment
+## Local Development and Deployment
 
 ### Prerequisites
+
 - [Node.js 18+](https://nodejs.org/)
 - [Firebase CLI](https://firebase.google.com/docs/cli)
 
 ### 1. Installation
+
 Install all dependencies in the frontend directory:
+
 ```bash
 cd frontend
 npm install
 ```
 
 ### 2. Environment Configuration
+
 Create a `.env.production` file inside `frontend/` containing your production Firebase details:
+
 ```env
 VITE_FIREBASE_API_KEY=your_production_api_key
 VITE_FIREBASE_AUTH_DOMAIN=al-umana-koperasi.firebaseapp.com
@@ -152,32 +167,39 @@ VITE_API_BASE_URL=
 ```
 
 ### 3. Build & Local Test
+
 To run unit and property-based tests:
+
 ```bash
 npm run test
 ```
 
 To compile a minified production build:
+
 ```bash
 npm run build
 ```
 
 ### 4. Deploying to Firebase Hosting
+
 Deploy your build to the live custom domain (`koperasi-alumana.com`):
+
 ```bash
 npx firebase deploy --only hosting
 ```
 
 ---
 
-## 📡 On-Premise WhatsApp Gateway (Local Service)
+## On-Premise WhatsApp Gateway (Local Service)
 
 The system integrates a local gateway (`wa-gateway`) that interfaces with WhatsApp Web. This allows automatic order updates to be sent directly to client phone numbers.
 
 To start the gateway locally:
+
 ```bash
 cd wa-gateway
 npm install
 node server.js
 ```
+
 The gateway will output a QR code in the terminal. Scan it using your WhatsApp application to link the account. It serves requests on port `8000`.
