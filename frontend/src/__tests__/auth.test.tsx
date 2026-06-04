@@ -16,6 +16,8 @@ let mockUserProfileData = {
   displayName: "Monitoring User",
   role: "monitoring",
 };
+const mockShowToast = vi.fn();
+const mockSetLang = vi.fn();
 
 // Mock Firebase SDKs
 vi.mock("firebase/app", () => ({
@@ -38,14 +40,14 @@ vi.mock("firebase/auth", () => ({
 vi.mock("@/contexts/LanguageContext", () => ({
   useLanguage: () => ({
     lang: "en",
-    setLang: vi.fn(),
+    setLang: mockSetLang,
   }),
   LanguageProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("@/contexts/ToastContext", () => ({
   useToast: () => ({
-    showToast: vi.fn(),
+    showToast: mockShowToast,
   }),
   ToastProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
@@ -54,10 +56,16 @@ vi.mock("firebase/firestore", () => ({
   getFirestore: vi.fn(() => ({})),
   doc: vi.fn(),
   setDoc: vi.fn(),
+  collection: vi.fn(() => ({})),
+  query: vi.fn(() => ({})),
+  where: vi.fn(() => ({})),
+  getDocs: vi.fn(() => Promise.resolve({ docs: [] })),
   onSnapshot: vi.fn((_ref, cb: (snapshot: unknown) => void) => {
     cb({
       exists: () => mockDocSnapshotExists,
       data: () => mockUserProfileData,
+      docChanges: () => [],
+      docs: [],
     });
     return () => {};
   }),
@@ -241,7 +249,7 @@ describe("Authentication UI Features", () => {
         displayName: "Monitoring User",
         role: "monitoring",
       };
-      window.history.pushState({}, "", "/admin/dashboard");
+      window.history.pushState({}, "", "/admin/orders");
     });
 
     afterEach(() => {
@@ -260,7 +268,7 @@ describe("Authentication UI Features", () => {
       fireEvent.click(profileBtn!);
 
       // Find the Sign out button in profile dropdown
-      const signOutBtn = screen.getByRole("button", { name: /Sign out/i });
+      const signOutBtn = screen.getAllByRole("button", { name: /Sign out/i })[0];
       expect(signOutBtn).toBeDefined();
 
       // Modal should not be visible initially
@@ -286,7 +294,7 @@ describe("Authentication UI Features", () => {
 
       // Open dropdown and click Sign out again to open modal again
       fireEvent.click(profileBtn!);
-      const signOutBtn2 = screen.getByRole("button", { name: /Sign out/i });
+      const signOutBtn2 = screen.getAllByRole("button", { name: /Sign out/i })[0];
       fireEvent.click(signOutBtn2);
       expect(screen.getByText("Konfirmasi Keluar")).toBeDefined();
 
@@ -336,7 +344,7 @@ describe("Authentication UI Features", () => {
         displayName: "Monitoring User",
         role: "monitoring",
       };
-      window.history.pushState({}, "", "/admin/dashboard");
+      window.history.pushState({}, "", "/admin/orders");
     });
 
     afterEach(() => {
@@ -347,10 +355,8 @@ describe("Authentication UI Features", () => {
       render(<AppRouter />);
 
       await waitFor(() => {
-        // Monitoring allowed routes: Dashboard, Orders, Tracking
-        expect(document.querySelector('a[href="/admin/dashboard"]')).not.toBeNull();
+        // Monitoring allowed routes: Orders
         expect(document.querySelector('a[href="/admin/orders"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/admin/tracking"]')).not.toBeNull();
       });
 
       // Open profile dropdown to check Settings link
@@ -358,8 +364,13 @@ describe("Authentication UI Features", () => {
       expect(profileBtn).not.toBeNull();
       fireEvent.click(profileBtn!);
       expect(document.querySelector('a[href="/admin/settings"]')).not.toBeNull();
+      expect(document.querySelector('a[href="/orders"]')).toBeNull();
+
+      // Monitoring allowed routes
+      expect(document.querySelector('a[href="/admin/dashboard"]')).not.toBeNull();
 
       // Monitoring disallowed routes should not be rendered
+      expect(document.querySelector('a[href="/admin/tracking"]')).toBeNull();
       expect(document.querySelector('a[href="/admin/production"]')).toBeNull();
       expect(document.querySelector('a[href="/admin/qc"]')).toBeNull();
       expect(document.querySelector('a[href="/admin/dispatch"]')).toBeNull();
@@ -418,16 +429,19 @@ describe("Authentication UI Features", () => {
         displayName: "Admin User",
       };
 
+      window.history.pushState({}, "", "/admin/orders");
       render(<AppRouter />);
 
       await waitFor(() => {
         // Admin sees allowed links
-        expect(document.querySelector('a[href="/admin/dashboard"]')).not.toBeNull();
         expect(document.querySelector('a[href="/admin/orders"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/admin/tracking"]')).not.toBeNull();
-        
-        // Admin does not see production/delivery/etc.
+        expect(document.querySelector('a[href="/admin/dashboard"]')).toBeNull();
+        expect(document.querySelector('a[href="/admin/invoices"]')).toBeNull();
+
+        // Admin does not see tracking/production/delivery/etc.
+        expect(document.querySelector('a[href="/admin/tracking"]')).toBeNull();
         expect(document.querySelector('a[href="/admin/products"]')).toBeNull();
+        expect(document.querySelector('a[href="/admin/payment-approvals"]')).toBeNull();
         expect(document.querySelector('a[href="/admin/production"]')).toBeNull();
         expect(document.querySelector('a[href="/admin/qc"]')).toBeNull();
         expect(document.querySelector('a[href="/distribusi/dispatch"]')).toBeNull();
@@ -438,7 +452,8 @@ describe("Authentication UI Features", () => {
       const profileBtn = document.getElementById("profile-menu-button");
       expect(profileBtn).not.toBeNull();
       fireEvent.click(profileBtn!);
-      expect(document.querySelector('a[href="/admin/settings"]')).not.toBeNull();
+      expect(document.querySelector('a[href="/admin/settings"]')).toBeNull();
+      expect(document.querySelector('a[href="/orders"]')).toBeNull();
     });
   });
 

@@ -20,9 +20,10 @@ const STALE_GPS_MS = 5 * 60 * 1000;
 export interface AnomalyAlertsProps {
   orders: Order[];
   locations: CourierGPS[];
+  onSelectOrder?: (orderId: string) => void;
 }
 
-export function AnomalyAlerts({ orders, locations }: AnomalyAlertsProps) {
+export function AnomalyAlerts({ orders, locations, onSelectOrder }: AnomalyAlertsProps) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   // Detect anomalies on every render (cheap; small set sizes).
@@ -118,42 +119,52 @@ export function AnomalyAlerts({ orders, locations }: AnomalyAlertsProps) {
           {anomalies.length}
         </span>
       </div>
-      <ul className="divide-y divide-[#E5E7EB] max-h-80 overflow-y-auto">
+      <div className="divide-y divide-[#E5E7EB] max-h-80 overflow-y-auto">
         <AnimatePresence>
           {anomalies.map((a) => (
-            <motion.li
+            <motion.div
               key={a.id}
               initial={{ opacity: 0, x: 8 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 8 }}
-              className="px-6 py-3 flex items-start gap-3"
+              onClick={() => onSelectOrder?.(a.orderId)}
+              className="px-6 py-3 flex items-start gap-3 hover:bg-[#F9FAFB] cursor-pointer transition-colors group/item"
+              title="Klik untuk detail pesanan"
             >
               <div
-                className="mt-0.5 h-8 w-8 shrink-0 rounded-full bg-[#FEE2E2] flex items-center justify-center"
+                className="mt-0.5 h-8 w-8 shrink-0 rounded-full bg-[#FEE2E2] flex items-center justify-center group-hover/item:scale-105 transition-transform"
                 aria-hidden="true"
               >
                 <AlertTriangle className="h-4 w-4 text-[#991B1B]" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm font-semibold text-[#111827]">
-                  {a.title}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm font-semibold text-[#111827] group-hover/item:text-[#D97706] transition-colors">
+                    {a.title}
+                  </p>
+                  <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.2 rounded font-semibold opacity-0 group-hover/item:opacity-100 transition-opacity">
+                    Lihat detail
+                  </span>
+                </div>
                 <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-[#6B7280] mt-0.5">
                   {a.detail}
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setDismissed((s) => new Set(s).add(a.id))}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDismissed((s) => new Set(s).add(a.id));
+                }}
                 aria-label="Dismiss alert"
-                className="shrink-0 h-7 w-7 rounded-full hover:bg-[#F3F4F6] flex items-center justify-center"
+                className="shrink-0 h-7 w-7 rounded-full hover:bg-[#F3F4F6] flex items-center justify-center transition-colors"
               >
                 <X className="h-4 w-4 text-[#6B7280]" />
               </button>
-            </motion.li>
+            </motion.div>
           ))}
         </AnimatePresence>
-      </ul>
+      </div>
     </Card>
   );
 }

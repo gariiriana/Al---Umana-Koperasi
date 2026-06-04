@@ -1,14 +1,15 @@
 import { useEffect, useState, lazy, Suspense } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { doc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
-import { ArrowLeft, ArrowRight, Loader2, MapPin, Wallet, CreditCard, ChevronRight, CheckCircle2, AlertTriangle, Navigation, Home, Briefcase, PenLine, FileText, ShoppingBag } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, MapPin, Wallet, CreditCard, ChevronRight, CheckCircle2, AlertTriangle, Navigation, Home, Briefcase, PenLine, FileText, ShoppingBag, Copy, ExternalLink, Check } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { subscribeToCart, computeCartTotal, CartLineItem, removeLineItem, setLineNotes } from "@/services/cartService";
-import { createOrder, PaymentMethod } from "@/services/orderService";
+import { createOrder, createAdminOrder, PaymentMethod } from "@/services/orderService";
+import type { OrderType } from "@/types/order";
 import { formatIDR } from "@/lib/format";
 import type { ReverseGeoResult } from "@/components/MapLocationPicker";
 import { ProductImage } from "@/components/ProductImage";
@@ -191,6 +192,81 @@ export function CheckoutWizard() {
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [outOfStockItems, setOutOfStockItems] = useState<string[]>([]);
+
+  // Admin Form Fields
+  const [orderType, setOrderType] = useState<OrderType>("event");
+  const [institutionName, setInstitutionName] = useState("");
+  const [recipientPhone, setRecipientPhone] = useState("");
+  const [recipientNotes, setRecipientNotes] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryTime, setDeliveryTime] = useState("");
+  const [foodDetails, setFoodDetails] = useState("");
+  const [drinkDetails, setDrinkDetails] = useState("");
+  const [additionalNotes, setAdditionalNotes] = useState("");
+  const [totalPriceOverride, setTotalPriceOverride] = useState<number | null>(null);
+
+  // Admin Success State
+  const [createdAdminOrder, setCreatedAdminOrder] = useState<{ id: string; token: string; phone: string; name: string; totalPayment: number } | null>(null);
+  const [adminCopied, setAdminCopied] = useState(false);
+
+  const isAdmin = profile?.role === "admin";
+
+  const handleAdminSubmitOrder = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (checkoutItems.length === 0) {
+      setSubmitError("Silakan pilih minimal 1 menu item");
+      return;
+    }
+
+    setSubmittingOrder(true);
+    setSubmitError(null);
+
+    const itemsPayload = checkoutItems.map((item) => ({
+      itemId: item.itemId,
+      itemName: item.itemName,
+      quantity: item.quantity,
+    }));
+
+    try {
+      const order = await createAdminOrder({
+        orderType,
+        institutionName: institutionName.trim(),
+        recipientName: customerName.trim(), // using customerName as recipientName
+        recipientPhone: recipientPhone.trim(),
+        recipientNotes: recipientNotes.trim(),
+        eventDate,
+        deliveryAddress: deliveryAddress.trim(),
+        deliveryTime: deliveryTime.trim(),
+        foodDetails: foodDetails.trim() || checkoutItems.map(s => `${s.itemName} (${s.quantity})`).join(", "),
+        drinkDetails: drinkDetails.trim(),
+        items: itemsPayload,
+        totalPrice: totalPriceOverride !== null ? totalPriceOverride : subtotal,
+        additionalNotes: additionalNotes.trim(),
+      });
+
+      // Clear checkout items from cart on success (in background)
+      if (user) {
+        const purchasedItemIds = checkoutItems.map((item) => item.itemId);
+        Promise.all(purchasedItemIds.map((itemId) => removeLineItem(user.uid, itemId)))
+          .catch((e) => console.error("Failed to clear cart:", e));
+      }
+
+      setCreatedAdminOrder({
+        id: order.id,
+        token: order.invoiceToken || "",
+        phone: order.recipientPhone,
+        name: order.recipientName,
+        totalPayment: totalPriceOverride !== null ? totalPriceOverride : subtotal,
+      });
+    } catch (err: unknown) {
+      console.error(err);
+      const e = err as { message?: string };
+      setSubmitError(e.message || "Gagal membuat pesanan");
+    } finally {
+      setSubmittingOrder(false);
+    }
+  };
 
   // Initialize fields once profile loads
   useEffect(() => {
@@ -454,9 +530,10 @@ export function CheckoutWizard() {
 
       requestCompleted = true;
 
-      // Clean up the purchased items from the shopping cart on success (Requirement 6.3 & 6.4)
+      // Clean up the purchased items from the shopping cart on success (in background)
       const purchasedItemIds = checkoutItems.map((item) => item.itemId);
-      await Promise.all(purchasedItemIds.map((itemId) => removeLineItem(user.uid, itemId)));
+      Promise.all(purchasedItemIds.map((itemId) => removeLineItem(user.uid, itemId)))
+        .catch((e) => console.error("Failed to clear cart:", e));
 
       if (paymentMethod === "cod") {
         // COD goes CONFIRMED immediately
@@ -483,6 +560,436 @@ export function CheckoutWizard() {
       setSubmittingOrder(false);
     }
   };
+
+  if (isAdmin) {
+    if (createdAdminOrder) {
+      const invoiceUrl = `/invoice/${createdAdminOrder.token}`;
+      return (
+        <div className="bg-[#F3F4F6] min-h-screen pb-20">
+          <div className="bg-white border-b border-[#E5E7EB] sticky top-0 z-10 px-4 py-3 flex items-center gap-3">
+            <h1 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
+              Pesanan Berhasil Dibuat
+            </h1>
+          </div>
+          <div className="p-4 max-w-2xl mx-auto space-y-6">
+            <div className="bg-white rounded-3xl p-8 text-center space-y-6 border border-[#E5E7EB] shadow-lg animate-in fade-in zoom-in duration-300">
+              <div className="w-16 h-16 bg-[#D1FAE5] text-[#10B981] rounded-full flex items-center justify-center mx-auto shadow-inner">
+                <Check className="w-8 h-8 stroke-[3]" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]">
+                  Pesanan Berhasil Dibuat
+                </h2>
+                <p className="text-sm text-[#6B7280]">
+                  ID Pesanan: <span className="font-mono font-bold text-[#111827]">{createdAdminOrder.id.slice(-6).toUpperCase()}</span>
+                </p>
+              </div>
+
+              <div className="p-4 bg-[#F9FAFB] rounded-2xl border border-[#E5E7EB] space-y-3 text-left">
+                <div className="text-sm text-[#374151]">
+                  <span className="font-semibold">Penerima:</span> {createdAdminOrder.name} ({createdAdminOrder.phone})
+                </div>
+                <div className="text-sm text-[#374151]">
+                  <span className="font-semibold">Total Tagihan:</span> {formatIDR(createdAdminOrder.totalPayment)}
+                </div>
+                <div className="pt-2 border-t border-[#E5E7EB]">
+                  <label className="block text-xs font-semibold text-[#6B7280] mb-1">
+                    Tautan Invoice Publik:
+                  </label>
+                  <div className="flex items-center gap-2 bg-white border border-[#D1D5DB] rounded-lg p-2 text-xs font-mono text-[#374151] break-all">
+                    {window.location.origin}{invoiceUrl}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = `${window.location.origin}${invoiceUrl}`;
+                    navigator.clipboard.writeText(url);
+                    setAdminCopied(true);
+                    setTimeout(() => setAdminCopied(false), 2000);
+                  }}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl border border-neutral-300 hover:bg-neutral-50 transition-colors font-bold text-[#374151] text-xs flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Copy className="w-4 h-4" />
+                  {adminCopied ? "Tersalin!" : "Salin Link"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = `${window.location.origin}${invoiceUrl}`;
+                    const shortId = createdAdminOrder.id.slice(-6).toUpperCase();
+                    const text = `Halo ${createdAdminOrder.name},\n\nPesanan Anda #${shortId} dari ${institutionName} telah berhasil dibuat!\nTotal Tagihan: Rp ${createdAdminOrder.totalPayment.toLocaleString()}\n\nSilakan konfirmasi pesanan dan lakukan tanda tangan digital melalui tautan invoice berikut:\n${url}`;
+                    const waUrl = `https://wa.me/${createdAdminOrder.phone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`;
+                    window.open(waUrl, "_blank");
+                  }}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20BA5A] border-none text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  Kirim ke WhatsApp
+                </button>
+                <Link to={invoiceUrl} target="_blank" className="w-full sm:w-auto">
+                  <button className="w-full px-6 py-2.5 rounded-xl border border-neutral-300 hover:bg-neutral-50 transition-colors font-bold text-[#374151] text-xs flex items-center justify-center gap-2 cursor-pointer">
+                    <ExternalLink className="w-4 h-4" />
+                    Lihat Invoice
+                  </button>
+                </Link>
+              </div>
+
+              <div className="pt-4 border-t border-[#E5E7EB]">
+                <Link to="/">
+                  <button className="px-6 py-2 rounded-xl border border-neutral-300 text-xs font-bold text-[#374151] hover:bg-neutral-50 cursor-pointer">
+                    Belanja Lagi
+                  </button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-[#F3F4F6] min-h-screen pb-20">
+        {/* Sticky Header */}
+        <div className="bg-white border-b border-[#E5E7EB] sticky top-0 z-10 px-4 py-3 flex items-center gap-3">
+          <button
+            title={t.back}
+            onClick={() => {
+              navigate("/cart");
+            }}
+            className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#111827]"
+          >
+            <ArrowLeft className="h-6 w-6" />
+          </button>
+          <h1 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
+            Informasi Pelanggan & Acara
+          </h1>
+        </div>
+
+        <div className="p-4 max-w-4xl mx-auto">
+          {loadingCart ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-[#FBBF24]" />
+            </div>
+          ) : checkoutItems.length === 0 ? (
+            <div className="bg-white rounded-3xl p-6 shadow-sm text-center space-y-4">
+              <AlertTriangle className="h-12 w-12 mx-auto text-[#F59E0B]" />
+              <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">{t.emptyCart}</h2>
+              <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
+                {t.emptyPrompt}
+              </p>
+              <Link to="/" className="inline-flex min-h-11 px-6 bg-[#FBBF24] rounded-2xl items-center font-bold text-[#111827]">
+                {t.shopNow}
+              </Link>
+            </div>
+          ) : (
+            <form onSubmit={handleAdminSubmitOrder} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="md:col-span-2 space-y-4">
+                <div className="bg-white rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-4">
+                  <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
+                    Informasi Pelanggan & Acara
+                  </h3>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-[#374151] mb-1">
+                        Jenis Pesanan
+                      </label>
+                      <div className="flex gap-4 mt-2">
+                        <label className="flex items-center gap-2 text-xs text-[#374151] cursor-pointer">
+                          <input
+                            type="radio"
+                            name="orderType"
+                            value="event"
+                            checked={orderType === "event"}
+                            onChange={() => setOrderType("event")}
+                            className="accent-[#FBBF24] w-4 h-4 cursor-pointer"
+                          />
+                          Event (Jatuh tempo 7 hari)
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-[#374151] cursor-pointer">
+                          <input
+                            type="radio"
+                            name="orderType"
+                            value="rutin"
+                            checked={orderType === "rutin"}
+                            onChange={() => setOrderType("rutin")}
+                            className="accent-[#FBBF24] w-4 h-4 cursor-pointer"
+                          />
+                          Rutin (Jatuh tempo 1 bulan)
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[#4B5563]">Nama Instansi/Pelanggan</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Yayasan Pesantren Al-Mana"
+                        className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                        value={institutionName}
+                        onChange={(e) => setInstitutionName(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-[#4B5563]">Nama Penerima</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Ustadz Ahmad"
+                          className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-[#4B5563]">Nomor Telepon Penerima</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. 08123456789"
+                          className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                          value={recipientPhone}
+                          onChange={(e) => setRecipientPhone(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-[#4B5563]">Tanggal Acara</label>
+                        <input
+                          type="date"
+                          required
+                          title="Tanggal Acara"
+                          placeholder="Pilih Tanggal Acara"
+                          className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                          value={eventDate}
+                          onChange={(e) => setEventDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-[#4B5563]">Waktu Pengantaran / Jam Acara</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. 10:00 WIB atau Makan Siang"
+                          className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                          value={deliveryTime}
+                          onChange={(e) => setDeliveryTime(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[#4B5563]">Alamat Pengiriman</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Kampus 2 Pesantren Al-Mana, Sukabumi"
+                        className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                        value={deliveryAddress}
+                        onChange={(e) => setDeliveryAddress(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[#374151]">
+                        Catatan Lokasi / Penerima (Opsional)
+                      </label>
+                      <textarea
+                        placeholder="e.g. Gedung A Lantai 2, hubungi via WA jika sudah di gerbang"
+                        rows={2}
+                        className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] resize-none"
+                        value={recipientNotes}
+                        onChange={(e) => setRecipientNotes(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Items List */}
+                <div className="bg-white rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-3">
+                  <div className="flex items-center gap-2">
+                    <ShoppingBag className="h-5 w-5 text-[#FBBF24]" />
+                    <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
+                      Detail Menu Makanan & Minuman
+                      <span className="text-[#9CA3AF] font-medium ml-1.5">({checkoutItems.length})</span>
+                    </h3>
+                  </div>
+
+                  <div className="space-y-2">
+                    {checkoutItems.map((item) => (
+                      <div key={item.itemId} className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 space-y-2">
+                        <div className="flex gap-3">
+                          {item.imageUrl && (
+                            <ProductImage
+                              imageUrl={item.imageUrl}
+                              alt={item.itemName}
+                              className="h-12 w-12 rounded-xl object-cover bg-white border border-neutral-200 shrink-0"
+                              fallbackClassName="h-5 w-5 text-[#9CA3AF]"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-[#111827] leading-snug truncate">{item.itemName}</p>
+                            <div className="flex items-center justify-between mt-0.5">
+                              <span className="text-[11px] text-[#6B7280]">
+                                {formatIDR(item.unitPrice)} × {item.quantity}
+                              </span>
+                              <span className="text-xs font-bold text-[#111827]">
+                                {formatIDR(item.unitPrice * item.quantity)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-[#FBBF24] transition-all">
+                          <FileText className="h-3.5 w-3.5 text-[#9CA3AF] shrink-0" />
+                          <input
+                            type="text"
+                            maxLength={200}
+                            placeholder="Catatan porsi (misal: extra pedas, tanpa bawang)"
+                            className="w-full bg-transparent border-none text-xs text-[#374151] placeholder-[#9CA3AF] focus:outline-none"
+                            value={item.notes ?? ""}
+                            onChange={async (e) => {
+                              const val = e.target.value;
+                              setCheckoutItems((prev) =>
+                                prev.map((it) =>
+                                  it.itemId === item.itemId ? { ...it, notes: val } : it
+                                )
+                              );
+                              if (!directCheckoutItems && user) {
+                                try { await setLineNotes(user.uid, item.itemId, val); } catch { /* silent */ }
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-neutral-100">
+                    <span className="text-xs font-semibold text-[#6B7280]">Total Kalkulasi Menu</span>
+                    <span className="text-sm font-extrabold text-[#111827]">{formatIDR(subtotal)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-white rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-4">
+                  <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827] border-b border-[#F3F4F6] pb-3">
+                    Detail Makanan & Minuman Tambahan
+                  </h3>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-[#6B7280] mb-1">
+                        Detail Makanan (Deskripsi tambahan)
+                      </label>
+                      <textarea
+                        placeholder="e.g. Nasi Kotak Ayam Bakar sambal pisah"
+                        rows={2}
+                        className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] resize-none"
+                        value={foodDetails}
+                        onChange={(e) => setFoodDetails(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-[#6B7280] mb-1">
+                        Detail Minuman (Deskripsi tambahan)
+                      </label>
+                      <textarea
+                        placeholder="e.g. Air Mineral botol 330ml dingin"
+                        rows={2}
+                        className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] resize-none"
+                        value={drinkDetails}
+                        onChange={(e) => setDrinkDetails(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-[#6B7280] mb-1">
+                        Catatan Tambahan Internal
+                      </label>
+                      <textarea
+                        placeholder="e.g. Tagihan dikirim ke bendahara yayasan langsung"
+                        rows={2}
+                        className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] resize-none"
+                        value={additionalNotes}
+                        onChange={(e) => setAdditionalNotes(e.target.value)}
+                      />
+                    </div>
+
+                    <hr className="border-[#F3F4F6] pt-1" />
+
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-xs font-semibold text-[#6B7280]">
+                          Override Total Tagihan (Manual)
+                        </label>
+                        {totalPriceOverride !== null && (
+                          <button
+                            type="button"
+                            className="text-[10px] text-[#EF4444] hover:underline cursor-pointer focus:outline-none"
+                            onClick={() => setTotalPriceOverride(null)}
+                          >
+                            Batal Override
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        placeholder="e.g. 500000 (kosongkan jika pakai total menu)"
+                        className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                        value={totalPriceOverride === null ? "" : totalPriceOverride}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTotalPriceOverride(val === "" ? null : Number(val));
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex justify-between items-center pt-3 border-t border-[#E5E7EB]">
+                      <span className="text-xs font-bold text-[#111827]">Total Tagihan:</span>
+                      <span className="text-sm font-extrabold text-[#D97706]">{formatIDR(totalPriceOverride !== null ? totalPriceOverride : subtotal)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {submitError && (
+                  <div className="bg-red-50 border border-red-200 text-red-900 p-4 rounded-2xl text-xs font-semibold font-['Hanken_Grotesk',system-ui,sans-serif]">
+                    <p>{submitError}</p>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={submittingOrder}
+                  className="w-full flex items-center justify-center gap-2 min-h-12 bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-extrabold text-[#111827] rounded-2xl shadow-md transition-all cursor-pointer disabled:bg-[#E5E7EB] disabled:text-[#9CA3AF] disabled:cursor-not-allowed"
+                >
+                  {submittingOrder ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Memproses Pesanan…
+                    </>
+                  ) : (
+                    <>
+                      Buat Pesanan & Invoice ({formatIDR(totalPriceOverride !== null ? totalPriceOverride : subtotal)})
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[#F3F4F6] min-h-screen pb-20">

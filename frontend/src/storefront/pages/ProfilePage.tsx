@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, type ChangeEvent, lazy, Suspense } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   User,
   MapPin,
@@ -207,7 +206,6 @@ export function ProfilePage() {
   const { user, profile } = useAuth();
   const { lang } = useLanguage();
   const { showToast } = useToast();
-  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const t = DICTIONARY[lang];
@@ -684,18 +682,7 @@ export function ProfilePage() {
                 <span>{t.tabNotifications}</span>
               </button>
 
-              <div className="h-px bg-neutral-200 my-2" />
 
-              <button
-                type="button"
-                onClick={() => navigate("/orders")}
-                className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold text-neutral-600 hover:bg-[#F3F4F6] hover:text-[#111827] cursor-pointer whitespace-nowrap transition-colors"
-              >
-                <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                </svg>
-                <span>{t.myOrders}</span>
-              </button>
             </nav>
           </aside>
 

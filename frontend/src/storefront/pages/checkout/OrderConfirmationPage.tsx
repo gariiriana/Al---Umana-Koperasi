@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from "react-router-dom";
-import { CheckCircle2, ArrowRight, ShoppingBag, MapPin, Clock, Calendar, Navigation } from "lucide-react";
+import { CheckCircle2, ShoppingBag, MapPin, Clock, Calendar, Navigation } from "lucide-react";
 import { motion } from "motion/react";
 
 import { formatIDR } from "@/lib/format";
@@ -219,15 +219,8 @@ export function OrderConfirmationPage() {
         {/* Actions Buttons */}
         <motion.div variants={itemVariants} className="space-y-3 pt-2">
           <Link
-            to="/orders"
-            className="w-full flex items-center justify-center gap-2 min-h-12 bg-[#111827] hover:bg-[#1F2937] text-sm font-bold text-white rounded-2xl shadow-sm transition-all"
-          >
-            {t.viewOrders}
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-          <Link
             to="/"
-            className="w-full flex items-center justify-center gap-2 min-h-12 bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-sm font-bold text-[#111827] rounded-2xl transition-all"
+            className="w-full flex items-center justify-center gap-2 min-h-12 bg-[#111827] hover:bg-[#1F2937] text-sm font-bold text-white rounded-2xl shadow-sm transition-all"
           >
             <ShoppingBag className="h-4 w-4" />
             {t.backShopping}

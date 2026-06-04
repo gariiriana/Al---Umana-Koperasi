@@ -14,7 +14,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/admin/orders",
     "/admin/orders/new",
     "/admin/invoices",
-    "/admin/tracking",
   ],
 
   /**
@@ -44,14 +43,11 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   monitoring: [
     "/admin/dashboard",
     "/admin/orders",
-    "/admin/tracking",
   ],
 };
 
 /** Roles that land on the admin AppShell when authenticated. */
 export const ADMIN_SHELL_ROLES = [
-  "admin",
-  "monitoring",
   "tim_produksi",
   "distribusi",
   "kurir",
@@ -62,7 +58,7 @@ export const ADMIN_SHELL_ROLES = [
  * a user navigates to a path their role is not allowed to view.
  */
 export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
-  admin: "/admin/dashboard",
+  admin: "/",
   monitoring: "/admin/dashboard",
   tim_produksi: "/admin/production",
   distribusi: "/distribusi/dispatch",

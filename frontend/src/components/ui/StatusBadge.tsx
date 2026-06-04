@@ -27,6 +27,20 @@ const STATUS_STYLES: Record<OrderStatus, StatusStyle> = {
   },
   COMPLETED: { classes: "bg-[#D1FAE5] text-[#065F46]", label: "Selesai" },
   DELIVERY_FAILED: { classes: "bg-[#FEE2E2] text-[#991B1B]", label: "Gagal Kirim" },
+  PLACING: { classes: "bg-[#F3F4F6] text-[#374151]", label: "Membuat Pesanan" },
+  AWAITING_PAYMENT_PROOF: {
+    classes: "bg-[#FEF3C7] text-[#92400E]",
+    label: "Menunggu Pembayaran",
+  },
+  AWAITING_PAYMENT_APPROVAL: {
+    classes: "bg-[#FFEDD5] text-[#9A3412]",
+    label: "Menunggu Verifikasi",
+  },
+  PAYMENT_REJECTED: { classes: "bg-[#FEE2E2] text-[#991B1B]", label: "Pembayaran Ditolak" },
+  CONFIRMED: { classes: "bg-[#FEF3C7] text-[#92400E]", label: "Dikonfirmasi" },
+  READY: { classes: "bg-[#F3E8FF] text-[#6B21A8]", label: "Quality Control" },
+  DELIVERED: { classes: "bg-[#D1FAE5] text-[#065F46]", label: "Selesai" },
+  FAILED: { classes: "bg-[#FEE2E2] text-[#991B1B]", label: "Gagal" },
 };
 
 const BASE_CLASSES =
@@ -39,7 +53,10 @@ export function StatusBadge({
   children,
   ...rest
 }: StatusBadgeProps) {
-  const style = STATUS_STYLES[status];
+  const style = STATUS_STYLES[status] || {
+    classes: "bg-[#F3F4F6] text-[#374151]",
+    label: String(status || "Unknown"),
+  };
   const composed = [BASE_CLASSES, style.classes, className ?? ""].join(" ").trim();
 
   return (

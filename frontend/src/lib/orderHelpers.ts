@@ -9,6 +9,14 @@ export const STATUS_LABELS: Record<"id" | "en", Record<OrderStatus, string>> = {
     OUT_FOR_DELIVERY: "Dalam Pengiriman",
     COMPLETED: "Selesai",
     DELIVERY_FAILED: "Gagal Kirim",
+    PLACING: "Membuat Pesanan",
+    AWAITING_PAYMENT_PROOF: "Menunggu Pembayaran",
+    AWAITING_PAYMENT_APPROVAL: "Menunggu Verifikasi",
+    PAYMENT_REJECTED: "Pembayaran Ditolak",
+    CONFIRMED: "Dikonfirmasi",
+    READY: "Uji Kelayakan (QC)",
+    DELIVERED: "Selesai",
+    FAILED: "Gagal",
   },
   en: {
     PENDING: "Pending",
@@ -18,6 +26,14 @@ export const STATUS_LABELS: Record<"id" | "en", Record<OrderStatus, string>> = {
     OUT_FOR_DELIVERY: "Out for Delivery",
     COMPLETED: "Completed",
     DELIVERY_FAILED: "Delivery Failed",
+    PLACING: "Placing Order",
+    AWAITING_PAYMENT_PROOF: "Awaiting Payment",
+    AWAITING_PAYMENT_APPROVAL: "Awaiting Approval",
+    PAYMENT_REJECTED: "Payment Rejected",
+    CONFIRMED: "Confirmed",
+    READY: "Quality Control (QC)",
+    DELIVERED: "Completed",
+    FAILED: "Failed",
   }
 };
 

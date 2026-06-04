@@ -5,41 +5,49 @@ import {
   Routes,
   useLocation,
 } from "react-router-dom";
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppShell } from "@/components/layout/AppShell";
 import { AdminAccessDenied } from "@/components/layout/AdminAccessDenied";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { LoginPage } from "@/pages/LoginPage";
-import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
-import { DashboardPage } from "@/pages/DashboardPage";
-import { OrdersPage } from "@/pages/OrdersPage";
-import { ProductionPage } from "@/pages/ProductionPage";
-import { QCReviewPage } from "@/pages/QCReviewPage";
-import { DispatchPage } from "@/pages/DispatchPage";
-import { DeliveryPage } from "@/pages/DeliveryPage";
-import { TrackingPage } from "@/pages/TrackingPage";
-import { SettingsPage } from "@/pages/SettingsPage";
-import { ProductsPage } from "@/admin/pages/ProductsPage";
-import { ProductFormPage } from "@/admin/pages/ProductFormPage";
-import { CategoriesPage } from "@/admin/pages/CategoriesPage";
-import { OrderInputPage } from "@/admin/pages/OrderInputPage";
-import { InvoicesPage } from "@/admin/pages/InvoicesPage";
-import { FoodSchedulePage } from "@/admin/pages/FoodSchedulePage";
-import { DeliverySchedulerPage } from "@/pages/DeliverySchedulerPage";
-import { InvoicePage } from "@/pages/InvoicePage";
 import {
-  ADMIN_SHELL_ROLES,
   ROLE_DEFAULT_REDIRECT,
 } from "@/constants/roles";
 import { StorefrontLayout } from "@/storefront/layouts/StorefrontLayout";
 import { HomePage } from "@/storefront/pages/HomePage";
-import { ProductDetailPage } from "@/storefront/pages/ProductDetailPage";
-import { HelpCenterPage } from "@/storefront/pages/HelpCenterPage";
-import { CategoryPage } from "@/storefront/pages/CategoryPage";
+
+const LoginPage = lazy(() => import("@/pages/LoginPage").then(module => ({ default: module.LoginPage })));
+const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage").then(module => ({ default: module.ForgotPasswordPage })));
+const DashboardPage = lazy(() => import("@/pages/DashboardPage").then(module => ({ default: module.DashboardPage })));
+const OrdersPage = lazy(() => import("@/pages/OrdersPage").then(module => ({ default: module.OrdersPage })));
+const ProductionPage = lazy(() => import("@/pages/ProductionPage").then(module => ({ default: module.ProductionPage })));
+const QCReviewPage = lazy(() => import("@/pages/QCReviewPage").then(module => ({ default: module.QCReviewPage })));
+const DispatchPage = lazy(() => import("@/pages/DispatchPage").then(module => ({ default: module.DispatchPage })));
+const DeliveryPage = lazy(() => import("@/pages/DeliveryPage").then(module => ({ default: module.DeliveryPage })));
+const TrackingPage = lazy(() => import("@/pages/TrackingPage").then(module => ({ default: module.TrackingPage })));
+const SettingsPage = lazy(() => import("@/pages/SettingsPage").then(module => ({ default: module.SettingsPage })));
+const ProductsPage = lazy(() => import("@/admin/pages/ProductsPage").then(module => ({ default: module.ProductsPage })));
+const ProductFormPage = lazy(() => import("@/admin/pages/ProductFormPage").then(module => ({ default: module.ProductFormPage })));
+const CategoriesPage = lazy(() => import("@/admin/pages/CategoriesPage").then(module => ({ default: module.CategoriesPage })));
+const InvoicesPage = lazy(() => import("@/admin/pages/InvoicesPage").then(module => ({ default: module.InvoicesPage })));
+const FoodSchedulePage = lazy(() => import("@/admin/pages/FoodSchedulePage").then(module => ({ default: module.FoodSchedulePage })));
+const DeliverySchedulerPage = lazy(() => import("@/pages/DeliverySchedulerPage").then(module => ({ default: module.DeliverySchedulerPage })));
+const InvoicePage = lazy(() => import("@/pages/InvoicePage").then(module => ({ default: module.InvoicePage })));
+const ProductDetailPage = lazy(() => import("@/storefront/pages/ProductDetailPage").then(module => ({ default: module.ProductDetailPage })));
+const HelpCenterPage = lazy(() => import("@/storefront/pages/HelpCenterPage").then(module => ({ default: module.HelpCenterPage })));
+const CategoryPage = lazy(() => import("@/storefront/pages/CategoryPage").then(module => ({ default: module.CategoryPage })));
+const RegisterPage = lazy(() => import("@/pages/RegisterPage").then(module => ({ default: module.RegisterPage })));
+const CartPage = lazy(() => import("@/storefront/pages/CartPage").then(module => ({ default: module.CartPage })));
+const CheckoutWizard = lazy(() => import("@/storefront/pages/checkout/CheckoutWizard").then(module => ({ default: module.CheckoutWizard })));
+const OrderConfirmationPage = lazy(() => import("@/storefront/pages/checkout/OrderConfirmationPage").then(module => ({ default: module.OrderConfirmationPage })));
+const NotificationsPage = lazy(() => import("@/storefront/pages/NotificationsPage").then(module => ({ default: module.NotificationsPage })));
+const ProfilePage = lazy(() => import("@/storefront/pages/ProfilePage").then(module => ({ default: module.ProfilePage })));
+const TestimoniPage = lazy(() => import("@/storefront/pages/TestimoniPage").then(module => ({ default: module.TestimoniPage })));
+
 import {
   CategoryIndexStub,
+  PaymentProofUploadPageStub,
 } from "@/storefront/pages/stubs";
 
 interface ProtectedProps {
@@ -98,13 +106,10 @@ function RootRoute() {
       </div>
     );
   }
-  if (
-    profile &&
-    (ADMIN_SHELL_ROLES as readonly string[]).includes(profile.role)
-  ) {
+  if (profile && ROLE_DEFAULT_REDIRECT[profile.role] && ROLE_DEFAULT_REDIRECT[profile.role] !== "/") {
     return (
       <Navigate
-        to={ROLE_DEFAULT_REDIRECT[profile.role] ?? "/admin/dashboard"}
+        to={ROLE_DEFAULT_REDIRECT[profile.role]}
         replace
       />
     );
@@ -153,6 +158,14 @@ function ShelledRoute({
     return <Navigate to={target} replace />;
   }
 
+  if (profile.role === "admin") {
+    return (
+      <StorefrontLayout>
+        {children}
+      </StorefrontLayout>
+    );
+  }
+
   return (
     <AppShell
       pageTitle={pageTitle}
@@ -177,6 +190,40 @@ function Storefront({ children }: { children: ReactNode }) {
   return <StorefrontLayout>{children}</StorefrontLayout>;
 }
 
+export function StorefrontProtectedRoute({
+  allowedRoles,
+  children,
+}: {
+  allowedRoles: readonly string[];
+  children: ReactNode;
+}) {
+  const { profile } = useAuth();
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
+        <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280]">
+          Loading profile…
+        </p>
+      </div>
+    );
+  }
+
+  if (!allowedRoles.includes(profile.role)) {
+    const isAdminOnlyRoute =
+      allowedRoles.length === 1 && allowedRoles[0] === "admin";
+    if (isAdminOnlyRoute) {
+      return <AdminAccessDenied />;
+    }
+
+    const target = ROLE_DEFAULT_REDIRECT[profile.role] ?? "/";
+    return <Navigate to={target} replace />;
+  }
+
+  return <StorefrontLayout>{children}</StorefrontLayout>;
+}
+
+
 function RoutesTree() {
   return (
     <Routes>
@@ -186,6 +233,14 @@ function RoutesTree() {
         element={
           <PublicRoute>
             <LoginPage />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/register"
+        element={
+          <PublicRoute>
+            <RegisterPage />
           </PublicRoute>
         }
       />
@@ -235,6 +290,71 @@ function RoutesTree() {
           </Storefront>
         }
       />
+      <Route
+        path="/cart"
+        element={
+          <Storefront>
+            <CartPage />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/checkout/address"
+        element={
+          <Storefront>
+            <CheckoutWizard />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/checkout/payment"
+        element={
+          <Storefront>
+            <CheckoutWizard />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/checkout/payment-proof/:orderId"
+        element={
+          <Storefront>
+            <PaymentProofUploadPageStub />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/checkout/confirmation"
+        element={
+          <Storefront>
+            <OrderConfirmationPage />
+          </Storefront>
+        }
+      />
+
+      <Route
+        path="/notifications"
+        element={
+          <Storefront>
+            <NotificationsPage />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <Storefront>
+            <ProfilePage />
+          </Storefront>
+        }
+      />
+      <Route
+        path="/testimoni"
+        element={
+          <Storefront>
+            <TestimoniPage />
+          </Storefront>
+        }
+      />
 
       {/* Admin shell routes */}
       <Route
@@ -265,16 +385,7 @@ function RoutesTree() {
       />
       <Route
         path="/admin/orders/new"
-        element={
-          <Protected>
-            <ShelledRoute
-              pageTitle="Input Pesanan Baru"
-              allowedRoles={["admin"]}
-            >
-              <OrderInputPage />
-            </ShelledRoute>
-          </Protected>
-        }
+        element={<Navigate to="/" replace />}
       />
       <Route
         path="/admin/invoices"
@@ -367,7 +478,7 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Tracking"
-              allowedRoles={["admin", "monitoring"]}
+              allowedRoles={[]}
             >
               <TrackingPage />
             </ShelledRoute>
@@ -487,7 +598,15 @@ export function AppRouter() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <RoutesTree />
+        <Suspense fallback={
+          <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
+            <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280]">
+              Loading…
+            </p>
+          </div>
+        }>
+          <RoutesTree />
+        </Suspense>
         <GlobalSignOutModal />
       </AuthProvider>
     </BrowserRouter>

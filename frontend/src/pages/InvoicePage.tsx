@@ -16,6 +16,20 @@ export function InvoicePage() {
   const [signing, setSigning] = useState(false);
 
   const sigCanvasRef = useRef<SignatureCanvas | null>(null);
+  const canvasContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!order || order.invoiceSignedAt) return;
+    const timer = setTimeout(() => {
+      const canvas = sigCanvasRef.current?.getCanvas();
+      const container = canvasContainerRef.current;
+      if (canvas && container) {
+        canvas.width = container.clientWidth;
+        canvas.height = 150;
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [order]);
 
   useEffect(() => {
     async function loadInvoice() {
@@ -136,6 +150,76 @@ export function InvoicePage() {
             </div>
           </div>
 
+          {/* Digital Signature section */}
+          <div className="pt-2 pb-2 space-y-4">
+            <h4 className="text-xs font-bold text-[#6B7280] uppercase tracking-wider text-center sm:text-left">
+              Konfirmasi & Tanda Tangan Pelanggan
+            </h4>
+
+            {order.invoiceSignedAt ? (
+              <div className="bg-[#D1FAE5] border border-[#A7F3D0] rounded-2xl p-6 flex flex-col items-center justify-center text-center space-y-4">
+                <div className="w-12 h-12 bg-white text-[#10B981] rounded-full flex items-center justify-center shadow-xs">
+                  <ShieldCheck className="w-6 h-6 stroke-[2.5]" />
+                </div>
+                <div className="space-y-1">
+                  <p className="font-bold text-[#065F46] text-sm">Pesanan Terkonfirmasi & Tanda Tangan Valid</p>
+                  <p className="text-xs text-[#047857]">
+                    Diverifikasi secara digital pada {new Date(order.invoiceSignedAt).toLocaleString("id-ID", { dateStyle: "long", timeStyle: "short" })}
+                  </p>
+                </div>
+                {order.invoiceSignatureData && (
+                  <div className="bg-white border border-[#A7F3D0] rounded-xl p-2 max-w-[200px]">
+                    <img src={order.invoiceSignatureData} alt="Tanda Tangan Pelanggan" className="max-h-24 mx-auto" />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-4 bg-neutral-50 p-6 rounded-2xl border border-[#E5E7EB]">
+                <p className="text-xs text-[#6B7280] text-center max-w-md">
+                  Dengan menandatangani di bawah ini, Anda menyatakan setuju dengan seluruh rincian hidangan, jumlah pesanan, alamat, dan total harga di bawah.
+                </p>
+
+                {/* Signature Canvas */}
+                <div 
+                  ref={canvasContainerRef}
+                  className="border border-[#D1D5DB] rounded-xl bg-white w-full max-w-[400px] overflow-hidden"
+                >
+                  <SignatureCanvas
+                    ref={sigCanvasRef}
+                    penColor="#111827"
+                    canvasProps={{
+                      className: "sigCanvas w-full bg-white cursor-crosshair",
+                      style: { height: "150px" }
+                    }}
+                  />
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 justify-center w-full max-w-[400px]">
+                  <Button
+                    type="button"
+                    variant="outlined"
+                    onClick={handleClear}
+                    disabled={signing}
+                    className="w-full sm:flex-1 rounded-xl text-xs py-2.5 h-10 border border-[#D1D5DB]"
+                  >
+                    Bersihkan
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={handleSign}
+                    loading={signing}
+                    className="w-full sm:flex-1 bg-[#D97706] hover:bg-[#B45309] text-white border-none rounded-xl text-xs py-2.5 h-10 font-bold whitespace-nowrap"
+                  >
+                    {signing ? "Memproses..." : "Konfirmasi & TTD"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <hr className="border-[#F3F4F6]" />
+
           {/* Invoice Meta Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-[#F9FAFB] rounded-2xl p-6 border border-[#E5E7EB]">
             <div className="space-y-3">
@@ -238,71 +322,6 @@ export function InvoicePage() {
           <div className="flex justify-between items-center pt-6 border-t border-[#F3F4F6]">
             <span className="font-['Manrope'] font-extrabold text-base text-[#111827]">Grand Total Tagihan:</span>
             <span className="font-['Manrope'] font-black text-2xl text-[#D97706]">{formatIDR(order.totalPrice)}</span>
-          </div>
-
-          {/* Digital Signature section */}
-          <div className="pt-8 border-t border-[#F3F4F6] space-y-4">
-            <h4 className="text-xs font-bold text-[#6B7280] uppercase tracking-wider text-center sm:text-left">
-              Konfirmasi & Tanda Tangan Pelanggan
-            </h4>
-
-            {order.invoiceSignedAt ? (
-              <div className="bg-[#D1FAE5] border border-[#A7F3D0] rounded-2xl p-6 flex flex-col items-center justify-center text-center space-y-4">
-                <div className="w-12 h-12 bg-white text-[#10B981] rounded-full flex items-center justify-center shadow-xs">
-                  <ShieldCheck className="w-6 h-6 stroke-[2.5]" />
-                </div>
-                <div className="space-y-1">
-                  <p className="font-bold text-[#065F46] text-sm">Pesanan Terkonfirmasi & Tanda Tangan Valid</p>
-                  <p className="text-xs text-[#047857]">
-                    Diverifikasi secara digital pada {new Date(order.invoiceSignedAt).toLocaleString("id-ID", { dateStyle: "long", timeStyle: "short" })}
-                  </p>
-                </div>
-                {order.invoiceSignatureData && (
-                  <div className="bg-white border border-[#A7F3D0] rounded-xl p-2 max-w-[200px]">
-                    <img src={order.invoiceSignatureData} alt="Tanda Tangan Pelanggan" className="max-h-24 mx-auto" />
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-4 bg-neutral-50 p-6 rounded-2xl border border-[#E5E7EB]">
-                <p className="text-xs text-[#6B7280] text-center max-w-md">
-                  Dengan menandatangani di bawah ini, Anda menyatakan setuju dengan seluruh rincian hidangan, jumlah pesanan, alamat, dan total harga di atas.
-                </p>
-
-                {/* Signature Canvas */}
-                <div className="border border-[#D1D5DB] rounded-xl bg-white w-full max-w-[400px] overflow-hidden">
-                  <SignatureCanvas
-                    ref={sigCanvasRef}
-                    penColor="#111827"
-                    canvasProps={{
-                      className: "sigCanvas w-full min-h-[150px] bg-white cursor-crosshair",
-                      style: { height: "150px" }
-                    }}
-                  />
-                </div>
-
-                <div className="flex gap-3 justify-center w-full max-w-[400px]">
-                  <Button
-                    type="button"
-                    variant="outlined"
-                    onClick={handleClear}
-                    disabled={signing}
-                    className="flex-1 rounded-xl text-xs py-2 h-9 border border-[#D1D5DB]"
-                  >
-                    Bersihkan
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    onClick={handleSign}
-                    loading={signing}
-                    className="flex-1 bg-[#D97706] hover:bg-[#B45309] text-white border-none rounded-xl text-xs py-2 h-9 font-bold"
-                  >
-                    {signing ? "Memproses..." : "Konfirmasi & Tanda Tangan"}
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         </Card>
 

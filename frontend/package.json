@@ -20,6 +20,8 @@
     "@radix-ui/react-toast": "^1.2.2",
     "@tailwindcss/vite": "^4.0.0",
     "firebase": "^11.0.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.460.0",
     "motion": "^11.11.0",

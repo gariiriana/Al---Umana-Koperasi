@@ -34,6 +34,7 @@ import { db } from "@/lib/firebase";
 import { currentUser } from "@/services/authService";
 import type { Order, OrderLineItem, OrderStatus, OrderType, PaymentStatus } from "@/types/order";
 import { sendWhatsAppNotification, sendWhatsAppNotificationDirect, WA_MESSAGES } from "./whatsappService";
+import { pushNotification, shortOrderId } from "./notificationWriter";
 
 /** Payment method identifiers accepted by the order creation. */
 export type PaymentMethod = "cod" | "bank_transfer" | "e_wallet";
@@ -76,6 +77,69 @@ function toIsoString(value: unknown): string {
 function toIsoStringOrUndefined(value: unknown): string | undefined {
   if (value == null) return undefined;
   return toIsoString(value);
+}
+
+function localDataToOrder(id: string, data: DocumentData): Order {
+  return {
+    id,
+    orderType: (data.orderType as Order["orderType"]) ?? "event",
+    institutionName: (data.institutionName as string) ?? "",
+    recipientName: (data.recipientName as string) ?? "",
+    recipientPhone: (data.recipientPhone as string) ?? "",
+    recipientNotes: data.recipientNotes as string | undefined,
+    eventDate: (data.eventDate as string) ?? "",
+    foodDetails: (data.foodDetails as string) ?? "",
+    drinkDetails: (data.drinkDetails as string) ?? "",
+    totalPrice: (data.totalPrice as number) ?? 0,
+    additionalNotes: data.additionalNotes as string | undefined,
+    paymentStatus: (data.paymentStatus as Order["paymentStatus"]) ?? "BELUM_DIBAYAR",
+    paymentDueDate: (data.paymentDueDate as string) ?? "",
+    invoiceToken: data.invoiceToken as string | undefined,
+    invoiceSignedAt: toIsoStringOrUndefined(data.invoiceSignedAt),
+    invoiceSignatureData: data.invoiceSignatureData as string | undefined,
+    manualValidation: data.manualValidation as Order["manualValidation"],
+    status: ((data.status as string) ?? "PENDING") as OrderStatus,
+    customerId: (data.customerId as string) ?? "",
+    customerName: (data.customerName as string) ?? "",
+    items: (data.items as OrderLineItem[]) ?? [],
+    deliveryAddress: (data.deliveryAddress as string) ?? "",
+    deliveryTime: (data.deliveryTime as string) ?? "",
+    rejectionReason: data.rejectionReason as string | undefined,
+    outOfStockItems: data.outOfStockItems as string[] | undefined,
+    assignedCourierId: data.assignedCourierId as string | undefined,
+    productionStartedBy: data.productionStartedBy as string | undefined,
+    productionStartedAt: toIsoStringOrUndefined(data.productionStartedAt),
+    qcReviewedBy: data.qcReviewedBy as string | undefined,
+    qcReviewedAt: toIsoStringOrUndefined(data.qcReviewedAt),
+    qcFailReason: data.qcFailReason as string | undefined,
+    deliveredAt: toIsoStringOrUndefined(data.deliveredAt),
+    proofFileIds: data.proofFileIds as string[] | undefined,
+    createdAt: toIsoString(data.createdAt),
+    updatedAt: toIsoString(data.updatedAt),
+    paymentMethod: ((data.paymentMethod as string) ?? "cod") as Order["paymentMethod"],
+    paymentProofFileId: data.paymentProofFileId as string | undefined,
+    paymentApprovedBy: data.paymentApprovedBy as string | undefined,
+    paymentApprovedAt: toIsoStringOrUndefined(data.paymentApprovedAt),
+    paymentRejectedBy: data.paymentRejectedBy as string | undefined,
+    paymentRejectedAt: toIsoStringOrUndefined(data.paymentRejectedAt),
+    paymentRejectionReason: data.paymentRejectionReason as string | undefined,
+    productionStartPhotoId: data.productionStartPhotoId as string | undefined,
+    productionTimerEnd: toIsoStringOrUndefined(data.productionTimerEnd),
+    productionDurationMinutes: data.productionDurationMinutes as number | undefined,
+    deliveryStartPhotoId: data.deliveryStartPhotoId as string | undefined,
+    deliveryTimerEnd: toIsoStringOrUndefined(data.deliveryTimerEnd),
+    deliveryStartedAt: toIsoStringOrUndefined(data.deliveryStartedAt),
+    deliveryDurationMinutes: data.deliveryDurationMinutes as number | undefined,
+    courierLat: data.courierLat as number | undefined,
+    courierLng: data.courierLng as number | undefined,
+    deliveryLat: data.deliveryLat as number | undefined,
+    deliveryLng: data.deliveryLng as number | undefined,
+    customerConfirmedAt: toIsoStringOrUndefined(data.customerConfirmedAt),
+    rating: data.rating as number | undefined,
+    review: data.review as string | undefined,
+    reviewPhotoId: data.reviewPhotoId as string | undefined,
+    reviewedAt: toIsoStringOrUndefined(data.reviewedAt),
+  };
 }
 
 function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
@@ -158,16 +222,29 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
 
   const colRef = collection(db, "orders");
   const orderDocRef = doc(colRef);
+  const now = new Date();
+  const orderData: Record<string, unknown> = {
+    customerId: user.uid,
+    customerName: payload.customerName,
+    items: payload.items,
+    deliveryAddress: payload.deliveryAddress,
+    deliveryTime: payload.deliveryTime,
+    paymentMethod: payload.paymentMethod,
+    createdAt: now,
+    updatedAt: now,
+  };
 
   await runTransaction(db, async (tx) => {
     const outOfStockItems: string[] = [];
-    // Cache inventory details during reads phase to avoid reads-after-writes in the second phase
     const inventoryDataMap = new Map<string, { quantity: number; available?: boolean }>();
 
-    // 1. Fetch and verify stock for all items (READS PHASE)
-    for (const item of payload.items) {
-      const itemRef = doc(db, "inventory", item.itemId);
-      const itemSnap = await tx.get(itemRef);
+    // 1. Fetch stock for all items in parallel (READS PHASE)
+    const itemRefs = payload.items.map((item) => doc(db, "inventory", item.itemId));
+    const itemSnaps = await Promise.all(itemRefs.map((ref) => tx.get(ref)));
+
+    for (let i = 0; i < payload.items.length; i++) {
+      const item = payload.items[i];
+      const itemSnap = itemSnaps[i];
       if (!itemSnap.exists()) {
         outOfStockItems.push(item.itemId);
         continue;
@@ -183,18 +260,6 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
         outOfStockItems.push(item.itemId);
       }
     }
-
-    const now = new Date();
-    const orderData: Record<string, unknown> = {
-      customerId: user.uid,
-      customerName: payload.customerName,
-      items: payload.items,
-      deliveryAddress: payload.deliveryAddress,
-      deliveryTime: payload.deliveryTime,
-      paymentMethod: payload.paymentMethod,
-      createdAt: now,
-      updatedAt: now,
-    };
 
     // 2. Branch depending on stock availability (WRITES PHASE)
     if (outOfStockItems.length > 0) {
@@ -226,8 +291,7 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
     tx.set(orderDocRef, orderData);
   });
 
-  const finalSnap = await getDoc(orderDocRef);
-  const order = snapshotToOrder(finalSnap);
+  const order = localDataToOrder(orderDocRef.id, orderData);
 
   // Trigger WhatsApp notification asynchronously
   if (order.status !== "DELIVERY_FAILED") {
@@ -246,6 +310,19 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
         WA_MESSAGES.placedNonCOD(order.customerName || "", shortId, payMethod)
       ).catch((e) => console.error("[createOrder WA Notif Error]", e));
     }
+
+    // Push in-app notification
+    pushNotification({
+      recipientId: order.customerId || "",
+      type: "order",
+      title: `Pesanan Baru #${shortId}`,
+      titleEn: `New Order #${shortId}`,
+      message: `Pesanan baru Anda #${shortId} berhasil dibuat dan sedang diproses.`,
+      messageEn: `Your new order #${shortId} has been placed and is being processed.`,
+      orderId: order.id,
+      orderShortId: shortId,
+      actorRole: "pelanggan",
+    }).catch((e) => console.error("[createOrder Push Notif Error]", e));
   }
 
   return order;
@@ -431,6 +508,7 @@ export async function transitionOrder(
 
   const updatedOrder = await getOrder(id);
   const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
+  const recipientId = updatedOrder.customerId || "";
 
   if (updatedOrder.recipientPhone) {
     let msg = "";
@@ -452,6 +530,67 @@ export async function transitionOrder(
     }
   }
 
+  // Push in-app notifications for each transition action
+  const notifMap: Record<string, { title: string; titleEn: string; message: string; messageEn: string; type: "production" | "delivery" }> = {
+    "start-production": {
+      title: `Pesanan Mulai Diproduksi #${shortId}`,
+      titleEn: `Production Started #${shortId}`,
+      message: `Pesanan #${shortId} saat ini sedang diproses oleh Tim Produksi.`,
+      messageEn: `Order #${shortId} is now being processed by the Production Team.`,
+      type: "production",
+    },
+    "complete-production": {
+      title: `Pesanan Masuk Tahap QC #${shortId}`,
+      titleEn: `Order Entering QC #${shortId}`,
+      message: `Pesanan #${shortId} selesai diproduksi dan memasuki Quality Control.`,
+      messageEn: `Order #${shortId} production complete, entering Quality Control.`,
+      type: "production",
+    },
+    "qc-pass": {
+      title: `Pesanan Lolos QC #${shortId}`,
+      titleEn: `Order Passed QC #${shortId}`,
+      message: `Pesanan #${shortId} lolos uji QC dan siap dikirim!`,
+      messageEn: `Order #${shortId} passed QC and is ready for delivery!`,
+      type: "production",
+    },
+    "qc-fail": {
+      title: `Pesanan Gagal QC #${shortId}`,
+      titleEn: `Order Failed QC #${shortId}`,
+      message: `Pesanan #${shortId} tidak lolos QC: "${payload.reason || "-"}". Akan diproduksi ulang.`,
+      messageEn: `Order #${shortId} failed QC: "${payload.reason || "-"}". Will be reproduced.`,
+      type: "production",
+    },
+    "fail-delivery": {
+      title: `Pengiriman Gagal #${shortId}`,
+      titleEn: `Delivery Failed #${shortId}`,
+      message: `Pesanan #${shortId} gagal dikirim: "${payload.reason || "-"}".`,
+      messageEn: `Order #${shortId} delivery failed: "${payload.reason || "-"}".`,
+      type: "delivery",
+    },
+    "reschedule": {
+      title: `Pengiriman Dijadwalkan Ulang #${shortId}`,
+      titleEn: `Delivery Rescheduled #${shortId}`,
+      message: `Pesanan #${shortId} dijadwalkan ulang untuk pengiriman.`,
+      messageEn: `Order #${shortId} has been rescheduled for delivery.`,
+      type: "delivery",
+    },
+  };
+
+  const notifData = notifMap[payload.action];
+  if (notifData && recipientId) {
+    pushNotification({
+      recipientId,
+      type: notifData.type,
+      title: notifData.title,
+      titleEn: notifData.titleEn,
+      message: notifData.message,
+      messageEn: notifData.messageEn,
+      orderId: updatedOrder.id,
+      orderShortId: shortId,
+      actorRole: "tim_produksi",
+    }).catch((e) => console.error("[transitionOrder Push Notif Error]", e));
+  }
+
   return updatedOrder;
 }
 
@@ -462,7 +601,23 @@ export async function assignCourier(id: string, courierId: string): Promise<Orde
     assignedCourierId: courierId,
     updatedAt: new Date(),
   });
-  return getOrder(id);
+  const updatedOrder = await getOrder(id);
+  const sid = shortOrderId(id);
+  const rid = updatedOrder.customerId || "";
+  if (rid) {
+    pushNotification({
+      recipientId: rid,
+      type: "delivery",
+      title: `Kurir Ditugaskan #${sid}`,
+      titleEn: `Courier Assigned #${sid}`,
+      message: `Kurir telah ditugaskan untuk pesanan #${sid}. Pesanan Anda akan segera dikirim.`,
+      messageEn: `A courier has been assigned to order #${sid}. Your order will be shipped soon.`,
+      orderId: id,
+      orderShortId: sid,
+      actorRole: "distribusi",
+    }).catch((e) => console.error("[assignCourier Push Notif Error]", e));
+  }
+  return updatedOrder;
 }
 
 /** Confirm dispatch for an assigned order. */
@@ -480,6 +635,22 @@ export async function dispatchOrder(id: string): Promise<Order> {
     const msg = `Halo ${updatedOrder.recipientName},\n\nPesanan Anda #${shortId} sedang dikirim oleh Kurir.`;
     sendWhatsAppNotificationDirect(updatedOrder.recipientPhone, shortId, msg)
       .catch((e) => console.error("[dispatchOrder WA Notif Error]", e));
+  }
+
+  // Push in-app notification
+  const rid = updatedOrder.customerId || "";
+  if (rid) {
+    pushNotification({
+      recipientId: rid,
+      type: "delivery",
+      title: `Pesanan Sedang Dikirim #${shortId}`,
+      titleEn: `Order Out for Delivery #${shortId}`,
+      message: `Pesanan #${shortId} sedang dikirim oleh Kurir. Mohon bersiap di alamat pengiriman.`,
+      messageEn: `Order #${shortId} is out for delivery by the Courier. Please be ready at the delivery address.`,
+      orderId: updatedOrder.id,
+      orderShortId: shortId,
+      actorRole: "distribusi",
+    }).catch((e) => console.error("[dispatchOrder Push Notif Error]", e));
   }
 
   return updatedOrder;
@@ -508,6 +679,22 @@ export async function confirmDelivery(
     const msg = `Halo ${updatedOrder.recipientName},\n\nHore! Pesanan Anda #${shortId} telah berhasil diserahterimakan dengan selamat. Terima kasih!`;
     sendWhatsAppNotificationDirect(updatedOrder.recipientPhone, shortId, msg)
       .catch((e) => console.error("[confirmDelivery WA Notif Error]", e));
+  }
+
+  // Push in-app notification
+  const rid = updatedOrder.customerId || "";
+  if (rid) {
+    pushNotification({
+      recipientId: rid,
+      type: "delivery",
+      title: `Pesanan Sampai #${shortId}`,
+      titleEn: `Order Delivered #${shortId}`,
+      message: `Hore! Pesanan #${shortId} telah berhasil diserahterimakan. Terima kasih!`,
+      messageEn: `Hooray! Order #${shortId} has been successfully delivered. Thank you!`,
+      orderId: updatedOrder.id,
+      orderShortId: shortId,
+      actorRole: "kurir",
+    }).catch((e) => console.error("[confirmDelivery Push Notif Error]", e));
   }
 
   return updatedOrder;
@@ -667,6 +854,22 @@ export async function approvePayment(orderId: string): Promise<Order> {
     WA_MESSAGES.paymentApproved(updatedOrder.customerName || "", shortId)
   ).catch((e) => console.error("[approvePayment WA Notif Error]", e));
 
+  // Push in-app notification
+  const rid = updatedOrder.customerId || "";
+  if (rid) {
+    pushNotification({
+      recipientId: rid,
+      type: "payment",
+      title: `Pembayaran Disetujui #${shortId}`,
+      titleEn: `Payment Approved #${shortId}`,
+      message: `Pembayaran untuk pesanan #${shortId} telah disetujui! Pesanan Anda akan segera diproses.`,
+      messageEn: `Payment for order #${shortId} has been approved! Your order will be processed shortly.`,
+      orderId,
+      orderShortId: shortId,
+      actorRole: "admin",
+    }).catch((e) => console.error("[approvePayment Push Notif Error]", e));
+  }
+
   return updatedOrder;
 }
 
@@ -697,6 +900,22 @@ export async function rejectPayment(
     shortId,
     WA_MESSAGES.paymentRejected(updatedOrder.customerName || "", shortId, reason)
   ).catch((e) => console.error("[rejectPayment WA Notif Error]", e));
+
+  // Push in-app notification
+  const rid = updatedOrder.customerId || "";
+  if (rid) {
+    pushNotification({
+      recipientId: rid,
+      type: "payment",
+      title: `Pembayaran Ditolak #${shortId}`,
+      titleEn: `Payment Rejected #${shortId}`,
+      message: `Pembayaran pesanan #${shortId} ditolak: "${reason}". Silakan upload ulang bukti pembayaran.`,
+      messageEn: `Payment for order #${shortId} was rejected: "${reason}". Please re-upload payment proof.`,
+      orderId,
+      orderShortId: shortId,
+      actorRole: "admin",
+    }).catch((e) => console.error("[rejectPayment Push Notif Error]", e));
+  }
 
   return updatedOrder;
 }
@@ -792,15 +1011,44 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
   const now = new Date();
   const dueDate = calculateDueDate(now, payload.orderType);
 
+  const orderData: Record<string, unknown> = {
+    orderType: payload.orderType,
+    institutionName: payload.institutionName,
+    recipientName: payload.recipientName,
+    recipientPhone: payload.recipientPhone,
+    recipientNotes: payload.recipientNotes || "",
+    eventDate: payload.eventDate,
+    deliveryAddress: payload.deliveryAddress,
+    deliveryTime: payload.deliveryTime,
+    foodDetails: payload.foodDetails,
+    drinkDetails: payload.drinkDetails,
+    totalPrice: payload.totalPrice,
+    additionalNotes: payload.additionalNotes || "",
+    paymentStatus: "BELUM_DIBAYAR",
+    paymentDueDate: dueDate,
+    invoiceToken: invoiceToken,
+    status: "PENDING",
+    items: payload.items,
+    createdAt: now,
+    updatedAt: now,
+  };
+
   await runTransaction(db, async (tx) => {
     const outOfStockItems: string[] = [];
     const inventoryDataMap = new Map<string, { quantity: number; available?: boolean }>();
 
-    // 1. Fetch and verify stock for all items
+    // 1. Fetch and verify stock for all items in parallel (READS PHASE)
+    const itemRefs = payload.items.map((item) => {
+      if (!item.itemId) return null;
+      return doc(db, "inventory", item.itemId);
+    }).filter((ref): ref is Exclude<typeof ref, null> => ref !== null);
+
+    const itemSnaps = await Promise.all(itemRefs.map((ref) => tx.get(ref)));
+
+    let snapIdx = 0;
     for (const item of payload.items) {
       if (!item.itemId) continue;
-      const itemRef = doc(db, "inventory", item.itemId);
-      const itemSnap = await tx.get(itemRef);
+      const itemSnap = itemSnaps[snapIdx++];
       if (!itemSnap.exists()) {
         outOfStockItems.push(item.itemId);
         continue;
@@ -821,7 +1069,7 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
       throw new Error("Stok tidak mencukupi untuk item: " + outOfStockItems.join(", "));
     }
 
-    // Deduct stock
+    // Deduct stock (WRITES ONLY)
     for (const item of payload.items) {
       if (!item.itemId) continue;
       const itemRef = doc(db, "inventory", item.itemId);
@@ -835,33 +1083,10 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
       });
     }
 
-    const orderData: Record<string, unknown> = {
-      orderType: payload.orderType,
-      institutionName: payload.institutionName,
-      recipientName: payload.recipientName,
-      recipientPhone: payload.recipientPhone,
-      recipientNotes: payload.recipientNotes || "",
-      eventDate: payload.eventDate,
-      deliveryAddress: payload.deliveryAddress,
-      deliveryTime: payload.deliveryTime,
-      foodDetails: payload.foodDetails,
-      drinkDetails: payload.drinkDetails,
-      totalPrice: payload.totalPrice,
-      additionalNotes: payload.additionalNotes || "",
-      paymentStatus: "BELUM_DIBAYAR",
-      paymentDueDate: dueDate,
-      invoiceToken: invoiceToken,
-      status: "PENDING",
-      items: payload.items,
-      createdAt: now,
-      updatedAt: now,
-    };
-
     tx.set(orderDocRef, orderData);
   });
 
-  const finalSnap = await getDoc(orderDocRef);
-  const order = snapshotToOrder(finalSnap);
+  const order = localDataToOrder(orderDocRef.id, orderData);
 
   // Send WhatsApp notification
   const shortId = order.id.length > 6 ? order.id.slice(-6).toUpperCase() : order.id.toUpperCase();
@@ -870,6 +1095,22 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
   
   sendWhatsAppNotificationDirect(order.recipientPhone, shortId, msg)
     .catch((e) => console.error("[createAdminOrder WA Notif Error]", e));
+
+  // Push in-app notification (if there's a customerId associated)
+  const rid = order.customerId || "";
+  if (rid) {
+    pushNotification({
+      recipientId: rid,
+      type: "order",
+      title: `Pesanan Baru dari Admin #${shortId}`,
+      titleEn: `New Admin Order #${shortId}`,
+      message: `Pesanan #${shortId} dari ${order.institutionName} telah dibuat oleh Admin. Total: Rp ${order.totalPrice.toLocaleString()}.`,
+      messageEn: `Order #${shortId} from ${order.institutionName} has been created by Admin. Total: Rp ${order.totalPrice.toLocaleString()}.`,
+      orderId: order.id,
+      orderShortId: shortId,
+      actorRole: "admin",
+    }).catch((e) => console.error("[createAdminOrder Push Notif Error]", e));
+  }
 
   return order;
 }
@@ -880,7 +1121,25 @@ export async function updatePaymentStatus(orderId: string, status: PaymentStatus
     paymentStatus: status,
     updatedAt: new Date(),
   });
-  return getOrder(orderId);
+  const updatedOrder = await getOrder(orderId);
+  const sid = shortOrderId(orderId);
+  const rid = updatedOrder.customerId || "";
+  const statusLabelId = status === "SUDAH_DIBAYAR" ? "Sudah Dibayar (Lunas)" : status === "JATUH_TEMPO" ? "Jatuh Tempo" : "Belum Dibayar";
+  const statusLabelEn = status === "SUDAH_DIBAYAR" ? "Paid" : status === "JATUH_TEMPO" ? "Overdue" : "Unpaid";
+  if (rid) {
+    pushNotification({
+      recipientId: rid,
+      type: "payment",
+      title: `Pembayaran Diperbarui #${sid}`,
+      titleEn: `Payment Updated #${sid}`,
+      message: `Status pembayaran pesanan #${sid} diubah menjadi: ${statusLabelId}.`,
+      messageEn: `Payment status for order #${sid} changed to: ${statusLabelEn}.`,
+      orderId,
+      orderShortId: sid,
+      actorRole: "admin",
+    }).catch((e) => console.error("[updatePaymentStatus Push Notif Error]", e));
+  }
+  return updatedOrder;
 }
 
 export async function manuallyValidateOrder(
@@ -905,7 +1164,23 @@ export async function manuallyValidateOrder(
     },
     updatedAt: new Date(),
   });
-  return getOrder(orderId);
+  const updatedOrder = await getOrder(orderId);
+  const sid = shortOrderId(orderId);
+  const rid = updatedOrder.customerId || "";
+  if (rid) {
+    pushNotification({
+      recipientId: rid,
+      type: "validation",
+      title: `Pesanan Divalidasi #${sid}`,
+      titleEn: `Order Validated #${sid}`,
+      message: `Pesanan #${sid} telah divalidasi secara manual oleh ${adminName}.`,
+      messageEn: `Order #${sid} has been manually validated by ${adminName}.`,
+      orderId,
+      orderShortId: sid,
+      actorRole: "admin",
+    }).catch((e) => console.error("[manuallyValidateOrder Push Notif Error]", e));
+  }
+  return updatedOrder;
 }
 
 export async function generateInvoiceToken(orderId: string): Promise<string> {

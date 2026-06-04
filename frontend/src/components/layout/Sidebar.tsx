@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { NavLink, Link } from "react-router-dom";
 import { motion } from "motion/react";
-import { ROLE_PERMISSIONS } from "@/constants/roles";
+import { ROLE_PERMISSIONS, ROLE_DEFAULT_REDIRECT } from "@/constants/roles";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Calendar,
   CheckCircle2,
   ChevronUp,
   Factory,
+  FileText,
   LayoutDashboard,
   LogOut,
-  MapPin,
   Package,
   Package2,
   Search,
@@ -29,36 +29,36 @@ interface NavItem {
 export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
+  { to: "/admin/invoices", label: "Catatan", icon: FileText },
   { to: "/admin/production", label: "Production", icon: Factory },
   { to: "/admin/qc", label: "Quality Control", icon: CheckCircle2 },
   { to: "/distribusi/scheduler", label: "Delivery Scheduler", icon: Calendar },
   { to: "/distribusi/dispatch", label: "Dispatch", icon: Truck },
   { to: "/distribusi/delivery", label: "Delivery", icon: Package },
-  { to: "/admin/tracking", label: "Tracking", icon: MapPin },
   { to: "/admin/products", label: "Daftar Produk", icon: Package2 },
 ] as const;
 
 const LABELS_DICT = {
   id: {
-    "/admin/dashboard": "Dashboard",
+    "/admin/dashboard": "Dasbor",
     "/admin/orders": "Pesanan",
+    "/admin/invoices": "Catatan",
     "/admin/production": "Produksi",
     "/admin/qc": "Kontrol Kualitas",
     "/distribusi/scheduler": "Penjadwal Pengiriman",
     "/distribusi/dispatch": "Pengiriman",
     "/distribusi/delivery": "Pengantaran",
-    "/admin/tracking": "Pelacakan",
     "/admin/products": "Daftar Produk",
   },
   en: {
     "/admin/dashboard": "Dashboard",
     "/admin/orders": "Orders",
+    "/admin/invoices": "Notes",
     "/admin/production": "Production",
     "/admin/qc": "Quality Control",
     "/distribusi/scheduler": "Delivery Scheduler",
     "/distribusi/dispatch": "Dispatch",
     "/distribusi/delivery": "Delivery",
-    "/admin/tracking": "Tracking",
     "/admin/products": "Product List",
   }
 } as const;
@@ -120,11 +120,13 @@ export function Sidebar({
     >
       {/* Logo */}
       <div className="px-6 py-4 border-b border-[#E5E7EB]">
-        <img
-          src="/logo.png"
-          alt="Pondok Pesantren Modern Al Umanaa"
-          className="h-14 object-contain"
-        />
+        <Link to={userRole ? (ROLE_DEFAULT_REDIRECT[userRole] ?? "/") : "/"}>
+          <img
+            src="/logo.png"
+            alt="Pondok Pesantren Modern Al Umanaa"
+            className="h-14 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+          />
+        </Link>
       </div>
 
       {/* Search Input (Desktop) */}
@@ -152,9 +154,6 @@ export function Sidebar({
         <ul className="space-y-1">
           {allowedItems.map(({ to, label, icon: Icon }) => {
             let translatedLabel: string = LABELS_DICT[lang][to as keyof typeof LABELS_DICT["en"]] || label;
-            if (userRole === "monitoring" && to === "/admin/dashboard") {
-              translatedLabel = lang === "id" ? "Performa" : "Performance";
-            }
             return (
               <li key={to}>
                 <NavLink

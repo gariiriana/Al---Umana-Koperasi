@@ -2,30 +2,27 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
-  collection,
-  query,
-  where,
-  onSnapshot,
-} from "firebase/firestore";
-import {
   Bell,
   ShoppingBag,
   Info,
   Gift,
-  ChevronRight,
   User,
-  Receipt,
   LogOut,
+  CheckCheck,
+  Truck,
+  CreditCard,
+  ShieldCheck,
+  Factory,
 } from "lucide-react";
 
-import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
-import type { Order } from "@/types/order";
 import { listAvailableProducts } from "@/services/catalogService";
 import {
   type NotificationItem,
-  mapOrderToNotification,
+  type FirestoreNotification,
   mapProductToPromoNotification,
+  subscribeNotifications,
+  markAllNotificationsAsRead,
   STATIC_PROMO_NOTIFICATIONS,
   STATIC_INFO_NOTIFICATIONS,
 } from "@/services/notificationService";
@@ -87,16 +84,37 @@ function formatTimeAgo(dateInput: unknown, langCode: "id" | "en") {
   }
 }
 
+/** Map a FirestoreNotification type to an icon + color scheme */
+function getNotifIcon(type: string) {
+  switch (type) {
+    case "order":
+      return { icon: ShoppingBag, bg: "bg-emerald-50", text: "text-emerald-600" };
+    case "production":
+      return { icon: Factory, bg: "bg-violet-50", text: "text-violet-600" };
+    case "delivery":
+      return { icon: Truck, bg: "bg-blue-50", text: "text-blue-600" };
+    case "payment":
+      return { icon: CreditCard, bg: "bg-amber-50", text: "text-amber-600" };
+    case "validation":
+      return { icon: ShieldCheck, bg: "bg-teal-50", text: "text-teal-600" };
+    case "promo":
+      return { icon: Gift, bg: "bg-red-50", text: "text-red-500" };
+    default:
+      return { icon: Info, bg: "bg-blue-50", text: "text-blue-500" };
+  }
+}
+
 export function NotificationsPage() {
   const { user, profile, requestSignOut } = useAuth();
   const { lang } = useLanguage();
   const [activeTab, setActiveTab] = useState<"order" | "promo" | "info">("order");
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [firestoreNotifs, setFirestoreNotifs] = useState<FirestoreNotification[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [promos, setPromos] = useState<NotificationItem[]>(STATIC_PROMO_NOTIFICATIONS);
+  const [markingRead, setMarkingRead] = useState(false);
   const [, setTick] = useState(0);
 
-  // Force re-render every 30 seconds to keep relative time-ago descriptions updated in real time
+  // Force re-render every 30 seconds to keep relative time-ago descriptions updated
   useEffect(() => {
     const timer = setInterval(() => {
       setTick((prev) => prev + 1);
@@ -104,35 +122,21 @@ export function NotificationsPage() {
     return () => clearInterval(timer);
   }, []);
 
+  // Subscribe to real-time Firestore notifications
   useEffect(() => {
     if (!user) {
       setLoading(false);
       return;
     }
 
-    const q = query(
-      collection(db, "orders"),
-      where("customerId", "==", user.uid)
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snap) => {
-        const list: Order[] = [];
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          list.push({
-            id: docSnap.id,
-            ...data,
-          } as Order);
-        });
-        // Sort client-side by updatedAt descending to mimic Firestore orderBy without requiring a composite index
-        list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-        setOrders(list);
+    const unsubscribe = subscribeNotifications(
+      user.uid,
+      (notifications) => {
+        setFirestoreNotifs(notifications);
         setLoading(false);
       },
       (err) => {
-        console.error("Failed to subscribe to order updates:", err);
+        console.error("Failed to subscribe to notifications:", err);
         setLoading(false);
       }
     );
@@ -153,37 +157,61 @@ export function NotificationsPage() {
       });
   }, []);
 
-  // Map order state transitions to notification items
-  const orderNotifications = orders.flatMap(mapOrderToNotification);
+  // Filter notifications by tab
+  const orderTabTypes = ["order", "production", "delivery", "validation"];
+  const orderNotifs = firestoreNotifs.filter((n) => orderTabTypes.includes(n.type));
+  const paymentNotifs = firestoreNotifs.filter((n) => n.type === "payment" || n.type === "system");
 
-  // Combine static and dynamic notifications and sort chronologically descending
-  const getNotificationsList = (): NotificationItem[] => {
-    let list: NotificationItem[] = [];
+  const unreadOrderCount = orderNotifs.filter((n) => !n.read).length;
+
+  const getNotificationsList = () => {
     if (activeTab === "order") {
-      list = orderNotifications;
+      return orderNotifs;
     } else if (activeTab === "promo") {
-      list = promos;
+      return promos;
     } else {
-      list = STATIC_INFO_NOTIFICATIONS;
+      // Info tab: payment/system Firestore notifs + static info
+      const infoFromFirestore: NotificationItem[] = paymentNotifs.map((n) => ({
+        id: n.id,
+        type: "info" as const,
+        title: { id: n.title, en: n.titleEn },
+        message: { id: n.message, en: n.messageEn },
+        time: n.createdAt,
+        orderId: n.orderId ?? undefined,
+      }));
+      return [...infoFromFirestore, ...STATIC_INFO_NOTIFICATIONS].sort(
+        (a, b) => Date.parse(b.time) - Date.parse(a.time)
+      );
     }
-    return [...list].sort((a, b) => Date.parse(b.time) - Date.parse(a.time));
   };
 
   const currentList = getNotificationsList();
+
+  const handleMarkAllRead = async () => {
+    if (!user || markingRead) return;
+    setMarkingRead(true);
+    try {
+      await markAllNotificationsAsRead(user.uid);
+    } catch (err) {
+      console.error("Failed to mark all as read:", err);
+    } finally {
+      setMarkingRead(false);
+    }
+  };
 
   const t = {
     title: lang === "id" ? "Pusat Notifikasi" : "Notification Center",
     tabOrder: lang === "id" ? "Status Pesanan" : "Order Status",
     tabPromo: lang === "id" ? "Promo" : "Promos",
-    tabInfo: lang === "id" ? "Info Koperasi" : "Cooperative Info",
+    tabInfo: lang === "id" ? "Info & Pembayaran" : "Info & Payments",
     noNotif: lang === "id" ? "Belum ada notifikasi baru" : "No new notifications",
     viewOrder: lang === "id" ? "Lihat Detail Pesanan" : "View Order Details",
     loading: lang === "id" ? "Memuat data..." : "Loading data...",
     navMyAccount: lang === "id" ? "Akun Saya" : "My Account",
-    navMyOrders: lang === "id" ? "Pesanan Saya" : "My Orders",
     navNotif: lang === "id" ? "Notifikasi" : "Notifications",
     navSignOut: lang === "id" ? "Keluar" : "Logout",
     userGreeting: lang === "id" ? "Halo," : "Hello,",
+    markAllRead: lang === "id" ? "Tandai Semua Dibaca" : "Mark All as Read",
   };
 
   return (
@@ -223,13 +251,6 @@ export function NotificationsPage() {
                 <span>{t.navMyAccount}</span>
               </Link>
               <Link
-                to="/orders"
-                className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-semibold text-neutral-600 hover:bg-[#F3F4F6] transition-colors"
-              >
-                <Receipt className="h-4.5 w-4.5 text-neutral-400" />
-                <span>{t.navMyOrders}</span>
-              </Link>
-              <Link
                 to="/notifications"
                 className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-extrabold bg-[#FEF3C7] text-[#B45309] transition-colors"
               >
@@ -250,15 +271,30 @@ export function NotificationsPage() {
           {/* MAIN CONTENT AREA */}
           <main className="flex-1 space-y-4">
             {/* Header Title */}
-            <header className="bg-white rounded-xl border border-[#E5E7EB] p-4 shadow-xs flex items-center gap-3">
-              <div className="h-9 w-9 rounded-full bg-[#FEF3C7] text-[#D97706] flex items-center justify-center shadow-xs">
-                <Bell className="h-5 w-5" />
+            <header className="bg-white rounded-xl border border-[#E5E7EB] p-4 shadow-xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-[#FEF3C7] text-[#D97706] flex items-center justify-center shadow-xs">
+                  <Bell className="h-5 w-5" />
+                </div>
+                <div>
+                  <h1 className="font-['Manrope',system-ui,sans-serif] text-lg font-bold text-[#111827]">
+                    {t.title}
+                  </h1>
+                </div>
               </div>
-              <div>
-                <h1 className="font-['Manrope',system-ui,sans-serif] text-lg font-bold text-[#111827]">
-                  {t.title}
-                </h1>
-              </div>
+
+              {/* Mark All as Read button */}
+              {firestoreNotifs.some((n) => !n.read) && (
+                <button
+                  type="button"
+                  onClick={handleMarkAllRead}
+                  disabled={markingRead}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#FEF3C7] text-[#B45309] text-[11px] font-bold hover:bg-[#FDE68A] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <CheckCheck className="h-3.5 w-3.5" />
+                  <span>{t.markAllRead}</span>
+                </button>
+              )}
             </header>
 
             {/* Tab switchers */}
@@ -275,6 +311,11 @@ export function NotificationsPage() {
                 <div className="flex items-center justify-center gap-1.5">
                   <ShoppingBag className="h-4 w-4" />
                   <span>{t.tabOrder}</span>
+                  {unreadOrderCount > 0 && (
+                    <span className="bg-red-500 text-white text-[9px] font-bold h-4 min-w-4 px-1 rounded-full flex items-center justify-center">
+                      {unreadOrderCount}
+                    </span>
+                  )}
                 </div>
               </button>
 
@@ -322,8 +363,61 @@ export function NotificationsPage() {
                   </div>
                   <p className="text-xs font-bold text-neutral-500">{t.noNotif}</p>
                 </div>
+              ) : activeTab === "order" ? (
+                /* Firestore notification cards for order tab */
+                (currentList as FirestoreNotification[]).map((item) => {
+                  const iconInfo = getNotifIcon(item.type);
+                  const IconComp = iconInfo.icon;
+                  return (
+                    <div
+                      key={item.id}
+                      className={`bg-white rounded-xl border hover:border-amber-200 p-4 transition-all duration-150 shadow-xs flex gap-3.5 ${
+                        item.read
+                          ? "border-[#E5E7EB] opacity-75"
+                          : "border-l-[3px] border-l-amber-400 border-t border-r border-b border-t-[#E5E7EB] border-r-[#E5E7EB] border-b-[#E5E7EB]"
+                      }`}
+                    >
+                      {/* Icon type marker */}
+                      <div className="shrink-0">
+                        <div
+                          className={`h-9 w-9 rounded-full flex items-center justify-center shadow-xs ${iconInfo.bg} ${iconInfo.text}`}
+                        >
+                          <IconComp className="h-4.5 w-4.5" />
+                        </div>
+                      </div>
+
+                      {/* Text content block */}
+                      <div className="flex-1 space-y-1.5 min-w-0">
+                        <div className="flex items-start justify-between gap-4">
+                          <h4 className={`text-xs leading-tight ${item.read ? "font-semibold text-neutral-600" : "font-extrabold text-neutral-800"}`}>
+                            {lang === "id" ? item.title : item.titleEn}
+                          </h4>
+                          <span className="text-[10px] text-neutral-400 font-semibold shrink-0">
+                            {formatTimeAgo(item.createdAt, lang)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-neutral-600 leading-relaxed">
+                          {lang === "id" ? item.message : item.messageEn}
+                        </p>
+
+                        {/* Actor role badge */}
+                        <div className="flex items-center gap-2 pt-0.5">
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-500 uppercase tracking-wider">
+                            {item.actorRole}
+                          </span>
+                          {!item.read && (
+                            <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" title="Belum dibaca" />
+                          )}
+                        </div>
+
+
+                      </div>
+                    </div>
+                  );
+                })
               ) : (
-                currentList.map((item) => (
+                /* Promo and Info tabs — use the legacy NotificationItem format */
+                (currentList as NotificationItem[]).map((item) => (
                   <div
                     key={item.id}
                     className="bg-white rounded-xl border border-[#E5E7EB] hover:border-amber-200 p-4 transition-all duration-150 shadow-xs flex gap-3.5"
@@ -332,16 +426,12 @@ export function NotificationsPage() {
                     <div className="shrink-0">
                       <div
                         className={`h-9 w-9 rounded-full flex items-center justify-center shadow-xs ${
-                          item.type === "order"
-                            ? "bg-emerald-50 text-emerald-600"
-                            : item.type === "promo"
+                          item.type === "promo"
                             ? "bg-red-50 text-red-500"
                             : "bg-blue-50 text-blue-500"
                         }`}
                       >
-                        {item.type === "order" ? (
-                          <ShoppingBag className="h-4.5 w-4.5" />
-                        ) : item.type === "promo" ? (
+                        {item.type === "promo" ? (
                           <Gift className="h-4.5 w-4.5" />
                         ) : (
                           <Info className="h-4.5 w-4.5" />
@@ -363,18 +453,7 @@ export function NotificationsPage() {
                         {item.message[lang]}
                       </p>
 
-                      {/* View details button for orders */}
-                      {item.orderId && (
-                        <div className="pt-1.5">
-                          <Link
-                            to={`/orders/${item.orderId}`}
-                            className="inline-flex items-center gap-1 text-[11px] font-extrabold text-[#B45309] hover:text-[#92400E] transition-colors"
-                          >
-                            <span>{t.viewOrder}</span>
-                            <ChevronRight className="h-3 w-3" />
-                          </Link>
-                        </div>
-                      )}
+
                     </div>
                   </div>
                 ))

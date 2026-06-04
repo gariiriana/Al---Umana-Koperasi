@@ -6,7 +6,15 @@ export type OrderStatus =
   | 'READY_TO_DELIVER'
   | 'OUT_FOR_DELIVERY'
   | 'COMPLETED'
-  | 'DELIVERY_FAILED';
+  | 'DELIVERY_FAILED'
+  | 'PLACING'
+  | 'AWAITING_PAYMENT_PROOF'
+  | 'AWAITING_PAYMENT_APPROVAL'
+  | 'PAYMENT_REJECTED'
+  | 'CONFIRMED'
+  | 'READY'
+  | 'DELIVERED'
+  | 'FAILED';
 
 // Status Pembayaran (jalur terpisah)
 export type PaymentStatus = 'BELUM_DIBAYAR' | 'SUDAH_DIBAYAR' | 'JATUH_TEMPO';

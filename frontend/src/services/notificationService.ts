@@ -1,5 +1,20 @@
 import type { Order } from "@/types/order";
 import type { InventoryItem } from "@/types/inventory";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  doc,
+  updateDoc,
+  writeBatch,
+  getDocs,
+  Timestamp,
+  type Unsubscribe,
+  type DocumentData,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export interface NotificationItem {
   id: string;
@@ -8,6 +23,131 @@ export interface NotificationItem {
   message: { id: string; en: string };
   time: string;
   orderId?: string;
+}
+
+/** Shape of a Firestore notification document. */
+export interface FirestoreNotification {
+  id: string;
+  recipientId: string;
+  type: string;
+  title: string;
+  titleEn: string;
+  message: string;
+  messageEn: string;
+  orderId?: string | null;
+  orderShortId?: string | null;
+  actorRole: string;
+  read: boolean;
+  createdAt: string;
+}
+
+function firestoreDocToNotification(
+  docId: string,
+  data: DocumentData
+): FirestoreNotification {
+  let createdAt: string;
+  if (data.createdAt instanceof Timestamp) {
+    createdAt = data.createdAt.toDate().toISOString();
+  } else if (data.createdAt && typeof data.createdAt.toDate === "function") {
+    createdAt = data.createdAt.toDate().toISOString();
+  } else if (typeof data.createdAt === "string") {
+    createdAt = data.createdAt;
+  } else {
+    createdAt = new Date().toISOString();
+  }
+
+  return {
+    id: docId,
+    recipientId: (data.recipientId as string) ?? "",
+    type: (data.type as string) ?? "system",
+    title: (data.title as string) ?? "",
+    titleEn: (data.titleEn as string) ?? "",
+    message: (data.message as string) ?? "",
+    messageEn: (data.messageEn as string) ?? "",
+    orderId: data.orderId as string | null | undefined,
+    orderShortId: data.orderShortId as string | null | undefined,
+    actorRole: (data.actorRole as string) ?? "system",
+    read: (data.read as boolean) ?? false,
+    createdAt,
+  };
+}
+
+/**
+ * Subscribe to real-time Firestore notifications for a specific user.
+ * Returns an unsubscribe function.
+ */
+export function subscribeNotifications(
+  userId: string,
+  callback: (notifications: FirestoreNotification[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, "notifications"),
+    where("recipientId", "==", userId),
+    orderBy("createdAt", "desc")
+  );
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list: FirestoreNotification[] = snap.docs.map((d) =>
+        firestoreDocToNotification(d.id, d.data())
+      );
+      callback(list);
+    },
+    onError
+  );
+}
+
+/**
+ * Subscribe only to unread notification count for a user.
+ * More efficient than subscribing to full notifications list.
+ */
+export function subscribeUnreadCount(
+  userId: string,
+  callback: (count: number) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, "notifications"),
+    where("recipientId", "==", userId),
+    where("read", "==", false)
+  );
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      callback(snap.size);
+    },
+    onError
+  );
+}
+
+/** Mark a single notification as read. */
+export async function markNotificationAsRead(
+  notificationId: string
+): Promise<void> {
+  const docRef = doc(db, "notifications", notificationId);
+  await updateDoc(docRef, { read: true });
+}
+
+/** Mark all notifications as read for a user. */
+export async function markAllNotificationsAsRead(
+  userId: string
+): Promise<void> {
+  const q = query(
+    collection(db, "notifications"),
+    where("recipientId", "==", userId),
+    where("read", "==", false)
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return;
+
+  const batch = writeBatch(db);
+  snap.docs.forEach((d) => {
+    batch.update(d.ref, { read: true });
+  });
+  await batch.commit();
 }
 
 export function parseToIsoString(value: unknown): string {

@@ -4,9 +4,11 @@ import {
   BadgeCheck,
   CheckCircle2,
   Factory,
+  FileText,
   LayoutDashboard,
   Package2,
   Send,
+  ShoppingCart,
   Truck,
   type LucideIcon,
 } from "lucide-react";
@@ -21,7 +23,9 @@ interface MobileNavItem {
 
 // All possible nav items — filtered per role via ROLE_PERMISSIONS
 export const MOBILE_NAV_ITEMS: readonly MobileNavItem[] = [
-  { to: "/admin/dashboard",         label: "Dashboard",     icon: LayoutDashboard },
+  { to: "/admin/dashboard",          label: "Dasbor",        icon: LayoutDashboard },
+  { to: "/admin/orders",            label: "Pesanan",       icon: ShoppingCart },
+  { to: "/admin/invoices",          label: "Catatan",       icon: FileText },
   { to: "/admin/products",          label: "Produk",        icon: Package2 },
   { to: "/admin/payment-approvals", label: "Pembayaran",    icon: BadgeCheck },
   { to: "/admin/production",        label: "Produksi",      icon: Factory },
@@ -43,10 +47,10 @@ export function MobileNav({ userRole }: MobileNavProps) {
 
   if (userRole === "monitoring") {
     allowedItems = allowedItems
-      .filter((item) => item.to === "/admin/dashboard")
+      .filter((item) => ["/admin/dashboard", "/admin/orders"].includes(item.to))
       .map((item) => ({
         ...item,
-        label: "Performa",
+        label: item.to === "/admin/dashboard" ? "Dasbor" : "Pesanan",
       }));
   }
 

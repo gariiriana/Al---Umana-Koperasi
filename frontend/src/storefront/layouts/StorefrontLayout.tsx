@@ -3,7 +3,6 @@ import { NavLink, Link, useNavigate, useSearchParams, useLocation } from "react-
 import {
   Home,
   LayoutGrid,
-  Receipt,
   ShoppingCart,
   Bell,
   HelpCircle,
@@ -14,7 +13,8 @@ import {
   Settings,
   Instagram,
   User,
-  Star,
+  LayoutDashboard,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -29,15 +29,8 @@ import { useCartAnimation } from "@/contexts/useCartAnimation";
 
 import { collection, query, where, onSnapshot, DocumentData } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { listAvailableProducts } from "@/services/catalogService";
 import type { Order } from "@/types/order";
-import {
-  type NotificationItem,
-  mapOrderToNotification,
-  mapProductToPromoNotification,
-  STATIC_PROMO_NOTIFICATIONS,
-  STATIC_INFO_NOTIFICATIONS,
-} from "@/services/notificationService";
+import { subscribeUnreadCount, markAllNotificationsAsRead } from "@/services/notificationService";
 
 /**
  * Responsive shell for the customer-facing Storefront.
@@ -66,9 +59,7 @@ interface StorefrontNavItem {
 export const STOREFRONT_NAV_ITEMS: readonly StorefrontNavItem[] = [
   { to: "/", label: "Beranda", icon: Home, end: true },
   { to: "/category", label: "Kategori", icon: LayoutGrid },
-  { to: "/testimoni", label: "Testimoni", icon: Star },
   { to: "/cart", label: "Keranjang", icon: ShoppingCart, badgeKey: "cart" },
-  { to: "/orders", label: "Pesanan", icon: Receipt },
 ] as const;
 
 /* ─── shared nav styles ──────────────────────────────────────────────── */
@@ -141,7 +132,6 @@ const DICTIONARY = {
 const getLocalizedLabel = (key: string, langCode: "id" | "en") => {
   if (key === "Beranda") return langCode === "id" ? "Beranda" : "Home";
   if (key === "Kategori") return langCode === "id" ? "Kategori" : "Category";
-  if (key === "Testimoni") return langCode === "id" ? "Testimoni" : "Reviews";
   if (key === "Keranjang") return langCode === "id" ? "Keranjang" : "Cart";
   if (key === "Pesanan") return langCode === "id" ? "Pesanan" : "Orders";
   return key;
@@ -160,6 +150,14 @@ export function StorefrontLayout({
 /** Inner layout component that can access CartAnimationContext */
 function StorefrontLayoutInner({ children }: { children: ReactNode }) {
   const { user, profile, requestSignOut } = useAuth();
+  const adminPanelLink = (() => {
+    if (!profile) return "/";
+    if (profile.role === "admin" || profile.role === "monitoring") return "/admin/dashboard";
+    if (profile.role === "tim_produksi") return "/admin/production";
+    if (profile.role === "distribusi") return "/distribusi/dispatch";
+    if (profile.role === "kurir") return "/distribusi/delivery";
+    return "/";
+  })();
   const { showToast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
@@ -201,31 +199,14 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
     return () => timers.forEach(clearTimeout);
   }, [flyDots, removeFlyDot]);
 
-  // Real-time order status change Toast notifications & Unread count calculation
+  // Real-time order status change Toast notifications (kept for live toast UX)
   useEffect(() => {
     if (!user) {
-      setUnreadCount(0);
       return;
     }
 
     let isInitialLoad = true;
     const previousStatuses: Record<string, { status: string; paymentStatus?: string }> = {};
-    let ordersList: Order[] = [];
-    let promoList: NotificationItem[] = [];
-
-    const lastReadStr = localStorage.getItem("al-umana-last-read-notifications");
-    const lastRead = lastReadStr ? Date.parse(lastReadStr) : 0;
-
-    const updateUnreadCount = () => {
-      if (location.pathname === "/notifications") {
-        setUnreadCount(0);
-        return;
-      }
-      const orderNotifs = ordersList.flatMap(mapOrderToNotification);
-      const allNotifs = [...orderNotifs, ...promoList, ...STATIC_INFO_NOTIFICATIONS];
-      const count = allNotifs.filter((n) => Date.parse(n.time) > lastRead).length;
-      setUnreadCount(count);
-    };
 
     const mapDocToOrder = (id: string, data: DocumentData): Order => {
       return {
@@ -254,20 +235,16 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
       } as unknown as Order;
     };
 
-    // 1. Subscribe to Orders
     const q = query(
       collection(db, "orders"),
       where("customerId", "==", user.uid)
     );
 
     const unsubscribeOrders = onSnapshot(q, (snapshot) => {
-      const currentOrders: Order[] = [];
-      
       snapshot.docChanges().forEach((change) => {
         const orderId = change.doc.id;
         const data = change.doc.data();
         const orderObj = mapDocToOrder(orderId, data);
-        currentOrders.push(orderObj);
 
         const status = orderObj.status;
         const paymentStatus = orderObj.paymentStatus;
@@ -355,35 +332,38 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
         }
       });
 
-      // Update local orders list and unread count
-      ordersList = snapshot.docs.map((docSnap) => mapDocToOrder(docSnap.id, docSnap.data()));
       isInitialLoad = false;
-      updateUnreadCount();
-    });
-
-    // 2. Load promo products
-    listAvailableProducts().then((products) => {
-      const discounted = products.filter((p) => (p.discountPercent ?? 0) > 0);
-      promoList = [...discounted.map(mapProductToPromoNotification), ...STATIC_PROMO_NOTIFICATIONS];
-      updateUnreadCount();
-    }).catch((err) => {
-      console.error("Failed to load catalog products for layout notifications:", err);
-      promoList = STATIC_PROMO_NOTIFICATIONS;
-      updateUnreadCount();
     });
 
     return () => {
       unsubscribeOrders();
     };
-  }, [user, lang, showToast, location.pathname]);
+  }, [user, lang, showToast]);
 
-  // Reset unread count to 0 when navigating to /notifications page
+  // Real-time unread notification count from Firestore
   useEffect(() => {
-    if (location.pathname === "/notifications") {
-      localStorage.setItem("al-umana-last-read-notifications", new Date().toISOString());
+    if (!user) {
       setUnreadCount(0);
+      return;
     }
-  }, [location.pathname]);
+
+    const unsubscribe = subscribeUnreadCount(
+      user.uid,
+      (count) => setUnreadCount(count),
+      (err) => console.error("Failed to subscribe to unread count:", err)
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Auto-mark all as read when visiting /notifications
+  useEffect(() => {
+    if (location.pathname === "/notifications" && user) {
+      markAllNotificationsAsRead(user.uid).catch((err) =>
+        console.error("Failed to auto-mark notifications as read:", err)
+      );
+    }
+  }, [location.pathname, user]);
 
   const t = DICTIONARY[lang];
 
@@ -416,21 +396,47 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
       <div className="min-h-screen bg-[#F3F4F6]">
 
         {/* ── MOBILE HORIZONTAL HEADER (<lg) ─────────────────────────── */}
-        <header className="lg:hidden bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-[#111827] sticky top-0 z-30 shadow-sm px-4 py-3 flex items-center justify-between">
-          {/* Logo / Brand */}
-          <Link to="/" className="flex items-center gap-1.5 shrink-0">
-            <img
-              src="/logo.png"
-              alt="Al Umanaa"
-              className="h-8 w-8 object-contain bg-white rounded-full p-0.5 border border-amber-200"
-            />
-            <span className="font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-white tracking-wide">
-              Al-Umanaa <span className="font-light text-amber-100 text-xs">{lang === "id" ? "Koperasi" : "Cooperative"}</span>
-            </span>
-          </Link>
+        <header className="lg:hidden bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-[#111827] sticky top-0 z-30 shadow-sm px-4 py-3 flex items-center justify-between gap-2">
+          {/* Logo / Brand & Order List Icon */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Link to="/" className="flex items-center gap-1.5">
+              <img
+                src="/logo.png"
+                alt="Al Umanaa"
+                className="h-8 w-8 object-contain bg-white rounded-full p-0.5 border border-amber-200"
+              />
+              <span className="font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-white tracking-wide">
+                Al-Umanaa <span className="font-light text-amber-100 text-xs">{lang === "id" ? "Koperasi" : "Cooperative"}</span>
+              </span>
+            </Link>
+            {profile && ["admin", "monitoring"].includes(profile.role) && (
+              <>
+                <span className="inline-block h-4 w-px bg-white/20 shrink-0 self-center" />
+                {profile.role !== "admin" && (
+                  <>
+                    <Link to="/admin/dashboard" className="p-1 text-white hover:opacity-85 transition-opacity" title={lang === "id" ? "Dasbor Monitoring" : "Monitoring Dashboard"}>
+                      <LayoutDashboard className="h-5 w-5" />
+                    </Link>
+                    <Link to="/admin/orders" className="p-1 text-white hover:opacity-85 transition-opacity" title={lang === "id" ? "Pesanan & Pembayaran" : "Orders & Payment"}>
+                      <ShoppingCart className="h-5 w-5" />
+                    </Link>
+                  </>
+                )}
+                {profile.role === "admin" && (
+                  <Link to="/admin/orders" className="p-1 text-white hover:opacity-85 transition-opacity" title={lang === "id" ? "Catatan" : "Invoices"}>
+                    <FileText className="h-5 w-5" />
+                  </Link>
+                )}
+              </>
+            )}
+          </div>
 
           {/* Right side: Language + Auth / Profile */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {profile && ["admin", "monitoring"].includes(profile.role) && user && (
+              <span className="inline-block h-4 w-px bg-white/20 shrink-0 self-center" />
+            )}
+
             {/* Notification Bell for Mobile */}
             {user && (
               <Link to="/notifications" className="relative p-1 text-white hover:opacity-85 transition-opacity">
@@ -442,22 +448,21 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                 )}
               </Link>
             )}
-            {user && <span className="text-amber-100 opacity-40">|</span>}
+            {user && <span className="inline-block h-4 w-px bg-white/20 shrink-0 self-center" />}
 
             {/* Language Switcher */}
-            <div className="relative">
+            <div className="relative flex items-center">
               <button
                 type="button"
                 onClick={() => {
                   setIsLangOpen(!isLangOpen);
                   setIsProfileOpen(false);
                 }}
-                className="flex items-center gap-0.5 hover:opacity-85 cursor-pointer focus:outline-none text-amber-50 text-xs"
+                className="flex items-center hover:opacity-85 cursor-pointer focus:outline-none text-amber-50 text-xs p-1"
                 aria-label="Pilih Bahasa"
                 title="Pilih Bahasa"
               >
                 <Globe className="h-4 w-4" />
-                <ChevronDown className="h-3 w-3" />
               </button>
               {isLangOpen && (
                 <>
@@ -482,27 +487,27 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
               )}
             </div>
 
-            <span className="text-amber-100 opacity-40">|</span>
+            <span className="inline-block h-4 w-px bg-white/20 shrink-0 self-center" />
 
             {/* Profile / Auth */}
             {user ? (
-              <div className="relative">
+              <div className="relative flex items-center">
                 <button
                   type="button"
+                  id="profile-menu-button-mobile"
                   onClick={() => {
                     setIsProfileOpen(!isProfileOpen);
                     setIsLangOpen(false);
                   }}
-                  className="flex items-center gap-1 font-bold text-white focus:outline-none cursor-pointer hover:opacity-85 text-xs"
+                  className="flex items-center font-bold text-white focus:outline-none cursor-pointer hover:opacity-85 text-xs p-1"
                 >
-                  <div className="h-6 w-6 rounded-full bg-white text-[#B45309] flex items-center justify-center text-[10px] font-extrabold overflow-hidden border border-white/20">
+                  <div className="h-6 w-6 rounded-full bg-white text-[#B45309] flex items-center justify-center text-[10px] font-extrabold overflow-hidden border border-white/20 shrink-0">
                     {(profile?.photoURL || user?.photoURL) ? (
                       <img src={profile?.photoURL || user?.photoURL || ""} alt="Avatar" className="h-full w-full object-cover" />
                     ) : (
                       (user.displayName ?? user.email ?? "?").charAt(0).toUpperCase()
                     )}
                   </div>
-                  <ChevronDown className="h-3 w-3" />
                 </button>
 
                 {isProfileOpen && (
@@ -520,23 +525,30 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                         <User className="h-4 w-4 text-neutral-500" />
                         <span>{t.myAccount}</span>
                       </Link>
-                      <Link
-                        to="/orders"
-                        onClick={() => setIsProfileOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold"
-                      >
-                        <Receipt className="h-4 w-4 text-neutral-500" />
-                        <span>{t.myOrders}</span>
-                      </Link>
+
                       {profile && ["admin", "monitoring", "tim_produksi", "distribusi", "kurir"].includes(profile.role) && (
-                        <Link
-                          to="/admin/dashboard"
-                          onClick={() => setIsProfileOpen(false)}
-                          className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-violet-700"
-                        >
-                          <Settings className="h-4 w-4 text-violet-500" />
-                          <span>{t.adminPanel}</span>
-                        </Link>
+                        <>
+                          {["tim_produksi", "distribusi", "kurir"].includes(profile.role) && (
+                            <Link
+                              to={adminPanelLink}
+                              onClick={() => setIsProfileOpen(false)}
+                              className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-violet-700"
+                            >
+                              <Settings className="h-4 w-4 text-violet-500" />
+                              <span>{t.adminPanel}</span>
+                            </Link>
+                          )}
+                          {profile.role !== "admin" && (
+                            <Link
+                              to="/admin/settings"
+                              onClick={() => setIsProfileOpen(false)}
+                              className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-violet-700 border-t border-neutral-100"
+                            >
+                              <Settings className="h-4 w-4 text-violet-500" />
+                              <span>{lang === "id" ? "Pengaturan" : "Settings"}</span>
+                            </Link>
+                          )}
+                        </>
                       )}
                       <button
                         type="button"
@@ -616,10 +628,28 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <Link to="/testimoni" className="flex items-center gap-1 hover:opacity-85 transition-opacity">
-                  <Star className="h-3.5 w-3.5" />
-                  <span>{getLocalizedLabel("Testimoni", lang)}</span>
-                </Link>
+                {profile && ["admin", "monitoring"].includes(profile.role) && (
+                  <>
+                    {profile.role !== "admin" && (
+                      <>
+                        <Link to="/admin/dashboard" className="flex items-center gap-1 hover:opacity-85 transition-opacity font-bold text-amber-200">
+                          <LayoutDashboard className="h-3.5 w-3.5" />
+                          <span>{lang === "id" ? "Dasbor" : "Dashboard"}</span>
+                        </Link>
+                        <Link to="/admin/orders" className="flex items-center gap-1 hover:opacity-85 transition-opacity font-bold text-amber-200">
+                          <ShoppingCart className="h-3.5 w-3.5" />
+                          <span>{lang === "id" ? "Pesanan" : "Orders"}</span>
+                        </Link>
+                      </>
+                    )}
+                    {profile.role === "admin" && (
+                      <Link to="/admin/orders" className="flex items-center gap-1 hover:opacity-85 transition-opacity font-bold text-amber-200">
+                        <FileText className="h-3.5 w-3.5" />
+                        <span>{lang === "id" ? "Catatan" : "Invoices"}</span>
+                      </Link>
+                    )}
+                  </>
+                )}
                 <Link to="/notifications" className="flex items-center gap-1 hover:opacity-85 transition-opacity relative">
                   <Bell className="h-3.5 w-3.5" />
                   <span>{t.notifications}</span>
@@ -672,6 +702,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                   <div className="relative">
                     <button
                       type="button"
+                      id="profile-menu-button"
                       onClick={() => setIsProfileOpen(!isProfileOpen)}
                       className="flex items-center gap-1.5 font-bold text-white focus:outline-none cursor-pointer hover:opacity-85"
                     >
@@ -698,23 +729,29 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                             <User className="h-4 w-4 text-neutral-500" />
                             <span>{t.myAccount}</span>
                           </Link>
-                          <Link
-                            to="/orders"
-                            onClick={() => setIsProfileOpen(false)}
-                            className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold"
-                          >
-                            <Receipt className="h-4 w-4 text-neutral-500" />
-                            <span>{t.myOrders}</span>
-                          </Link>
                           {profile && ["admin", "monitoring", "tim_produksi", "distribusi", "kurir"].includes(profile.role) && (
-                            <Link
-                              to="/admin/dashboard"
-                              onClick={() => setIsProfileOpen(false)}
-                              className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-violet-700"
-                            >
-                              <Settings className="h-4 w-4 text-violet-500" />
-                              <span>{t.adminPanel}</span>
-                            </Link>
+                            <>
+                              {["tim_produksi", "distribusi", "kurir"].includes(profile.role) && (
+                                <Link
+                                  to={adminPanelLink}
+                                  onClick={() => setIsProfileOpen(false)}
+                                  className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-violet-700"
+                                >
+                                  <Settings className="h-4 w-4 text-violet-500" />
+                                  <span>{t.adminPanel}</span>
+                                </Link>
+                              )}
+                              {profile.role !== "admin" && (
+                                <Link
+                                  to="/admin/settings"
+                                  onClick={() => setIsProfileOpen(false)}
+                                  className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-violet-700 border-t border-neutral-100"
+                                >
+                                  <Settings className="h-4 w-4 text-violet-500" />
+                                  <span>{lang === "id" ? "Pengaturan" : "Settings"}</span>
+                                </Link>
+                              )}
+                            </>
                           )}
                           <button
                             type="button"
@@ -860,7 +897,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                     <span className="truncate">{getLocalizedLabel(label, lang)}</span>
                   </NavLink>
                 </li>
-              ),
+              )
             )}
           </ul>
         </nav>
