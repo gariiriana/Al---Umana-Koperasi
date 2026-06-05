@@ -37,7 +37,6 @@ const InvoicePage = lazy(() => import("@/pages/InvoicePage").then(module => ({ d
 const ProductDetailPage = lazy(() => import("@/storefront/pages/ProductDetailPage").then(module => ({ default: module.ProductDetailPage })));
 const HelpCenterPage = lazy(() => import("@/storefront/pages/HelpCenterPage").then(module => ({ default: module.HelpCenterPage })));
 const CategoryPage = lazy(() => import("@/storefront/pages/CategoryPage").then(module => ({ default: module.CategoryPage })));
-const RegisterPage = lazy(() => import("@/pages/RegisterPage").then(module => ({ default: module.RegisterPage })));
 const CartPage = lazy(() => import("@/storefront/pages/CartPage").then(module => ({ default: module.CartPage })));
 const CheckoutWizard = lazy(() => import("@/storefront/pages/checkout/CheckoutWizard").then(module => ({ default: module.CheckoutWizard })));
 const OrderConfirmationPage = lazy(() => import("@/storefront/pages/checkout/OrderConfirmationPage").then(module => ({ default: module.OrderConfirmationPage })));
@@ -238,11 +237,7 @@ function RoutesTree() {
       />
       <Route
         path="/register"
-        element={
-          <PublicRoute>
-            <RegisterPage />
-          </PublicRoute>
-        }
+        element={<Navigate to="/login" replace />}
       />
       <Route
         path="/forgot-password"

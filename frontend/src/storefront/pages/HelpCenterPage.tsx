@@ -2,18 +2,19 @@ import { useState } from "react";
 import {
   Search,
   HelpCircle,
-  CreditCard,
+  Shield,
+  Package,
   Truck,
-  FileText,
+  MapPin,
+  Monitor,
   ChevronDown,
   ChevronUp,
-  ShoppingBag,
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 interface FAQItem {
   id: string;
-  category: "shopping" | "payment" | "shipping" | "policy";
+  category: "admin" | "production" | "distribution" | "courier" | "monitoring";
   question: {
     id: string;
     en: string;
@@ -25,110 +26,188 @@ interface FAQItem {
 }
 
 const FAQ_DATA: FAQItem[] = [
+  // Admin FAQs
   {
-    id: "faq-1",
-    category: "shopping",
+    id: "faq-admin-1",
+    category: "admin",
     question: {
-      id: "Bagaimana cara memesan produk di Koperasi Al-Umanaa?",
-      en: "How do I order products at Al-Umanaa Cooperative?",
+      id: "Bagaimana cara menyetujui atau menolak bukti transfer pembayaran?",
+      en: "How do I approve or reject bank transfer payment proofs?",
     },
     answer: {
-      id: "Anda dapat memilih produk berkualitas dari halaman Beranda, menambahkannya ke Keranjang belanja, lalu klik tombol Checkout untuk melengkapi alamat pengiriman dan menyelesaikan pesanan.",
-      en: "You can select quality products from the Home page, add them to your shopping Cart, then click the Checkout button to fill in the delivery address and complete your order.",
+      id: "1. Tinjau Bukti: Buka menu 'Orders' -> klik detail pada pesanan pelanggan.\n2. Cek Berkas: Periksa gambar bukti transfer yang diunggah pelanggan.\n3. Aksi: Klik tombol 'Setujui Pembayaran' untuk memvalidasi transaksi, atau klik 'Tolak Pembayaran' dan masukkan alasan penolakan jika bukti transfer tidak valid.",
+      en: "1. Review Proof: Go to the 'Orders' menu -> click on the order details.\n2. Check Document: Inspect the uploaded transfer proof image.\n3. Action: Click 'Setujui Pembayaran' to approve, or click 'Tolak Pembayaran' and enter a clear rejection reason if the proof is invalid.",
     },
   },
   {
-    id: "faq-2",
-    category: "shopping",
+    id: "faq-admin-2",
+    category: "admin",
     question: {
-      id: "Apakah saya harus memiliki akun untuk berbelanja?",
-      en: "Do I need to have an account to shop?",
+      id: "Bagaimana cara mengunduh invoice pesanan untuk arsip koperasi?",
+      en: "How do I download order invoices for cooperative archives?",
     },
     answer: {
-      id: "Ya, Anda perlu mendaftar akun pelanggan terlebih dahulu agar kami dapat memproses pesanan, melacak pengiriman, dan mencatat transaksi keanggotaan koperasi Anda.",
-      en: "Yes, you need to register a customer account first so that we can process your orders, track shipments, and record your cooperative membership transactions.",
+      id: "1. Buka Catatan: Masuk ke halaman 'Daftar Invoice' atau 'Invoices' di sidebar.\n2. Cari Pesanan: Cari pesanan berdasarkan ID atau nama pelanggan.\n3. Unduh PDF: Klik ikon/tombol download PDF di samping pesanan untuk mengunduh berkas invoice resmi.",
+      en: "1. Open Invoices: Go to the 'Daftar Invoice' or 'Invoices' page in the sidebar.\n2. Locate Order: Find the order using the ID or customer name.\n3. Download PDF: Click the PDF download icon/button next to the order to save the official invoice file.",
+    },
+  },
+  // Production FAQs
+  {
+    id: "faq-prod-1",
+    category: "production",
+    question: {
+      id: "Bagaimana cara memproses pesanan baru ke tahap produksi?",
+      en: "How do I process a new order into the production stage?",
+    },
+    answer: {
+      id: "1. Buka Dashboard Produksi: Buka menu 'Production' pada sidebar admin.\n2. Pilih Antrean: Temukan pesanan baru yang berstatus PENDING.\n3. Mulai Produksi: Klik tombol 'Mulai Produksi' untuk memindahkan status pesanan menjadi IN_PRODUCTION.",
+      en: "1. Open Production: Navigate to the 'Production' page in the admin sidebar.\n2. Select Queue: Find the new orders with a PENDING status.\n3. Start Production: Click the 'Mulai Produksi' button to advance the status to IN_PRODUCTION.",
     },
   },
   {
-    id: "faq-3",
-    category: "payment",
+    id: "faq-prod-2",
+    category: "production",
     question: {
-      id: "Metode pembayaran apa saja yang didukung?",
-      en: "What payment methods are supported?",
+      id: "Bagaimana melakukan Quality Control (QC) setelah produksi selesai?",
+      en: "How do I perform Quality Control (QC) after production is finished?",
     },
     answer: {
-      id: "Kami mendukung metode Cash on Delivery (COD/Bayar di Tempat) serta transfer bank/e-wallet. Untuk metode transfer, Anda wajib mengunggah bukti pembayaran agar dapat diverifikasi oleh admin.",
-      en: "We support Cash on Delivery (COD) as well as bank transfer/e-wallet. For transfer methods, you must upload a payment proof to be verified by the admin.",
+      id: "1. Tinjau Antrean QC: Buka menu 'Quality Control' (QC) di sidebar.\n2. Cek Kelayakan: Periksa produk apakah telah diproduksi dengan benar sesuai pesanan.\n3. Lolos QC: Klik tombol 'Lolos QC' untuk mengubah status pesanan menjadi Siap Dikirim (READY_TO_DELIVER).",
+      en: "1. Open QC Queue: Go to the 'Quality Control' (QC) page in the sidebar.\n2. Inspect Quality: Check if the product matches the order specs and is in good condition.\n3. Pass QC: Click the 'Lolos QC' button to mark the order as READY_TO_DELIVER.",
     },
   },
   {
-    id: "faq-4",
-    category: "payment",
+    id: "faq-prod-3",
+    category: "production",
     question: {
-      id: "Mengapa bukti transfer saya ditolak?",
-      en: "Why was my bank transfer proof rejected?",
+      id: "Bagaimana cara menambah atau mengedit produk dalam katalog?",
+      en: "How do I add or edit products in the catalog?",
     },
     answer: {
-      id: "Penolakan biasanya terjadi jika foto/screenshot bukti transfer kurang jelas, nominal tidak sesuai, atau rekening tujuan salah. Anda dapat melihat alasan penolakan di detail pesanan Anda dan mengunggah kembali bukti yang valid.",
-      en: "Rejection usually occurs if the transfer proof photo/screenshot is unclear, the transfer amount does not match, or the destination account is incorrect. You can view the rejection reason in your order details and re-upload a valid proof.",
+      id: "1. Manajemen Produk: Masuk ke halaman 'Daftar Produk' di sidebar.\n2. Tambah Baru: Klik 'Tambah Produk', lalu masukkan nama, harga, stok, deskripsi, kategori, serta unggah gambar produk.\n3. Ubah Produk: Klik tombol edit pada produk aktif untuk memperbarui detail yang ada lalu klik Simpan.",
+      en: "1. Product Catalog: Go to the 'Daftar Produk' page in the sidebar.\n2. Add New: Click 'Tambah Produk' and fill in the name, price, stock, description, category, and upload a product image.\n3. Edit Product: Click the edit button on any active product to modify details and save.",
     },
   },
   {
-    id: "faq-5",
-    category: "shipping",
+    id: "faq-prod-4",
+    category: "production",
     question: {
-      id: "Bagaimana cara melacak pesanan saya?",
-      en: "How do I track my order?",
+      id: "Bagaimana cara mengatur jadwal menu katering/makanan harian santri?",
+      en: "How do I configure the daily student catering/food menu schedule?",
     },
     answer: {
-      id: "Anda dapat melihat status pesanan di halaman 'Pesanan' -> 'Pesanan Saya'. Setelah kurir dikirimkan, Anda dapat memantau lokasi GPS kurir secara langsung di halaman pelacakan.",
-      en: "You can view your order status on the 'Orders' -> 'My Orders' page. Once the courier is dispatched, you can monitor the courier's GPS location in real time on the tracking page.",
+      id: "1. Buka Penjadwal Makanan: Masuk ke menu 'Jadwal Makanan' di sidebar.\n2. Atur Menu Harian: Isi atau edit daftar menu makanan untuk setiap hari dalam seminggu.\n3. Simpan: Klik tombol simpan untuk memperbarui jadwal yang akan diakses oleh tim dapur dan monitoring.",
+      en: "1. Open Food Schedule: Go to the 'Jadwal Makanan' page in the sidebar.\n2. Configure Daily Menu: Add or edit the catering menu for each day of the week.\n3. Save: Click the save button to update the schedule accessed by the kitchen and monitoring teams.",
+    },
+  },
+  // Distribution FAQs
+  {
+    id: "faq-dist-1",
+    category: "distribution",
+    question: {
+      id: "Bagaimana cara mendistribusikan pesanan kepada kurir lapangan?",
+      en: "How do I dispatch orders to the field couriers?",
+    },
+    answer: {
+      id: "1. Buka Dispatcher: Masuk ke menu 'Dispatch' di sidebar.\n2. Pilih Pesanan: Cari pesanan berstatus Siap Dikirim (READY_TO_DELIVER).\n3. Tugaskan Kurir: Pilih kurir aktif yang tersedia, isi detail rute pengantaran, lalu klik 'Kirim' untuk melimpahkan tugas ke kurir tersebut.",
+      en: "1. Open Dispatch: Navigate to the 'Dispatch' page in the sidebar.\n2. Select Order: Look for orders with a READY_TO_DELIVER status.\n3. Assign Courier: Choose an active, available courier, enter the route instructions, and click 'Kirim' to assign the delivery.",
     },
   },
   {
-    id: "faq-6",
-    category: "shipping",
+    id: "faq-dist-2",
+    category: "distribution",
     question: {
-      id: "Berapa lama proses pengiriman pesanan?",
-      en: "How long does order delivery take?",
+      id: "Bagaimana cara mengatur jadwal kloter pengiriman kurir?",
+      en: "How do I schedule courier delivery runs?",
     },
     answer: {
-      id: "Pesanan akan diproses oleh Tim Produksi terlebih dahulu untuk jaminan kualitas. Waktu pengiriman bergantung pada jarak lokasi Anda dan jadwal pengiriman yang Anda pilih saat checkout.",
-      en: "Orders will be processed by the Production Team first for quality assurance. Delivery time depends on your distance and the delivery schedule you selected during checkout.",
+      id: "1. Buka Penjadwal Rute: Buka halaman 'Delivery Scheduler' di sidebar.\n2. Urutan Pengantaran: Atur jadwal tanggal pengantaran dan urutan pesanan untuk kurir agar rute jalan efisien.\n3. Sinkronisasi: Perubahan jadwal otomatis tersinkronisasi ke perangkat kurir.",
+      en: "1. Open Route Scheduler: Go to the 'Delivery Scheduler' page in the sidebar.\n2. Delivery Order: Arrange the delivery dates and sequence of orders for the courier to optimize the delivery route.\n3. Sync: Schedule updates automatically synchronize with the courier's device.",
+    },
+  },
+  // Courier FAQs
+  {
+    id: "faq-cour-1",
+    category: "courier",
+    question: {
+      id: "Bagaimana cara kurir memulai proses pengantaran pesanan?",
+      en: "How does a courier start the order delivery process?",
+    },
+    answer: {
+      id: "1. Akses Halaman Delivery: Buka menu 'Delivery' di perangkat mobile Anda.\n2. Pilih Tugas: Lihat daftar pesanan yang ditugaskan kepada Anda.\n3. Mulai Perjalanan: Klik tombol 'Mulai Pengiriman'. Langkah ini secara otomatis mengaktifkan pengiriman koordinat GPS berkala dari perangkat Anda ke sistem pelacakan.",
+      en: "1. Access Delivery Page: Open the 'Delivery' page on your mobile device.\n2. Select Assignment: View the list of orders assigned to you.\n3. Start Run: Click the 'Mulai Pengiriman' button. This automatically enables periodic GPS coordinate updates from your device to the tracking system.",
     },
   },
   {
-    id: "faq-7",
-    category: "policy",
+    id: "faq-cour-2",
+    category: "courier",
     question: {
-      id: "Apakah saya bisa membatalkan pesanan yang sudah dibayar?",
-      en: "Can I cancel an order that has been paid for?",
+      id: "Bagaimana menyelesaikan pengantaran dengan bukti pengiriman (Proof of Delivery)?",
+      en: "How do I complete a delivery with Proof of Delivery?",
     },
     answer: {
-      id: "Pesanan yang sudah masuk ke proses produksi tidak dapat dibatalkan. Jika Anda perlu mengubah pesanan sebelum produksi dimulai, silakan hubungi kontak layanan pelanggan Koperasi Al-Umanaa.",
-      en: "Orders that have entered the production phase cannot be cancelled. If you need to modify your order before production starts, please contact Al-Umanaa Cooperative customer support.",
+      id: "1. Konfirmasi Tiba: Setelah tiba di lokasi tujuan, klik 'Selesaikan Pengiriman'.\n2. Tanda Tangan: Mintalah penerima menandatangani secara digital langsung pada layar perangkat Anda.\n3. Foto Serah Terima: Ambil foto dokumentasi produk yang diserahkan kepada penerima.\n4. Kirim Bukti: Klik tombol 'Kirim Bukti' untuk menyelesaikan tugas secara resmi di sistem.",
+      en: "1. Confirm Arrival: Upon reaching the destination, click 'Selesaikan Pengiriman'.\n2. Signature: Have the recipient draw their digital signature directly on your screen.\n3. Take Photo: Capture a photo of the product being handed over to the recipient.\n4. Submit: Click the 'Kirim Bukti' button to officially complete the task in the system.",
     },
   },
   {
-    id: "faq-8",
-    category: "policy",
+    id: "faq-cour-3",
+    category: "courier",
     question: {
-      id: "Bagaimana kebijakan pengembalian barang jika produk rusak?",
-      en: "What is the return policy if a product is damaged?",
+      id: "Mengapa GPS harus selalu aktif saat pengantaran barang?",
+      en: "Why must GPS stay enabled during deliveries?",
     },
     answer: {
-      id: "Koperasi Al-Umanaa menjamin kualitas setiap produk. Jika barang diterima dalam keadaan rusak atau tidak sesuai, Anda dapat mengajukan klaim pengembalian dana atau tukar barang dengan menyertakan bukti foto ke admin melalui Pusat Bantuan.",
-      en: "Al-Umanaa Cooperative guarantees the quality of every product. If items are received damaged or incorrect, you can submit a claim for refund or replacement by providing photographic evidence to the admin through the Help Center.",
+      id: "Pengaktifan GPS penting agar sistem dapat merekam koordinat pengantaran secara real-time. Hal ini memungkinkan tim monitoring memantau lokasi kurir pada peta untuk memastikan keselamatan kurir dan ketepatan estimasi waktu pengantaran.",
+      en: "Keeping GPS active allows the system to capture real-time delivery coordinates. This enables the monitoring team to track courier positions on the map to ensure courier safety and precise delivery time estimates.",
+    },
+  },
+  // Monitoring FAQs
+  {
+    id: "faq-mon-1",
+    category: "monitoring",
+    question: {
+      id: "Bagaimana cara memantau pergerakan kurir secara langsung (real-time)?",
+      en: "How do I monitor courier movements in real-time?",
+    },
+    answer: {
+      id: "1. Buka Dasbor Monitoring: Masuk ke halaman 'Dashboard' di sidebar.\n2. Tinjau Peta: Perhatikan peta pelacakan interaktif di halaman utama.\n3. Pantau Posisi: Ikon penanda kurir akan bergerak secara dinamis berdasarkan sinyal GPS teraktif dari perangkat kurir yang sedang di perjalanan.",
+      en: "1. Open Monitoring Dashboard: Navigate to the 'Dashboard' page in the sidebar.\n2. View Map: Inspect the interactive tracking map on the main screen.\n3. Track Courier: Courier pin icons move dynamically on the map based on active GPS updates sent by couriers currently on the road.",
+    },
+  },
+  {
+    id: "faq-mon-2",
+    category: "monitoring",
+    question: {
+      id: "Metrik operasional apa saja yang ditampilkan di Dasbor?",
+      en: "What operational metrics are displayed on the Dashboard?",
+    },
+    answer: {
+      id: "Dasbor menampilkan total omzet penjualan koperasi (harian/bulanan), jumlah pesanan berdasarkan status (Pending, Produksi, QC, Siap Dikirim, Pengiriman, Selesai), daftar kurir aktif, dan log aktivitas pengantaran real-time.",
+      en: "The Dashboard showcases cooperative sales revenue (daily/monthly), order volume breakdown by status (Pending, In Production, QC, Ready, Out for Delivery, Completed), active couriers, and real-time delivery logs.",
+    },
+  },
+  {
+    id: "faq-mon-3",
+    category: "monitoring",
+    question: {
+      id: "Bagaimana cara mengevaluasi performa pengiriman kurir?",
+      en: "How do I evaluate courier delivery performance?",
+    },
+    answer: {
+      id: "Di bagian bawah halaman Dashboard, Anda dapat meninjau 'Daftar Riwayat Tugas Selesai'. Bagian ini mencatat waktu mulai pengantaran, waktu selesai, nama kurir, pesanan yang dibawa, serta bukti tanda tangan dan dokumentasi serah terima.",
+      en: "At the bottom of the Dashboard page, you can review the 'Daftar Riwayat Tugas Selesai' log list. This logs the start time, completion time, courier name, orders carried, and links to signature & photo proofs.",
     },
   },
 ];
 
 const CATEGORIES = [
   { id: "all", label: { id: "Semua", en: "All" }, icon: HelpCircle },
-  { id: "shopping", label: { id: "Belanja", en: "Shopping" }, icon: ShoppingBag },
-  { id: "payment", label: { id: "Pembayaran", en: "Payment" }, icon: CreditCard },
-  { id: "shipping", label: { id: "Pengiriman", en: "Shipping" }, icon: Truck },
-  { id: "policy", label: { id: "Kebijakan", en: "Policy" }, icon: FileText },
+  { id: "admin", label: { id: "Admin", en: "Admin" }, icon: Shield },
+  { id: "production", label: { id: "Produksi", en: "Production" }, icon: Package },
+  { id: "distribution", label: { id: "Distribusi", en: "Distribution" }, icon: Truck },
+  { id: "courier", label: { id: "Kurir", en: "Courier" }, icon: MapPin },
+  { id: "monitoring", label: { id: "Monitoring", en: "Monitoring" }, icon: Monitor },
 ];
 
 export function HelpCenterPage() {
@@ -154,12 +233,12 @@ export function HelpCenterPage() {
   });
 
   const t = {
-    title: lang === "id" ? "Pusat Bantuan Al-Umanaa" : "Al-Umanaa Help Center",
-    subtitle: lang === "id" ? "Ada yang bisa kami bantu hari ini?" : "How can we help you today?",
-    placeholder: lang === "id" ? "Ketik pertanyaan Anda di sini..." : "Type your question here...",
-    noResults: lang === "id" ? "Tidak ada pertanyaan ditemukan." : "No questions found.",
-    popularFaqs: lang === "id" ? "Pertanyaan Populer (FAQ)" : "Popular Questions (FAQ)",
-    faqCategory: lang === "id" ? "Kategori Bantuan" : "Help Categories",
+    title: lang === "id" ? "Pusat Tutorial Operasional" : "Operational Tutorials",
+    subtitle: lang === "id" ? "Temukan panduan penggunaan sistem berdasarkan peran Anda:" : "Find system usage guides based on your role:",
+    placeholder: lang === "id" ? "Ketik peran atau kata kunci tutorial..." : "Type role or search keyword...",
+    noResults: lang === "id" ? "Tidak ada tutorial ditemukan." : "No tutorials found.",
+    popularFaqs: lang === "id" ? "Tutorial Operasional & FAQ Peran" : "Operational Tutorials & Role FAQs",
+    faqCategory: lang === "id" ? "Pilih Peran Staf" : "Select Staff Role",
   };
 
   return (
@@ -197,7 +276,7 @@ export function HelpCenterPage() {
           <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
             {t.faqCategory}
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
             {CATEGORIES.map((cat) => {
               const Icon = cat.icon;
               const isActive = activeTab === cat.id;
@@ -258,7 +337,7 @@ export function HelpCenterPage() {
                     </button>
 
                     {isExpanded && (
-                      <div className="px-4 pb-4 pt-1 font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-neutral-600 leading-relaxed border-t border-neutral-50">
+                      <div className="px-4 pb-4 pt-1 font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-neutral-600 leading-relaxed border-t border-neutral-50 whitespace-pre-line">
                         {faq.answer[lang]}
                       </div>
                     )}

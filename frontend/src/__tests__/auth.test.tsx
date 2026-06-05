@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BrowserRouter } from "react-router-dom";
 import type { ReactNode, HTMLAttributes } from "react";
 import { LoginPage } from "@/pages/LoginPage";
-import { RegisterPage } from "@/pages/RegisterPage";
 import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppRouter } from "@/router/AppRouter";
@@ -165,58 +164,6 @@ describe("Authentication UI Features", () => {
     expect(screen.getByText("Forgot password?")).toBeDefined();
   });
 
-  it("should toggle password visibility on RegisterPage", () => {
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <RegisterPage />
-        </AuthProvider>
-      </BrowserRouter>
-    );
-
-    const passwordInput = screen.getByPlaceholderText("Create password") as HTMLInputElement;
-    const confirmInput = screen.getByPlaceholderText("Confirm password") as HTMLInputElement;
-
-    expect(passwordInput.type).toBe("password");
-    expect(confirmInput.type).toBe("password");
-
-    const toggleButtons = screen.getAllByLabelText("Toggle password visibility");
-    expect(toggleButtons.length).toBe(2);
-
-    // Toggle password
-    fireEvent.click(toggleButtons[0]);
-    expect(passwordInput.type).toBe("text");
-    expect(confirmInput.type).toBe("password");
-
-    // Toggle confirm password
-    fireEvent.click(toggleButtons[1]);
-    expect(confirmInput.type).toBe("text");
-  });
-
-  it("should show validation error when passwords do not match on RegisterPage", async () => {
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <RegisterPage />
-        </AuthProvider>
-      </BrowserRouter>
-    );
-
-    const nameInput = screen.getByPlaceholderText("Your Full Name");
-    const emailInput = screen.getByPlaceholderText("you@al-umana.id");
-    const passwordInput = screen.getByPlaceholderText("Create password");
-    const confirmInput = screen.getByPlaceholderText("Confirm password");
-    const submitBtn = screen.getByRole("button", { name: /^Register$/ });
-
-    fireEvent.change(nameInput, { target: { value: "John Doe" } });
-    fireEvent.change(emailInput, { target: { value: "john@example.com" } });
-    fireEvent.change(passwordInput, { target: { value: "password123" } });
-    fireEvent.change(confirmInput, { target: { value: "password456" } });
-
-    fireEvent.click(submitBtn);
-
-    expect(await screen.findByText("Passwords do not match")).toBeDefined();
-  });
 
   it("should render ForgotPasswordPage and display success message on submission", async () => {
     render(
@@ -260,7 +207,9 @@ describe("Authentication UI Features", () => {
       render(<AppRouter />);
 
       // Verify the page has loaded (loading overlay is gone)
-      expect(screen.queryByText("Loading…")).toBeNull();
+      await waitFor(() => {
+        expect(screen.queryAllByText(/Loading/i).length).toBe(0);
+      });
 
       // Open profile dropdown
       const profileBtn = document.getElementById("profile-menu-button");
@@ -311,6 +260,11 @@ describe("Authentication UI Features", () => {
       // Go to settings page
       window.history.pushState({}, "", "/admin/settings");
       render(<AppRouter />);
+
+      // Wait for loading to finish and page to render
+      await waitFor(() => {
+        expect(screen.queryAllByText(/Loading/i).length).toBe(0);
+      });
 
       // Find Sign out button in SettingsPage
       const settingsSignOutBtn = screen.getByRole("button", { name: /Sign out/i });

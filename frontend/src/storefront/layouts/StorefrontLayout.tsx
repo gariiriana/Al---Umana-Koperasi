@@ -84,7 +84,7 @@ const DICTIONARY = {
     contactUs: "Hubungi Kami",
     followUs: "Ikuti kami di",
     notifications: "Notifikasi",
-    help: "Bantuan",
+    help: "Tutorial",
     languageLabel: "Bahasa Indonesia",
     register: "Daftar",
     login: "Log In",
@@ -108,7 +108,7 @@ const DICTIONARY = {
     contactUs: "Contact Us",
     followUs: "Follow us on",
     notifications: "Notifications",
-    help: "Help Center",
+    help: "Tutorials",
     languageLabel: "English",
     register: "Register",
     login: "Log In",
@@ -770,8 +770,6 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 font-bold text-white">
-                    <Link to="/register" className="hover:opacity-85">{t.register}</Link>
-                    <span className="opacity-40 font-normal">|</span>
                     <Link to="/login" className="hover:opacity-85">{t.login}</Link>
                   </div>
                 )}
