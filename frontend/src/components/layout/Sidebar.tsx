@@ -92,7 +92,7 @@ const roleBadge: Record<string, string> = {
   admin: "Admin",
   tim_produksi: "Produksi",
   distribusi: "Distribusi",
-  monitoring: "Monitor",
+  monitoring: "Monitoring",
   kurir: "Kurir",
 };
 

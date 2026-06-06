@@ -65,7 +65,8 @@ export function AppShell({
     admin: "Admin",
     tim_produksi: "Produksi",
     distribusi: "Distribusi",
-    monitoring: "Monitor",
+    monitoring: "Monitoring",
+    kurir: "Kurir",
   };
 
   return (

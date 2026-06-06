@@ -11,6 +11,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface FAQItem {
   id: string;
@@ -49,6 +50,18 @@ const FAQ_DATA: FAQItem[] = [
     answer: {
       id: "1. Buka Catatan: Masuk ke halaman 'Daftar Invoice' atau 'Invoices' di sidebar.\n2. Cari Pesanan: Cari pesanan berdasarkan ID atau nama pelanggan.\n3. Unduh PDF: Klik ikon/tombol download PDF di samping pesanan untuk mengunduh berkas invoice resmi.",
       en: "1. Open Invoices: Go to the 'Daftar Invoice' or 'Invoices' page in the sidebar.\n2. Locate Order: Find the order using the ID or customer name.\n3. Download PDF: Click the PDF download icon/button next to the order to save the official invoice file.",
+    },
+  },
+  {
+    id: "faq-admin-3",
+    category: "admin",
+    question: {
+      id: "Bagaimana cara beralih peran (multi-role) untuk mengakses fitur staf lain?",
+      en: "How do I switch roles (multi-role) to access other staff features?",
+    },
+    answer: {
+      id: "Sebagai Administrator, Anda memiliki akses penuh ke seluruh fitur staf. Cukup klik foto profil Anda di sudut kanan atas untuk membuka menu 'Akses Peran', lalu klik fitur peran staf yang ingin Anda buka (seperti Monitoring, Produksi, Distribusi, Penjadwal, atau Kurir).",
+      en: "As an Administrator, you have full access to all staff features. Simply click your profile photo in the top right corner to open the 'Role Access' menu, and click on the staff role feature you want to access (such as Monitoring, Production, Distribution, Scheduler, or Courier).",
     },
   },
   // Production FAQs
@@ -98,6 +111,18 @@ const FAQ_DATA: FAQItem[] = [
     answer: {
       id: "1. Buka Penjadwal Makanan: Masuk ke menu 'Jadwal Makanan' di sidebar.\n2. Atur Menu Harian: Isi atau edit daftar menu makanan untuk setiap hari dalam seminggu.\n3. Simpan: Klik tombol simpan untuk memperbarui jadwal yang akan diakses oleh tim dapur dan monitoring.",
       en: "1. Open Food Schedule: Go to the 'Jadwal Makanan' page in the sidebar.\n2. Configure Daily Menu: Add or edit the catering menu for each day of the week.\n3. Save: Click the save button to update the schedule accessed by the kitchen and monitoring teams.",
+    },
+  },
+  {
+    id: "faq-prod-5",
+    category: "production",
+    question: {
+      id: "Bagaimana cara melihat riwayat produksi dan kontrol kualitas (QC) yang telah selesai?",
+      en: "How do I view the completed production and quality control (QC) history?",
+    },
+    answer: {
+      id: "1. Buka Halaman Riwayat: Masuk ke halaman 'Riwayat' di bawah menu produksi di sidebar.\n2. Tinjau Data: Anda akan melihat daftar semua pesanan yang telah selesai diproduksi dan lolos QC beserta catatan waktunya.",
+      en: "1. Open History Page: Go to the 'Riwayat' page under the production menu in the sidebar.\n2. Review Data: You will see a list of all orders that have completed production and passed QC, along with their timestamps.",
     },
   },
   // Distribution FAQs
@@ -212,7 +237,14 @@ const CATEGORIES = [
 
 export function HelpCenterPage() {
   const { lang } = useLanguage();
-  const [activeTab, setActiveTab] = useState<string>("all");
+  const { profile } = useAuth();
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (!profile?.role) return "all";
+    if (profile.role === "tim_produksi") return "production";
+    if (profile.role === "distribusi") return "distribution";
+    if (profile.role === "kurir") return "courier";
+    return profile.role; // admin, monitoring
+  });
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [expandedFaqId, setExpandedFaqId] = useState<string | null>(null);
 
