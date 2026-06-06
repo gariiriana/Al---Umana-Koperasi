@@ -22,6 +22,7 @@ const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage").then(
 const DashboardPage = lazy(() => import("@/pages/DashboardPage").then(module => ({ default: module.DashboardPage })));
 const OrdersPage = lazy(() => import("@/pages/OrdersPage").then(module => ({ default: module.OrdersPage })));
 const ProductionPage = lazy(() => import("@/pages/ProductionPage").then(module => ({ default: module.ProductionPage })));
+const ProductionHistoryPage = lazy(() => import("@/pages/ProductionHistoryPage").then(module => ({ default: module.ProductionHistoryPage })));
 const QCReviewPage = lazy(() => import("@/pages/QCReviewPage").then(module => ({ default: module.QCReviewPage })));
 const DispatchPage = lazy(() => import("@/pages/DispatchPage").then(module => ({ default: module.DispatchPage })));
 const DeliveryPage = lazy(() => import("@/pages/DeliveryPage").then(module => ({ default: module.DeliveryPage })));
@@ -454,6 +455,19 @@ function RoutesTree() {
               allowedRoles={["tim_produksi"]}
             >
               <ProductionPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/admin/production/history"
+        element={
+          <Protected>
+            <ShelledRoute
+              pageTitle="Riwayat Produksi & QC"
+              allowedRoles={["tim_produksi"]}
+            >
+              <ProductionHistoryPage />
             </ShelledRoute>
           </Protected>
         }

@@ -22,6 +22,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   tim_produksi: [
     "/admin/production",
     "/admin/qc",
+    "/admin/production/history",
     "/admin/products",
     "/admin/products/new",
     "/admin/categories",

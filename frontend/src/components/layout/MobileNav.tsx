@@ -10,6 +10,7 @@ import {
   Send,
   ShoppingCart,
   Truck,
+  History,
   type LucideIcon,
 } from "lucide-react";
 
@@ -30,6 +31,7 @@ export const MOBILE_NAV_ITEMS: readonly MobileNavItem[] = [
   { to: "/admin/payment-approvals", label: "Pembayaran",    icon: BadgeCheck },
   { to: "/admin/production",        label: "Produksi",      icon: Factory },
   { to: "/admin/qc",               label: "QC",            icon: CheckCircle2 },
+  { to: "/admin/production/history", label: "Riwayat",       icon: History },
   { to: "/distribusi/dispatch",     label: "Pengiriman",    icon: Send },
   { to: "/distribusi/delivery",     label: "Antar",         icon: Truck },
 ] as const;

@@ -17,6 +17,7 @@ import {
   Settings,
   ShoppingCart,
   Truck,
+  History,
   type LucideIcon,
 } from "lucide-react";
 
@@ -32,6 +33,7 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/admin/invoices", label: "Catatan", icon: FileText },
   { to: "/admin/production", label: "Production", icon: Factory },
   { to: "/admin/qc", label: "Quality Control", icon: CheckCircle2 },
+  { to: "/admin/production/history", label: "Riwayat", icon: History },
   { to: "/distribusi/scheduler", label: "Delivery Scheduler", icon: Calendar },
   { to: "/distribusi/dispatch", label: "Dispatch", icon: Truck },
   { to: "/distribusi/delivery", label: "Delivery", icon: Package },
@@ -45,6 +47,7 @@ const LABELS_DICT = {
     "/admin/invoices": "Catatan",
     "/admin/production": "Produksi",
     "/admin/qc": "Kontrol Kualitas",
+    "/admin/production/history": "Riwayat",
     "/distribusi/scheduler": "Penjadwal Pengiriman",
     "/distribusi/dispatch": "Pengiriman",
     "/distribusi/delivery": "Pengantaran",
@@ -56,6 +59,7 @@ const LABELS_DICT = {
     "/admin/invoices": "Notes",
     "/admin/production": "Production",
     "/admin/qc": "Quality Control",
+    "/admin/production/history": "History",
     "/distribusi/scheduler": "Delivery Scheduler",
     "/distribusi/dispatch": "Dispatch",
     "/distribusi/delivery": "Delivery",
