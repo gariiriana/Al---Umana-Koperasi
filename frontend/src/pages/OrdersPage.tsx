@@ -749,6 +749,78 @@ export function OrdersPage() {
         }
       }
 
+      // Admin Complaint Notes and Photo Proof (visible to admin on exported PDF)
+      if (order.adminComplaintNotes || order.adminComplaintPhotoId) {
+        y += 10;
+        
+        const complaintLines: string[] = [];
+        if (order.adminComplaintNotes) {
+          complaintLines.push(`Catatan Pengaduan: ${order.adminComplaintNotes}`);
+        }
+        
+        let complaintHeight = 0;
+        let wrappedComplaint: string[] = [];
+        if (complaintLines.length > 0) {
+          wrappedComplaint = doc.splitTextToSize(complaintLines.join("\n"), pageW - 28);
+          complaintHeight = wrappedComplaint.length * 4 + 10;
+        }
+
+        const photoNeeded = !!order.adminComplaintPhotoId;
+        const totalSpaceNeeded = complaintHeight + (photoNeeded ? 70 : 0) + 15;
+
+        if (y + totalSpaceNeeded > pageH - 20) {
+          doc.addPage();
+          y = 20;
+        }
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(...brandAmberDark);
+        doc.text("PENGADUAN & BUKTI ADMIN (INTERNAL)", 14, y);
+        y += 5;
+
+        if (complaintLines.length > 0) {
+          doc.setFillColor(...brandYellowCream);
+          doc.setDrawColor(...brandYellowBorder);
+          doc.setLineWidth(0.4);
+          doc.rect(14, y, pageW - 28, complaintHeight, "FD");
+
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.setTextColor(...slateDark);
+          doc.text(wrappedComplaint, 18, y + 6);
+          y += complaintHeight + 6;
+        }
+
+        if (order.adminComplaintPhotoId) {
+          const complaintPhotoDataUri = await fetchImageBase64(order.adminComplaintPhotoId, "delivery_files");
+          if (complaintPhotoDataUri) {
+            if (y + 65 > pageH - 15) {
+              doc.addPage();
+              y = 20;
+            }
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(8.5);
+            doc.setTextColor(...brandAmberDark);
+            doc.text("BUKTI FOTO PENGADUAN:", 14, y);
+            y += 4;
+
+            try {
+              const format = complaintPhotoDataUri.includes("image/png") ? "PNG" : "JPEG";
+              doc.addImage(complaintPhotoDataUri, format, 14, y, 80, 60);
+              y += 65;
+            } catch (imgErr) {
+              console.error("Error inserting complaint screenshot into PDF:", imgErr);
+              doc.setFont("helvetica", "italic");
+              doc.setFontSize(8);
+              doc.setTextColor(...slateLight);
+              doc.text("[Gagal memuat format gambar bukti]", 14, y);
+              y += 6;
+            }
+          }
+        }
+      }
+
       // Page border and decor
       const totalPages = doc.getNumberOfPages();
       for (let p = 1; p <= totalPages; p++) {
