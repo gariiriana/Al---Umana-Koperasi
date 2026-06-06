@@ -214,59 +214,63 @@ export function NotificationsPage() {
     markAllRead: lang === "id" ? "Tandai Semua Dibaca" : "Mark All as Read",
   };
 
+  const isOperational = profile && profile.role !== "admin";
+
   return (
-    <div className="min-h-screen bg-[#F3F4F6] pb-12 font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-800">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className={`${isOperational ? "" : "min-h-screen bg-[#F3F4F6] pb-12"} font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-800`}>
+      <div className={isOperational ? "max-w-7xl mx-auto" : "max-w-7xl mx-auto px-4 py-8"}>
         <div className="flex flex-col lg:flex-row gap-6">
           {/* LEFT SIDEBAR (Shopee-style Account Menu on Desktop) */}
-          <aside className="hidden lg:block w-64 shrink-0 space-y-6">
-            {/* User Profile Header */}
-            <div className="flex items-center gap-3 px-2">
-              <div className="h-12 w-12 rounded-full overflow-hidden bg-gradient-to-tr from-[#FBBF24] to-[#F59E0B] flex items-center justify-center text-white text-base font-extrabold shadow-sm border border-neutral-200 shrink-0">
-                {profile?.photoURL || user?.photoURL ? (
-                  <img
-                    src={profile?.photoURL || user?.photoURL || ""}
-                    alt="Avatar"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  (user?.displayName ?? user?.email ?? "?").charAt(0).toUpperCase()
-                )}
+          {!isOperational && (
+            <aside className="hidden lg:block w-64 shrink-0 space-y-6">
+              {/* User Profile Header */}
+              <div className="flex items-center gap-3 px-2">
+                <div className="h-12 w-12 rounded-full overflow-hidden bg-gradient-to-tr from-[#FBBF24] to-[#F59E0B] flex items-center justify-center text-white text-base font-extrabold shadow-sm border border-neutral-200 shrink-0">
+                  {profile?.photoURL || user?.photoURL ? (
+                    <img
+                      src={profile?.photoURL || user?.photoURL || ""}
+                      alt="Avatar"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    (user?.displayName ?? user?.email ?? "?").charAt(0).toUpperCase()
+                  )}
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-xs text-neutral-500 font-semibold">{t.userGreeting}</span>
+                  <h3 className="text-sm font-bold text-neutral-800 truncate max-w-[170px]">
+                    {user?.displayName || user?.email || "Customer"}
+                  </h3>
+                </div>
               </div>
-              <div className="space-y-0.5">
-                <span className="text-xs text-neutral-500 font-semibold">{t.userGreeting}</span>
-                <h3 className="text-sm font-bold text-neutral-800 truncate max-w-[170px]">
-                  {user?.displayName || user?.email || "Customer"}
-                </h3>
-              </div>
-            </div>
 
-            {/* Navigation links */}
-            <nav aria-label="Menu Akun" className="bg-white rounded-xl border border-[#E5E7EB] p-2 space-y-1 shadow-xs">
-              <Link
-                to="/cart"
-                className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-semibold text-neutral-600 hover:bg-[#F3F4F6] transition-colors"
-              >
-                <User className="h-4.5 w-4.5 text-neutral-400" />
-                <span>{t.navMyAccount}</span>
-              </Link>
-              <Link
-                to="/notifications"
-                className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-extrabold bg-[#FEF3C7] text-[#B45309] transition-colors"
-              >
-                <Bell className="h-4.5 w-4.5 text-[#F59E0B]" />
-                <span>{t.navNotif}</span>
-              </Link>
-              <button
-                type="button"
-                onClick={requestSignOut}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 transition-colors text-left cursor-pointer border-t border-neutral-100 mt-2 pt-3"
-              >
-                <LogOut className="h-4.5 w-4.5 text-red-500" />
-                <span>{t.navSignOut}</span>
-              </button>
-            </nav>
-          </aside>
+              {/* Navigation links */}
+              <nav aria-label="Menu Akun" className="bg-white rounded-xl border border-[#E5E7EB] p-2 space-y-1 shadow-xs">
+                <Link
+                  to="/cart"
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-semibold text-neutral-600 hover:bg-[#F3F4F6] transition-colors"
+                >
+                  <User className="h-4.5 w-4.5 text-neutral-400" />
+                  <span>{t.navMyAccount}</span>
+                </Link>
+                <Link
+                  to="/notifications"
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-extrabold bg-[#FEF3C7] text-[#B45309] transition-colors"
+                >
+                  <Bell className="h-4.5 w-4.5 text-[#F59E0B]" />
+                  <span>{t.navNotif}</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={requestSignOut}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 transition-colors text-left cursor-pointer border-t border-neutral-100 mt-2 pt-3"
+                >
+                  <LogOut className="h-4.5 w-4.5 text-red-500" />
+                  <span>{t.navSignOut}</span>
+                </button>
+              </nav>
+            </aside>
+          )}
 
           {/* MAIN CONTENT AREA */}
           <main className="flex-1 space-y-4">

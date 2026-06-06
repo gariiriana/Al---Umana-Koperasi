@@ -52,10 +52,13 @@ const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
   }
 };
 
-const fetchImageBase64 = async (fileId: string): Promise<string | null> => {
+const fetchImageBase64 = async (
+  fileId: string,
+  collectionName: "payment_proofs" | "delivery_files" = "payment_proofs"
+): Promise<string | null> => {
   try {
-    const cleanId = fileId.replace("payment_proofs/", "");
-    const parentRef = doc(db, "payment_proofs", cleanId);
+    const cleanId = fileId.replace(`${collectionName}/`, "");
+    const parentRef = doc(db, collectionName, cleanId);
     const parentSnap = await getDoc(parentRef);
     if (!parentSnap.exists()) return null;
     
@@ -64,7 +67,7 @@ const fetchImageBase64 = async (fileId: string): Promise<string | null> => {
     
     const chunkPromises = [];
     for (let i = 0; i < totalChunks; i++) {
-      const chunkRef = doc(db, "payment_proofs", cleanId, "chunks", String(i));
+      const chunkRef = doc(db, collectionName, cleanId, "chunks", String(i));
       chunkPromises.push(getDoc(chunkRef));
     }
     const chunkSnaps = await Promise.all(chunkPromises);
@@ -77,7 +80,7 @@ const fetchImageBase64 = async (fileId: string): Promise<string | null> => {
     }
     return fullDataUri || null;
   } catch (err) {
-    console.error("Error fetching image base64:", err);
+    console.error(`Error fetching image base64 from ${collectionName}:`, err);
     return null;
   }
 };
@@ -111,10 +114,15 @@ export function OrdersPage() {
   const [proofImageSrc, setProofImageSrc] = useState<string | null>(null);
   const [loadingProof, setLoadingProof] = useState(false);
 
+  // Production start photo states
+  const [productionStartPhotoSrc, setProductionStartPhotoSrc] = useState<string | null>(null);
+  const [loadingProductionPhoto, setLoadingProductionPhoto] = useState(false);
+
   useEffect(() => {
     if (!previewInvoiceOrder) {
       setScreenshotSrc(null);
       setProofImageSrc(null);
+      setProductionStartPhotoSrc(null);
       return;
     }
 
@@ -152,6 +160,24 @@ export function OrdersPage() {
       loadProof();
     } else {
       setProofImageSrc(null);
+    }
+
+    const productionPhotoId = previewInvoiceOrder.productionStartPhotoId;
+    if (productionPhotoId) {
+      const loadProductionPhoto = async () => {
+        setLoadingProductionPhoto(true);
+        try {
+          const dataUri = await fetchImageBase64(productionPhotoId, "delivery_files");
+          setProductionStartPhotoSrc(dataUri);
+        } catch (err) {
+          console.error("Error loading production start photo:", err);
+        } finally {
+          setLoadingProductionPhoto(false);
+        }
+      };
+      loadProductionPhoto();
+    } else {
+      setProductionStartPhotoSrc(null);
     }
   }, [previewInvoiceOrder]);
 
@@ -825,7 +851,14 @@ export function OrdersPage() {
                     <tr key={o.id} className="hover:bg-neutral-50/50 transition-colors">
                       {/* ID / Tipe */}
                       <td className="py-4 px-6 font-['Hanken_Grotesk']">
-                        <div className="font-mono font-bold text-[#111827]">#{shortId}</div>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewInvoiceOrder(o)}
+                          className="font-mono font-bold text-blue-600 hover:text-blue-800 hover:underline text-left cursor-pointer focus:outline-none"
+                          title="Lihat Detail Pesanan"
+                        >
+                          #{shortId}
+                        </button>
                         <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
                           o.orderType === "event" ? "bg-purple-100 text-purple-700" : "bg-cyan-100 text-cyan-700"
                         }`}>
@@ -1086,7 +1119,14 @@ export function OrdersPage() {
                 {/* Header: ID, Type & Operational Status */}
                 <div className="flex flex-wrap items-center justify-between gap-1 pb-2 border-b border-[#F3F4F6]">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-bold text-[#111827]">#{shortId}</span>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewInvoiceOrder(o)}
+                      className="font-mono font-bold text-blue-600 hover:text-blue-800 hover:underline text-left cursor-pointer focus:outline-none"
+                      title="Lihat Detail Pesanan"
+                    >
+                      #{shortId}
+                    </button>
                     <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
                       o.orderType === "event" ? "bg-purple-100 text-purple-700" : "bg-cyan-100 text-cyan-700"
                     }`}>
@@ -1550,6 +1590,33 @@ export function OrdersPage() {
                         <span className="font-bold">Catatan Lokasi:</span>
                         <p className="mt-0.5">{previewInvoiceOrder.recipientNotes}</p>
                       </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Foto Mulai Memasak (Dapur Produksi) */}
+              {previewInvoiceOrder.productionStartPhotoId && (
+                <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200 font-['Hanken_Grotesk']">
+                  <h5 className="font-bold text-neutral-500 uppercase tracking-wider text-[10px]">
+                    Foto Mulai Memasak (Dapur Produksi)
+                  </h5>
+                  <div className="border border-[#E5E7EB] rounded-xl overflow-hidden bg-neutral-50 p-4 flex flex-col items-center justify-center">
+                    {loadingProductionPhoto ? (
+                      <div className="flex items-center gap-2 text-xs text-neutral-500 py-6">
+                        <Loader2 className="w-4 h-4 animate-spin text-neutral-600" />
+                        <span>Memuat foto mulai memasak...</span>
+                      </div>
+                    ) : productionStartPhotoSrc ? (
+                      <div className="bg-white border border-[#E5E7EB] rounded-lg p-2 max-w-sm w-full shadow-2xs">
+                        <img
+                          src={productionStartPhotoSrc}
+                          alt="Foto Mulai Memasak"
+                          className="max-h-64 mx-auto rounded object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-neutral-500 italic">Foto mulai memasak tidak dapat dimuat atau kosong.</p>
                     )}
                   </div>
                 </div>

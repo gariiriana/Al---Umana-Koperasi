@@ -222,6 +222,42 @@ export function StorefrontProtectedRoute({
   return <StorefrontLayout>{children}</StorefrontLayout>;
 }
 
+function NotificationsRouteWrapper() {
+  const { user, profile, loading, requestSignOut } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
+        <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280]">
+          Loading profile…
+        </p>
+      </div>
+    );
+  }
+
+  // If user is logged in and is an operational user (non-admin), wrap in AppShell.
+  if (user && profile && profile.role !== "admin") {
+    return (
+      <AppShell
+        pageTitle="Notifikasi"
+        userName={profile?.displayName ?? user?.displayName ?? undefined}
+        userEmail={user?.email ?? undefined}
+        userRole={profile?.role}
+        userPhotoUrl={profile?.photoURL ?? user?.photoURL ?? undefined}
+        onSignOut={requestSignOut}
+      >
+        <NotificationsPage />
+      </AppShell>
+    );
+  }
+
+  // Otherwise (guest, admin, customer), wrap in Storefront layout.
+  return (
+    <StorefrontLayout>
+      <NotificationsPage />
+    </StorefrontLayout>
+  );
+}
 
 function RoutesTree() {
   return (
@@ -329,9 +365,7 @@ function RoutesTree() {
       <Route
         path="/notifications"
         element={
-          <Storefront>
-            <NotificationsPage />
-          </Storefront>
+          <NotificationsRouteWrapper />
         }
       />
       <Route

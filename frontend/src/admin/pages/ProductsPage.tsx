@@ -274,8 +274,6 @@ export function ProductsPage() {
   // Delete target state
   const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [deletingAll, setDeletingAll] = useState(false);
-  const [seedingDemo, setSeedingDemo] = useState(false);
 
   // Availability Prompt state
   const [promptTarget, setPromptTarget] = useState<{ item: InventoryItem; nextQty: number } | null>(null);
@@ -587,147 +585,6 @@ export function ProductsPage() {
       showToast({ message: t.deleteError, variant: "error" });
     } finally {
       setDeletingId(null);
-    }
-  };
-
-  const handleDeleteAllProducts = async () => {
-    const confirmMsg = lang === "id" 
-      ? "Apakah Anda yakin ingin menghapus SELURUH produk (termasuk semua foto tambahan) dari database secara permanen?"
-      : "Are you sure you want to permanently delete ALL products (including all additional photos) from the database?";
-      
-    if (confirm(confirmMsg)) {
-      setDeletingAll(true);
-      try {
-        // Fetch all items from database to delete everything globally, ignoring active filters
-        const allItems = await listAllItems();
-        await Promise.all(allItems.map(async (item) => {
-          await deleteItem(item.id);
-        }));
-        
-        showToast({ 
-          message: lang === "id" ? "Semua produk berhasil dihapus secara permanen!" : "All products successfully deleted permanently!", 
-          variant: "success" 
-        });
-        
-        await load();
-      } catch (err) {
-        console.error("Gagal menghapus semua produk:", err);
-        showToast({ 
-          message: lang === "id" ? "Gagal menghapus semua produk." : "Failed to delete all products.", 
-          variant: "error" 
-        });
-      } finally {
-        setDeletingAll(false);
-      }
-    }
-  };
-
-  const handleSeedUMKMData = async () => {
-    const confirmMsg = lang === "id"
-      ? "Apakah Anda yakin ingin memuat data produk dummy khas UMKM Indonesia ke database Firestore?"
-      : "Are you sure you want to load Indonesian UMKM dummy product data into the Firestore database?";
-      
-    if (confirm(confirmMsg)) {
-      setSeedingDemo(true);
-      try {
-        const dummySeeds = [
-          {
-            itemName: "Bakso Sapi Urat Solo",
-            category: "Makanan",
-            price: 18000,
-            discountPercent: 10,
-            quantity: 50,
-            unit: "porsi",
-            available: true,
-            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/2/27/Bakso_Daging_Sapi.jpg",
-            detailImageUrls: [
-              "https://upload.wikimedia.org/wikipedia/commons/c/c1/Indonesian_bakso%2C_with_noodle_and_bean_sprouts%2C_April_2018_%2801%29.jpg",
-              "https://upload.wikimedia.org/wikipedia/commons/5/55/Bakso_khas_Solo.jpg"
-            ]
-          },
-          {
-            itemName: "Nasi Goreng Spesial UMKM",
-            category: "Makanan",
-            price: 15000,
-            discountPercent: 0,
-            quantity: 40,
-            unit: "porsi",
-            available: true,
-            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/9/9b/Nasi_goreng-1.JPG",
-            detailImageUrls: [
-              "https://upload.wikimedia.org/wikipedia/commons/8/8b/Nasi-Goreng.jpg",
-              "https://upload.wikimedia.org/wikipedia/commons/3/30/Nasi_goren_%28fried_rice%29_%288618224811%29.jpg"
-            ]
-          },
-          {
-            itemName: "Es Teh Manis Jumbo",
-            category: "Minuman",
-            price: 5000,
-            discountPercent: 0,
-            quantity: 100,
-            unit: "gelas",
-            available: true,
-            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/6/6b/ES_TEH_MANIS.jpg",
-            detailImageUrls: []
-          },
-          {
-            itemName: "Keripik Singkong Balado",
-            category: "Camilan",
-            price: 12000,
-            discountPercent: 15,
-            quantity: 30,
-            unit: "bungkus",
-            available: true,
-            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/8/84/Keripik_singkong_balado_cassava_chips.JPG",
-            detailImageUrls: [
-              "https://upload.wikimedia.org/wikipedia/commons/9/97/Keripik_Singkong_Pedas.jpg"
-            ]
-          },
-          {
-            itemName: "Es Jeruk Peras Segar",
-            category: "Minuman",
-            price: 7000,
-            discountPercent: 0,
-            quantity: 60,
-            unit: "gelas",
-            available: true,
-            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/6/66/Es_jeruk.jpg",
-            detailImageUrls: [
-              "https://upload.wikimedia.org/wikipedia/commons/4/4d/Es_Jeruk_Barokah.jpg"
-            ]
-          },
-          {
-            itemName: "Kerupuk Uyel Putih Kaleng",
-            category: "Camilan",
-            price: 2000,
-            discountPercent: 0,
-            quantity: 80,
-            unit: "pcs",
-            available: true,
-            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/f/fc/Kerupuk_putih.jpg",
-            detailImageUrls: [
-              "https://upload.wikimedia.org/wikipedia/commons/a/a1/Kroepoek.jpg"
-            ]
-          }
-        ];
-
-        await Promise.all(dummySeeds.map(payload => createItem(payload)));
-        
-        showToast({
-          message: lang === "id" ? "Berhasil memuat data produk UMKM!" : "Successfully seeded UMKM products data!",
-          variant: "success"
-        });
-        
-        await load();
-      } catch (err) {
-        console.error("Gagal melakukan seeding produk UMKM:", err);
-        showToast({
-          message: lang === "id" ? "Gagal memuat data produk UMKM." : "Failed to seed UMKM products.",
-          variant: "error"
-        });
-      } finally {
-        setSeedingDemo(false);
-      }
     }
   };
 
@@ -1083,39 +940,8 @@ export function ProductsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          {items.length > 0 && (
-            <button
-              type="button"
-              disabled={deletingAll || seedingDemo}
-              onClick={() => void handleDeleteAllProducts()}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 h-9 sm:h-10 px-2.5 sm:px-4 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-[11px] sm:text-xs font-bold text-white shadow-sm transition-all cursor-pointer whitespace-nowrap flex-nowrap"
-              title={lang === "id" ? "Hapus Semua Produk" : "Delete All Products"}
-            >
-              {deletingAll ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-              <span>{lang === "id" ? "Hapus Semua" : "Delete All"}</span>
-            </button>
-          )}
           <button
             type="button"
-            disabled={deletingAll || seedingDemo}
-            onClick={() => void handleSeedUMKMData()}
-            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 h-9 sm:h-10 px-2.5 sm:px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-[11px] sm:text-xs font-bold text-white shadow-sm transition-all cursor-pointer whitespace-nowrap flex-nowrap"
-            title={lang === "id" ? "Muat Data Dummy UMKM" : "Load UMKM Dummy Data"}
-          >
-            {seedingDemo ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            <span>{lang === "id" ? "Muat UMKM" : "Load UMKM"}</span>
-          </button>
-          <button
-            type="button"
-            disabled={deletingAll || seedingDemo}
             onClick={() => void openDrawer()}
             className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 h-9 sm:h-10 px-2.5 sm:px-4 rounded-lg bg-[#FBBF24] hover:bg-[#F59E0B] text-[11px] sm:text-xs font-bold text-[#111827] shadow-sm transition-all cursor-pointer whitespace-nowrap flex-nowrap"
           >

@@ -75,7 +75,7 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
   const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
 
   const [showStartForm, setShowStartForm] = useState(false);
-  const [duration, setDuration] = useState<number>(10);
+  const [duration, setDuration] = useState<number | "">("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -104,6 +104,10 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
       setCardError("Foto mulai memasak wajib diunggah.");
       return;
     }
+    if (!duration) {
+      setCardError("Estimasi waktu memasak wajib diisi.");
+      return;
+    }
     setUploading(true);
     setCardError(null);
     try {
@@ -111,7 +115,7 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
         orderId: order.id,
         onProgress: (p) => setUploadProgress(Math.round(p.fraction * 100)),
       });
-      await onStart(order, duration, result.fileId);
+      await onStart(order, duration as number, result.fileId);
       setShowStartForm(false);
       setPhotoFile(null);
       setPhotoPreview(null);
@@ -221,19 +225,19 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
                   <label className="block text-[11px] font-bold text-[#374151]">
                     Estimasi Waktu Memasak (Menit)
                   </label>
-                  <select
+                  <input
+                    type="number"
+                    min={1}
                     value={duration}
-                    onChange={(e) => setDuration(Number(e.target.value))}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setDuration(val === "" ? "" : Math.max(1, Number(val)));
+                    }}
                     title="Estimasi Waktu Memasak"
                     aria-label="Estimasi Waktu Memasak"
                     className="w-full bg-white border border-[#D1D5DB] rounded-lg px-2.5 py-1.5 text-xs font-medium text-[#111827] focus:outline-none focus:ring-2 focus:ring-amber-200"
-                  >
-                    <option value={5}>5 Menit</option>
-                    <option value={10}>10 Menit</option>
-                    <option value={15}>15 Menit</option>
-                    <option value={20}>20 Menit</option>
-                    <option value={30}>30 Menit</option>
-                  </select>
+                    placeholder="Contoh: 10"
+                  />
                 </div>
 
                 {/* Photo file picker - centered */}

@@ -1,10 +1,13 @@
-import { Search, LogOut, X, Settings } from "lucide-react";
-import { useState, type ChangeEvent, ReactNode } from "react";
+import { LogOut, Settings, Bell, Globe, HelpCircle } from "lucide-react";
+import { useState, useEffect, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { subscribeUnreadCount } from "@/services/notificationService";
 import { MobileNav } from "./MobileNav";
 import { Sidebar } from "./Sidebar";
 import { Footer } from "./Footer";
+import { ROLE_DEFAULT_REDIRECT } from "@/constants/roles";
 
 export interface AppShellProps {
   children: ReactNode;
@@ -22,7 +25,6 @@ export interface AppShellProps {
 
 export function AppShell({
   children,
-  pageTitle,
   searchValue,
   onSearchChange,
   searchPlaceholder = "Cari pesanan, kurir...",
@@ -31,15 +33,32 @@ export function AppShell({
   userRole,
   userPhotoUrl,
   onSignOut,
-  headerActions,
 }: AppShellProps) {
-  const { lang } = useLanguage();
+  const { lang, setLang } = useLanguage();
+  const { user } = useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [isLangOpen, setIsLangOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const handleSearch = (event: ChangeEvent<HTMLInputElement>) => {
-    onSearchChange?.(event.target.value);
+  useEffect(() => {
+    if (!user) {
+      setUnreadCount(0);
+      return;
+    }
+    const unsubscribe = subscribeUnreadCount(
+      user.uid,
+      (count) => setUnreadCount(count),
+      (err) => console.error("Failed to subscribe to unread count:", err)
+    );
+    return () => unsubscribe();
+  }, [user]);
+
+  const handleLangChange = (newLang: "id" | "en") => {
+    setLang(newLang);
+    localStorage.setItem("al-umana-lang", newLang);
+    setIsLangOpen(false);
   };
+
 
   const initial = (userName ?? userEmail ?? "?").charAt(0).toUpperCase();
   const roleBadge: Record<string, string> = {
@@ -64,144 +83,161 @@ export function AppShell({
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* ── Top header ─────────────────────────────────────────── */}
-        <header className="md:hidden sticky top-0 z-30 bg-white border-b border-[#E5E7EB]">
-
-          {/* Mobile search bar (full-width, shown on demand) */}
-          {isMobileSearchOpen && (
-            <div className="md:hidden flex items-center gap-2 px-4 py-2.5 border-b border-[#E5E7EB]">
-              <Search className="h-4 w-4 text-[#9CA3AF] shrink-0" aria-hidden="true" />
-              <input
-                type="search"
-                autoFocus
-                value={searchValue ?? ""}
-                onChange={handleSearch}
-                placeholder={searchPlaceholder}
-                className="flex-1 bg-transparent text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none font-['Hanken_Grotesk',system-ui,sans-serif]"
+        <header className="sticky top-0 z-30 bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-white shadow-md px-4 py-3 flex items-center justify-between gap-4 font-['Hanken_Grotesk',system-ui,sans-serif]">
+          {/* Left: Logo & Cooperative Name */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Link to={userRole ? (ROLE_DEFAULT_REDIRECT[userRole] ?? "/") : "/"} className="flex items-center gap-2">
+              <img
+                src="/logo.png"
+                alt="Al Umanaa"
+                className="h-9 w-9 object-contain bg-white rounded-full p-0.5 border border-amber-200 shrink-0"
               />
+              <span className="font-['Manrope',system-ui,sans-serif] text-sm md:text-base font-extrabold text-white tracking-wide">
+                Al-Umanaa <span className="font-light text-amber-100 text-xs">{lang === "id" ? "Koperasi" : "Cooperative"}</span>
+              </span>
+            </Link>
+          </div>
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2 md:gap-3 shrink-0">
+            {/* Tutorial Button */}
+            <Link
+              to="/help"
+              className="flex items-center gap-1.5 hover:bg-white/10 rounded-lg px-2.5 py-1.5 transition-colors text-white font-bold text-xs"
+              title={lang === "id" ? "Pusat Tutorial" : "Help Center"}
+            >
+              <HelpCircle className="h-4.5 w-4.5" />
+              <span className="hidden sm:inline">{lang === "id" ? "Tutorial" : "Tutorials"}</span>
+            </Link>
+
+            <span className="h-5 w-px bg-white/20 shrink-0 self-center" />
+
+            {/* Notification Bell */}
+            <Link
+              to="/notifications"
+              className="relative p-1.5 hover:bg-white/10 rounded-lg text-white transition-colors flex items-center justify-center"
+              title={lang === "id" ? "Notifikasi" : "Notifications"}
+            >
+              <Bell className="h-4.5 w-4.5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 bg-red-600 text-white text-[9px] font-bold h-4 min-w-4 px-1 rounded-full flex items-center justify-center border border-[#F59E0B] shadow-xs">
+                  {unreadCount}
+                </span>
+              )}
+            </Link>
+
+            <span className="h-5 w-px bg-white/20 shrink-0 self-center" />
+
+            {/* Language Switcher */}
+            <div className="relative flex items-center">
               <button
-                onClick={() => setIsMobileSearchOpen(false)}
-                aria-label="Tutup pencarian"
-                className="text-[#9CA3AF] hover:text-[#374151] cursor-pointer"
+                type="button"
+                onClick={() => {
+                  setIsLangOpen(!isLangOpen);
+                  setIsDropdownOpen(false);
+                }}
+                className="flex items-center gap-1 hover:bg-white/10 rounded-lg px-2.5 py-1.5 cursor-pointer focus:outline-none text-white text-xs font-bold"
+                aria-label="Pilih Bahasa"
+                title="Pilih Bahasa"
               >
-                <X className="h-5 w-5" />
+                <Globe className="h-4.5 w-4.5" />
+                <span className="hidden md:inline">{lang === "id" ? "ID" : "EN"}</span>
               </button>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between gap-3 px-4 md:px-6 py-3">
-            {/* Left: page title (mobile) / search (desktop) */}
-            <div className="flex-1 min-w-0">
-              {/* Desktop search */}
-              {onSearchChange && (
-                <label className="relative hidden md:block">
-                  <span className="sr-only">Cari</span>
-                  <Search
-                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]"
-                    aria-hidden="true"
-                  />
-                  <input
-                    type="search"
-                    value={searchValue ?? ""}
-                    onChange={handleSearch}
-                    placeholder={searchPlaceholder}
-                    className="w-full max-w-xs rounded-full border border-[#E5E7EB] bg-[#F9FAFB] pl-10 pr-4 py-2 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent font-['Hanken_Grotesk',system-ui,sans-serif] transition"
-                  />
-                </label>
-              )}
-
-              {/* Mobile: show page title */}
-              {pageTitle && (
-                <p className="md:hidden font-['Manrope',system-ui,sans-serif] text-base font-extrabold text-[#111827] truncate">
-                  {pageTitle}
-                </p>
+              {isLangOpen && (
+                <>
+                  <div className="fixed inset-0 z-40 cursor-default" onClick={() => setIsLangOpen(false)} />
+                  <div className="absolute right-0 mt-2 w-36 rounded-lg bg-white border border-[#E5E7EB] shadow-md py-1 z-50 text-neutral-800 font-sans text-xs">
+                    <button
+                      type="button"
+                      onClick={() => handleLangChange("id")}
+                      className={`w-full text-left px-3 py-2 hover:bg-[#F3F4F6] font-semibold cursor-pointer ${lang === "id" ? "text-[#F59E0B]" : ""}`}
+                    >
+                      Bahasa Indonesia
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLangChange("en")}
+                      className={`w-full text-left px-3 py-2 hover:bg-[#F3F4F6] font-semibold cursor-pointer ${lang === "en" ? "text-[#F59E0B]" : ""}`}
+                    >
+                      English
+                    </button>
+                  </div>
+                </>
               )}
             </div>
 
-            {/* Right: actions + search icon (mobile) + avatar */}
-            <div className="flex items-center gap-2 shrink-0">
-              {headerActions && (
-                <div className="hidden sm:flex items-center gap-2">{headerActions}</div>
-              )}
+            <span className="h-5 w-px bg-white/20 shrink-0 self-center" />
 
-              {/* Mobile search toggle */}
-              {onSearchChange && (
-                <button
-                  onClick={() => setIsMobileSearchOpen(true)}
-                  aria-label="Buka pencarian"
-                  className="md:hidden h-9 w-9 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#6B7280] cursor-pointer transition-colors"
-                >
-                  <Search className="h-5 w-5" />
-                </button>
-              )}
+            {/* User Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                id="profile-menu-button"
+                onClick={() => {
+                  setIsDropdownOpen(!isDropdownOpen);
+                  setIsLangOpen(false);
+                }}
+                className="h-8 w-8 rounded-full bg-white hover:bg-amber-50 flex items-center justify-center text-[#B45309] font-bold text-xs shrink-0 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:ring-offset-2 overflow-hidden border border-white/25"
+                aria-label={userName ? `Masuk sebagai ${userName}` : "Menu pengguna"}
+                title={userName ?? userEmail}
+              >
+                {userPhotoUrl ? (
+                  <img src={userPhotoUrl} alt="Avatar" className="h-full w-full object-cover" />
+                ) : (
+                  initial
+                )}
+              </button>
 
-              {/* Avatar + dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  id="profile-menu-button"
-                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className="h-9 w-9 rounded-full bg-[#FBBF24] hover:bg-[#F59E0B] flex items-center justify-center text-[#111827] font-bold text-sm shrink-0 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:ring-offset-2 overflow-hidden"
-                  aria-label={userName ? `Masuk sebagai ${userName}` : "Menu pengguna"}
-                  title={userName ?? userEmail}
-                >
-                  {userPhotoUrl ? (
-                    <img src={userPhotoUrl} alt="Avatar" className="h-full w-full object-cover" />
-                  ) : (
-                    initial
-                  )}
-                </button>
-
-                {isDropdownOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40 cursor-default"
-                      onClick={() => setIsDropdownOpen(false)}
-                    />
-                    <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-[#E5E7EB] shadow-xl py-2 z-50 font-['Hanken_Grotesk',system-ui,sans-serif]">
-                      <div className="px-4 py-3 border-b border-[#F3F4F6]">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-[#FBBF24] flex items-center justify-center text-sm font-bold text-[#111827] shrink-0 overflow-hidden">
-                            {userPhotoUrl ? (
-                              <img src={userPhotoUrl} alt="Avatar" className="h-full w-full object-cover" />
-                            ) : (
-                              initial
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-[#111827] truncate">{userName || "Pengguna"}</p>
-                            {userRole && (
-                              <span className="inline-block text-[10px] font-bold bg-[#F3F4F6] text-[#6B7280] rounded-full px-2 py-0.5 mt-0.5">
-                                {roleBadge[userRole] ?? userRole}
-                              </span>
-                            )}
-                          </div>
+              {isDropdownOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40 cursor-default"
+                    onClick={() => setIsDropdownOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-[#E5E7EB] shadow-xl py-2 z-50 font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-800">
+                    <div className="px-4 py-3 border-b border-[#F3F4F6]">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-full bg-[#FBBF24] flex items-center justify-center text-sm font-bold text-[#111827] shrink-0 overflow-hidden">
+                          {userPhotoUrl ? (
+                            <img src={userPhotoUrl} alt="Avatar" className="h-full w-full object-cover" />
+                          ) : (
+                            initial
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-[#111827] truncate">{userName || "Pengguna"}</p>
+                          {userRole && (
+                            <span className="inline-block text-[10px] font-bold bg-[#F3F4F6] text-[#6B7280] rounded-full px-2 py-0.5 mt-0.5">
+                              {roleBadge[userRole] ?? userRole}
+                            </span>
+                          )}
                         </div>
                       </div>
-
-                      <Link
-                        to="/admin/settings"
-                        onClick={() => setIsDropdownOpen(false)}
-                        className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-[#374151] hover:bg-[#F3F4F6] hover:text-[#111827] transition-colors border-b border-[#F3F4F6]"
-                      >
-                        <Settings className="h-4 w-4 text-[#6B7280]" />
-                        <span>{lang === "id" ? "Pengaturan" : "Settings"}</span>
-                      </Link>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsDropdownOpen(false);
-                          onSignOut?.();
-                        }}
-                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-[#DC2626] hover:bg-red-50 transition-colors text-left cursor-pointer mt-1"
-                      >
-                        <LogOut className="h-4 w-4" />
-                        {lang === "id" ? "Keluar" : "Sign Out"}
-                      </button>
                     </div>
-                  </>
-                )}
-              </div>
+
+                    <Link
+                      to="/admin/settings"
+                      onClick={() => setIsDropdownOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-[#374151] hover:bg-[#F3F4F6] hover:text-[#111827] transition-colors border-b border-[#F3F4F6]"
+                    >
+                      <Settings className="h-4 w-4 text-[#6B7280]" />
+                      <span>{lang === "id" ? "Pengaturan" : "Settings"}</span>
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsDropdownOpen(false);
+                        onSignOut?.();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-[#DC2626] hover:bg-red-50 transition-colors text-left cursor-pointer mt-1"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      {lang === "id" ? "Keluar" : "Sign Out"}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </header>

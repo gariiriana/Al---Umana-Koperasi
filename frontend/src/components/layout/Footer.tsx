@@ -33,7 +33,7 @@ export function Footer() {
   return (
     <footer className="bg-[#111827] text-[#9CA3AF] border-t border-[#1F2937] font-['Hanken_Grotesk',system-ui,sans-serif] pb-14 lg:pb-0">
       {/* Upper Footer: Links & Info */}
-      <div className="max-w-7xl mx-auto px-4 py-10 md:py-16 grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
+      <div className="hidden md:grid max-w-7xl mx-auto px-4 py-10 md:py-16 grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
         {/* Column 1: Brand & Motto */}
         <div className="space-y-4">
           <Link to="/" className="flex items-center gap-2.5">

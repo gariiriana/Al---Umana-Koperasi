@@ -140,7 +140,7 @@ interface StartDeliveryFormProps {
 }
 
 function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps) {
-  const [duration, setDuration] = useState<number>(20);
+  const [duration, setDuration] = useState<number | "">("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -169,6 +169,10 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
       setError("Foto mulai pengantaran wajib diunggah.");
       return;
     }
+    if (!duration) {
+      setError("Estimasi durasi perjalanan wajib diisi.");
+      return;
+    }
     setUploading(true);
     setError(null);
     try {
@@ -176,7 +180,7 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
         orderId: order.id,
         onProgress: (p) => setUploadProgress(Math.round(p.fraction * 100)),
       });
-      await onStart(duration, result.fileId);
+      await onStart(duration as number, result.fileId);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -213,21 +217,21 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
       {/* Estimasi durasi */}
       <div className="space-y-1">
         <label className="block text-[11px] font-bold text-[#374151]">
-          Estimasi Durasi Perjalanan
+          Estimasi Durasi Perjalanan (Menit)
         </label>
-        <select
+        <input
+          type="number"
+          min={1}
           value={duration}
-          onChange={(e) => setDuration(Number(e.target.value))}
+          onChange={(e) => {
+            const val = e.target.value;
+            setDuration(val === "" ? "" : Math.max(1, Number(val)));
+          }}
           title="Estimasi Durasi Perjalanan"
           aria-label="Estimasi Durasi Perjalanan"
           className="w-full bg-white border border-[#D1D5DB] rounded-lg px-2.5 py-1.5 text-xs font-medium text-[#111827] focus:outline-none focus:ring-2 focus:ring-orange-200"
-        >
-          <option value={10}>10 Menit</option>
-          <option value={20}>20 Menit</option>
-          <option value={30}>30 Menit</option>
-          <option value={45}>45 Menit</option>
-          <option value={60}>60 Menit</option>
-        </select>
+          placeholder="Contoh: 20"
+        />
       </div>
 
       {/* Foto mulai pengantaran - centered file button */}

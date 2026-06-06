@@ -317,9 +317,9 @@ export function DeliverySchedulerPage() {
                   type="submit"
                   variant="primary"
                   loading={assigning}
+                  leftIcon={<Check className="w-4 h-4" />}
                   className="w-full py-2.5 bg-[#D97706] hover:bg-[#B45309] text-white border-none rounded-xl font-bold shadow-md shadow-amber-700/10 flex items-center justify-center gap-2"
                 >
-                  <Check className="w-4 h-4" />
                   Tugaskan Sekarang
                 </Button>
               </form>
