@@ -15,6 +15,9 @@ import {
   User,
   LayoutDashboard,
   FileText,
+  Factory,
+  Truck,
+  Package,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -729,7 +732,54 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                             <User className="h-4 w-4 text-neutral-500" />
                             <span>{t.myAccount}</span>
                           </Link>
-                          {profile && ["admin", "monitoring", "tim_produksi", "distribusi", "kurir"].includes(profile.role) && (
+                          {profile?.role === "admin" && (
+                            <>
+                              <div className="px-4 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-neutral-100">
+                                {lang === "id" ? "Akses Peran" : "Role Access"}
+                              </div>
+                              <Link
+                                to="/admin/dashboard"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-amber-700 border-b border-neutral-100"
+                              >
+                                <LayoutDashboard className="h-4 w-4 text-amber-500" />
+                                <span>{lang === "id" ? "Fitur Monitoring" : "Monitoring Features"}</span>
+                              </Link>
+                              <Link
+                                to="/admin/production"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-emerald-700 border-b border-neutral-100"
+                              >
+                                <Factory className="h-4 w-4 text-emerald-500" />
+                                <span>{lang === "id" ? "Fitur Tim Produksi" : "Production Features"}</span>
+                              </Link>
+                              <Link
+                                to="/distribusi/dispatch"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-blue-700 border-b border-neutral-100"
+                              >
+                                <Truck className="h-4 w-4 text-blue-500" />
+                                <span>{lang === "id" ? "Fitur Distribusi" : "Distribution Features"}</span>
+                              </Link>
+                              <Link
+                                to="/distribusi/delivery"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-indigo-700 border-b border-neutral-100"
+                              >
+                                <Package className="h-4 w-4 text-indigo-500" />
+                                <span>{lang === "id" ? "Fitur Kurir" : "Courier Features"}</span>
+                              </Link>
+                              <Link
+                                to="/admin/settings"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-violet-700 border-b border-neutral-100"
+                              >
+                                <Settings className="h-4 w-4 text-violet-500" />
+                                <span>{lang === "id" ? "Pengaturan" : "Settings"}</span>
+                              </Link>
+                            </>
+                          )}
+                          {profile && profile.role !== "admin" && ["monitoring", "tim_produksi", "distribusi", "kurir"].includes(profile.role) && (
                             <>
                               {["tim_produksi", "distribusi", "kurir"].includes(profile.role) && (
                                 <Link
@@ -741,16 +791,14 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                                   <span>{t.adminPanel}</span>
                                 </Link>
                               )}
-                              {profile.role !== "admin" && (
-                                <Link
-                                  to="/admin/settings"
-                                  onClick={() => setIsProfileOpen(false)}
-                                  className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-violet-700 border-t border-neutral-100"
-                                >
-                                  <Settings className="h-4 w-4 text-violet-500" />
-                                  <span>{lang === "id" ? "Pengaturan" : "Settings"}</span>
-                                </Link>
-                              )}
+                              <Link
+                                to="/admin/settings"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-violet-700 border-t border-neutral-100"
+                              >
+                                <Settings className="h-4 w-4 text-violet-500" />
+                                <span>{lang === "id" ? "Pengaturan" : "Settings"}</span>
+                              </Link>
                             </>
                           )}
                           <button

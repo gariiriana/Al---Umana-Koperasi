@@ -41,6 +41,7 @@ export interface MobileNavProps {
 export function MobileNav({ userRole }: MobileNavProps) {
   let allowedItems = MOBILE_NAV_ITEMS.filter((item) => {
     if (!userRole) return false;
+    if (userRole === "admin") return true;
     const allowedPaths = ROLE_PERMISSIONS[userRole] || [];
     return allowedPaths.includes(item.to);
   });

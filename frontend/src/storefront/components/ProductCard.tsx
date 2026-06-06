@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ImageOff, ShoppingCart } from "lucide-react";
 
 import { useLanguage } from "@/contexts/LanguageContext";
-import { formatIDR, truncate } from "@/lib/format";
+import { truncate } from "@/lib/format";
 import type { InventoryItem } from "@/types/inventory";
 import { ProductImage } from "@/components/ProductImage";
 import { useAuth } from "@/contexts/AuthContext";
@@ -53,7 +53,6 @@ export function ProductCard({ item, className }: ProductCardProps) {
   const cartBtnRef = useRef<HTMLButtonElement | null>(null);
 
   const inStock = item.available && item.quantity > 0;
-  const discountPercent = item.discountPercent ?? 0;
   const baseSales = (item.price % 97) + 5;
   const salesText = lang === "en" ? `${baseSales} sold` : `${baseSales} terjual`;
 
@@ -189,19 +188,6 @@ export function ProductCard({ item, className }: ProductCardProps) {
           )}
         </div>
 
-        {/* Discount Badge Overlay */}
-        {discountPercent > 0 && (
-          <span className="absolute top-0 right-0 bg-[#FFEAEB] text-[#EE4D2D] text-[10px] font-black px-2 py-1 rounded-bl-xl border-l border-b border-[#FEE2E2] z-10">
-            -{discountPercent}%
-          </span>
-        )}
-
-        {/* Promo Xtra Yellow Tag Overlay */}
-        {discountPercent > 0 && (
-          <span className="bg-[#FFD400] text-[#D0011B] text-[8px] font-black px-1.5 py-0.5 rounded-tr-md absolute bottom-0 left-0 shadow-sm uppercase tracking-wider z-10">
-            Promo Xtra
-          </span>
-        )}
       </div>
 
       {/* Product Details */}
@@ -213,18 +199,6 @@ export function ProductCard({ item, className }: ProductCardProps) {
           >
             {truncate(item.itemName, 80)}
           </h3>
-        </div>
-
-        {/* Price Block (Standalone row to prevent truncation) */}
-        <div className="flex flex-col min-w-0 pt-0.5">
-          {discountPercent > 0 && (
-            <span className="text-[10px] text-neutral-400 line-through leading-tight">
-              {formatIDR(Math.round(item.price / (1 - discountPercent / 100)))}
-            </span>
-          )}
-          <span className="text-sm font-extrabold text-[#EE4D2D] leading-tight">
-            {formatIDR(item.price)}
-          </span>
         </div>
 
         {/* Action Buttons (Full-width row) */}

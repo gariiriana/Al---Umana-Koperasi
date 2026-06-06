@@ -1300,12 +1300,20 @@ export function CheckoutWizard() {
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-bold text-[#111827] leading-snug truncate">{item.itemName}</p>
                                 <div className="flex items-center justify-between mt-0.5">
-                                  <span className="text-[11px] text-[#6B7280]">
-                                    {formatIDR(item.unitPrice)} × {item.quantity}
-                                  </span>
-                                  <span className="text-xs font-bold text-[#111827]">
-                                    {formatIDR(item.unitPrice * item.quantity)}
-                                  </span>
+                                  {isAdmin ? (
+                                    <>
+                                      <span className="text-[11px] text-[#6B7280]">
+                                        {formatIDR(item.unitPrice)} × {item.quantity}
+                                      </span>
+                                      <span className="text-xs font-bold text-[#111827]">
+                                        {formatIDR(item.unitPrice * item.quantity)}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="text-[11px] text-[#6B7280]">
+                                      {item.quantity} {lang === "en" ? "item(s)" : "pcs"}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1335,10 +1343,12 @@ export function CheckoutWizard() {
                         ))}
                       </div>
 
-                      <div className="flex items-center justify-between pt-2 border-t border-neutral-100">
-                        <span className="text-xs font-semibold text-[#6B7280]">{lang === "en" ? "Subtotal" : "Subtotal"}</span>
-                        <span className="text-sm font-extrabold text-[#111827]">{formatIDR(subtotal)}</span>
-                      </div>
+                      {isAdmin && (
+                        <div className="flex items-center justify-between pt-2 border-t border-neutral-100">
+                          <span className="text-xs font-semibold text-[#6B7280]">{lang === "en" ? "Subtotal" : "Subtotal"}</span>
+                          <span className="text-sm font-extrabold text-[#111827]">{formatIDR(subtotal)}</span>
+                        </div>
+                      )}
                     </div>
 
                   {addressError && (
@@ -1467,7 +1477,36 @@ export function CheckoutWizard() {
                       {t.instructionTitle}
                     </h4>
                     <div className="text-xs text-[#4B5563] font-['Hanken_Grotesk',system-ui,sans-serif] space-y-2 leading-relaxed">
-                      {paymentMethod === "bank_transfer" ? (
+                      {!isAdmin ? (
+                        <>
+                          <p className="font-semibold text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                            {lang === "en" 
+                              ? "The final price for this order will be determined by the Admin. You will be notified once the Admin inputs the final price, and you can upload the payment proof afterwards." 
+                              : "Harga final untuk pesanan ini akan ditentukan oleh Admin. Anda akan menerima notifikasi setelah Admin memasukkan harga final, dan Anda dapat mengunggah bukti transfer setelahnya."}
+                          </p>
+                          {paymentMethod === "bank_transfer" ? (
+                            <p>
+                              {lang === "en" ? "Cooperative bank account for transfer:" : "Rekening transfer bank koperasi:"}
+                              <br />
+                              🏦 **{t.instructionBankTitle}**
+                              <br />
+                              {lang === "en" ? "Account:" : "Rekening:"} **123-456-7890**
+                              <br />
+                              {lang === "en" ? "Account Holder:" : "Atas Nama:"} **{t.bankName}**
+                            </p>
+                          ) : (
+                            <p>
+                              {lang === "en" ? "Cooperative E-Wallet for transfer:" : "E-Wallet transfer koperasi:"}
+                              <br />
+                              📱 **{t.instructionEwalletTitle}**
+                              <br />
+                              {lang === "en" ? "Number:" : "Nomor:"} **0812-3456-7890**
+                              <br />
+                              {lang === "en" ? "Account Holder:" : "Atas Nama:"} **{t.bankName}**
+                            </p>
+                          )}
+                        </>
+                      ) : paymentMethod === "bank_transfer" ? (
                         <p>
                           {lang === "en" ? "Please transfer the total payment of" : "Silakan transfer total pembayaran sebesar"} **{formatIDR(grandTotal)}** {lang === "en" ? "to the cooperative bank account:" : "ke rekening koperasi:"}
                           <br />
@@ -1488,38 +1527,42 @@ export function CheckoutWizard() {
                           {lang === "en" ? "Account Holder:" : "Atas Nama:"} **{t.bankName}**
                         </p>
                       )}
-                      <p className="text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
-                        {t.instructionAlert}
-                      </p>
+                      {isAdmin && (
+                        <p className="text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                          {t.instructionAlert}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
 
                 {/* Billing Summary */}
-                <div className="bg-white rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-3">
-                  <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
-                    {t.costSummary}
-                  </h3>
-                  <div className="space-y-2 text-xs font-['Hanken_Grotesk',system-ui,sans-serif] text-[#6B7280]">
-                    <div className="flex justify-between">
-                      <span>{t.productSubtotal}</span>
-                      <span className="font-semibold text-[#111827]">{formatIDR(subtotal)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>{t.shippingFee}</span>
-                      <span className="font-semibold text-[#111827]">{formatIDR(DELIVERY_FEE)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>{t.serviceFee}</span>
-                      <span className="font-semibold text-[#111827]">{formatIDR(SERVICE_FEE)}</span>
-                    </div>
-                    <hr className="border-[#F3F4F6] pt-1" />
-                    <div className="flex justify-between text-sm font-bold text-[#111827] font-['Manrope',system-ui,sans-serif]">
-                      <span>{t.totalPayment}</span>
-                      <span className="text-base font-extrabold text-[#111827]">{formatIDR(grandTotal)}</span>
+                {isAdmin && (
+                  <div className="bg-white rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-3">
+                    <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
+                      {t.costSummary}
+                    </h3>
+                    <div className="space-y-2 text-xs font-['Hanken_Grotesk',system-ui,sans-serif] text-[#6B7280]">
+                      <div className="flex justify-between">
+                        <span>{t.productSubtotal}</span>
+                        <span className="font-semibold text-[#111827]">{formatIDR(subtotal)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>{t.shippingFee}</span>
+                        <span className="font-semibold text-[#111827]">{formatIDR(DELIVERY_FEE)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>{t.serviceFee}</span>
+                        <span className="font-semibold text-[#111827]">{formatIDR(SERVICE_FEE)}</span>
+                      </div>
+                      <hr className="border-[#F3F4F6] pt-1" />
+                      <div className="flex justify-between text-sm font-bold text-[#111827] font-['Manrope',system-ui,sans-serif]">
+                        <span>{t.totalPayment}</span>
+                        <span className="text-base font-extrabold text-[#111827]">{formatIDR(grandTotal)}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {submitError && (
                   <div className="bg-red-50 border border-red-200 text-red-900 p-4 rounded-2xl text-xs space-y-2 font-['Hanken_Grotesk',system-ui,sans-serif]">
@@ -1548,7 +1591,7 @@ export function CheckoutWizard() {
                     </>
                   ) : (
                     <>
-                      {t.placeOrder} ({formatIDR(grandTotal)})
+                      {isAdmin ? `${t.placeOrder} (${formatIDR(grandTotal)})` : t.placeOrder}
                     </>
                   )}
                 </button>

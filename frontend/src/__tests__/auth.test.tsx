@@ -402,11 +402,15 @@ describe("Authentication UI Features", () => {
         expect(document.querySelector('a[href="/distribusi/delivery"]')).toBeNull();
       });
 
-      // Open profile dropdown to check Settings link
+      // Open profile dropdown to check Settings and other role links
       const profileBtn = document.getElementById("profile-menu-button");
       expect(profileBtn).not.toBeNull();
       fireEvent.click(profileBtn!);
-      expect(document.querySelector('a[href="/admin/settings"]')).toBeNull();
+      expect(document.querySelector('a[href="/admin/settings"]')).not.toBeNull();
+      expect(document.querySelector('a[href="/admin/dashboard"]')).not.toBeNull();
+      expect(document.querySelector('a[href="/admin/production"]')).not.toBeNull();
+      expect(document.querySelector('a[href="/distribusi/dispatch"]')).not.toBeNull();
+      expect(document.querySelector('a[href="/distribusi/delivery"]')).not.toBeNull();
       expect(document.querySelector('a[href="/orders"]')).toBeNull();
     });
   });

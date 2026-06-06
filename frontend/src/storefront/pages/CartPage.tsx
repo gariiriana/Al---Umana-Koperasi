@@ -11,10 +11,9 @@ import {
   subscribeToCart,
   setLineQuantity,
   removeLineItem,
-  computeCartTotal,
   CartLineItem,
 } from "@/services/cartService";
-import { formatIDR } from "@/lib/format";
+
 
 const DICTIONARY = {
   id: {
@@ -189,8 +188,7 @@ export function CartPage() {
     );
   }
 
-  const selectedItems = items.filter((item) => selectedItemIds.has(item.itemId));
-  const grandTotal = computeCartTotal(selectedItems);
+
 
   return (
     <div className="bg-[#F3F4F6] min-h-screen pb-32">
@@ -316,12 +314,7 @@ export function CartPage() {
 
                   {/* Price & Quantity Stepper */}
                   <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">{t.unitPrice}</p>
-                      <p className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
-                        {formatIDR(item.unitPrice)}
-                      </p>
-                    </div>
+
 
                     {/* Quantity Stepper */}
                     <div className="flex items-center gap-2 bg-[#F3F4F6] rounded-full p-1 border border-[#E5E7EB]">
@@ -347,13 +340,7 @@ export function CartPage() {
                     </div>
                   </div>
 
-                  {/* Subtotal */}
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-[#F3F4F6]">
-                    <span className="text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">{t.subtotal}</span>
-                    <span className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">
-                      {formatIDR(item.unitPrice * item.quantity)}
-                    </span>
-                  </div>
+
 
 
                 </div>
@@ -362,14 +349,8 @@ export function CartPage() {
           </div>
 
           {/* Sticky Summary & Checkout Footer */}
-          <div className="bg-white border-t border-[#E5E7EB] fixed bottom-14 lg:bottom-0 left-0 right-0 p-4 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] max-w-[480px] lg:max-w-7xl mx-auto z-10 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">{t.totalPayment}</p>
-                <p className="font-['Manrope',system-ui,sans-serif] text-lg font-black text-[#111827]">
-                  {formatIDR(grandTotal)}
-                </p>
-              </div>
+          <div className="bg-white border-t border-[#E5E7EB] fixed bottom-14 lg:bottom-0 left-0 right-0 p-4 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] max-w-[480px] lg:max-w-7xl mx-auto z-10">
+            <div className="flex items-center justify-end">
               <button
                 onClick={() => {
                   if (selectedItemIds.size === 0) return;
@@ -378,7 +359,7 @@ export function CartPage() {
                   });
                 }}
                 disabled={selectedItemIds.size === 0}
-                className="inline-flex items-center gap-2 min-h-12 px-6 rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-extrabold text-[#111827] shadow-md transition-all cursor-pointer disabled:bg-[#E5E7EB] disabled:text-[#9CA3AF] disabled:cursor-not-allowed"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-12 px-6 rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-extrabold text-[#111827] shadow-md transition-all cursor-pointer disabled:bg-[#E5E7EB] disabled:text-[#9CA3AF] disabled:cursor-not-allowed"
               >
                 {t.proceedToAddress}
                 <ArrowRight className="h-4 w-4" />

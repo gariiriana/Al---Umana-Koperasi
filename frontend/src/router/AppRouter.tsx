@@ -143,7 +143,7 @@ function ShelledRoute({
   }
 
   // Redirect to respective default landing page if role is not allowed
-  if (profile && !allowedRoles.includes(profile.role)) {
+  if (profile && profile.role !== "admin" && !allowedRoles.includes(profile.role)) {
     // Admin-only routes (those that allow ONLY the admin role) show the
     // "Akses Ditolak" screen for non-admins and redirect to the storefront
     // homepage within 3 seconds (Requirements 16.3, 16.5).
@@ -158,10 +158,26 @@ function ShelledRoute({
   }
 
   if (profile.role === "admin") {
+    // If the page is originally designed to allow the admin role, render inside StorefrontLayout
+    if (allowedRoles.includes("admin")) {
+      return (
+        <StorefrontLayout>
+          {children}
+        </StorefrontLayout>
+      );
+    }
+    // Otherwise, render it inside the AppShell so the admin gets the sidebars and headers for the role
     return (
-      <StorefrontLayout>
+      <AppShell
+        pageTitle={pageTitle}
+        userName={profile?.displayName ?? user?.displayName ?? undefined}
+        userEmail={user?.email ?? undefined}
+        userRole={profile?.role}
+        userPhotoUrl={profile?.photoURL ?? user?.photoURL ?? undefined}
+        onSignOut={requestSignOut}
+      >
         {children}
-      </StorefrontLayout>
+      </AppShell>
     );
   }
 
@@ -208,7 +224,7 @@ export function StorefrontProtectedRoute({
     );
   }
 
-  if (!allowedRoles.includes(profile.role)) {
+  if (profile.role !== "admin" && !allowedRoles.includes(profile.role)) {
     const isAdminOnlyRoute =
       allowedRoles.length === 1 && allowedRoles[0] === "admin";
     if (isAdminOnlyRoute) {

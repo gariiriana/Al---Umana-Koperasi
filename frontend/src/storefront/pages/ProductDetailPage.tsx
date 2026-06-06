@@ -18,7 +18,6 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getProduct } from "@/services/catalogService";
 import { addToCart, type CartLineItem } from "@/services/cartService";
-import { formatIDR } from "@/lib/format";
 import { ProductImage } from "@/components/ProductImage";
 import type { InventoryItem } from "@/types/inventory";
 import { useCartAnimation } from "@/contexts/useCartAnimation";
@@ -252,7 +251,7 @@ export function ProductDetailPage() {
 
   const { product } = state;
   const inStock = product.available && product.quantity > 0;
-  const totalPrice = product.price * qty;
+
 
   const images: string[] = [];
   if (product.imageUrl) images.push(product.imageUrl);
@@ -355,25 +354,7 @@ export function ProductDetailPage() {
               {product.itemName}
             </h2>
 
-            {/* Price block */}
-            <div className="pt-1 flex flex-col gap-1">
-              {product.discountPercent && product.discountPercent > 0 ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-neutral-400 line-through">
-                    {formatIDR(Math.round(product.price / (1 - product.discountPercent / 100)))}
-                  </span>
-                  <span className="bg-[#FFEAEB] text-[#EE4D2D] text-xs font-black px-2 py-0.5 rounded-md animate-pulse">
-                    -{product.discountPercent}%
-                  </span>
-                </div>
-              ) : null}
-              <p className="font-['Manrope',system-ui,sans-serif] text-3xl font-black text-[#B45309]">
-                {formatIDR(product.price)}
-                <span className="text-sm font-semibold text-[#6B7280] ml-1">
-                  / {translateUnit(product.unit, lang)}
-                </span>
-              </p>
-            </div>
+
           </div>
 
           {/* Divider */}
@@ -439,13 +420,6 @@ export function ProductDetailPage() {
                 </span>
               </div>
 
-              {/* Subtotal */}
-              <div className="flex items-center justify-between text-sm py-2 border-t border-[#F3F4F6]">
-                <span className="text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">{t.subtotal}</span>
-                <span className="font-['Manrope',system-ui,sans-serif] font-black text-[#111827] text-lg">
-                  {formatIDR(totalPrice)}
-                </span>
-              </div>
             </div>
           ) : (
             <div className="mx-4 mt-3 lg:mx-0 bg-white rounded-2xl p-4 text-center">
@@ -508,7 +482,7 @@ export function ProductDetailPage() {
                 </>
               ) : (
                 <>
-                  {t.buyNow} — {formatIDR(totalPrice)}
+                  {t.buyNow}
                 </>
               )}
             </button>
