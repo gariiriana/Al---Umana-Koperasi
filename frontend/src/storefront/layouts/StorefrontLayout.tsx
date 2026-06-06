@@ -18,6 +18,7 @@ import {
   Factory,
   Truck,
   Package,
+  Calendar,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -760,6 +761,14 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                               >
                                 <Truck className="h-4 w-4 text-blue-500" />
                                 <span>{lang === "id" ? "Fitur Distribusi" : "Distribution Features"}</span>
+                              </Link>
+                              <Link
+                                to="/distribusi/scheduler"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-sky-700 border-b border-neutral-100"
+                              >
+                                <Calendar className="h-4 w-4 text-sky-500" />
+                                <span>{lang === "id" ? "Fitur Penjadwal Pengiriman" : "Delivery Scheduler"}</span>
                               </Link>
                               <Link
                                 to="/distribusi/delivery"

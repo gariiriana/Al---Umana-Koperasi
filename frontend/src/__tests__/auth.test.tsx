@@ -410,6 +410,7 @@ describe("Authentication UI Features", () => {
       expect(document.querySelector('a[href="/admin/dashboard"]')).not.toBeNull();
       expect(document.querySelector('a[href="/admin/production"]')).not.toBeNull();
       expect(document.querySelector('a[href="/distribusi/dispatch"]')).not.toBeNull();
+      expect(document.querySelector('a[href="/distribusi/scheduler"]')).not.toBeNull();
       expect(document.querySelector('a[href="/distribusi/delivery"]')).not.toBeNull();
       expect(document.querySelector('a[href="/orders"]')).toBeNull();
     });
