@@ -243,8 +243,8 @@ export function AppShell({
         </header>
 
         {/* ── Main content ───────────────────────────────────────── */}
-        <main className="flex-1 overflow-y-auto bg-[#F3F4F6] pb-24 md:pb-0 flex flex-col justify-between">
-          <div className="px-4 md:px-6 py-5">{children}</div>
+        <main className="flex-1 overflow-y-auto bg-[#F3F4F6] pb-24 md:pb-0 flex flex-col justify-between min-w-0 w-full">
+          <div className="px-4 md:px-6 py-5 w-full min-w-0">{children}</div>
           <Footer />
         </main>
       </div>

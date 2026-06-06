@@ -898,15 +898,15 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
         </header>
 
         {/* ── MAIN CONTENT AREA ────────────────────────────────────── */}
-        <div className="flex flex-col min-h-screen">
+        <div className="flex flex-col min-h-screen min-w-0 w-full">
           <main
             className={
-              "flex-1 pb-20 lg:pb-8 w-full " +
+              "flex-1 pb-20 lg:pb-8 w-full min-w-0 " +
               "font-['Hanken_Grotesk',system-ui,sans-serif] text-[#111827]"
             }
           >
             {/* Content wrapper: full width on desktop, capped for readability */}
-            <div className="w-full max-w-7xl mx-auto">
+            <div className="w-full max-w-7xl mx-auto min-w-0">
               {children}
             </div>
           </main>

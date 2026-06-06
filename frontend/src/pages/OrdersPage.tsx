@@ -824,20 +824,20 @@ export function OrdersPage() {
         </div>
       </Card>
 
-      {/* Desktop Table View (hidden on mobile, visible on md+) */}
-      <div className="hidden md:block">
+      {/* Desktop Table View (hidden on mobile/tablet, visible on xl+) */}
+      <div className="hidden xl:block">
         <Card className="!p-0 overflow-hidden border border-[#E5E7EB] rounded-2xl shadow-sm bg-white">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto w-full">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB] text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">
-                  <th className="py-4 px-6">ID / Tipe</th>
-                  <th className="py-4 px-6">Instansi & Penerima</th>
-                  <th className="py-4 px-6">Detail Pesanan & Harga</th>
-                  <th className="py-4 px-6">Waktu Input & Acara / Tempo</th>
-                  <th className="py-4 px-6">Status Operasional</th>
-                  <th className="py-4 px-6">Status Pembayaran</th>
-                  <th className="py-4 px-6 text-center">Aksi</th>
+                  <th className="py-4 px-4 whitespace-nowrap">ID / Tipe</th>
+                  <th className="py-4 px-4">Instansi & Penerima</th>
+                  <th className="py-4 px-4">Detail Pesanan & Harga</th>
+                  <th className="py-4 px-4 whitespace-nowrap">Waktu Input & Acara / Tempo</th>
+                  <th className="py-4 px-4 whitespace-nowrap">Status Operasional</th>
+                  <th className="py-4 px-4 whitespace-nowrap">Status Pembayaran</th>
+                  <th className="py-4 px-4 text-center whitespace-nowrap">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E5E7EB] text-sm text-[#374151]">
@@ -850,24 +850,26 @@ export function OrdersPage() {
                   return (
                     <tr key={o.id} className="hover:bg-neutral-50/50 transition-colors">
                       {/* ID / Tipe */}
-                      <td className="py-4 px-6 font-['Hanken_Grotesk']">
-                        <button
-                          type="button"
-                          onClick={() => setPreviewInvoiceOrder(o)}
-                          className="font-mono font-bold text-blue-600 hover:text-blue-800 hover:underline text-left cursor-pointer focus:outline-none"
-                          title="Lihat Detail Pesanan"
-                        >
-                          #{shortId}
-                        </button>
-                        <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                          o.orderType === "event" ? "bg-purple-100 text-purple-700" : "bg-cyan-100 text-cyan-700"
-                        }`}>
-                          {o.orderType}
-                        </span>
+                      <td className="py-4 px-4 font-['Hanken_Grotesk'] whitespace-nowrap">
+                        <div className="flex flex-col items-start">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewInvoiceOrder(o)}
+                            className="font-mono font-bold text-blue-600 hover:text-blue-800 hover:underline text-left cursor-pointer focus:outline-none"
+                            title="Lihat Detail Pesanan"
+                          >
+                            #{shortId}
+                          </button>
+                          <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                            o.orderType === "event" ? "bg-purple-100 text-purple-700" : "bg-cyan-100 text-cyan-700"
+                          }`}>
+                            {o.orderType}
+                          </span>
+                        </div>
                       </td>
 
                       {/* Instansi & Penerima */}
-                      <td className="py-4 px-6">
+                      <td className="py-4 px-4">
                         <div className="font-bold text-[#111827]">{o.institutionName}</div>
                         <div className="text-xs text-[#6B7280] flex items-center gap-1.5 mt-1 font-medium">
                           <User className="w-3.5 h-3.5 text-[#9CA3AF]" />
@@ -880,12 +882,12 @@ export function OrdersPage() {
                       </td>
 
                       {/* Detail Pesanan & Harga */}
-                      <td className="py-4 px-6">
-                        <div className="text-xs max-w-xs truncate text-[#4B5563]" title={o.foodDetails}>
+                      <td className="py-4 px-4">
+                        <div className="text-xs max-w-[180px] truncate text-[#4B5563]" title={o.foodDetails}>
                           {o.foodDetails}
                         </div>
                         {o.drinkDetails && (
-                          <div className="text-[11px] text-[#6B7280] italic truncate mt-0.5" title={o.drinkDetails}>
+                          <div className="text-[11px] text-[#6B7280] italic truncate mt-0.5 max-w-[180px]" title={o.drinkDetails}>
                             Minuman: {o.drinkDetails}
                           </div>
                         )}
@@ -895,7 +897,7 @@ export function OrdersPage() {
                       </td>
 
                       {/* Tanggal Acara / Jatuh Tempo */}
-                      <td className="py-4 px-6">
+                      <td className="py-4 px-4 whitespace-nowrap">
                         <div className="text-[11px] text-[#6B7280] font-semibold mb-1">
                           Input: {new Date(o.createdAt).toLocaleString("id-ID", {
                             day: "2-digit",
@@ -907,24 +909,24 @@ export function OrdersPage() {
                         </div>
                         <div className="flex items-center gap-1 text-xs text-[#374151]">
                           <Calendar className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
-                          Acara: {new Date(o.eventDate).toLocaleDateString("id-ID")}
+                          <span>Acara: {new Date(o.eventDate).toLocaleDateString("id-ID")}</span>
                         </div>
                         <div className={`flex items-center gap-1 text-xs font-semibold mt-1.5 ${
                           dueInfo.isOverdue ? "text-[#EF4444]" : dueInfo.isWarning ? "text-[#F59E0B]" : "text-[#6B7280]"
                         }`}>
                           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                          Tempo: {new Date(o.paymentDueDate).toLocaleDateString("id-ID")}
+                          <span>Tempo: {new Date(o.paymentDueDate).toLocaleDateString("id-ID")}</span>
                           {dueInfo.isOverdue && <span className="text-[9px] font-extrabold bg-red-100 text-red-700 px-1.5 py-0.5 rounded ml-1 uppercase">Overdue</span>}
                         </div>
                       </td>
 
                       {/* Status Operasional */}
-                      <td className="py-4 px-6">
+                      <td className="py-4 px-4 whitespace-nowrap">
                         <StatusBadge status={o.status} />
                       </td>
 
                       {/* Status Pembayaran */}
-                      <td className="py-4 px-6">
+                      <td className="py-4 px-4 whitespace-nowrap">
                         {isMonitoring ? (
                           <span
                             className={`inline-block text-xs font-bold rounded-lg px-2.5 py-1.5 border ${
@@ -989,7 +991,7 @@ export function OrdersPage() {
                       </td>
 
                       {/* Aksi */}
-                      <td className="py-4 px-6 text-center">
+                      <td className="py-4 px-4 text-center whitespace-nowrap">
                         <div className="flex flex-col gap-1.5 items-center justify-center">
                           {/* Status Transition buttons */}
                           {!isMonitoring && o.status === "PENDING" && (
@@ -1096,8 +1098,12 @@ export function OrdersPage() {
         </Card>
       </div>
 
-      {/* Mobile Card List View (visible on mobile, hidden on md+) */}
-      <div className={`md:hidden ${isMonitoring ? "grid grid-cols-2 gap-3" : "space-y-4"}`}>
+      {/* Mobile Card List View (visible on mobile/tablet, hidden on xl+) */}
+      <div className={`xl:hidden ${
+        isMonitoring 
+          ? "grid grid-cols-2 md:grid-cols-3 gap-3" 
+          : "grid grid-cols-1 md:grid-cols-2 gap-4"
+      }`}>
         {filteredOrders.length === 0 ? (
           <div className="col-span-full py-12 text-center text-sm text-[#6B7280] font-['Hanken_Grotesk'] bg-white rounded-2xl border border-[#E5E7EB]">
             Tidak ada pesanan ditemukan.

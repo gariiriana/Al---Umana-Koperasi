@@ -5,12 +5,14 @@ import {
   Routes,
   useLocation,
 } from "react-router-dom";
-import { lazy, Suspense, type ReactNode } from "react";
+import { lazy, Suspense, type ReactNode, useState, useEffect } from "react";
 
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppShell } from "@/components/layout/AppShell";
 import { AdminAccessDenied } from "@/components/layout/AdminAccessDenied";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
+import { OfflineScreen } from "@/components/ui/OfflineScreen";
 import {
   ROLE_DEFAULT_REDIRECT,
 } from "@/constants/roles";
@@ -44,6 +46,7 @@ const OrderConfirmationPage = lazy(() => import("@/storefront/pages/checkout/Ord
 const NotificationsPage = lazy(() => import("@/storefront/pages/NotificationsPage").then(module => ({ default: module.NotificationsPage })));
 const ProfilePage = lazy(() => import("@/storefront/pages/ProfilePage").then(module => ({ default: module.ProfilePage })));
 const TestimoniPage = lazy(() => import("@/storefront/pages/TestimoniPage").then(module => ({ default: module.TestimoniPage })));
+const NotFoundPage = lazy(() => import("@/pages/NotFoundPage").then(module => ({ default: module.NotFoundPage })));
 
 import {
   CategoryIndexStub,
@@ -58,13 +61,7 @@ function Protected({ children }: ProtectedProps) {
   const { user, loading } = useAuth();
   const location = useLocation();
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
-        <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280]">
-          Loading…
-        </p>
-      </div>
-    );
+    return <LoadingScreen message="Memuat data..." />;
   }
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location }} />;
@@ -75,13 +72,7 @@ function Protected({ children }: ProtectedProps) {
 function PublicRoute({ children }: ProtectedProps) {
   const { user, profile, loading } = useAuth();
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
-        <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280]">
-          Loading…
-        </p>
-      </div>
-    );
+    return <LoadingScreen message="Memuat data..." />;
   }
   if (user) {
     const target = profile ? ROLE_DEFAULT_REDIRECT[profile.role] ?? "/" : "/";
@@ -98,13 +89,7 @@ function PublicRoute({ children }: ProtectedProps) {
 function RootRoute() {
   const { profile, loading } = useAuth();
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
-        <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280]">
-          Loading…
-        </p>
-      </div>
-    );
+    return <LoadingScreen message="Memuat..." />;
   }
   if (profile && ROLE_DEFAULT_REDIRECT[profile.role] && ROLE_DEFAULT_REDIRECT[profile.role] !== "/") {
     return (
@@ -134,13 +119,7 @@ function ShelledRoute({
 
   // If auth is resolved but profile is not loaded yet, wait or return loading
   if (!profile) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
-        <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280]">
-          Loading profile…
-        </p>
-      </div>
-    );
+    return <LoadingScreen message="Memuat profil..." />;
   }
 
   // Redirect to respective default landing page if role is not allowed
@@ -216,13 +195,7 @@ export function StorefrontProtectedRoute({
   const { profile } = useAuth();
 
   if (!profile) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
-        <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280]">
-          Loading profile…
-        </p>
-      </div>
-    );
+    return <LoadingScreen message="Memuat profil..." />;
   }
 
   if (profile.role !== "admin" && !allowedRoles.includes(profile.role)) {
@@ -243,13 +216,7 @@ function NotificationsRouteWrapper() {
   const { user, profile, loading, requestSignOut } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
-        <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280]">
-          Loading profile…
-        </p>
-      </div>
-    );
+    return <LoadingScreen message="Memuat profil..." />;
   }
 
   // If user is logged in and is an operational user (non-admin), wrap in AppShell.
@@ -633,7 +600,7 @@ function RoutesTree() {
         element={<Navigate to="/admin/settings" replace />}
       />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }
@@ -654,16 +621,29 @@ function GlobalSignOutModal() {
 }
 
 export function AppRouter() {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  if (!isOnline) {
+    return <OfflineScreen />;
+  }
+
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Suspense fallback={
-          <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
-            <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280]">
-              Loading…
-            </p>
-          </div>
-        }>
+        <Suspense fallback={<LoadingScreen message="Memuat halaman..." />}>
           <RoutesTree />
         </Suspense>
         <GlobalSignOutModal />
