@@ -62,18 +62,18 @@ const DICTIONARY = {
 
 const roleLabels: Record<string, Record<string, string>> = {
   id: {
-    admin: "Administrator",
-    tim_produksi: "Tim Produksi",
-    distribusi: "Bagian Distribusi",
-    monitoring: "Monitoring & Pengawasan",
-    kurir: "Kurir Pengantar",
+    admin: "Admin",
+    tim_produksi: "Produksi",
+    distribusi: "Distribusi",
+    monitoring: "Monitoring",
+    kurir: "Kurir",
   },
   en: {
-    admin: "Administrator",
-    tim_produksi: "Production Team",
-    distribusi: "Distribution Dept",
-    monitoring: "Monitoring & Supervisor",
-    kurir: "Delivery Courier",
+    admin: "Admin",
+    tim_produksi: "Production",
+    distribusi: "Distribution",
+    monitoring: "Monitoring",
+    kurir: "Courier",
   }
 };
 

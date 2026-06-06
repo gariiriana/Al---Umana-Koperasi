@@ -752,7 +752,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                                 className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-emerald-700 border-b border-neutral-100"
                               >
                                 <Factory className="h-4 w-4 text-emerald-500" />
-                                <span>{lang === "id" ? "Fitur Tim Produksi" : "Production Features"}</span>
+                                <span>{lang === "id" ? "Fitur Produksi" : "Production Features"}</span>
                               </Link>
                               <Link
                                 to="/distribusi/dispatch"
