@@ -162,6 +162,8 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     invoiceSignedAt: toIsoStringOrUndefined(data.invoiceSignedAt),
     invoiceSignatureData: data.invoiceSignatureData as string | undefined,
     manualValidation: data.manualValidation as Order["manualValidation"],
+    adminComplaintNotes: data.adminComplaintNotes as string | undefined,
+    adminComplaintPhotoId: data.adminComplaintPhotoId as string | undefined,
     status: ((data.status as string) ?? "PENDING") as OrderStatus,
     customerId: (data.customerId as string) ?? "",
     customerName: (data.customerName as string) ?? "",
@@ -1204,5 +1206,24 @@ export async function assignMultipleOrders(courierId: string, orderIds: string[]
       });
     }
   });
+}
+
+export async function updateAdminNotes(
+  orderId: string,
+  data: {
+    notes: string;
+    photoFileId?: string | null;
+  }
+): Promise<Order> {
+  const docRef = doc(db, "orders", orderId);
+  const updates: Record<string, unknown> = {
+    adminComplaintNotes: data.notes,
+    updatedAt: new Date(),
+  };
+  if (data.photoFileId !== undefined) {
+    updates.adminComplaintPhotoId = data.photoFileId || "";
+  }
+  await updateDocAndReturn(docRef, updates);
+  return getOrder(orderId);
 }
 

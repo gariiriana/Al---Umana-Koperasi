@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Plus, Search, Calendar, Copy, ExternalLink, AlertTriangle, ShieldCheck, CheckCircle2, User, Phone, FileDown, X, Loader2 } from "lucide-react";
+import { Plus, Search, Calendar, Copy, ExternalLink, AlertTriangle, ShieldCheck, CheckCircle2, User, Phone, FileDown, X, Loader2, Upload } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { doc, getDoc } from "firebase/firestore";
@@ -8,11 +8,12 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeOrders } from "@/services/realtimeService";
-import { transitionOrder, updatePaymentStatus, manuallyValidateOrder, type TransitionAction } from "@/services/orderService";
+import { transitionOrder, updatePaymentStatus, manuallyValidateOrder, updateAdminNotes, type TransitionAction } from "@/services/orderService";
 import type { Order, OrderStatus, PaymentStatus } from "@/types/order";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { uploadFileInChunks } from "@/services/chunkUploadService";
 import { ManualValidationModal } from "@/admin/pages/ManualValidationModal";
 import { formatIDR } from "@/lib/format";
 import { ProductImage } from "@/components/ProductImage";
@@ -118,13 +119,38 @@ export function OrdersPage() {
   const [productionStartPhotoSrc, setProductionStartPhotoSrc] = useState<string | null>(null);
   const [loadingProductionPhoto, setLoadingProductionPhoto] = useState(false);
 
+  // Admin internal/complaint notes and uploader states
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [editNotesText, setEditNotesText] = useState("");
+  const [editNotesPhotoId, setEditNotesPhotoId] = useState<string | null>(null);
+  const [complaintPhotoFile, setComplaintPhotoFile] = useState<File | null>(null);
+  const [complaintPhotoPreview, setComplaintPhotoPreview] = useState<string | null>(null);
+  const [complaintPhotoSrc, setComplaintPhotoSrc] = useState<string | null>(null);
+  const [loadingComplaintPhoto, setLoadingComplaintPhoto] = useState(false);
+  const [uploadingComplaint, setUploadingComplaint] = useState(false);
+  const [uploadComplaintProgress, setUploadComplaintProgress] = useState(0);
+  const [savingNotes, setSavingNotes] = useState(false);
+
   useEffect(() => {
     if (!previewInvoiceOrder) {
       setScreenshotSrc(null);
       setProofImageSrc(null);
       setProductionStartPhotoSrc(null);
+      setComplaintPhotoSrc(null);
+      setIsEditingNotes(false);
+      setEditNotesText("");
+      setEditNotesPhotoId(null);
+      setComplaintPhotoFile(null);
+      setComplaintPhotoPreview(null);
       return;
     }
+
+    // Reset edit states for this order
+    setIsEditingNotes(false);
+    setEditNotesText(previewInvoiceOrder.adminComplaintNotes || "");
+    setEditNotesPhotoId(previewInvoiceOrder.adminComplaintPhotoId || null);
+    setComplaintPhotoFile(null);
+    setComplaintPhotoPreview(null);
 
     const screenshotIds = previewInvoiceOrder.manualValidation?.screenshotFileIds;
     if (screenshotIds && screenshotIds.length > 0) {
@@ -179,6 +205,24 @@ export function OrdersPage() {
     } else {
       setProductionStartPhotoSrc(null);
     }
+
+    const complaintPhotoId = previewInvoiceOrder.adminComplaintPhotoId;
+    if (complaintPhotoId) {
+      const loadComplaintPhoto = async () => {
+        setLoadingComplaintPhoto(true);
+        try {
+          const dataUri = await fetchImageBase64(complaintPhotoId, "delivery_files");
+          setComplaintPhotoSrc(dataUri);
+        } catch (err) {
+          console.error("Error loading complaint photo:", err);
+        } finally {
+          setLoadingComplaintPhoto(false);
+        }
+      };
+      loadComplaintPhoto();
+    } else {
+      setComplaintPhotoSrc(null);
+    }
   }, [previewInvoiceOrder]);
 
   useEffect(() => {
@@ -231,6 +275,70 @@ export function OrdersPage() {
     } catch (err) {
       console.error(err);
       showToast({ message: "Gagal menyimpan verifikasi manual", variant: "error" });
+    }
+  };
+
+  const handleComplaintFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Validate file
+    const isImage = file.type.startsWith("image/");
+    const isSizeOk = file.size <= 15 * 1024 * 1024; // 15MB
+    if (!isImage || !isSizeOk) {
+      showToast({
+        message: !isImage
+          ? "Format file tidak didukung. Harap pilih gambar."
+          : "Ukuran file terlalu besar (maksimal 15 MB).",
+        variant: "error"
+      });
+      return;
+    }
+    
+    setComplaintPhotoFile(file);
+    setComplaintPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const handleSaveNotes = async () => {
+    if (!previewInvoiceOrder) return;
+    setSavingNotes(true);
+    setUploadingComplaint(true);
+    
+    try {
+      let finalPhotoId = editNotesPhotoId;
+      
+      // If there is a new file, upload it in chunks first
+      if (complaintPhotoFile) {
+        const uploadResult = await uploadFileInChunks(complaintPhotoFile, {
+          orderId: previewInvoiceOrder.id,
+          onProgress: (p) => setUploadComplaintProgress(Math.round(p.fraction * 100)),
+        });
+        finalPhotoId = uploadResult.fileId;
+      }
+      
+      // Save notes and photo uploader reference onto the order
+      const updatedOrder = await updateAdminNotes(previewInvoiceOrder.id, {
+        notes: editNotesText,
+        photoFileId: finalPhotoId,
+      });
+      
+      // Update preview state with updated order to reflect changes in UI
+      setPreviewInvoiceOrder(updatedOrder);
+      
+      showToast({ message: "Catatan internal admin berhasil disimpan!", variant: "success" });
+      setIsEditingNotes(false);
+      setComplaintPhotoFile(null);
+      setComplaintPhotoPreview(null);
+    } catch (err) {
+      console.error("Error saving admin notes:", err);
+      showToast({
+        message: err instanceof Error ? err.message : "Gagal menyimpan catatan admin",
+        variant: "error",
+      });
+    } finally {
+      setSavingNotes(false);
+      setUploadingComplaint(false);
+      setUploadComplaintProgress(0);
     }
   };
 
@@ -1502,7 +1610,161 @@ export function OrdersPage() {
                           <img src={screenshotSrc} alt="Bukti Validasi Manual" className="max-h-60 mx-auto rounded object-contain" />
                         </div>
                       ) : (
-                        <p className="text-[10px] text-amber-600 italic">Bukti foto tidak dapat dimuat atau kosong.</p>
+                        <p className="text-[10px] text-amber-600 italic">Bukti foto tidak dapat dimuat or kosong.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Internal Admin & Complaint Notes Section (Visible to Admin only) */}
+              {!isMonitoring && (
+                <div className="bg-neutral-50/70 border border-[#E5E7EB] rounded-xl p-4 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                  <div className="flex items-center justify-between border-b border-neutral-200/50 pb-2">
+                    <div className="flex items-center gap-2 text-neutral-800 font-bold text-[11px] uppercase tracking-wide">
+                      <AlertTriangle className="w-4 h-4 text-amber-500" />
+                      <span>Catatan Pengaduan & Bukti Admin</span>
+                    </div>
+                    {!isEditingNotes && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditNotesText(previewInvoiceOrder.adminComplaintNotes || "");
+                          setEditNotesPhotoId(previewInvoiceOrder.adminComplaintPhotoId || null);
+                          setIsEditingNotes(true);
+                        }}
+                        className="text-[10px] font-extrabold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-md px-2 py-1 transition-all cursor-pointer"
+                      >
+                        Edit Catatan & Bukti
+                      </button>
+                    )}
+                  </div>
+
+                  {isEditingNotes ? (
+                    <div className="space-y-3 pt-1">
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider">
+                          Catatan Internal / Komplain
+                        </label>
+                        <textarea
+                          value={editNotesText}
+                          onChange={(e) => setEditNotesText(e.target.value)}
+                          placeholder="Masukkan catatan komplain atau keluhan pelanggan jika ada..."
+                          rows={3}
+                          className="w-full rounded-lg border border-[#D1D5DB] px-3 py-2 text-xs text-[#111827] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40 bg-white"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider">
+                          Bukti Foto Pendukung
+                        </label>
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-[#D1D5DB] rounded-lg p-4 bg-white hover:bg-neutral-50 transition relative cursor-pointer min-h-[70px] text-center">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleComplaintFileChange}
+                              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                              title="Pilih Foto Bukti"
+                            />
+                            <Upload className="h-5 w-5 text-[#9CA3AF] mb-1" />
+                            <span className="text-[10px] font-bold text-[#4B5563]">
+                              {complaintPhotoFile ? "Ganti Foto Bukti" : "Upload Foto Bukti Komplain"}
+                            </span>
+                            <span className="text-[8px] text-[#9CA3AF] mt-0.5">JPEG, PNG, WebP (Maks 15MB)</span>
+                          </div>
+                          {(complaintPhotoPreview || complaintPhotoSrc) && (
+                            <div className="relative shrink-0">
+                              <img
+                                src={complaintPhotoPreview || complaintPhotoSrc || ""}
+                                alt="Bukti komplain"
+                                className="h-16 w-16 object-contain rounded-lg border border-[#E5E7EB] bg-neutral-100"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setComplaintPhotoFile(null);
+                                  setComplaintPhotoPreview(null);
+                                  setEditNotesPhotoId(null);
+                                  setComplaintPhotoSrc(null);
+                                }}
+                                className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 shadow-sm border border-white cursor-pointer"
+                                title="Hapus foto"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {uploadingComplaint && uploadComplaintProgress > 0 && (
+                        <div className="space-y-1 pt-1">
+                          <div className="flex justify-between text-[9px] text-[#6B7280]">
+                            <span>Mengunggah bukti...</span>
+                            <span>{uploadComplaintProgress}%</span>
+                          </div>
+                          <div className="h-1 w-full bg-[#E5E7EB] rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-amber-500 transition-all duration-150"
+                              style={{ width: `${uploadComplaintProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 pt-2 border-t border-neutral-100">
+                        <Button
+                          onClick={handleSaveNotes}
+                          disabled={savingNotes}
+                          size="sm"
+                          className="bg-[#D97706] hover:bg-[#B45309] text-white border-none rounded-lg text-[10px] font-bold py-1 px-3"
+                        >
+                          {savingNotes ? "Menyimpan..." : "Simpan Catatan"}
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          onClick={() => {
+                            setIsEditingNotes(false);
+                            setComplaintPhotoFile(null);
+                            setComplaintPhotoPreview(null);
+                          }}
+                          disabled={savingNotes}
+                          size="sm"
+                          className="px-3 border border-[#D1D5DB] rounded-lg hover:bg-neutral-50 text-[10px] font-bold py-1"
+                        >
+                          Batal
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 pt-1 text-[11px] text-neutral-700">
+                      <div>
+                        <span className="font-bold text-neutral-500 block uppercase text-[9px] tracking-wider mb-0.5">Catatan Keluhan / Komplain Admin:</span>
+                        <p className="whitespace-pre-wrap leading-relaxed text-neutral-800 bg-white border border-[#E5E7EB] rounded-lg p-2.5">
+                          {previewInvoiceOrder.adminComplaintNotes || "Tidak ada catatan komplain."}
+                        </p>
+                      </div>
+
+                      {previewInvoiceOrder.adminComplaintPhotoId && (
+                        <div>
+                          <span className="font-bold text-neutral-500 block uppercase text-[9px] tracking-wider mb-1">Bukti Foto / Screenshot Komplain:</span>
+                          {loadingComplaintPhoto ? (
+                            <div className="flex items-center gap-2 text-[10px] text-neutral-500 py-4 justify-center bg-white rounded-lg border border-neutral-100">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Memuat gambar bukti komplain...</span>
+                            </div>
+                          ) : complaintPhotoSrc ? (
+                            <div className="bg-white border border-neutral-200 rounded-lg p-2 max-w-xs shadow-2xs">
+                              <a href={complaintPhotoSrc} target="_blank" rel="noreferrer" title="Lihat ukuran penuh" className="block cursor-zoom-in">
+                                <img src={complaintPhotoSrc} alt="Bukti Komplain" className="max-h-48 rounded object-contain mx-auto" />
+                              </a>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-red-500 italic">Bukti foto tidak dapat dimuat atau kosong.</p>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}

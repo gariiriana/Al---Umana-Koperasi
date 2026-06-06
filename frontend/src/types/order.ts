@@ -55,6 +55,8 @@ export interface Order {
   invoiceSignedAt?: string;
   invoiceSignatureData?: string;
   manualValidation?: ManualValidation;
+  adminComplaintNotes?: string;
+  adminComplaintPhotoId?: string;
   status: OrderStatus;
   items: OrderLineItem[];
   deliveryAddress: string;

@@ -57,6 +57,8 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     invoiceSignedAt: data.invoiceSignedAt ? toIsoString(data.invoiceSignedAt) : undefined,
     invoiceSignatureData: data.invoiceSignatureData as string | undefined,
     manualValidation: data.manualValidation as Order["manualValidation"],
+    adminComplaintNotes: data.adminComplaintNotes as string | undefined,
+    adminComplaintPhotoId: data.adminComplaintPhotoId as string | undefined,
     status: ((data.status as string) ?? "PENDING") as OrderStatus,
     customerId: (data.customerId as string) ?? "",
     customerName: (data.customerName as string) ?? "",
