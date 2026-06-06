@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Plus, Search, Calendar, Copy, ExternalLink, AlertTriangle, ShieldCheck, CheckCircle2, User, Phone, FileDown, X, Loader2, Upload } from "lucide-react";
+import { Plus, Search, Calendar, Copy, ExternalLink, AlertTriangle, ShieldCheck, CheckCircle2, User, Phone, FileDown, X, Loader2, Upload, Eye } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { doc, getDoc } from "firebase/firestore";
@@ -130,6 +130,12 @@ export function OrdersPage() {
   const [uploadingComplaint, setUploadingComplaint] = useState(false);
   const [uploadComplaintProgress, setUploadComplaintProgress] = useState(0);
   const [savingNotes, setSavingNotes] = useState(false);
+
+  // Active edit state for inline row complaint notes
+  const [activeEditRowId, setActiveEditRowId] = useState<string | null>(null);
+  const [rowComplaintPhotoSrcs, setRowComplaintPhotoSrcs] = useState<Record<string, string>>({});
+  const [loadingRowPhotoIds, setLoadingRowPhotoIds] = useState<Record<string, boolean>>({});
+
 
   useEffect(() => {
     if (!previewInvoiceOrder) {
@@ -341,6 +347,116 @@ export function OrdersPage() {
       setUploadComplaintProgress(0);
     }
   };
+
+  const handleSaveNotesInline = async () => {
+    if (!activeEditRowId) return;
+    const targetOrder = filteredOrders.find((o) => o.id === activeEditRowId);
+    if (!targetOrder) return;
+    
+    setSavingNotes(true);
+    setUploadingComplaint(true);
+    
+    try {
+      let finalPhotoId = editNotesPhotoId;
+      
+      // If there is a new file, upload it in chunks first
+      if (complaintPhotoFile) {
+        const uploadResult = await uploadFileInChunks(complaintPhotoFile, {
+          orderId: targetOrder.id,
+          onProgress: (p) => setUploadComplaintProgress(Math.round(p.fraction * 100)),
+        });
+        finalPhotoId = uploadResult.fileId;
+      }
+      
+      // Save notes and photo uploader reference onto the order
+      const updatedOrder = await updateAdminNotes(targetOrder.id, {
+        notes: editNotesText,
+        photoFileId: finalPhotoId,
+      });
+      
+      // Update loaded row photos cache if needed
+      if (finalPhotoId) {
+        // If we have a preview data URL, cache it to avoid refetching
+        if (complaintPhotoPreview) {
+          setRowComplaintPhotoSrcs(prev => ({ ...prev, [targetOrder.id]: complaintPhotoPreview }));
+        }
+      } else if (finalPhotoId === null || finalPhotoId === "") {
+        setRowComplaintPhotoSrcs(prev => {
+          const updated = { ...prev };
+          delete updated[targetOrder.id];
+          return updated;
+        });
+      }
+      
+      // Also update previewInvoiceOrder if it's currently open
+      if (previewInvoiceOrder?.id === targetOrder.id) {
+        setPreviewInvoiceOrder(updatedOrder);
+      }
+      
+      showToast({ message: "Catatan internal admin berhasil disimpan!", variant: "success" });
+      setActiveEditRowId(null);
+      setComplaintPhotoFile(null);
+      setComplaintPhotoPreview(null);
+    } catch (err) {
+      console.error("Error saving admin notes inline:", err);
+      showToast({
+        message: err instanceof Error ? err.message : "Gagal menyimpan catatan admin",
+        variant: "error",
+      });
+    } finally {
+      setSavingNotes(false);
+      setUploadingComplaint(false);
+      setUploadComplaintProgress(0);
+    }
+  };
+
+  const handleStartEditNotes = async (order: Order) => {
+    setActiveEditRowId(order.id);
+    setEditNotesText(order.adminComplaintNotes || "");
+    setEditNotesPhotoId(order.adminComplaintPhotoId || null);
+    setComplaintPhotoFile(null);
+    setComplaintPhotoPreview(null);
+    
+    if (order.adminComplaintPhotoId) {
+      if (rowComplaintPhotoSrcs[order.id]) {
+        setComplaintPhotoSrc(rowComplaintPhotoSrcs[order.id]);
+      } else {
+        setLoadingComplaintPhoto(true);
+        try {
+          const dataUri = await fetchImageBase64(order.adminComplaintPhotoId, "delivery_files");
+          if (dataUri) {
+            setComplaintPhotoSrc(dataUri);
+            setRowComplaintPhotoSrcs(prev => ({ ...prev, [order.id]: dataUri }));
+          } else {
+            setComplaintPhotoSrc(null);
+          }
+        } catch (err) {
+          console.error("Error loading complaint photo for editing:", err);
+          setComplaintPhotoSrc(null);
+        } finally {
+          setLoadingComplaintPhoto(false);
+        }
+      }
+    } else {
+      setComplaintPhotoSrc(null);
+    }
+  };
+
+  const handleLoadRowPhoto = async (orderId: string, photoId: string) => {
+    if (rowComplaintPhotoSrcs[orderId]) return; // already loaded
+    setLoadingRowPhotoIds(prev => ({ ...prev, [orderId]: true }));
+    try {
+      const dataUri = await fetchImageBase64(photoId, "delivery_files");
+      if (dataUri) {
+        setRowComplaintPhotoSrcs(prev => ({ ...prev, [orderId]: dataUri }));
+      }
+    } catch (err) {
+      console.error("Error loading row photo:", err);
+    } finally {
+      setLoadingRowPhotoIds(prev => ({ ...prev, [orderId]: false }));
+    }
+  };
+
 
   // Due date warnings logic
   const getDueDateInfo = (order: Order) => {
@@ -956,7 +1072,8 @@ export function OrdersPage() {
                   const shortId = o.id.slice(-6).toUpperCase();
 
                   return (
-                    <tr key={o.id} className="hover:bg-neutral-50/50 transition-colors">
+                    <React.Fragment key={o.id}>
+                      <tr className="hover:bg-neutral-50/50 transition-colors">
                       {/* ID / Tipe */}
                       <td className="py-4 px-4 font-['Hanken_Grotesk'] whitespace-nowrap">
                         <div className="flex flex-col items-start">
@@ -1190,6 +1307,175 @@ export function OrdersPage() {
                         </div>
                       </td>
                     </tr>
+
+                    {/* Inline sub-row for Admin Complaint Notes & Proof (visible to Admins only) */}
+                    {!isMonitoring && (
+                      <tr key={`${o.id}-admin-panel`} className="bg-neutral-50/45 border-b border-[#E5E7EB] transition-colors hover:bg-neutral-100/30">
+                        <td colSpan={7} className="py-3 px-5">
+                          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                            {/* Title and Badge */}
+                            <div className="flex items-center gap-2 text-neutral-800 font-bold text-[10px] uppercase tracking-wider shrink-0 mt-1">
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                              <span>Pengaduan & Bukti Admin</span>
+                            </div>
+
+                            {/* Content area */}
+                            <div className="flex-1 min-w-0">
+                              {activeEditRowId === o.id ? (
+                                // Edit Mode
+                                <div className="space-y-3 bg-white p-3.5 rounded-xl border border-amber-200/60 shadow-xs max-w-2xl">
+                                  <div className="space-y-1">
+                                    <label className="block text-[9px] font-bold text-neutral-400 uppercase tracking-wider">
+                                      Catatan Keluhan / Komplain
+                                    </label>
+                                    <textarea
+                                      value={editNotesText}
+                                      onChange={(e) => setEditNotesText(e.target.value)}
+                                      placeholder="Tulis keluhan pelanggan atau catatan internal..."
+                                      rows={2}
+                                      className="w-full rounded-lg border border-[#D1D5DB] px-3 py-1.5 text-xs text-[#111827] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40 bg-white"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <label className="block text-[9px] font-bold text-neutral-400 uppercase tracking-wider">
+                                      Bukti Foto Pendukung
+                                    </label>
+                                    <div className="flex items-center gap-4">
+                                      <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-[#D1D5DB] rounded-lg p-3 bg-neutral-50 hover:bg-neutral-100 transition relative cursor-pointer min-h-[50px] text-center">
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          onChange={handleComplaintFileChange}
+                                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                          title="Pilih Foto Bukti"
+                                        />
+                                        <Upload className="h-4.5 w-4.5 text-[#9CA3AF] mb-0.5" />
+                                        <span className="text-[9px] font-bold text-[#4B5563]">
+                                          {complaintPhotoFile ? "Ganti Foto" : "Upload Foto Bukti"}
+                                        </span>
+                                        <span className="text-[8px] text-[#9CA3AF]">Maks 15MB</span>
+                                      </div>
+                                      {(complaintPhotoPreview || complaintPhotoSrc) && (
+                                        <div className="relative shrink-0">
+                                          <img
+                                            src={complaintPhotoPreview || complaintPhotoSrc || ""}
+                                            alt="Bukti komplain"
+                                            className="h-12 w-12 object-contain rounded-lg border border-[#E5E7EB] bg-neutral-100"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setComplaintPhotoFile(null);
+                                              setComplaintPhotoPreview(null);
+                                              setEditNotesPhotoId(null);
+                                              setComplaintPhotoSrc(null);
+                                            }}
+                                            className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 shadow-sm border border-white cursor-pointer"
+                                            title="Hapus foto"
+                                          >
+                                            <X className="w-2.5 h-2.5" />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {uploadingComplaint && uploadComplaintProgress > 0 && (
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between text-[8px] text-[#6B7280]">
+                                        <span>Mengunggah bukti...</span>
+                                        <span>{uploadComplaintProgress}%</span>
+                                      </div>
+                                      <div className="h-1 w-full bg-[#E5E7EB] rounded-full overflow-hidden">
+                                        <div
+                                          className="h-full bg-amber-500 transition-all duration-150"
+                                          style={{ width: `${uploadComplaintProgress}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  <div className="flex gap-2 pt-2 border-t border-neutral-100">
+                                    <Button
+                                      onClick={handleSaveNotesInline}
+                                      disabled={savingNotes}
+                                      size="sm"
+                                      className="bg-[#D97706] hover:bg-[#B45309] text-white border-none rounded-lg text-[10px] font-bold py-1 px-3"
+                                    >
+                                      {savingNotes ? "Menyimpan..." : "Simpan"}
+                                    </Button>
+                                    <Button
+                                      variant="outlined"
+                                      onClick={() => {
+                                        setActiveEditRowId(null);
+                                        setComplaintPhotoFile(null);
+                                        setComplaintPhotoPreview(null);
+                                      }}
+                                      disabled={savingNotes}
+                                      size="sm"
+                                      className="px-3 border border-[#D1D5DB] rounded-lg hover:bg-neutral-50 text-[10px] font-bold py-1"
+                                    >
+                                      Batal
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                // Read-only / Display Mode
+                                <div className="flex items-start gap-4">
+                                  <div className="flex-1 min-w-0">
+                                    {o.adminComplaintNotes ? (
+                                      <p className="whitespace-pre-wrap leading-relaxed text-xs text-neutral-800 bg-white border border-[#E5E7EB] rounded-lg p-2 max-w-2xl shadow-3xs">
+                                        {o.adminComplaintNotes}
+                                      </p>
+                                    ) : (
+                                      <span className="text-xs text-neutral-400 italic">Tidak ada catatan komplain.</span>
+                                    )}
+                                  </div>
+
+                                  {/* Photo Area */}
+                                  {o.adminComplaintPhotoId && (
+                                    <div className="shrink-0">
+                                      {loadingRowPhotoIds[o.id] ? (
+                                        <div className="flex items-center gap-1.5 text-[10px] text-neutral-400 py-1 px-2 bg-white rounded border border-neutral-100">
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                          <span>Memuat bukti...</span>
+                                        </div>
+                                      ) : rowComplaintPhotoSrcs[o.id] ? (
+                                        <div className="bg-white border border-neutral-200 rounded p-1 shadow-3xs max-w-[80px]">
+                                          <a href={rowComplaintPhotoSrcs[o.id]} target="_blank" rel="noreferrer" title="Lihat ukuran penuh" className="block cursor-zoom-in">
+                                            <img src={rowComplaintPhotoSrcs[o.id]} alt="Bukti" className="max-h-12 object-contain mx-auto rounded" />
+                                          </a>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleLoadRowPhoto(o.id, o.adminComplaintPhotoId!)}
+                                          className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded px-2 py-1 flex items-center gap-1 cursor-pointer transition-all"
+                                        >
+                                          <Eye className="w-3.5 h-3.5" />
+                                          <span>Lihat Foto</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Edit button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditNotes(o)}
+                                    className="text-[10px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded px-2 py-1 cursor-pointer shrink-0 transition-all ml-auto self-center"
+                                  >
+                                    Edit Catatan
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
 
@@ -1494,6 +1780,163 @@ export function OrdersPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Inline mobile admin notes & photo section (visible to Admins only) */}
+                {!isMonitoring && (
+                  <div className="mt-3 pt-3 border-t border-[#F3F4F6] bg-neutral-50/60 rounded-xl p-3.5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-neutral-800 font-bold text-[9px] uppercase tracking-wider">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Pengaduan & Bukti Admin</span>
+                      </div>
+                      {activeEditRowId !== o.id && (
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditNotes(o)}
+                          className="text-[9px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded px-2 py-0.5 cursor-pointer transition-all"
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
+
+                    {activeEditRowId === o.id ? (
+                      // Mobile Edit Mode
+                      <div className="space-y-3 bg-white p-3 rounded-lg border border-amber-200/60 shadow-2xs">
+                        <div className="space-y-1">
+                          <label className="block text-[8px] font-bold text-neutral-400 uppercase tracking-wider">
+                            Catatan Keluhan / Komplain
+                          </label>
+                          <textarea
+                            value={editNotesText}
+                            onChange={(e) => setEditNotesText(e.target.value)}
+                            placeholder="Tulis keluhan pelanggan..."
+                            rows={2}
+                            className="w-full rounded-lg border border-[#D1D5DB] px-2.5 py-1.5 text-xs text-[#111827] focus:border-[#FBBF24] focus:outline-none bg-white"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[8px] font-bold text-neutral-400 uppercase tracking-wider">
+                            Bukti Foto Pendukung
+                          </label>
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-[#D1D5DB] rounded-lg p-2.5 bg-neutral-50 hover:bg-neutral-100 relative min-h-[45px] text-center">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleComplaintFileChange}
+                                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                title="Pilih Foto Bukti"
+                              />
+                              <Upload className="h-4 w-4 text-[#9CA3AF] mb-0.5" />
+                              <span className="text-[8px] font-bold text-[#4B5563]">Upload Foto Bukti</span>
+                            </div>
+                            {(complaintPhotoPreview || complaintPhotoSrc) && (
+                              <div className="relative shrink-0">
+                                <img
+                                  src={complaintPhotoPreview || complaintPhotoSrc || ""}
+                                  alt="Bukti komplain"
+                                  className="h-10 w-10 object-contain rounded-lg border border-[#E5E7EB] bg-neutral-100"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setComplaintPhotoFile(null);
+                                    setComplaintPhotoPreview(null);
+                                    setEditNotesPhotoId(null);
+                                    setComplaintPhotoSrc(null);
+                                  }}
+                                  className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 shadow-sm border border-white cursor-pointer"
+                                  title="Hapus foto"
+                                >
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {uploadingComplaint && uploadComplaintProgress > 0 && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[8px] text-[#6B7280]">
+                              <span>Mengunggah...</span>
+                              <span>{uploadComplaintProgress}%</span>
+                            </div>
+                            <div className="h-1 w-full bg-[#E5E7EB] rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-amber-500 transition-all duration-150"
+                                style={{ width: `${uploadComplaintProgress}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 pt-2 border-t border-neutral-100">
+                          <Button
+                            onClick={handleSaveNotesInline}
+                            disabled={savingNotes}
+                            size="sm"
+                            className="bg-[#D97706] hover:bg-[#B45309] text-white border-none rounded-lg text-[9px] font-bold py-0.5 px-2.5"
+                          >
+                            {savingNotes ? "Menyimpan..." : "Simpan"}
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            onClick={() => {
+                              setActiveEditRowId(null);
+                              setComplaintPhotoFile(null);
+                              setComplaintPhotoPreview(null);
+                            }}
+                            disabled={savingNotes}
+                            size="sm"
+                            className="px-2.5 border border-[#D1D5DB] rounded-lg hover:bg-neutral-50 text-[9px] font-bold py-0.5"
+                          >
+                            Batal
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      // Mobile Read-only / Display Mode
+                      <div className="flex items-start justify-between gap-3 text-xs">
+                        <div className="flex-1 min-w-0">
+                          {o.adminComplaintNotes ? (
+                            <p className="whitespace-pre-wrap leading-relaxed text-[11px] text-neutral-800 bg-white border border-[#E5E7EB] rounded-lg p-2 shadow-3xs">
+                              {o.adminComplaintNotes}
+                            </p>
+                          ) : (
+                            <span className="text-[10px] text-neutral-400 italic">Tidak ada catatan komplain.</span>
+                          )}
+                        </div>
+
+                        {o.adminComplaintPhotoId && (
+                          <div className="shrink-0 self-center">
+                            {loadingRowPhotoIds[o.id] ? (
+                              <div className="flex items-center gap-1 text-[8px] text-neutral-400 py-0.5 px-1 bg-white rounded border border-neutral-100">
+                                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                <span>Memuat...</span>
+                              </div>
+                            ) : rowComplaintPhotoSrcs[o.id] ? (
+                              <div className="bg-white border border-neutral-200 rounded p-0.5 shadow-3xs max-w-[60px]">
+                                <a href={rowComplaintPhotoSrcs[o.id]} target="_blank" rel="noreferrer" title="Lihat ukuran penuh" className="block cursor-zoom-in">
+                                  <img src={rowComplaintPhotoSrcs[o.id]} alt="Bukti" className="max-h-10 object-contain mx-auto rounded" />
+                                </a>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleLoadRowPhoto(o.id, o.adminComplaintPhotoId!)}
+                                className="text-[9px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5 cursor-pointer transition-all"
+                              >
+                                Foto
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })
