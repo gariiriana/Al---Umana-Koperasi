@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BrowserRouter } from "react-router-dom";
-import type { ReactNode, HTMLAttributes } from "react";
+import { type ReactNode, type HTMLAttributes, forwardRef } from "react";
 import { LoginPage } from "@/pages/LoginPage";
 import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -123,6 +123,12 @@ vi.mock("motion/react", () => ({
     ),
   },
   AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
+vi.mock("@marsidev/react-turnstile", () => ({
+  Turnstile: forwardRef((props: any, ref: any) => {
+    return <div data-testid="turnstile-mock" />;
+  }),
 }));
 
 describe("Authentication UI Features", () => {

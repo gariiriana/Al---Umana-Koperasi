@@ -131,7 +131,7 @@ export function OrdersPage() {
       const loadScreenshot = async () => {
         setLoadingScreenshot(true);
         try {
-          const dataUri = await fetchImageBase64(screenshotIds[0]);
+          const dataUri = await fetchImageBase64(screenshotIds[0], "delivery_files");
           setScreenshotSrc(dataUri);
         } catch (err) {
           console.error("Error loading validation screenshot:", err);
@@ -499,7 +499,7 @@ export function OrdersPage() {
 
         const screenshotIds = order.manualValidation.screenshotFileIds;
         if (screenshotIds && screenshotIds.length > 0) {
-          const screenshotDataUri = await fetchImageBase64(screenshotIds[0]);
+          const screenshotDataUri = await fetchImageBase64(screenshotIds[0], "delivery_files");
           if (screenshotDataUri) {
             if (y + 65 > pageH - 15) {
               doc.addPage();

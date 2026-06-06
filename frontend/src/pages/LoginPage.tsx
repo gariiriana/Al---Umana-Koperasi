@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Lock, Mail, Eye, EyeOff } from "lucide-react";
 import { doc, getDoc } from "firebase/firestore";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
 
 const DICTIONARY = {
   id: {
@@ -50,10 +51,22 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileInstance>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!turnstileToken) {
+      setError(
+        lang === "id"
+          ? "Silakan verifikasi bahwa Anda manusia melalui Cloudflare Turnstile."
+          : "Please verify that you are human via Cloudflare Turnstile."
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       await signIn(email, password);
@@ -90,6 +103,9 @@ export function LoginPage() {
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed");
+      // Reset Turnstile on authentication error
+      turnstileRef.current?.reset();
+      setTurnstileToken(null);
     } finally {
       setSubmitting(false);
     }
@@ -180,6 +196,19 @@ export function LoginPage() {
                   {t.forgotPassword}
                 </Link>
               </div>
+            </div>
+
+            <div className="flex justify-center py-2">
+              <Turnstile
+                ref={turnstileRef}
+                siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
+                onSuccess={(token) => setTurnstileToken(token)}
+                onExpire={() => setTurnstileToken(null)}
+                onError={() => setTurnstileToken(null)}
+                options={{
+                  theme: "dark",
+                }}
+              />
             </div>
 
             {error && (
