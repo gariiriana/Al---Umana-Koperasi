@@ -19,6 +19,7 @@ import { formatIDR } from "@/lib/format";
 import { ProductImage } from "@/components/ProductImage";
 import html2canvas from "html2canvas";
 import { aggregateIngredients } from "@/lib/ingredientsParser";
+import { getProduct } from "@/services/catalogService";
 
 const statusShortLabels: Record<OrderStatus, string> = {
   PENDING: "Pending",
@@ -498,6 +499,24 @@ export function OrdersPage() {
   const exportSingleOrderToPDF = async (order: Order) => {
     setExportingOrderId(order.id);
     try {
+      const itemsWithImages = await Promise.all(
+        order.items.map(async (it) => {
+          let base64: string | null = null;
+          try {
+            const product = await getProduct(it.itemId);
+            if (product && product.imageUrl) {
+              base64 = await getBase64ImageFromUrl(product.imageUrl);
+            }
+          } catch (e) {
+            console.error(`Failed to get product image for item ${it.itemId}:`, e);
+          }
+          return {
+            ...it,
+            imageBase64: base64,
+          };
+        })
+      );
+
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const pageW = doc.internal.pageSize.getWidth();
       const pageH = doc.internal.pageSize.getHeight();
@@ -611,25 +630,49 @@ export function OrdersPage() {
       doc.text("RINCIAN PESANAN", 14, y);
       y += 4;
 
-      const tableItemsBody = order.items.map((it) => [
+      const tableItemsBody = itemsWithImages.map((it) => [
+        "", // placeholder for image column
         it.itemName,
         `× ${it.quantity}`
       ]);
 
       autoTable(doc, {
         startY: y,
-        head: [["Menu / Barang", "Jumlah (Porsi / Unit)"]],
+        head: [["Foto", "Menu / Barang", "Jumlah (Porsi / Unit)"]],
         body: tableItemsBody,
         theme: "striped",
         styles: { lineColor: brandYellowBorder, lineWidth: 0.15 },
         headStyles: { fillColor: brandGold, textColor: white, fontStyle: "bold", fontSize: 8.5, halign: "center", cellPadding: 3 },
-        bodyStyles: { fontSize: 8.5, textColor: slateDark, cellPadding: 3 },
+        bodyStyles: { fontSize: 8.5, textColor: slateDark, cellPadding: 3, minCellHeight: 14, valign: "middle" },
         columnStyles: {
-          0: { cellWidth: pageW - 28 - 40 },
-          1: { halign: "center", cellWidth: 40, fontStyle: "bold" },
+          0: { cellWidth: 16, halign: "center" },
+          1: { cellWidth: pageW - 28 - 16 - 30 },
+          2: { halign: "center", cellWidth: 30, fontStyle: "bold" },
         },
         alternateRowStyles: { fillColor: brandYellowCream },
         margin: { left: 14, right: 14 },
+        didDrawCell: (data) => {
+          if (data.section === "body" && data.column.index === 0) {
+            const item = itemsWithImages[data.row.index];
+            if (item && item.imageBase64) {
+              const cell = data.cell;
+              const imgSize = 10; // 10mm x 10mm
+              const imgX = cell.x + (cell.width - imgSize) / 2;
+              const imgY = cell.y + (cell.height - imgSize) / 2;
+              try {
+                const format = item.imageUrl?.toLowerCase().endsWith(".png") ? "PNG" : "JPEG";
+                doc.addImage(item.imageBase64, format, imgX, imgY, imgSize, imgSize);
+              } catch (e) {
+                console.error("Failed to add cell image to PDF:", e);
+              }
+            } else {
+              doc.setFont("helvetica", "normal");
+              doc.setFontSize(8);
+              doc.setTextColor(150, 150, 150);
+              doc.text("-", data.cell.x + data.cell.width / 2, data.cell.y + data.cell.height / 2 + 1, { align: "center" });
+            }
+          }
+        }
       });
 
       y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
@@ -676,50 +719,62 @@ export function OrdersPage() {
       const discountAmount = order.discountAmount || 0;
       const subtotal = order.totalPrice + discountAmount - (order.additionalFee || 0);
 
-      let boxHeight = 12;
-      if (discountAmount > 0) boxHeight += 6;
-      if (order.additionalFee && order.additionalFee > 0) boxHeight += 6;
+      const rows: { label: string; value: string; isBold?: boolean; color?: [number, number, number] }[] = [];
+      rows.push({ label: "Subtotal Menu:", value: `Rp ${subtotal.toLocaleString("id-ID")}` });
+      if (discountAmount > 0) {
+        rows.push({
+          label: `Diskon Promo (${order.promoCode || "PROMO"}):`,
+          value: `-Rp ${discountAmount.toLocaleString("id-ID")}`,
+          isBold: true,
+          color: [5, 150, 105], // Green
+        });
+      }
+      if (order.additionalFee && order.additionalFee > 0) {
+        rows.push({
+          label: "Biaya Tambahan:",
+          value: `Rp ${order.additionalFee.toLocaleString("id-ID")}`,
+        });
+      }
+
+      const rowHeight = 5.5;
+      const numRows = rows.length;
+      const separatorOffset = 1.5;
+      const grandTotalSpace = 8;
+      const boxPadding = 5;
+      const boxHeight = boxPadding * 2 + (numRows * rowHeight) + separatorOffset + grandTotalSpace;
 
       doc.setFillColor(...brandYellowCream);
       doc.setDrawColor(...brandGold);
       doc.setLineWidth(0.5);
       doc.rect(14, y, pageW - 28, boxHeight, "FD");
 
-      let boxY = y + 5;
-      doc.setFont("helvetica", "normal");
+      let currentY = y + boxPadding + 3;
       doc.setFontSize(8.5);
-      doc.setTextColor(...slateDark);
 
-      doc.text("Subtotal Menu:", 18, boxY);
-      doc.text(`Rp ${subtotal.toLocaleString("id-ID")}`, pageW - 18, boxY, { align: "right" });
-      boxY += 5;
-
-      if (discountAmount > 0) {
-        doc.setTextColor(5, 150, 105); // Green
-        doc.setFont("helvetica", "bold");
-        doc.text(`Diskon Promo (${order.promoCode || "PROMO"}):`, 18, boxY);
-        doc.text(`-Rp ${discountAmount.toLocaleString("id-ID")}`, pageW - 18, boxY, { align: "right" });
-        boxY += 5;
-        doc.setTextColor(...slateDark);
-        doc.setFont("helvetica", "normal");
-      }
-
-      if (order.additionalFee && order.additionalFee > 0) {
-        doc.text("Biaya Tambahan:", 18, boxY);
-        doc.text(`Rp ${order.additionalFee.toLocaleString("id-ID")}`, pageW - 18, boxY, { align: "right" });
-        boxY += 5;
+      for (const row of rows) {
+        doc.setFont("helvetica", row.isBold ? "bold" : "normal");
+        if (row.color) {
+          doc.setTextColor(...row.color);
+        } else {
+          doc.setTextColor(...slateDark);
+        }
+        doc.text(row.label, 18, currentY);
+        doc.text(row.value, pageW - 18, currentY, { align: "right" });
+        currentY += rowHeight;
       }
 
       // Draw line separator inside box
+      currentY -= (rowHeight - separatorOffset);
       doc.setDrawColor(...brandYellowBorder);
       doc.setLineWidth(0.3);
-      doc.line(18, boxY - 1, pageW - 18, boxY - 1);
+      doc.line(18, currentY, pageW - 18, currentY);
 
+      currentY += 5;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9.5);
       doc.setTextColor(...brandAmberDark);
-      doc.text("GRAND TOTAL TAGIHAN:", 18, boxY + 3.5);
-      doc.text(`Rp ${order.totalPrice.toLocaleString("id-ID")}`, pageW - 18, boxY + 3.5, { align: "right" });
+      doc.text("GRAND TOTAL TAGIHAN:", 18, currentY);
+      doc.text(`Rp ${order.totalPrice.toLocaleString("id-ID")}`, pageW - 18, currentY, { align: "right" });
 
       y += boxHeight + 8;
 
