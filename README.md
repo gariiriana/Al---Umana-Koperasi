@@ -13,6 +13,8 @@ An enterprise-grade, high-performance, and secure hybrid-serverless system custo
 [![Cloudflare Shield](https://img.shields.io/badge/Cloudflare-WAF_Protected-orange.svg?style=for-the-badge&logo=cloudflare&logoColor=white&color=F38020)](https://www.cloudflare.com/)
 [![Testing Framework](https://img.shields.io/badge/Vitest-Checked-brightgreen.svg?style=for-the-badge&logo=vitest&logoColor=white&color=6E9F18)](https://vitest.dev/)
 [![Property-Based Testing](https://img.shields.io/badge/Correctness-18_PBT_Properties-brightgreen.svg?style=for-the-badge&color=2EA043)](#correctness-properties-and-pbt)
+[![Docker](https://img.shields.io/badge/Docker-Enabled-blue.svg?style=for-the-badge&logo=docker&logoColor=white&color=2496ED)](https://www.docker.com/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-Enabled-blue.svg?style=for-the-badge&logo=kubernetes&logoColor=white&color=326CE5)](https://kubernetes.io/)
 
 ---
 
@@ -223,3 +225,45 @@ node server.js
 ```
 
 The gateway will output a QR code in the terminal. Scan it using your WhatsApp application to link the account. It serves requests on port `8000`.
+
+---
+
+## Production Containerization & Orchestration
+
+The system is fully containerized and can be orchestrated in cloud/on-premise environments using Docker Compose or Kubernetes.
+
+### 1. Docker Compose Production Deployment
+
+A pre-configured production Docker Compose architecture is provided in [docker-compose.prod.yml](file:///c:/Users/Gari%20Iriana/OneDrive/Documents/Al%20umana/docker-compose.prod.yml):
+
+- **Backend Service**: Serves the Go backend production target. Depends on `wa-gateway` and auto-loads `.env.production`.
+- **Frontend Service**: Hosts the built static React app served via Nginx, optimized with reverse caching.
+- **WA-Gateway**: Runs Node.js Express server with automated Chromium headless dependencies. Mounts a persistent named volume `wa_session` (`/app/.wwebjs_auth`) to store linked session states, preventing recurrent QR code scans after restarts.
+
+To build and launch the production containers:
+
+```bash
+docker-compose -f docker-compose.prod.yml up --build -d
+```
+
+### 2. Enterprise Kubernetes Deployment
+
+Kubernetes manifests are organized within the [k8s/](file:///c:/Users/Gari%20Iriana/OneDrive/Documents/Al%20umana/k8s) directory for high-availability cloud cluster deployment:
+
+- **Namespace (`namespace.yaml`)**: Places resources in a dedicated `al-umana` namespace.
+- **Config & Secrets (`configmap.yaml`, `secrets.yaml`)**: Manages environment variables and stores base64 Firebase Service Account credentials securely.
+- **Backend Deployment (`backend-deployment.yaml`)**: Runs 2 replicas with health checking liveness/readiness probes on port `8080`.
+- **Frontend Deployment (`frontend-deployment.yaml`)**: Runs 2 replicas using Nginx to serve static React pages.
+- **WA Gateway (`wa-gateway-deployment.yaml`)**: Serves as a singleton replica (due to single-client session constraints) utilizing a PersistentVolumeClaim to store the WhatsApp session state.
+- **Horizontal Pod Autoscaling (`hpa.yaml`)**: Autoscales frontend pods (2–4 replicas) when CPU usage targets $\ge 60\%$, and backend pods (2–6 replicas) when CPU targets $\ge 50\%$.
+- **Ingress Controller (`ingress.yaml`)**: Employs an Nginx Ingress routing traffic:
+  - `/api/*` -> Backend ClusterIP service (`backend-service.yaml`)
+  - `/wa/*` -> WA-Gateway ClusterIP service (`wa-gateway-service.yaml`)
+  - `/*` -> Frontend ClusterIP service (`frontend-service.yaml`)
+
+To apply the Kubernetes topology to your cluster:
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/
+```
