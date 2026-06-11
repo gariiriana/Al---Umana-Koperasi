@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { MapPin, Loader2, Crosshair, X } from "lucide-react";
+import { MapPin, Loader2, Crosshair, X, Search } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────
 export interface ReverseGeoResult {
@@ -12,6 +12,20 @@ export interface ReverseGeoResult {
   postalCode: string;
   mapsUrl: string;
   displayAddress: string;
+}
+
+export interface SearchResult {
+  place_id: number;
+  licence: string;
+  osm_type: string;
+  osm_id: number;
+  boundingbox: string[];
+  lat: string;
+  lon: string;
+  display_name: string;
+  class: string;
+  type: string;
+  importance: number;
 }
 
 interface MapLocationPickerProps {
@@ -96,6 +110,62 @@ export function MapLocationPicker({ lang, onLocationSelected, onClose }: MapLoca
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const mapRef = useRef<L.Map | null>(null);
+
+  // Search location fields
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const isSelectingRef = useRef(false);
+
+  useEffect(() => {
+    if (isSelectingRef.current) {
+      isSelectingRef.current = false;
+      return;
+    }
+    if (searchQuery.trim().length < 3) {
+      setSearchResults([]);
+      setShowResults(false);
+      return;
+    }
+    const delayDebounce = setTimeout(() => {
+      setSearching(true);
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&accept-language=id&limit=5`;
+      fetch(url, {
+        headers: { "User-Agent": "AlUmanaKoperasiApp/1.0" },
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error("Search failed");
+          return res.json();
+        })
+        .then((data) => {
+          setSearchResults(data || []);
+          setShowResults(true);
+        })
+        .catch((err) => {
+          console.error("Geocoding search failed:", err);
+        })
+        .finally(() => {
+          setSearching(false);
+        });
+    }, 600);
+
+    return () => clearTimeout(delayDebounce);
+  }, [searchQuery]);
+
+  const handleSelectResult = (item: SearchResult) => {
+    const lat = parseFloat(item.lat);
+    const lng = parseFloat(item.lon);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      isSelectingRef.current = true;
+      setMarkerPos([lat, lng]);
+      setShowResults(false);
+      setSearchQuery(item.display_name);
+      if (mapRef.current) {
+        mapRef.current.flyTo([lat, lng], 17, { duration: 1.2 });
+      }
+    }
+  };
 
   // Auto-get user's current location on mount
   useEffect(() => {
@@ -207,6 +277,50 @@ export function MapLocationPicker({ lang, onLocationSelected, onClose }: MapLoca
 
         {/* Map */}
         <div className="relative w-full h-[280px] md:h-[340px] flex-shrink-0">
+          {/* Search Box Overlay */}
+          <div className="absolute top-3 left-3 right-3 z-[1000] space-y-1">
+            <div className="flex items-center bg-white rounded-xl shadow-lg border border-neutral-200 px-3 py-2">
+              <Search className="h-4 w-4 text-neutral-400 shrink-0 mr-2" />
+              <input
+                type="text"
+                placeholder={lang === "id" ? "Cari alamat atau lokasi..." : "Search address or location..."}
+                className="w-full bg-transparent border-none text-xs text-[#111827] focus:outline-none placeholder-neutral-400"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searching && <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500 mr-1.5" />}
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSearchResults([]);
+                    setShowResults(false);
+                  }}
+                  className="p-0.5 rounded-full hover:bg-neutral-100 text-neutral-400 shrink-0 cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            {/* Search Results Dropdown */}
+            {showResults && searchResults.length > 0 && (
+              <div className="bg-white rounded-xl shadow-xl border border-neutral-100 max-h-40 overflow-y-auto divide-y divide-neutral-100">
+                {searchResults.map((item) => (
+                  <button
+                    key={item.place_id}
+                    type="button"
+                    onClick={() => handleSelectResult(item)}
+                    className="w-full text-left px-3 py-2.5 hover:bg-neutral-50 flex items-start gap-2 text-xs text-neutral-700 transition cursor-pointer"
+                  >
+                    <MapPin className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                    <span className="line-clamp-2 leading-relaxed">{item.display_name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <MapContainer
             center={DEFAULT_CENTER}
             zoom={14}
