@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, CheckCheck, Clock, ChefHat, Package, AlertCircle, Loader2, Upload, Camera } from "lucide-react";
+import { Play, CheckCheck, Clock, ChefHat, Package, AlertCircle, Loader2, Camera } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 import { ApiError } from "@/services/apiClient";
@@ -11,7 +11,6 @@ import type { Order } from "@/types/order";
 import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import { uploadFileInChunks } from "@/services/chunkUploadService";
-import { validateImageUpload } from "@/lib/validators";
 import { ProductImage } from "@/components/ProductImage";
 import { LiveCamera } from "@/components/LiveCamera";
 
@@ -86,23 +85,6 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [cardError, setCardError] = useState<string | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const validation = validateImageUpload(file.type, file.size);
-    if (!validation.accepted) {
-      if (validation.reason === "mime") {
-        setCardError("MIME tipe tidak diijinkan. Gunakan JPG, PNG, atau WebP.");
-      } else {
-        setCardError("Ukuran file terlalu besar. Maksimal 15 MB.");
-      }
-      return;
-    }
-    setPhotoFile(file);
-    setPhotoPreview(URL.createObjectURL(file));
-    setCardError(null);
-  };
 
   const handleConfirmStart = async () => {
     if (!selectedKitchen) {
