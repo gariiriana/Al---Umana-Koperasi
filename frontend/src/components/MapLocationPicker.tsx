@@ -47,10 +47,8 @@ const DEFAULT_CENTER: [number, number] = [-6.9034, 106.9696];
 
 // ── Nominatim Reverse Geocoding ──────────────────────────────────
 async function reverseGeocode(lat: number, lng: number): Promise<ReverseGeoResult> {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=id&zoom=18&addressdetails=1`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": "AlUmanaKoperasiApp/1.0" },
-  });
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=id&zoom=18&addressdetails=1&email=koperasi@al-umana.id`;
+  const res = await fetch(url);
 
   if (!res.ok) throw new Error("Geocoding request failed");
 
@@ -130,10 +128,8 @@ export function MapLocationPicker({ lang, onLocationSelected, onClose }: MapLoca
     }
     const delayDebounce = setTimeout(() => {
       setSearching(true);
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&accept-language=id&limit=5`;
-      fetch(url, {
-        headers: { "User-Agent": "AlUmanaKoperasiApp/1.0" },
-      })
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&accept-language=id&countrycodes=id&limit=5&email=koperasi@al-umana.id`;
+      fetch(url)
         .then((res) => {
           if (!res.ok) throw new Error("Search failed");
           return res.json();

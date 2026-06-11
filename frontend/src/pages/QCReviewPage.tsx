@@ -82,17 +82,17 @@ export function QCReviewPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="font-['Manrope',system-ui,sans-serif] text-xl sm:text-2xl font-extrabold text-[#111827]">
             Quality Control
           </h1>
-          <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] mt-0.5">
+          <p className="text-xs sm:text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] mt-0.5">
             Periksa hasil produksi sebelum dikirim ke distribusi
           </p>
         </div>
-        <div className="flex flex-col items-center bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
-          <span className="text-lg font-extrabold text-purple-700 font-['Manrope',system-ui,sans-serif]">{queue.length}</span>
+        <div className="flex flex-col items-center bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5 sm:py-2 self-start sm:self-center">
+          <span className="text-base sm:text-lg font-extrabold text-purple-700 font-['Manrope',system-ui,sans-serif]">{queue.length}</span>
           <span className="text-[9px] font-bold text-purple-600 uppercase tracking-wide">Review</span>
         </div>
       </div>
@@ -219,7 +219,7 @@ export function QCReviewPage() {
                           <ClipboardCheck className="h-4 w-4 text-purple-700" />
                           Checklist Verifikasi Kualitas (QC)
                         </p>
-                        <div className="grid grid-cols-2 gap-2 text-[#374151] font-semibold">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[#374151] font-semibold">
                           <label className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-neutral-200 hover:border-purple-200 cursor-pointer transition">
                             <input
                               type="checkbox"
@@ -260,7 +260,7 @@ export function QCReviewPage() {
                       </div>
 
                       {/* Action buttons */}
-                      <div className="flex gap-2.5">
+                      <div className="flex flex-col sm:flex-row gap-2.5">
                         {!isExpanded ? (
                           <>
                             {/* Pass */}

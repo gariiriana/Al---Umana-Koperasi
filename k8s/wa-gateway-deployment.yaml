@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wa-session-pvc
+  namespace: al-umana
+  labels:
+    app: wa-gateway
+    app.kubernetes.io/part-of: al-umana
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wa-gateway
+  namespace: al-umana
+  labels:
+    app: wa-gateway
+    app.kubernetes.io/part-of: al-umana
+spec:
+  # WA Gateway must be a singleton — only 1 replica can hold the WA session
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wa-gateway
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: wa-gateway
+    spec:
+      containers:
+        - name: wa-gateway
+          image: al-umana/wa-gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          volumeMounts:
+            - name: wa-session
+              mountPath: /app/.wwebjs_auth
+          resources:
+            requests:
+              cpu: "150m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "768Mi"
+          livenessProbe:
+            httpGet:
+              path: /send-message
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: wa-session
+          persistentVolumeClaim:
+            claimName: wa-session-pvc

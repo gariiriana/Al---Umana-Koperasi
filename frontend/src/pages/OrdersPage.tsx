@@ -157,6 +157,14 @@ export function OrdersPage() {
   const [productionStartPhotoSrc, setProductionStartPhotoSrc] = useState<string | null>(null);
   const [loadingProductionPhoto, setLoadingProductionPhoto] = useState(false);
 
+  // Courier start OTW photo states
+  const [courierStartPhotoSrc, setCourierStartPhotoSrc] = useState<string | null>(null);
+  const [loadingCourierStartPhoto, setLoadingCourierStartPhoto] = useState(false);
+
+  // Courier delivery proof photo states
+  const [courierProofPhotoSrcs, setCourierProofPhotoSrcs] = useState<string[]>([]);
+  const [loadingCourierProofPhotos, setLoadingCourierProofPhotos] = useState(false);
+
   // Admin internal/complaint notes and uploader states
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [editNotesText, setEditNotesText] = useState("");
@@ -181,6 +189,8 @@ export function OrdersPage() {
       setProofImageSrc(null);
       setProductionStartPhotoSrc(null);
       setComplaintPhotoSrc(null);
+      setCourierStartPhotoSrc(null);
+      setCourierProofPhotoSrcs([]);
       setIsEditingNotes(false);
       setEditNotesText("");
       setEditNotesPhotoId(null);
@@ -266,6 +276,43 @@ export function OrdersPage() {
       loadComplaintPhoto();
     } else {
       setComplaintPhotoSrc(null);
+    }
+
+    const courierStartPhotoId = previewInvoiceOrder.deliveryStartPhotoId;
+    if (courierStartPhotoId) {
+      const loadCourierStartPhoto = async () => {
+        setLoadingCourierStartPhoto(true);
+        try {
+          const dataUri = await fetchImageBase64(courierStartPhotoId, "delivery_files");
+          setCourierStartPhotoSrc(dataUri);
+        } catch (err) {
+          console.error("Error loading courier start photo:", err);
+        } finally {
+          setLoadingCourierStartPhoto(false);
+        }
+      };
+      loadCourierStartPhoto();
+    } else {
+      setCourierStartPhotoSrc(null);
+    }
+
+    const courierProofFileIds = previewInvoiceOrder.proofFileIds;
+    if (courierProofFileIds && courierProofFileIds.length > 0) {
+      const loadCourierProofPhotos = async () => {
+        setLoadingCourierProofPhotos(true);
+        try {
+          const promises = courierProofFileIds.map((id) => fetchImageBase64(id, "delivery_files"));
+          const results = await Promise.all(promises);
+          setCourierProofPhotoSrcs(results.filter((res): res is string => !!res));
+        } catch (err) {
+          console.error("Error loading courier proof photos:", err);
+        } finally {
+          setLoadingCourierProofPhotos(false);
+        }
+      };
+      loadCourierProofPhotos();
+    } else {
+      setCourierProofPhotoSrcs([]);
     }
   }, [previewInvoiceOrder]);
 
@@ -1845,11 +1892,7 @@ export function OrdersPage() {
       </div>
 
       {/* Mobile Card List View (visible on mobile/tablet, hidden on xl+) */}
-      <div className={`xl:hidden ${
-        isMonitoring 
-          ? "grid grid-cols-2 md:grid-cols-3 gap-3" 
-          : "grid grid-cols-1 md:grid-cols-2 gap-4"
-      }`}>
+      <div className="xl:hidden grid grid-cols-2 md:grid-cols-3 gap-3">
         {filteredOrders.length === 0 ? (
           <div className="col-span-full py-12 text-center text-sm text-[#6B7280] font-['Hanken_Grotesk'] bg-white rounded-2xl border border-[#E5E7EB]">
             Tidak ada pesanan ditemukan.
@@ -1864,22 +1907,20 @@ export function OrdersPage() {
             return (
               <div
                 key={o.id}
-                className={`bg-white rounded-2xl border border-[#E5E7EB] shadow-xs flex flex-col justify-between text-[#374151] ${
-                  isMonitoring ? "p-3 gap-2 text-xs" : "p-4 gap-3 text-sm"
-                }`}
+                className="bg-white rounded-xl border border-[#E5E7EB] shadow-xs flex flex-col justify-between text-[#374151] p-2.5 gap-2 text-[11px]"
               >
                 {/* Header: ID, Type & Operational Status */}
-                <div className="flex flex-wrap items-center justify-between gap-1 pb-2 border-b border-[#F3F4F6]">
-                  <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-1 pb-1.5 border-b border-[#F3F4F6]">
+                  <div className="flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => setPreviewInvoiceOrder(o)}
-                      className="font-mono font-bold text-blue-600 hover:text-blue-800 hover:underline text-left cursor-pointer focus:outline-none"
+                      className="font-mono font-bold text-blue-600 hover:text-blue-800 hover:underline text-left cursor-pointer focus:outline-none text-[10px]"
                       title="Lihat Detail Pesanan"
                     >
                       #{shortId}
                     </button>
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                    <span className={`px-1 py-0.5 rounded text-[8px] font-extrabold uppercase ${
                       o.orderType === "event" ? "bg-purple-100 text-purple-700" : "bg-cyan-100 text-cyan-700"
                     }`}>
                       {o.orderType}
@@ -1887,65 +1928,65 @@ export function OrdersPage() {
                   </div>
                   <StatusBadge
                     status={o.status}
-                    className={isMonitoring ? "px-1.5 py-0.5 text-[9px] font-extrabold" : ""}
+                    className="px-1 py-0.5 text-[8px] font-extrabold"
                   >
-                    {isMonitoring ? statusShortLabels[o.status] : undefined}
+                    {statusShortLabels[o.status]}
                   </StatusBadge>
                 </div>
 
                 {/* Body: Recipient & Instansi */}
-                <div className="space-y-1">
-                  <div className={`font-extrabold text-[#111827] truncate ${isMonitoring ? "text-xs" : "text-base"}`} title={o.institutionName}>
+                <div className="space-y-0.5">
+                  <div className="font-extrabold text-[#111827] text-xs truncate" title={o.institutionName}>
                     {o.institutionName}
                   </div>
-                  <div className="space-y-1 text-[#6B7280] text-[10px]">
-                    <div className="flex items-center gap-1.5 font-medium truncate">
-                      <User className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
+                  <div className="space-y-0.5 text-[#6B7280] text-[9px]">
+                    <div className="flex items-center gap-1 font-medium truncate">
+                      <User className="w-3 h-3 text-[#9CA3AF] shrink-0" />
                       <span>{o.recipientName}</span>
                     </div>
-                    <div className="flex items-center gap-1.5 font-mono truncate">
-                      <Phone className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
+                    <div className="flex items-center gap-1 font-mono truncate">
+                      <Phone className="w-3 h-3 text-[#9CA3AF] shrink-0" />
                       <span>{o.recipientPhone}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Order Details & Price */}
-                <div className="bg-[#F9FAFB] p-2.5 rounded-xl border border-[#F3F4F6] space-y-1">
-                  <div className="text-[10px] text-[#4B5563] break-words line-clamp-2" title={o.foodDetails}>
+                <div className="bg-[#F9FAFB] p-2 rounded-lg border border-[#F3F4F6] space-y-0.5">
+                  <div className="text-[9px] text-[#4B5563] break-words line-clamp-2" title={o.foodDetails}>
                     {o.foodDetails}
                   </div>
                   {o.drinkDetails && !isMonitoring && (
-                    <div className="text-[11px] text-[#6B7280] italic mt-1 break-words">
+                    <div className="text-[9px] text-[#6B7280] italic break-words line-clamp-1">
                       Minuman: {o.drinkDetails}
                     </div>
                   )}
-                  <div className={`font-extrabold text-[#B45309] ${isMonitoring ? "text-xs" : "text-base"}`}>
+                  <div className="font-extrabold text-[#B45309] text-xs">
                     {formatIDR(o.totalPrice)}
                   </div>
                 </div>
 
                 {/* Dates: Event & Due Date */}
-                <div className="space-y-1 text-[10px] text-[#374151]">
-                  <div className="flex items-center gap-1.5 truncate">
-                    <Calendar className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
+                <div className="space-y-0.5 text-[9px] text-[#374151]">
+                  <div className="flex items-center gap-1 truncate">
+                    <Calendar className="w-3 h-3 text-[#9CA3AF] shrink-0" />
                     <span>Acara: {new Date(o.eventDate).toLocaleDateString("id-ID")}</span>
                   </div>
-                  <div className={`flex items-center gap-1.5 font-semibold ${
+                  <div className={`flex items-center gap-1 font-semibold ${
                     dueInfo.isOverdue ? "text-[#EF4444]" : dueInfo.isWarning ? "text-[#F59E0B]" : "text-[#6B7280]"
                   }`}>
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <AlertTriangle className="w-3 h-3 shrink-0" />
                     <span className="truncate">Tempo: {new Date(o.paymentDueDate).toLocaleDateString("id-ID")}</span>
                   </div>
                 </div>
 
                 {/* Payment Status & Validation Badge */}
-                <div className="flex flex-col gap-1.5 pt-1.5 border-t border-[#F3F4F6]">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
+                <div className="flex flex-col gap-1 pt-1 border-t border-[#F3F4F6]">
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                    <div className="flex items-center gap-1">
                       {isMonitoring ? (
                         <span
-                          className={`inline-block text-[9px] font-extrabold rounded-md px-1.5 py-0.5 border ${
+                          className={`inline-block text-[8px] font-extrabold rounded-md px-1 py-0.5 border ${
                             o.paymentStatus === "SUDAH_DIBAYAR"
                               ? "bg-[#D1FAE5] text-[#065F46] border-[#A7F3D0]"
                               : o.paymentStatus === "JATUH_TEMPO"
@@ -1960,25 +2001,22 @@ export function OrdersPage() {
                             : "Belum Bayar"}
                         </span>
                       ) : (
-                        <>
-                          <span className="text-xs text-[#6B7280] font-medium">Pembayaran:</span>
-                          <select
-                            className={`text-xs font-bold rounded-lg px-2 py-1.5 border focus:outline-none cursor-pointer ${
-                              o.paymentStatus === "SUDAH_DIBAYAR"
-                                ? "bg-[#D1FAE5] text-[#065F46] border-[#A7F3D0]"
-                                : o.paymentStatus === "JATUH_TEMPO"
-                                ? "bg-[#FEE2E2] text-[#991B1B] border-[#FCA5A5]"
-                                : "bg-[#FEF3C7] text-[#92400E] border-[#FDE047]"
-                            }`}
-                            value={o.paymentStatus}
-                            onChange={(e) => handleUpdatePaymentStatus(o.id, e.target.value as PaymentStatus)}
-                            aria-label="Ubah Status Pembayaran"
-                          >
-                            <option value="BELUM_DIBAYAR">Belum Dibayar</option>
-                            <option value="SUDAH_DIBAYAR">Sudah Dibayar</option>
-                            <option value="JATUH_TEMPO">Jatuh Tempo</option>
-                          </select>
-                        </>
+                        <select
+                          className={`text-[9px] font-bold rounded-md px-1 py-0.5 border focus:outline-none cursor-pointer ${
+                            o.paymentStatus === "SUDAH_DIBAYAR"
+                              ? "bg-[#D1FAE5] text-[#065F46] border-[#A7F3D0]"
+                              : o.paymentStatus === "JATUH_TEMPO"
+                              ? "bg-[#FEE2E2] text-[#991B1B] border-[#FCA5A5]"
+                              : "bg-[#FEF3C7] text-[#92400E] border-[#FDE047]"
+                          }`}
+                          value={o.paymentStatus}
+                          onChange={(e) => handleUpdatePaymentStatus(o.id, e.target.value as PaymentStatus)}
+                          aria-label="Ubah Status Pembayaran"
+                        >
+                          <option value="BELUM_DIBAYAR">Belum Bayar</option>
+                          <option value="SUDAH_DIBAYAR">Lunas</option>
+                          <option value="JATUH_TEMPO">Tempo</option>
+                        </select>
                       )}
                     </div>
                     <div>
@@ -1986,22 +2024,22 @@ export function OrdersPage() {
                         <button
                           type="button"
                           onClick={() => setPreviewInvoiceOrder(o)}
-                          className="inline-flex items-center gap-1 text-[9px] font-bold text-[#10B981] bg-emerald-50 border border-emerald-200 rounded-md px-1.5 py-0.5 hover:bg-emerald-100 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-0.5 text-[8px] font-bold text-[#10B981] bg-emerald-50 border border-emerald-200 rounded-md px-1 py-0.5 hover:bg-emerald-100 transition-colors cursor-pointer"
                           title="Lihat Tanda Tangan"
                         >
-                          <ShieldCheck className="w-3 h-3" /> TTD
+                          <ShieldCheck className="w-2.5 h-2.5" /> TTD
                         </button>
                       ) : isManuallyValidated ? (
                         <button
                           type="button"
                           onClick={() => setPreviewInvoiceOrder(o)}
-                          className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-1.5 py-0.5 hover:bg-amber-100 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-0.5 text-[8px] font-bold text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-1 py-0.5 hover:bg-amber-100 transition-colors cursor-pointer"
                           title="Lihat Validasi Manual"
                         >
-                          <CheckCircle2 className="w-3 h-3" /> Valid
+                          <CheckCircle2 className="w-2.5 h-2.5" /> Valid
                         </button>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[9px] font-medium text-[#6B7280] bg-neutral-100 rounded-md px-1.5 py-0.5">
+                        <span className="inline-flex items-center gap-0.5 text-[8px] font-medium text-[#6B7280] bg-neutral-100 rounded-md px-1 py-0.5">
                           Belum Valid
                         </span>
                       )}
@@ -2010,11 +2048,11 @@ export function OrdersPage() {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex flex-col gap-1.5 pt-1.5 border-t border-[#F3F4F6]">
+                <div className="flex flex-col gap-1 pt-1 border-t border-[#F3F4F6]">
                   {/* Status Transition buttons */}
                   {!isMonitoring && o.status === "PENDING" && (
                     <button
-                      className="bg-[#D97706] hover:bg-[#B45309] text-white w-full h-10 rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                      className="bg-[#D97706] hover:bg-[#B45309] text-white w-full h-8 rounded-lg text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
                       onClick={() => handleTransition(o.id, "start-production")}
                       disabled={transitioningId === o.id}
                     >
@@ -2023,7 +2061,7 @@ export function OrdersPage() {
                   )}
                   {!isMonitoring && o.status === "IN_PRODUCTION" && (
                     <button
-                      className="bg-purple-600 hover:bg-purple-700 text-white w-full h-10 rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                      className="bg-purple-600 hover:bg-purple-700 text-white w-full h-8 rounded-lg text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
                       onClick={() => handleTransition(o.id, "complete-production")}
                       disabled={transitioningId === o.id}
                     >
@@ -2031,16 +2069,16 @@ export function OrdersPage() {
                     </button>
                   )}
                   {!isMonitoring && o.status === "QC" && (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1.5">
                       <button
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white h-10 rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 rounded-lg text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
                         onClick={() => handleTransition(o.id, "qc-pass")}
                         disabled={transitioningId === o.id}
                       >
                         Lolos
                       </button>
                       <button
-                        className="bg-red-600 hover:bg-red-700 text-white h-10 rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                        className="bg-red-600 hover:bg-red-700 text-white h-8 rounded-lg text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
                         onClick={() => {
                           const reason = prompt("Masukkan alasan kegagalan QC:");
                           if (reason) handleTransition(o.id, "qc-fail", reason);
@@ -2054,10 +2092,10 @@ export function OrdersPage() {
 
                   {/* Secondary/Utility Actions */}
                   {isMonitoring ? (
-                    <div className="flex gap-1.5">
+                    <div className="flex gap-1">
                       <button
                         onClick={() => handleCopyLink(o)}
-                        className="flex-1 flex items-center justify-center border border-[#D1D5DB] rounded-xl hover:bg-neutral-100 transition-all h-9 cursor-pointer"
+                        className="flex-1 flex items-center justify-center border border-[#D1D5DB] rounded-lg hover:bg-neutral-100 transition-all h-8 cursor-pointer"
                         title="Salin Link Invoice"
                       >
                         <Copy className="w-3.5 h-3.5 text-[#4B5563]" />
@@ -2067,7 +2105,7 @@ export function OrdersPage() {
                         <Link
                           to={`/invoice/${o.invoiceToken}`}
                           target="_blank"
-                          className="flex-1 text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-xl transition-all flex items-center justify-center h-9"
+                          className="flex-1 text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-lg transition-all flex items-center justify-center h-8"
                           title="Buka Invoice"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
@@ -2076,7 +2114,7 @@ export function OrdersPage() {
 
                       <button
                         onClick={() => exportSingleOrderToPDF(o)}
-                        className="flex-1 text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-xl transition-all flex items-center justify-center h-9 cursor-pointer"
+                        className="flex-1 text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-lg transition-all flex items-center justify-center h-8 cursor-pointer"
                         title="Unduh PDF Invoice"
                         disabled={exportingOrderId === o.id}
                       >
@@ -2089,7 +2127,7 @@ export function OrdersPage() {
 
                       <button
                         onClick={() => exportSingleOrderToJPG(o)}
-                        className="flex-1 text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-xl transition-all flex items-center justify-center h-9 cursor-pointer"
+                        className="flex-1 text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-lg transition-all flex items-center justify-center h-8 cursor-pointer"
                         title="Unduh JPG Invoice"
                         disabled={exportingJpgOrderId === o.id}
                       >
@@ -2101,21 +2139,26 @@ export function OrdersPage() {
                       </button>
                     </div>
                   ) : (
-                    <div className="flex gap-2">
+                    <div className="flex gap-1 w-full">
                       <button
                         onClick={() => handleCopyLink(o)}
-                        className="flex-1 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 border border-[#D1D5DB] rounded-xl py-2 px-3 transition-all text-xs font-semibold flex items-center justify-center gap-1.5 h-10"
+                        className="flex-1 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 border border-[#D1D5DB] rounded-lg h-8 transition-all text-[10px] font-semibold flex items-center justify-center gap-1"
+                        title="Salin Link Invoice"
                       >
-                        <Copy className="w-4 h-4" />
-                        {copiedOrderId === o.id ? "Tersalin!" : "Salin Link Invoice"}
+                        <Copy className="w-3.5 h-3.5 text-[#4B5563]" />
+                        <span className="hidden md:inline">
+                          {copiedOrderId === o.id ? "Tersalin!" : "Salin Link"}
+                        </span>
                       </button>
 
                       {!isSigned && !isManuallyValidated && (
                         <button
                           onClick={() => setValidationTargetId(o.id)}
-                          className="flex-1 text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl py-2 px-3 transition-all text-xs font-bold flex items-center justify-center h-10"
+                          className="flex-1 text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg h-8 transition-all text-[10px] font-bold flex items-center justify-center gap-1"
+                          title="Validasi Bukti"
                         >
-                          Validasi Bukti
+                          <CheckCircle2 className="w-3.5 h-3.5 text-amber-500" />
+                          <span className="hidden md:inline">Validasi</span>
                         </button>
                       )}
 
@@ -2123,36 +2166,36 @@ export function OrdersPage() {
                         <Link
                           to={`/invoice/${o.invoiceToken}`}
                           target="_blank"
-                          className="text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-xl p-2.5 transition-all flex items-center justify-center h-10 w-10 shrink-0"
+                          className="text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-lg transition-all flex items-center justify-center h-8 w-8 shrink-0"
                           title="Buka Invoice"
                         >
-                          <ExternalLink className="w-4 h-4" />
+                          <ExternalLink className="w-3.5 h-3.5" />
                         </Link>
                       )}
 
                       <button
                         onClick={() => exportSingleOrderToPDF(o)}
-                        className="text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-xl p-2.5 transition-all flex items-center justify-center h-10 w-10 shrink-0 cursor-pointer"
+                        className="text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-lg transition-all flex items-center justify-center h-8 w-8 shrink-0 cursor-pointer"
                         title="Unduh PDF Invoice"
                         disabled={exportingOrderId === o.id}
                       >
                         {exportingOrderId === o.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         ) : (
-                          <FileDown className="w-4 h-4" />
+                          <FileDown className="w-3.5 h-3.5" />
                         )}
                       </button>
 
                       <button
                         onClick={() => exportSingleOrderToJPG(o)}
-                        className="text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-xl p-2.5 transition-all flex items-center justify-center h-10 w-10 shrink-0 cursor-pointer"
+                        className="text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-lg transition-all flex items-center justify-center h-8 w-8 shrink-0 cursor-pointer"
                         title="Unduh JPG Invoice"
                         disabled={exportingJpgOrderId === o.id}
                       >
                         {exportingJpgOrderId === o.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         ) : (
-                          <ImageIcon className="w-4 h-4" />
+                          <ImageIcon className="w-3.5 h-3.5" />
                         )}
                       </button>
                     </div>
@@ -2161,17 +2204,17 @@ export function OrdersPage() {
 
                 {/* Inline mobile admin notes & photo section (visible to Admins only) */}
                 {!isMonitoring && (
-                  <div className="mt-3 pt-3 border-t border-[#F3F4F6] bg-neutral-50/60 rounded-xl p-3.5 space-y-3">
+                  <div className="mt-2 pt-2 border-t border-[#F3F4F6] bg-neutral-50/60 rounded-xl p-2.5 space-y-2 text-[9px]">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-neutral-800 font-bold text-[9px] uppercase tracking-wider">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                        <span>Pengaduan & Bukti Admin</span>
+                      <div className="flex items-center gap-1 text-neutral-800 font-bold uppercase tracking-wider text-[8px]">
+                        <AlertTriangle className="w-3 h-3 text-amber-500" />
+                        <span>Komplain & Bukti</span>
                       </div>
                       {activeEditRowId !== o.id && (
                         <button
                           type="button"
                           onClick={() => handleStartEditNotes(o)}
-                          className="text-[9px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded px-2 py-0.5 cursor-pointer transition-all"
+                          className="text-[8px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5 cursor-pointer transition-all"
                         >
                           Edit
                         </button>
@@ -2737,6 +2780,92 @@ export function OrdersPage() {
                       </div>
                     ) : (
                       <p className="text-[10px] text-neutral-500 italic">Foto mulai memasak tidak dapat dimuat atau kosong.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Foto Kurir Mulai OTW (Start Delivery) */}
+              {previewInvoiceOrder.deliveryStartPhotoId && (
+                <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200 font-['Hanken_Grotesk']">
+                  <h5 className="font-bold text-neutral-500 uppercase tracking-wider text-[10px]">
+                    Foto Kurir Mulai OTW (Start Delivery)
+                  </h5>
+                  <div className="border border-[#E5E7EB] rounded-xl overflow-hidden bg-neutral-50 p-4 flex flex-col items-center justify-center">
+                    {loadingCourierStartPhoto ? (
+                      <div className="flex items-center gap-2 text-xs text-neutral-500 py-6">
+                        <Loader2 className="w-4 h-4 animate-spin text-neutral-600" />
+                        <span>Memuat foto mulai OTW...</span>
+                      </div>
+                    ) : courierStartPhotoSrc ? (
+                      <div className="bg-white border border-[#E5E7EB] rounded-lg p-2 max-w-sm w-full shadow-2xs">
+                        <img
+                          src={courierStartPhotoSrc}
+                          alt="Foto Kurir Mulai OTW"
+                          className="max-h-64 mx-auto rounded object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-neutral-500 italic">Foto mulai OTW tidak dapat dimuat atau kosong.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Bukti Pengiriman Kurir & Tanda Tangan */}
+              {previewInvoiceOrder.proofFileIds && previewInvoiceOrder.proofFileIds.length > 0 && (
+                <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200 font-['Hanken_Grotesk']">
+                  <h5 className="font-bold text-neutral-500 uppercase tracking-wider text-[10px]">
+                    Bukti Pengiriman Kurir & TTD Penerima
+                  </h5>
+                  <div className="border border-[#E5E7EB] rounded-xl overflow-hidden bg-neutral-50 p-4 space-y-4">
+                    {loadingCourierProofPhotos ? (
+                      <div className="flex items-center justify-center gap-2 text-xs text-neutral-500 py-6">
+                        <Loader2 className="w-4 h-4 animate-spin text-neutral-600" />
+                        <span>Memuat bukti pengiriman...</span>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Photos */}
+                        <div className="space-y-2">
+                          <span className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider">
+                            Foto Dokumentasi Penerimaan
+                          </span>
+                          {courierProofPhotoSrcs.length > 1 ? (
+                            <div className="space-y-2">
+                              {courierProofPhotoSrcs.slice(0, -1).map((src, idx) => (
+                                <div key={idx} className="bg-white border border-[#E5E7EB] rounded-lg p-2 shadow-2xs">
+                                  <img
+                                    src={src}
+                                    alt={`Bukti Pengiriman #${idx + 1}`}
+                                    className="max-h-48 mx-auto rounded object-contain"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-neutral-500 italic">Tidak ada foto dokumentasi.</p>
+                          )}
+                        </div>
+
+                        {/* Signature */}
+                        <div className="space-y-2">
+                          <span className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider">
+                            Tanda Tangan Penerima (PIC)
+                          </span>
+                          {courierProofPhotoSrcs.length > 0 ? (
+                            <div className="bg-white border border-[#E5E7EB] rounded-lg p-2 shadow-2xs flex items-center justify-center aspect-video">
+                              <img
+                                src={courierProofPhotoSrcs[courierProofPhotoSrcs.length - 1]}
+                                alt="Tanda Tangan Penerima"
+                                className="max-h-32 object-contain"
+                              />
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-neutral-500 italic">Tidak ada tanda tangan.</p>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>

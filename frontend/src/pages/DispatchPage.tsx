@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   Truck, RotateCcw, AlertCircle, MapPin, Clock,
   User, Package, Loader2, Navigation, ChevronDown,
-  History, Eye, X, ChevronUp,
+  History, Eye, ChevronUp,
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,8 +13,8 @@ import { subscribeOrders } from "@/services/realtimeService";
 import type { Order } from "@/types/order";
 
 import { db } from "@/lib/firebase";
-import { doc, updateDoc, getDoc } from "firebase/firestore";
-import { Button } from "@/components/ui/Button";
+import { doc, updateDoc } from "firebase/firestore";
+import { ProofModal } from "@/components/delivery/ProofModal";
 
 const renderFormattedAddress = (address: string) => {
   if (!address) return null;
@@ -86,160 +86,6 @@ const renderFormattedAddress = (address: string) => {
   );
 };
 
-interface ProofModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  proofFileIds: string[];
-}
-
-function ProofModal({ isOpen, onClose, proofFileIds }: ProofModalProps) {
-  const [photoSrc, setPhotoSrc] = useState<string | null>(null);
-  const [sigSrc, setSigSrc] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isOpen || !proofFileIds || proofFileIds.length === 0) {
-      setPhotoSrc(null);
-      setSigSrc(null);
-      return;
-    }
-
-    const loadProofs = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const fetchFile = async (photoId: string) => {
-          const fileId = photoId.replace("delivery_files/", "");
-          const parentRef = doc(db, "delivery_files", fileId);
-          const parentSnap = await getDoc(parentRef);
-          
-          if (parentSnap.exists()) {
-            const meta = parentSnap.data();
-            const totalChunks = meta.totalChunks || 0;
-            
-            const chunkPromises = [];
-            for (let i = 0; i < totalChunks; i++) {
-              const chunkRef = doc(db, "delivery_files", fileId, "chunks", String(i));
-              chunkPromises.push(getDoc(chunkRef));
-            }
-            const chunkSnaps = await Promise.all(chunkPromises);
-            
-            let fullDataUri = "";
-            for (const chunkSnap of chunkSnaps) {
-              if (chunkSnap.exists()) {
-                fullDataUri += chunkSnap.data().data || "";
-              }
-            }
-            return fullDataUri;
-          }
-          return null;
-        };
-
-        if (proofFileIds[0]) {
-          const photoData = await fetchFile(proofFileIds[0]);
-          setPhotoSrc(photoData);
-        }
-        if (proofFileIds[1]) {
-          const sigData = await fetchFile(proofFileIds[1]);
-          setSigSrc(sigData);
-        }
-      } catch (err) {
-        console.error("Gagal memuat bukti pengiriman:", err);
-        setError("Gagal memuat bukti pengiriman.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadProofs();
-  }, [isOpen, proofFileIds]);
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="absolute inset-0 bg-black/55 backdrop-blur-xs"
-      />
-
-      {/* Modal Content */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        transition={{ type: "spring", duration: 0.3 }}
-        className="relative bg-white rounded-3xl max-w-2xl w-full p-6 shadow-xl border border-[#E5E7EB] font-['Hanken_Grotesk',system-ui,sans-serif] flex flex-col gap-4 z-10 max-h-[90vh] overflow-y-auto"
-      >
-        <div className="flex items-center justify-between border-b border-[#F3F4F6] pb-3">
-          <h3 className="font-['Manrope',system-ui,sans-serif] text-lg font-bold text-[#111827]">
-            Bukti Pengiriman
-          </h3>
-          <button
-            onClick={onClose}
-            aria-label="Tutup"
-            className="text-gray-400 hover:text-gray-600 transition cursor-pointer p-1"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="py-12 text-center space-y-2">
-            <Loader2 className="h-8 w-8 animate-spin text-amber-500 mx-auto" />
-            <p className="text-xs text-[#6B7280]">Memuat bukti pengiriman...</p>
-          </div>
-        ) : error ? (
-          <div className="py-8 text-center text-red-600 text-sm font-semibold">
-            {error}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Photo proof */}
-            <div className="space-y-2">
-              <span className="block text-xs font-bold text-[#374151] uppercase tracking-wide">Foto Dokumentasi</span>
-              {photoSrc ? (
-                <div className="border border-[#E5E7EB] rounded-2xl overflow-hidden bg-neutral-50 aspect-video w-full flex items-center justify-center">
-                  <img src={photoSrc} alt="Foto Bukti" className="h-full w-full object-cover" />
-                </div>
-              ) : (
-                <div className="border border-dashed border-[#D1D5DB] rounded-2xl p-6 text-center text-xs text-[#9CA3AF]">
-                  Tidak ada foto dokumentasi
-                </div>
-              )}
-            </div>
-
-            {/* Signature proof */}
-            <div className="space-y-2">
-              <span className="block text-xs font-bold text-[#374151] uppercase tracking-wide">Tanda Tangan PIC</span>
-              {sigSrc ? (
-                <div className="border border-[#E5E7EB] rounded-2xl p-4 bg-neutral-50 aspect-video w-full flex items-center justify-center">
-                  <img src={sigSrc} alt="Tanda Tangan Bukti" className="max-h-32 object-contain" />
-                </div>
-              ) : (
-                <div className="border border-dashed border-[#D1D5DB] rounded-2xl p-6 text-center text-xs text-[#9CA3AF]">
-                  Tidak ada tanda tangan
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="flex justify-end pt-3 border-t border-[#F3F4F6] mt-2">
-          <Button variant="secondary" onClick={onClose}>
-            Tutup
-          </Button>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
 // ── Main Page ───────────────────────────────────────────────────
 
 export function DispatchPage() {
@@ -256,6 +102,7 @@ export function DispatchPage() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isProofModalOpen, setIsProofModalOpen] = useState(false);
   const [selectedProofFiles, setSelectedProofFiles] = useState<string[]>([]);
+  const [selectedStartPhotoId, setSelectedStartPhotoId] = useState<string | undefined>(undefined);
 
   useEffect(() => subscribeOrders(setOrders, console.error), []);
 
@@ -285,7 +132,15 @@ export function DispatchPage() {
 
   const ready = useMemo(() => orders.filter((o) => o.status === "READY_TO_DELIVER"), [orders]);
   const enRoute = useMemo(() => orders.filter((o) => o.status === "OUT_FOR_DELIVERY"), [orders]);
-  const completed = useMemo(() => orders.filter((o) => o.status === "COMPLETED" || o.status === "DELIVERED"), [orders]);
+  const completed = useMemo(() => {
+    return orders
+      .filter((o) => o.status === "COMPLETED" || o.status === "DELIVERED")
+      .sort((a, b) => {
+        const timeA = a.deliveredAt ? new Date(a.deliveredAt).getTime() : 0;
+        const timeB = b.deliveredAt ? new Date(b.deliveredAt).getTime() : 0;
+        return timeB - timeA;
+      });
+  }, [orders]);
 
   const busyCourierIds = useMemo(() => {
     const busy = new Set<string>();
@@ -669,17 +524,32 @@ export function DispatchPage() {
                         <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
                         {renderFormattedAddress(o.deliveryAddress)}
                       </div>
-                      {o.deliveryLat && o.deliveryLng && (
-                        <a
-                          href={`https://www.google.com/maps?q=${o.deliveryLat},${o.deliveryLng}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded-lg px-2.5 py-1 text-xs font-bold font-['Hanken_Grotesk',system-ui,sans-serif] transition shrink-0 cursor-pointer"
-                        >
-                          <MapPin className="h-3 w-3 text-blue-500 shrink-0" />
-                          <span>Lihat Peta</span>
-                        </a>
-                      )}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {o.deliveryStartPhotoId && (
+                          <button
+                            onClick={() => {
+                              setSelectedProofFiles([]);
+                              setSelectedStartPhotoId(o.deliveryStartPhotoId || undefined);
+                              setIsProofModalOpen(true);
+                            }}
+                            className="flex items-center gap-1.5 bg-orange-50 border border-orange-200 hover:bg-orange-100 text-orange-700 rounded-lg px-2.5 py-1 text-xs font-bold font-['Hanken_Grotesk',system-ui,sans-serif] transition cursor-pointer"
+                          >
+                            <Eye className="h-3 w-3 text-orange-500 shrink-0" />
+                            <span>Foto Mulai OTW</span>
+                          </button>
+                        )}
+                        {o.deliveryLat && o.deliveryLng && (
+                          <a
+                            href={`https://www.google.com/maps?q=${o.deliveryLat},${o.deliveryLng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded-lg px-2.5 py-1 text-xs font-bold font-['Hanken_Grotesk',system-ui,sans-serif] transition cursor-pointer"
+                          >
+                            <MapPin className="h-3 w-3 text-blue-500 shrink-0" />
+                            <span>Lihat Peta</span>
+                          </a>
+                        )}
+                      </div>
                     </div>
                     {/* Per-order GPS coordinate chip */}
                     {gpsStatus === "active" && gpsCoords && (
@@ -771,17 +641,18 @@ export function DispatchPage() {
                             </div>
                           </div>
 
-                          {hasProof && (
+                          {(hasProof || o.deliveryStartPhotoId) && (
                             <div className="pt-2 border-t border-[#F3F4F6] flex justify-end">
                               <button
                                 onClick={() => {
                                   setSelectedProofFiles(o.proofFileIds || []);
+                                  setSelectedStartPhotoId(o.deliveryStartPhotoId || undefined);
                                   setIsProofModalOpen(true);
                                 }}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ECFDF5] hover:bg-[#D1FAE5] text-emerald-700 font-bold text-xs rounded-lg transition cursor-pointer"
                               >
                                 <Eye className="h-3.5 w-3.5" />
-                                Lihat Bukti Pengiriman
+                                Lihat Bukti Foto & TTD
                               </button>
                             </div>
                           )}
@@ -800,6 +671,7 @@ export function DispatchPage() {
         isOpen={isProofModalOpen}
         onClose={() => setIsProofModalOpen(false)}
         proofFileIds={selectedProofFiles}
+        deliveryStartPhotoId={selectedStartPhotoId}
       />
     </div>
   );

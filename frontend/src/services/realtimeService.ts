@@ -79,6 +79,7 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     qcFailReason: data.qcFailReason as string | undefined,
     deliveredAt: data.deliveredAt ? toIsoString(data.deliveredAt) : undefined,
     proofFileIds: data.proofFileIds as string[] | undefined,
+    deliveryProofPhotos: data.deliveryProofPhotos as Order["deliveryProofPhotos"],
     createdAt: toIsoString(data.createdAt),
     updatedAt: toIsoString(data.updatedAt),
     paymentMethod: ((data.paymentMethod as string) ?? "cod") as Order["paymentMethod"],

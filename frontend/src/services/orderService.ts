@@ -101,6 +101,8 @@ function localDataToOrder(id: string, data: DocumentData): Order {
     invoiceSignedAt: toIsoStringOrUndefined(data.invoiceSignedAt),
     invoiceSignatureData: data.invoiceSignatureData as string | undefined,
     manualValidation: data.manualValidation as Order["manualValidation"],
+    adminComplaintNotes: data.adminComplaintNotes as string | undefined,
+    adminComplaintPhotoId: data.adminComplaintPhotoId as string | undefined,
     status: ((data.status as string) ?? "PENDING") as OrderStatus,
     customerId: (data.customerId as string) ?? "",
     customerName: (data.customerName as string) ?? "",
@@ -117,6 +119,7 @@ function localDataToOrder(id: string, data: DocumentData): Order {
     qcFailReason: data.qcFailReason as string | undefined,
     deliveredAt: toIsoStringOrUndefined(data.deliveredAt),
     proofFileIds: data.proofFileIds as string[] | undefined,
+    deliveryProofPhotos: data.deliveryProofPhotos as Order["deliveryProofPhotos"],
     createdAt: toIsoString(data.createdAt),
     updatedAt: toIsoString(data.updatedAt),
     paymentMethod: ((data.paymentMethod as string) ?? "cod") as Order["paymentMethod"],
@@ -187,6 +190,7 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     qcFailReason: data.qcFailReason as string | undefined,
     deliveredAt: toIsoStringOrUndefined(data.deliveredAt),
     proofFileIds: data.proofFileIds as string[] | undefined,
+    deliveryProofPhotos: data.deliveryProofPhotos as Order["deliveryProofPhotos"],
     createdAt: toIsoString(data.createdAt),
     updatedAt: toIsoString(data.updatedAt),
     paymentMethod: ((data.paymentMethod as string) ?? "cod") as Order["paymentMethod"],
@@ -682,7 +686,8 @@ export async function dispatchOrder(id: string): Promise<Order> {
 /** Mark an OUT_FOR_DELIVERY order as COMPLETED. */
 export async function confirmDelivery(
   id: string,
-  proofFileIds: string[]
+  proofFileIds: string[],
+  photos?: { fileId: string; description: string }[]
 ): Promise<Order> {
   const docRef = doc(db, "orders", id);
   const updates: Record<string, unknown> = {
@@ -692,6 +697,9 @@ export async function confirmDelivery(
   };
   if (proofFileIds.length > 0) {
     updates.proofFileIds = proofFileIds;
+  }
+  if (photos && photos.length > 0) {
+    updates.deliveryProofPhotos = photos;
   }
   await updateDocAndReturn(docRef, updates);
 

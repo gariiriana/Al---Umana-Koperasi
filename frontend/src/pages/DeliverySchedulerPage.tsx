@@ -160,7 +160,7 @@ export function DeliverySchedulerPage() {
           <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]">
             Delivery Scheduler
           </h1>
-          <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk'] mt-1">
+          <p className="text-[11px] sm:text-xs text-[#6B7280] font-['Hanken_Grotesk'] mt-1">
             Jadwalkan pengiriman masal, tugaskan kurir sekaligus, dan hindari bentrok waktu pengantaran.
           </p>
         </div>

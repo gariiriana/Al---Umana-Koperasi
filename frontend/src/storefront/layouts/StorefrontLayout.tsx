@@ -401,9 +401,9 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
       <div className="min-h-screen bg-[#F3F4F6]">
 
         {/* ── MOBILE HORIZONTAL HEADER (<lg) ─────────────────────────── */}
-        <header className="lg:hidden bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-[#111827] sticky top-0 z-30 shadow-sm px-4 py-3 flex items-center justify-between gap-2">
+        <header className="lg:hidden bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-[#111827] sticky top-0 z-30 shadow-sm px-3 py-2.5 flex items-center justify-between gap-1.5 w-full overflow-hidden">
           {/* Logo / Brand & Order List Icon */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <Link to="/" className="flex items-center gap-1.5">
               <img
                 src="/logo.png"
@@ -411,7 +411,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                 className="h-8 w-8 object-contain bg-white rounded-full p-0.5 border border-amber-200"
               />
               <span className="font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-white tracking-wide">
-                Al-Umanaa <span className="font-light text-amber-100 text-xs">{lang === "id" ? "Koperasi" : "Cooperative"}</span>
+                Al-Umanaa <span className="hidden sm:inline font-light text-amber-100 text-xs">{lang === "id" ? "Koperasi" : "Cooperative"}</span>
               </span>
             </Link>
             {profile && ["admin", "monitoring"].includes(profile.role) && (
@@ -437,7 +437,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
           </div>
 
           {/* Right side: Language + Auth / Profile */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {profile && ["admin", "monitoring"].includes(profile.role) && user && (
               <span className="inline-block h-4 w-px bg-white/20 shrink-0 self-center" />
             )}

@@ -11,6 +11,9 @@ services:
       - ./backend/.env.production
     environment:
       - ENV=production
+      - WA_GATEWAY_URL=http://wa-gateway:8000
+    depends_on:
+      - wa-gateway
 
   frontend:
     build:
@@ -22,3 +25,15 @@ services:
       - ./frontend/.env.production
     depends_on:
       - backend
+
+  wa-gateway:
+    build:
+      context: ./wa-gateway
+    ports:
+      - "8000:8000"
+    volumes:
+      - wa_session:/app/.wwebjs_auth
+    restart: unless-stopped
+
+volumes:
+  wa_session:

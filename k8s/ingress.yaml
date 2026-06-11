@@ -1,0 +1,46 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: al-umana-ingress
+  namespace: al-umana
+  labels:
+    app.kubernetes.io/part-of: al-umana
+  annotations:
+    # Nginx Ingress Controller annotations
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: al-umana.local
+      http:
+        paths:
+          # Backend API — requests to /api/* are routed to the Go backend
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 8080
+
+          # WA Gateway — internal webhook, accessible via /wa/*
+          - path: /wa(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: wa-gateway-service
+                port:
+                  number: 8000
+
+          # Frontend SPA — catch-all, serves the React app
+          - path: /()(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: frontend-service
+                port:
+                  number: 80

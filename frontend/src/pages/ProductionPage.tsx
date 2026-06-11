@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, CheckCheck, Clock, ChefHat, Package, AlertCircle, Loader2, Upload } from "lucide-react";
+import { Play, CheckCheck, Clock, ChefHat, Package, AlertCircle, Loader2, Upload, Camera } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 import { ApiError } from "@/services/apiClient";
@@ -13,6 +13,7 @@ import { doc, updateDoc } from "firebase/firestore";
 import { uploadFileInChunks } from "@/services/chunkUploadService";
 import { validateImageUpload } from "@/lib/validators";
 import { ProductImage } from "@/components/ProductImage";
+import { LiveCamera } from "@/components/LiveCamera";
 
 
 function CookingTimer({ timerEnd, status }: { timerEnd?: string; status: string }) {
@@ -84,6 +85,7 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [cardError, setCardError] = useState<string | null>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -310,36 +312,53 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
                   />
                 </div>
 
-                {/* Photo file picker - centered */}
+                {/* Photo picker using live camera */}
                 <div className="space-y-1">
                   <label className="block text-[11px] font-bold text-[#374151]">
-                    Foto Mulai Memasak
+                    Foto Mulai Memasak <span className="text-red-500">*</span>
                   </label>
-                  <div className="flex flex-col items-center justify-center border border-dashed border-[#D1D5DB] rounded-lg p-4 bg-white hover:bg-neutral-50 transition relative cursor-pointer min-h-[90px] text-center">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      title="Pilih Foto Mulai Masak"
-                      aria-label="Pilih Foto Mulai Masak"
-                      onChange={handleFileChange}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    />
-                    <Upload className="h-5 w-5 text-[#9CA3AF] mb-1.5" />
-                    <span className="text-[11px] font-bold text-[#4B5563]">
-                      {photoFile ? "Ubah Foto Terpilih" : "Pilih Foto Mulai Masak"}
-                    </span>
-                    <span className="text-[9px] text-[#9CA3AF] mt-0.5">JPEG, PNG, atau WebP (Maks 15MB)</span>
-                  </div>
                   
+                  <div
+                    onClick={() => setIsCameraOpen(true)}
+                    className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-300 hover:border-[#fbbf24] rounded-2xl p-5 bg-[#111827] hover:bg-[#1f2937] transition duration-200 cursor-pointer min-h-[100px] text-center shadow-md select-none group"
+                  >
+                    <Camera className="h-7 w-7 text-[#fbbf24] mb-1.5 animate-pulse" />
+                    <span className="text-[10px] font-extrabold text-white tracking-widest uppercase font-heading">
+                      AMBIL FOTO LIVE
+                    </span>
+                    <span className="text-[8px] text-neutral-400 mt-0.5">Watermark Lokasi & Waktu Tersemat</span>
+                  </div>
+
                   {photoPreview && (
-                    <div className="mt-2 flex items-center justify-center">
+                    <div className="mt-2 relative rounded-xl overflow-hidden border border-[#E5E7EB] group">
                       <img
                         src={photoPreview}
                         alt="Preview mulai masak"
-                        className="h-20 w-20 object-cover rounded-lg border border-[#E5E7EB]"
+                        className="w-full h-32 object-cover"
                       />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition duration-150 flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => setIsCameraOpen(true)}
+                          className="px-3 py-1.5 bg-[#fbbf24] hover:bg-[#f59e0b] text-[#111827] text-xs font-bold rounded-lg transition"
+                        >
+                          Ambil Ulang
+                        </button>
+                      </div>
                     </div>
                   )}
+
+                  <LiveCamera
+                    isOpen={isCameraOpen}
+                    onClose={() => setIsCameraOpen(false)}
+                    activityType="PRODUKSI"
+                    orderId={order.id}
+                    onCapture={(file) => {
+                      setPhotoFile(file);
+                      setPhotoPreview(URL.createObjectURL(file));
+                      setCardError(null);
+                    }}
+                  />
                 </div>
 
                 {/* Progress bar */}
@@ -467,22 +486,22 @@ export function ProductionPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="font-['Manrope',system-ui,sans-serif] text-xl sm:text-2xl font-extrabold text-[#111827]">
             {lang === "id" ? "Dapur Produksi" : "Production"}
           </h1>
-          <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] mt-0.5">
+          <p className="text-xs sm:text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] mt-0.5">
             {lang === "id" ? "Kelola pesanan yang sedang dan menunggu dimasak" : "Manage orders currently cooking and waiting to be cooked"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex flex-col items-center bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            <span className="text-lg font-extrabold text-amber-700 font-['Manrope',system-ui,sans-serif]">{inProduction.length}</span>
+        <div className="flex items-center gap-2 self-start sm:self-center">
+          <div className="flex flex-col items-center bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 sm:py-2">
+            <span className="text-base sm:text-lg font-extrabold text-amber-700 font-['Manrope',system-ui,sans-serif]">{inProduction.length}</span>
             <span className="text-[9px] font-bold text-amber-600 uppercase tracking-wide">{lang === "id" ? "Masak" : "Cooking"}</span>
           </div>
-          <div className="flex flex-col items-center bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg px-3 py-2">
-            <span className="text-lg font-extrabold text-[#374151] font-['Manrope',system-ui,sans-serif]">{confirmed.length}</span>
+          <div className="flex flex-col items-center bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg px-3 py-1.5 sm:py-2">
+            <span className="text-base sm:text-lg font-extrabold text-[#374151] font-['Manrope',system-ui,sans-serif]">{confirmed.length}</span>
             <span className="text-[9px] font-bold text-[#6B7280] uppercase tracking-wide">{lang === "id" ? "Antri" : "Queue"}</span>
           </div>
         </div>

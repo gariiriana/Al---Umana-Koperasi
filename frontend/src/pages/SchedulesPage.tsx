@@ -6,10 +6,67 @@ import { useAuth } from "@/contexts/AuthContext";
 import { listAllSchedules, saveSchedule, deleteSchedule, type DistributionSchedule } from "@/services/distributionScheduleService";
 import type { ReverseGeoResult } from "@/components/MapLocationPicker";
 import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+
+// Helper to convert URL to Base64 image with downscaling
+const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch image: ${res.statusText}`);
+    const blob = await res.blob();
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const maxDim = 256;
+        let width = img.naturalWidth;
+        let height = img.naturalHeight;
+        
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = () => resolve(null);
+      img.src = URL.createObjectURL(blob);
+    });
+  } catch (err) {
+    console.error("Error converting URL to Base64:", err);
+    return null;
+  }
+};
 
 const MapLocationPicker = lazy(() =>
   import("@/components/MapLocationPicker").then((m) => ({ default: m.MapLocationPicker }))
 );
+
+const DAILY_TEMPLATE_ITEMS = [
+  { time: "04.00", title: "Makan Pagi Pimpinan & Mahad (Catering/MBG)", destination: "Math'am & Area Santri", notes: "" },
+  { time: "07.00", title: "Indocafe, Paket Buah Utk Pimpinan (Catering)", destination: "10B", notes: "" },
+  { time: "07.00", title: "Lemper, Risol Mayo dll (Bakery)", destination: "10B", notes: "" },
+  { time: "08.00", title: "Snack Pagi Pimpinan (Catering)", destination: "Math'am", notes: "" },
+  { time: "08.00", title: "10 Paket Snack Box (Bakery) - SCG (MD Office)", destination: "SCG (MD Office)", notes: "" },
+  { time: "11.00", title: "Makan siang Mahad & Pimpinan (Catering)", destination: "Math'am & Area Santri", notes: "" },
+  { time: "11.00", title: "Tempe, Kerupuk (catering)", destination: "10B", notes: "" },
+  { time: "12.00", title: "Snack siang Pimpinan (Catering)", destination: "Math'am", notes: "" },
+  { time: "14.00", title: "Makan Sore Mahad & Pimpinan (Catering)", destination: "Math'am & Area Santri", notes: "" },
+  { time: "22.00", title: "Pesanan Extra Vit (Catering)", destination: "SCG", notes: "" },
+];
 
 export function SchedulesPage() {
   const { lang } = useLanguage();
@@ -47,7 +104,62 @@ export function SchedulesPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const canEdit = profile?.role === "distribusi" || profile?.role === "admin";
+  // Template states
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templateDate, setTemplateDate] = useState("");
+  const [selectedTemplateItems, setSelectedTemplateItems] = useState<number[]>([]);
+  const [generatingTemplate, setGeneratingTemplate] = useState(false);
+
+  const handleGenerateTemplate = async () => {
+    if (!templateDate) {
+      showToast({
+        message: lang === "id" ? "Pilih tanggal terlebih dahulu." : "Please select a date.",
+        variant: "error",
+      });
+      return;
+    }
+    if (selectedTemplateItems.length === 0) {
+      showToast({
+        message: lang === "id" ? "Pilih minimal satu item template." : "Please select at least one template item.",
+        variant: "error",
+      });
+      return;
+    }
+
+    setGeneratingTemplate(true);
+    try {
+      const promises = selectedTemplateItems.map((idx) => {
+        const item = DAILY_TEMPLATE_ITEMS[idx];
+        return saveSchedule({
+          date: templateDate,
+          time: item.time,
+          title: item.title,
+          destination: item.destination,
+          notes: item.notes,
+        });
+      });
+      await Promise.all(promises);
+
+      showToast({
+        message: lang === "id" 
+          ? `Berhasil membuat ${selectedTemplateItems.length} jadwal untuk tanggal ${templateDate}.` 
+          : `Successfully generated ${selectedTemplateItems.length} schedules for ${templateDate}.`,
+        variant: "success",
+      });
+      setShowTemplateModal(false);
+      await load();
+    } catch (err) {
+      console.error("Failed to generate schedules:", err);
+      showToast({
+        message: lang === "id" ? "Gagal men-generate jadwal dari template." : "Failed to generate schedules from template.",
+        variant: "error",
+      });
+    } finally {
+      setGeneratingTemplate(false);
+    }
+  };
+
+  const canEdit = profile?.role === "distribusi" || (profile?.role as string) === "distributor" || profile?.role === "admin";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -178,90 +290,109 @@ export function SchedulesPage() {
     }
   };
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     try {
+      showToast({
+        message: lang === "id" ? "Sedang menyiapkan PDF..." : "Preparing PDF...",
+        variant: "info",
+      });
+
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const pageW = doc.internal.pageSize.getWidth();
       
+      const brandGold: [number, number, number] = [217, 119, 6];       // #D97706
       const brandAmberDark: [number, number, number] = [180, 83, 9];    // #B45309
+      const brandYellowCream: [number, number, number] = [255, 253, 245]; // #FFFDF5
+      const brandYellowBorder: [number, number, number] = [253, 230, 138]; // #FDE68A
       const slateDark: [number, number, number] = [30, 41, 59];        // #1E293B
       const slateLight: [number, number, number] = [107, 114, 128];     // #6B7280
+      const white: [number, number, number] = [255, 255, 255];
 
-      let y = 15;
+      // Draw PDF Header
+      const logoBase64 = await getBase64ImageFromUrl("/logo.png");
+      if (logoBase64) {
+        doc.addImage(logoBase64, "PNG", 14, 12, 18, 18);
+      }
+      const titleX = logoBase64 ? 36 : 14;
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
+      doc.setFontSize(12);
       doc.setTextColor(...brandAmberDark);
-      doc.text("KOPERASI AL-UMANAA - JADWAL DISTRIBUSI", pageW / 2, y, { align: "center" });
+      doc.text("KOPERASI AL-UMANAA", titleX, 16);
 
-      y += 6;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(...slateDark);
+      doc.text("LAPORAN JADWAL DISTRIBUSI", titleX, 20.5);
+
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
+      doc.setFontSize(7.5);
       doc.setTextColor(...slateLight);
+      doc.text("Pesantren Al-Umanaa, Sukabumi | SIMOL", titleX, 25.5);
+
       let filterDesc = "Semua Data Jadwal";
       if (filterType === "day") {
-        filterDesc = `Harian: ${new Date(filterDate).toLocaleDateString("id-ID", { dateStyle: "full" })}`;
+        filterDesc = `${new Date(filterDate).toLocaleDateString("id-ID", { dateStyle: "full" })}`;
       } else if (filterType === "week") {
-        filterDesc = `Mingguan: ${filterWeekStart} s/d ${filterWeekEnd}`;
+        filterDesc = `${filterWeekStart} s/d ${filterWeekEnd}`;
       } else if (filterType === "month") {
-        filterDesc = `Bulanan: ${filterMonthStart} s/d ${filterMonthEnd}`;
+        filterDesc = `${filterMonthStart} s/d ${filterMonthEnd}`;
       }
-      doc.text(`Laporan Jadwal Distribusi (${filterDesc})`, pageW / 2, y, { align: "center" });
 
-      // Table Header
-      y += 10;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8.5);
-      doc.setFillColor(243, 244, 246);
-      doc.rect(14, y, pageW - 28, 7, "F");
-      doc.setTextColor(...slateDark);
-      doc.text("Tanggal", 16, y + 5);
-      doc.text("Waktu", 40, y + 5);
-      doc.text("Kegiatan / Nama Distribusi", 65, y + 5);
-      doc.text("Tujuan", 150, y + 5);
+      doc.setTextColor(...brandGold);
+      doc.text(filterDesc, pageW - 14, 16, { align: "right" });
 
-      y += 7;
       doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(...slateLight);
+      doc.text(`Total Jadwal: ${filteredSchedules.length} Kegiatan`, pageW - 14, 20.5, { align: "right" });
+      doc.text(`Dicetak: ${new Date().toLocaleDateString("id-ID")}`, pageW - 14, 25.5, { align: "right" });
 
-      for (const item of filteredSchedules) {
-        if (y > 275) {
-          doc.addPage();
-          y = 15;
-          // Re-draw header row on new page
-          doc.setFont("helvetica", "bold");
-          doc.setFillColor(243, 244, 246);
-          doc.rect(14, y, pageW - 28, 7, "F");
-          doc.setTextColor(...slateDark);
-          doc.text("Tanggal", 16, y + 5);
-          doc.text("Waktu", 40, y + 5);
-          doc.text("Kegiatan / Nama Distribusi", 65, y + 5);
-          doc.text("Tujuan", 150, y + 5);
-          y += 7;
-          doc.setFont("helvetica", "normal");
-        }
+      doc.setDrawColor(...brandGold);
+      doc.setLineWidth(0.5);
+      doc.line(14, 31, pageW - 14, 31);
 
-        // Draw line separator
-        doc.setDrawColor(229, 231, 235);
-        doc.setLineWidth(0.2);
-        doc.line(14, y, pageW - 14, y);
+      // Table Body preparation
+      const tableBody = filteredSchedules.map((item, index) => {
+        // Strip out the maps URL from destination label if present
+        const label = item.destination.replace(/\s*\|\s*https?:\/\/[^\s|]+/, "").trim();
+        return [
+          String(index + 1),
+          item.date,
+          item.time,
+          item.title,
+          label,
+          item.notes || "-"
+        ];
+      });
 
-        doc.setFontSize(8);
-        doc.text(item.date, 16, y + 5);
-        doc.text(item.time, 40, y + 5);
-        
-        // Wrap text for kegiatan
-        const titleLines = doc.splitTextToSize(item.title, 80);
-        doc.text(titleLines, 65, y + 5);
-        
-        const destLines = doc.splitTextToSize(item.destination, 45);
-        doc.text(destLines, 150, y + 5);
-
-        const maxHeight = Math.max(titleLines.length, destLines.length) * 4.5;
-        y += Math.max(maxHeight, 7);
-      }
+      autoTable(doc, {
+        startY: 36,
+        head: [["No", "Tanggal", "Waktu", "Kegiatan / Nama Distribusi", "Tujuan / Lokasi", "Catatan"]],
+        body: tableBody,
+        theme: "striped",
+        styles: { lineColor: brandYellowBorder, lineWidth: 0.15 },
+        headStyles: { fillColor: brandGold, textColor: white, fontStyle: "bold", fontSize: 9, halign: "center", cellPadding: 3.5 },
+        bodyStyles: { fontSize: 8.5, textColor: slateDark, cellPadding: 3.5, valign: "middle" },
+        columnStyles: {
+          0: { cellWidth: 10, halign: "center" },
+          1: { cellWidth: 22, halign: "center" },
+          2: { cellWidth: 20, halign: "center", fontStyle: "bold" },
+          3: { cellWidth: 55, fontStyle: "bold" },
+          4: { cellWidth: 45 },
+          5: { cellWidth: pageW - 28 - 10 - 22 - 20 - 55 - 45 }
+        },
+        alternateRowStyles: { fillColor: brandYellowCream },
+        margin: { left: 14, right: 14 }
+      });
 
       doc.save(`jadwal-distribusi-${filterType}-${new Date().toISOString().split("T")[0]}.pdf`);
-      showToast({ message: lang === "id" ? "Berhasil mengunduh laporan PDF." : "Successfully downloaded PDF report.", variant: "success" });
+      showToast({
+        message: lang === "id" ? "Berhasil mengunduh laporan PDF." : "Successfully downloaded PDF report.",
+        variant: "success",
+      });
     } catch (err) {
       console.error(err);
       showToast({ message: "Gagal membuat PDF", variant: "error" });
@@ -270,7 +401,7 @@ export function SchedulesPage() {
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-6xl mx-auto font-['Hanken_Grotesk']">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="font-['Manrope'] text-xl sm:text-2xl font-extrabold text-[#111827]">
             {lang === "id" ? "Jadwal Distribusi Harian" : "Daily Distribution Schedules"}
@@ -279,58 +410,72 @@ export function SchedulesPage() {
             {lang === "id" ? "Atur dan pantau jadwal pengiriman makanan, buah, serta snack koperasi." : "Manage and track cooperative deliveries of food, fruit, and snacks."}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
           <button
             type="button"
             onClick={exportPDF}
-            className="inline-flex items-center justify-center gap-1.5 h-10 px-4 border border-[#D1D5DB] bg-white hover:bg-neutral-50 text-xs font-bold text-[#374151] rounded-xl transition cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 h-10 px-4 w-full sm:w-auto border border-[#D1D5DB] bg-white hover:bg-neutral-50 text-xs font-bold text-[#374151] rounded-xl transition cursor-pointer"
           >
-            <FileDown className="h-4 w-4" />
-            {lang === "id" ? "Unduh PDF Laporan" : "Download PDF Report"}
+            <FileDown className="h-4 w-4 shrink-0" />
+            <span>{lang === "id" ? "Unduh PDF Laporan" : "Download PDF Report"}</span>
           </button>
           {canEdit && (
-            <button
-              type="button"
-              onClick={openAddForm}
-              className="inline-flex items-center justify-center gap-1.5 h-10 px-4 bg-[#FBBF24] hover:bg-[#F59E0B] text-xs font-bold text-[#111827] rounded-xl shadow-xs transition cursor-pointer"
-            >
-              <Plus className="h-4 w-4" />
-              {lang === "id" ? "Tambah Jadwal" : "Add Schedule"}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setTemplateDate(filterDate || new Date().toISOString().split("T")[0]);
+                  setSelectedTemplateItems(DAILY_TEMPLATE_ITEMS.map((_, idx) => idx));
+                  setShowTemplateModal(true);
+                }}
+                className="inline-flex items-center justify-center gap-1.5 h-10 px-4 w-full sm:w-auto border border-amber-300 bg-amber-50 hover:bg-amber-100 text-xs font-bold text-amber-800 rounded-xl transition cursor-pointer"
+              >
+                <Calendar className="h-4 w-4 text-amber-600 shrink-0" />
+                <span>{lang === "id" ? "Generate Template" : "Generate Template"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={openAddForm}
+                className="inline-flex items-center justify-center gap-1.5 h-10 px-4 w-full sm:w-auto bg-[#FBBF24] hover:bg-[#F59E0B] text-xs font-bold text-[#111827] rounded-xl shadow-xs transition cursor-pointer"
+              >
+                <Plus className="h-4 w-4 shrink-0" />
+                <span>{lang === "id" ? "Tambah Jadwal" : "Add Schedule"}</span>
+              </button>
+            </>
           )}
         </div>
       </div>
 
       {/* Filter Toolbar */}
-      <div className="bg-white border border-[#E5E7EB] rounded-3xl p-5 shadow-xs space-y-4">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="bg-white border border-[#E5E7EB] rounded-3xl p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
           <button
             onClick={() => setFilterType("day")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${filterType === "day" ? "bg-amber-100 text-amber-800" : "bg-neutral-100 text-[#4B5563] hover:bg-neutral-200"}`}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer text-center ${filterType === "day" ? "bg-amber-100 text-amber-800" : "bg-neutral-100 text-[#4B5563] hover:bg-neutral-200"}`}
           >
             {lang === "id" ? "Harian" : "Daily"}
           </button>
           <button
             onClick={() => setFilterType("week")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${filterType === "week" ? "bg-amber-100 text-amber-800" : "bg-neutral-100 text-[#4B5563] hover:bg-neutral-200"}`}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer text-center ${filterType === "week" ? "bg-amber-100 text-amber-800" : "bg-neutral-100 text-[#4B5563] hover:bg-neutral-200"}`}
           >
             {lang === "id" ? "Mingguan" : "Weekly"}
           </button>
           <button
             onClick={() => setFilterType("month")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${filterType === "month" ? "bg-amber-100 text-amber-800" : "bg-neutral-100 text-[#4B5563] hover:bg-neutral-200"}`}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer text-center ${filterType === "month" ? "bg-amber-100 text-amber-800" : "bg-neutral-100 text-[#4B5563] hover:bg-neutral-200"}`}
           >
             {lang === "id" ? "Bulanan" : "Monthly"}
           </button>
           <button
             onClick={() => setFilterType("all")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${filterType === "all" ? "bg-amber-100 text-amber-800" : "bg-neutral-100 text-[#4B5563] hover:bg-neutral-200"}`}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer text-center ${filterType === "all" ? "bg-amber-100 text-amber-800" : "bg-neutral-100 text-[#4B5563] hover:bg-neutral-200"}`}
           >
             {lang === "id" ? "Semua Jadwal" : "All Schedules"}
           </button>
         </div>
 
-        <div className="pt-2 border-t border-[#F3F4F6]">
+        <div className="pt-3 border-t border-[#F3F4F6]">
           {filterType === "day" && (
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
               <label htmlFor="filter-date" className="text-xs font-bold text-[#4B5563]">{lang === "id" ? "Pilih Tanggal" : "Select Date"}:</label>
@@ -338,50 +483,56 @@ export function SchedulesPage() {
                 id="filter-date"
                 type="date"
                 aria-label={lang === "id" ? "Pilih tanggal filter" : "Filter date"}
-                className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-1.5 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                className="w-full sm:w-auto bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-1.5 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                 value={filterDate}
                 onChange={(e) => setFilterDate(e.target.value)}
               />
             </div>
           )}
           {filterType === "week" && (
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
               <span className="text-xs font-bold text-[#4B5563]">{lang === "id" ? "Rentang Tanggal" : "Date Range"}:</span>
-              <input
-                type="date"
-                placeholder="Mulai"
-                className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-1.5 text-xs text-[#111827] focus:outline-none"
-                value={filterWeekStart}
-                onChange={(e) => setFilterWeekStart(e.target.value)}
-              />
-              <span className="text-xs text-[#9CA3AF]">s/d</span>
-              <input
-                type="date"
-                placeholder="Selesai"
-                className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-1.5 text-xs text-[#111827] focus:outline-none"
-                value={filterWeekEnd}
-                onChange={(e) => setFilterWeekEnd(e.target.value)}
-              />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <input
+                  type="date"
+                  placeholder="Mulai"
+                  aria-label={lang === "id" ? "Tanggal awal minggu" : "Week start date"}
+                  className="w-full sm:w-auto bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-1.5 text-xs text-[#111827] focus:outline-none"
+                  value={filterWeekStart}
+                  onChange={(e) => setFilterWeekStart(e.target.value)}
+                />
+                <span className="text-xs text-[#9CA3AF] shrink-0">s/d</span>
+                <input
+                  type="date"
+                  placeholder="Selesai"
+                  aria-label={lang === "id" ? "Tanggal akhir minggu" : "Week end date"}
+                  className="w-full sm:w-auto bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-1.5 text-xs text-[#111827] focus:outline-none"
+                  value={filterWeekEnd}
+                  onChange={(e) => setFilterWeekEnd(e.target.value)}
+                />
+              </div>
             </div>
           )}
           {filterType === "month" && (
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
               <label className="text-xs font-bold text-[#4B5563]">{lang === "id" ? "Pilih Bulan (dari – sampai)" : "Select Month (from – to)"}:</label>
-              <input
-                type="date"
-                aria-label={lang === "id" ? "Tanggal awal bulan" : "Month start date"}
-                className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-1.5 text-xs text-[#111827] focus:outline-none"
-                value={filterMonthStart}
-                onChange={(e) => setFilterMonthStart(e.target.value)}
-              />
-              <span className="text-xs text-[#9CA3AF]">s/d</span>
-              <input
-                type="date"
-                aria-label={lang === "id" ? "Tanggal akhir bulan" : "Month end date"}
-                className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-1.5 text-xs text-[#111827] focus:outline-none"
-                value={filterMonthEnd}
-                onChange={(e) => setFilterMonthEnd(e.target.value)}
-              />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <input
+                  type="date"
+                  aria-label={lang === "id" ? "Tanggal awal bulan" : "Month start date"}
+                  className="w-full sm:w-auto bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-1.5 text-xs text-[#111827] focus:outline-none"
+                  value={filterMonthStart}
+                  onChange={(e) => setFilterMonthStart(e.target.value)}
+                />
+                <span className="text-xs text-[#9CA3AF] shrink-0">s/d</span>
+                <input
+                  type="date"
+                  aria-label={lang === "id" ? "Tanggal akhir bulan" : "Month end date"}
+                  className="w-full sm:w-auto bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-1.5 text-xs text-[#111827] focus:outline-none"
+                  value={filterMonthEnd}
+                  onChange={(e) => setFilterMonthEnd(e.target.value)}
+                />
+              </div>
             </div>
           )}
         </div>
@@ -405,79 +556,143 @@ export function SchedulesPage() {
           <p className="text-xs text-[#6B7280] mt-1">{lang === "id" ? "Belum ada jadwal distribusi yang tercatat dalam filter yang Anda pilih." : "No distribution run schedules match the current filters."}</p>
         </div>
       ) : (
-        <div className="bg-white border border-[#E5E7EB] rounded-3xl overflow-hidden shadow-xs">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB] text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">
-                  <th className="py-3 px-4 sm:px-6">{lang === "id" ? "Tanggal" : "Date"}</th>
-                  <th className="py-3 px-4">{lang === "id" ? "Waktu" : "Time"}</th>
-                  <th className="py-3 px-4">{lang === "id" ? "Kegiatan / Nama Distribusi" : "Activity / Run"}</th>
-                  <th className="py-3 px-4">{lang === "id" ? "Tujuan" : "Destination"}</th>
-                  {canEdit && <th className="py-3 px-4 text-center">{lang === "id" ? "Aksi" : "Actions"}</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E5E7EB] text-xs sm:text-sm text-[#374151] font-sans">
-                {filteredSchedules.map((s) => (
-                  <tr key={s.id} className="hover:bg-neutral-50/50">
-                    <td className="py-3.5 px-4 sm:px-6 font-semibold text-[#111827] whitespace-nowrap">
-                      {new Date(s.date).toLocaleDateString("id-ID", { dateStyle: "medium" })}
-                    </td>
-                    <td className="py-3.5 px-4 font-mono font-bold text-amber-700 whitespace-nowrap">
-                      {s.time}
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-[#111827]">
-                      {s.title}
-                      {s.notes && <p className="text-[10px] font-normal text-[#6B7280] mt-0.5">{s.notes}</p>}
-                    </td>
-                    <td className="py-3.5 px-4 font-semibold text-[#4B5563]">
-                      {(() => {
-                        const urlMatch = s.destination.match(/(https?:\/\/[^\s|]+)/);
-                        if (urlMatch) {
-                          const mapsLink = urlMatch[1];
-                          const label = s.destination.replace(/\s*\|\s*https?:\/\/[^\s|]+/, "").trim();
-                          return (
-                            <div className="space-y-1">
-                              {label && <span>{label}</span>}
-                              <a
-                                href={mapsLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1 text-[11px] font-bold text-amber-700 hover:text-amber-900 hover:underline transition w-fit"
-                              >
-                                <MapPin className="h-3 w-3" />
-                                {lang === "id" ? "Buka Maps ↗" : "Open Maps ↗"}
-                              </a>
-                            </div>
-                          );
-                        }
-                        return s.destination;
-                      })()}
-                    </td>
+        <div>
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {filteredSchedules.map((s) => {
+              const urlMatch = s.destination.match(/(https?:\/\/[^\s|]+)/);
+              const mapsLink = urlMatch ? urlMatch[1] : null;
+              const destLabel = s.destination.replace(/\s*\|\s*https?:\/\/[^\s|]+/, "").trim();
+
+              return (
+                <div key={s.id} className="bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-xs space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-amber-100 text-amber-800 font-mono font-bold text-[11px] px-2.5 py-1 rounded-lg">
+                        {s.time}
+                      </span>
+                      <span className="text-[11px] font-semibold text-[#6B7280]">
+                        {new Date(s.date).toLocaleDateString("id-ID", { dateStyle: "medium" })}
+                      </span>
+                    </div>
                     {canEdit && (
-                      <td className="py-3.5 px-4 whitespace-nowrap text-center">
-                      <div className="inline-flex gap-1.5 justify-center">
-                          <button
-                            aria-label={lang === "id" ? `Ubah jadwal ${s.title}` : `Edit schedule ${s.title}`}
-                            onClick={() => openEditForm(s)}
-                            className="p-1.5 hover:bg-neutral-100 rounded-lg text-[#4B5563] transition cursor-pointer"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            aria-label={lang === "id" ? `Hapus jadwal ${s.title}` : `Delete schedule ${s.title}`}
-                            onClick={() => void handleDelete(s.id)}
-                            className="p-1.5 hover:bg-red-50 rounded-lg text-[#DC2626] transition cursor-pointer"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
+                      <div className="flex items-center gap-1">
+                        <button
+                          aria-label={lang === "id" ? `Ubah jadwal ${s.title}` : `Edit schedule ${s.title}`}
+                          onClick={() => openEditForm(s)}
+                          className="p-1.5 hover:bg-neutral-100 rounded-lg text-[#4B5563] transition cursor-pointer"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          aria-label={lang === "id" ? `Hapus jadwal ${s.title}` : `Delete schedule ${s.title}`}
+                          onClick={() => void handleDelete(s.id)}
+                          className="p-1.5 hover:bg-red-50 rounded-lg text-[#DC2626] transition cursor-pointer"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     )}
+                  </div>
+
+                  <p className="font-bold text-sm text-[#111827] leading-snug">{s.title}</p>
+                  {s.notes && <p className="text-[10px] text-[#6B7280]">{s.notes}</p>}
+
+                  <div className="flex items-center gap-1.5 text-xs text-[#4B5563]">
+                    <MapPin className="h-3.5 w-3.5 text-[#9CA3AF] shrink-0" />
+                    <span className="font-semibold">{destLabel}</span>
+                  </div>
+                  {mapsLink && (
+                    <a
+                      href={mapsLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 hover:text-amber-900 hover:underline transition"
+                    >
+                      <MapPin className="h-3 w-3" />
+                      {lang === "id" ? "Buka Maps ↗" : "Open Maps ↗"}
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block bg-white border border-[#E5E7EB] rounded-3xl overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB] text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">
+                    <th className="py-3 px-6">{lang === "id" ? "Tanggal" : "Date"}</th>
+                    <th className="py-3 px-4">{lang === "id" ? "Waktu" : "Time"}</th>
+                    <th className="py-3 px-4">{lang === "id" ? "Kegiatan / Nama Distribusi" : "Activity / Run"}</th>
+                    <th className="py-3 px-4">{lang === "id" ? "Tujuan" : "Destination"}</th>
+                    {canEdit && <th className="py-3 px-4 text-center">{lang === "id" ? "Aksi" : "Actions"}</th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-[#E5E7EB] text-sm text-[#374151] font-sans">
+                  {filteredSchedules.map((s) => (
+                    <tr key={s.id} className="hover:bg-neutral-50/50">
+                      <td className="py-3.5 px-6 font-semibold text-[#111827] whitespace-nowrap">
+                        {new Date(s.date).toLocaleDateString("id-ID", { dateStyle: "medium" })}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-bold text-amber-700 whitespace-nowrap">
+                        {s.time}
+                      </td>
+                      <td className="py-3.5 px-4 font-bold text-[#111827]">
+                        {s.title}
+                        {s.notes && <p className="text-[10px] font-normal text-[#6B7280] mt-0.5">{s.notes}</p>}
+                      </td>
+                      <td className="py-3.5 px-4 font-semibold text-[#4B5563]">
+                        {(() => {
+                          const urlMatch = s.destination.match(/(https?:\/\/[^\s|]+)/);
+                          if (urlMatch) {
+                            const mapsLink = urlMatch[1];
+                            const label = s.destination.replace(/\s*\|\s*https?:\/\/[^\s|]+/, "").trim();
+                            return (
+                              <div className="space-y-1">
+                                {label && <span>{label}</span>}
+                                <a
+                                  href={mapsLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-[11px] font-bold text-amber-700 hover:text-amber-900 hover:underline transition w-fit"
+                                >
+                                  <MapPin className="h-3 w-3" />
+                                  {lang === "id" ? "Buka Maps ↗" : "Open Maps ↗"}
+                                </a>
+                              </div>
+                            );
+                          }
+                          return s.destination;
+                        })()}
+                      </td>
+                      {canEdit && (
+                        <td className="py-3.5 px-4 whitespace-nowrap text-center">
+                          <div className="inline-flex gap-1.5 justify-center">
+                            <button
+                              aria-label={lang === "id" ? `Ubah jadwal ${s.title}` : `Edit schedule ${s.title}`}
+                              onClick={() => openEditForm(s)}
+                              className="p-1.5 hover:bg-neutral-100 rounded-lg text-[#4B5563] transition cursor-pointer"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                              aria-label={lang === "id" ? `Hapus jadwal ${s.title}` : `Delete schedule ${s.title}`}
+                              onClick={() => void handleDelete(s.id)}
+                              className="p-1.5 hover:bg-red-50 rounded-lg text-[#DC2626] transition cursor-pointer"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -624,6 +839,118 @@ export function SchedulesPage() {
             onClose={() => setShowMapPicker(false)}
           />
         </Suspense>
+      )}
+
+      {/* Template Generator Modal */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-lg border border-[#E5E7EB] shadow-2xl relative">
+            <button
+              aria-label={lang === "id" ? "Tutup modal template" : "Close template modal"}
+              onClick={() => setShowTemplateModal(false)}
+              className="absolute top-4 right-4 p-1 hover:bg-neutral-100 rounded-full transition"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h2 className="font-['Manrope'] text-lg font-extrabold text-[#111827] mb-2">
+              {lang === "id" ? "Generate Jadwal dari Template" : "Generate Schedules from Template"}
+            </h2>
+            <p className="text-xs text-[#6B7280] mb-4">
+              {lang === "id" 
+                ? "Pilih tanggal target dan item jadwal yang ingin digenerate secara otomatis." 
+                : "Select the target date and schedule items you wish to generate automatically."}
+            </p>
+
+            <div className="space-y-4">
+              {/* Target Date */}
+              <div className="space-y-1">
+                <label htmlFor="temp-date" className="block text-xs font-bold text-[#4B5563]">Target Tanggal <span className="text-red-500">*</span></label>
+                <input
+                  id="temp-date"
+                  type="date"
+                  required
+                  className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#111827]"
+                  value={templateDate}
+                  onChange={(e) => setTemplateDate(e.target.value)}
+                />
+              </div>
+
+              {/* Items List */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-2">
+                  <span className="text-xs font-bold text-[#4B5563]">Daftar Item Jadwal Harian</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedTemplateItems.length === DAILY_TEMPLATE_ITEMS.length) {
+                        setSelectedTemplateItems([]);
+                      } else {
+                        setSelectedTemplateItems(DAILY_TEMPLATE_ITEMS.map((_, i) => i));
+                      }
+                    }}
+                    className="text-xs font-bold text-amber-700 hover:text-amber-900 transition cursor-pointer"
+                  >
+                    {selectedTemplateItems.length === DAILY_TEMPLATE_ITEMS.length
+                      ? (lang === "id" ? "Batalkan Semua" : "Clear All")
+                      : (lang === "id" ? "Pilih Semua" : "Select All")}
+                  </button>
+                </div>
+
+                <div className="max-h-60 overflow-y-auto space-y-2 divide-y divide-[#F3F4F6] pr-1">
+                  {DAILY_TEMPLATE_ITEMS.map((item, idx) => {
+                    const isChecked = selectedTemplateItems.includes(idx);
+                    return (
+                      <label key={idx} className="flex items-start gap-3 pt-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) {
+                              setSelectedTemplateItems(selectedTemplateItems.filter((i) => i !== idx));
+                            } else {
+                              setSelectedTemplateItems([...selectedTemplateItems, idx]);
+                            }
+                          }}
+                          className="h-4 w-4 mt-0.5 accent-amber-500 rounded border-gray-300"
+                        />
+                        <div className="text-xs text-[#374151]">
+                          <p className="font-bold text-amber-800 font-mono inline-block mr-1">[{item.time}]</p>
+                          <span className="font-bold">{item.title}</span>
+                          <span className="text-gray-500 text-[10px] block">Tujuan: {item.destination}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTemplateModal(false)}
+                  className="flex-1 min-h-11 border border-gray-300 hover:bg-gray-50 text-xs font-bold text-[#4B5563] rounded-xl transition cursor-pointer"
+                >
+                  {lang === "id" ? "Batal" : "Cancel"}
+                </button>
+                <button
+                  type="button"
+                  disabled={generatingTemplate || selectedTemplateItems.length === 0}
+                  onClick={handleGenerateTemplate}
+                  className="flex-2 flex items-center justify-center gap-2 min-h-11 bg-amber-500 hover:bg-amber-600 font-bold text-xs text-white rounded-xl shadow-sm transition cursor-pointer disabled:opacity-50"
+                >
+                  {generatingTemplate ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                  {lang === "id" 
+                    ? `Generate (${selectedTemplateItems.length}) Jadwal` 
+                    : `Generate (${selectedTemplateItems.length}) Schedules`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

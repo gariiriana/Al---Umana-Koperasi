@@ -84,27 +84,27 @@ export function AppShell({
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* ── Top header ─────────────────────────────────────────── */}
-        <header className="sticky top-0 z-30 bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-white shadow-md px-4 py-3 flex items-center justify-between gap-4 font-['Hanken_Grotesk',system-ui,sans-serif]">
+        <header className="sticky top-0 z-30 bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-white shadow-md px-3 py-2.5 md:px-4 md:py-3 flex items-center justify-between gap-2 md:gap-4 font-['Hanken_Grotesk',system-ui,sans-serif]">
           {/* Left: Logo & Cooperative Name */}
-          <div className="flex items-center gap-2 shrink-0">
-            <Link to={userRole ? (ROLE_DEFAULT_REDIRECT[userRole] ?? "/") : "/"} className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+            <Link to={userRole ? (ROLE_DEFAULT_REDIRECT[userRole] ?? "/") : "/"} className="flex items-center gap-1.5 md:gap-2">
               <img
                 src="/logo.png"
                 alt="Al Umanaa"
-                className="h-9 w-9 object-contain bg-white rounded-full p-0.5 border border-amber-200 shrink-0"
+                className="h-8 w-8 md:h-9 md:w-9 object-contain bg-white rounded-full p-0.5 border border-amber-200 shrink-0"
               />
               <span className="font-['Manrope',system-ui,sans-serif] text-sm md:text-base font-extrabold text-white tracking-wide">
-                Al-Umanaa <span className="font-light text-amber-100 text-xs">{lang === "id" ? "Koperasi" : "Cooperative"}</span>
+                Al-Umanaa <span className="hidden sm:inline font-light text-amber-100 text-xs">{lang === "id" ? "Koperasi" : "Cooperative"}</span>
               </span>
             </Link>
           </div>
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-2 md:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
             {/* Tutorial Button */}
             <Link
               to="/help"
-              className="flex items-center gap-1.5 hover:bg-white/10 rounded-lg px-2.5 py-1.5 transition-colors text-white font-bold text-xs"
+              className="flex items-center gap-1 md:gap-1.5 hover:bg-white/10 rounded-lg px-1.5 py-1 md:px-2.5 md:py-1.5 transition-colors text-white font-bold text-xs"
               title={lang === "id" ? "Pusat Tutorial" : "Help Center"}
             >
               <HelpCircle className="h-4.5 w-4.5" />
@@ -113,10 +113,10 @@ export function AppShell({
 
             {userRole === "admin" && (
               <>
-                <span className="h-5 w-px bg-white/20 shrink-0 self-center" />
+                <span className="hidden sm:inline-block h-5 w-px bg-white/20 shrink-0 self-center" />
                 <Link
                   to="/admin/promos"
-                  className="flex items-center gap-1.5 hover:bg-white/10 rounded-lg px-2.5 py-1.5 transition-colors text-white font-bold text-xs"
+                  className="flex items-center gap-1 md:gap-1.5 hover:bg-white/10 rounded-lg px-1.5 py-1 md:px-2.5 md:py-1.5 transition-colors text-white font-bold text-xs"
                   title={lang === "id" ? "Promo & Diskon" : "Promos & Discounts"}
                 >
                   <Tag className="h-4.5 w-4.5" />
@@ -125,12 +125,12 @@ export function AppShell({
               </>
             )}
 
-            <span className="h-5 w-px bg-white/20 shrink-0 self-center" />
+            <span className="hidden sm:inline-block h-5 w-px bg-white/20 shrink-0 self-center" />
 
             {/* Notification Bell */}
             <Link
               to="/notifications"
-              className="relative p-1.5 hover:bg-white/10 rounded-lg text-white transition-colors flex items-center justify-center"
+              className="relative p-1 md:p-1.5 hover:bg-white/10 rounded-lg text-white transition-colors flex items-center justify-center"
               title={lang === "id" ? "Notifikasi" : "Notifications"}
             >
               <Bell className="h-4.5 w-4.5" />
@@ -141,7 +141,7 @@ export function AppShell({
               )}
             </Link>
 
-            <span className="h-5 w-px bg-white/20 shrink-0 self-center" />
+            <span className="hidden sm:inline-block h-5 w-px bg-white/20 shrink-0 self-center" />
 
             {/* Language Switcher */}
             <div className="relative flex items-center">
@@ -151,7 +151,7 @@ export function AppShell({
                   setIsLangOpen(!isLangOpen);
                   setIsDropdownOpen(false);
                 }}
-                className="flex items-center gap-1 hover:bg-white/10 rounded-lg px-2.5 py-1.5 cursor-pointer focus:outline-none text-white text-xs font-bold"
+                className="flex items-center gap-1 hover:bg-white/10 rounded-lg px-1.5 py-1 md:px-2.5 md:py-1.5 cursor-pointer focus:outline-none text-white text-xs font-bold"
                 aria-label="Pilih Bahasa"
                 title="Pilih Bahasa"
               >
@@ -181,7 +181,7 @@ export function AppShell({
               )}
             </div>
 
-            <span className="h-5 w-px bg-white/20 shrink-0 self-center" />
+            <span className="hidden sm:inline-block h-5 w-px bg-white/20 shrink-0 self-center" />
 
             {/* User Dropdown */}
             <div className="relative">

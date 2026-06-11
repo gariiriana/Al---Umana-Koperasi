@@ -50,6 +50,15 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tim_produksi';
     }
 
+    function isDistribusi() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distributor'
+        );
+    }
+
     // -------------------------------------------------------------------
     // Default deny. Any path not matched explicitly is forbidden.
     // -------------------------------------------------------------------
@@ -241,10 +250,10 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     // Distribution Schedules
     // -------------------------------------------------------------------
-    // Admin and tim_produksi can manage distribution schedules.
+    // Admin, tim_produksi, and distribusi can manage distribution schedules.
     match /distribution_schedules/{scheduleId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin() || isTimProduksi();
+      allow write: if isAdmin() || isTimProduksi() || isDistribusi();
     }
 
     // -------------------------------------------------------------------

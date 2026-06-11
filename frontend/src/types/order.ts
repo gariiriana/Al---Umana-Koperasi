@@ -77,6 +77,7 @@ export interface Order {
   qcFailReason?: string;
   deliveredAt?: string;
   proofFileIds?: string[];
+  deliveryProofPhotos?: { fileId: string; description: string }[];
   paymentMethod?: 'cod' | 'bank_transfer' | 'e_wallet';
   paymentProofFileId?: string;
   paymentApprovedBy?: string;

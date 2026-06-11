@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { subscribeToCart, computeCartTotal, CartLineItem, removeLineItem, setLineNotes } from "@/services/cartService";
+import { subscribeToCart, computeCartTotal, CartLineItem, removeLineItem, setLineNotes, setLineQuantity } from "@/services/cartService";
 import { createOrder, createAdminOrder, PaymentMethod } from "@/services/orderService";
 import type { OrderType } from "@/types/order";
 import { formatIDR } from "@/lib/format";
@@ -227,7 +227,7 @@ export function CheckoutWizard() {
   const [additionalFee, setAdditionalFee] = useState<number>(() => getSavedField("additionalFee", 0));
 
   // Admin Success State
-  const [createdAdminOrder, setCreatedAdminOrder] = useState<{ id: string; token: string; phone: string; name: string; totalPayment: number } | null>(null);
+  const [createdAdminOrder, setCreatedAdminOrder] = useState<{ id: string; token: string; phone: string; name: string; totalPayment: number; institutionName: string } | null>(null);
   const [adminCopied, setAdminCopied] = useState(false);
 
   const isAdmin = profile?.role === "admin";
@@ -244,6 +244,22 @@ export function CheckoutWizard() {
 
   const subtotal = computeCartTotal(checkoutItems);
   const grandTotal = Math.max(0, subtotal - promoDiscount) + DELIVERY_FEE + SERVICE_FEE;
+
+  const handleUpdateItemQty = async (itemId: string, newQty: number) => {
+    if (newQty < 1) return;
+    setCheckoutItems((prev) =>
+      prev.map((it) =>
+        it.itemId === itemId ? { ...it, quantity: newQty } : it
+      )
+    );
+    if (!directCheckoutItems && user) {
+      try {
+        await setLineQuantity(user.uid, itemId, newQty);
+      } catch (err) {
+        console.error("Gagal memperbarui kuantitas:", err);
+      }
+    }
+  };
 
   useEffect(() => {
     if (isAdmin) {
@@ -622,9 +638,28 @@ export function CheckoutWizard() {
         phone: order.recipientPhone,
         name: order.recipientName,
         totalPayment: (subtotal - promoDiscount) + additionalFee,
+        institutionName: institutionName.trim(),
       });
 
       localStorage.removeItem("admin_checkout_form");
+
+      // Reset all React state fields to clear the form inputs
+      setOrderType("event");
+      setInstitutionName("");
+      setCustomerName("");
+      setRecipientPhone("");
+      setRecipientNotes("");
+      setEventDate("");
+      setDeliveryTime("");
+      setDeliveryAddress("");
+      setAdminMapsUrl("");
+      setFoodDetails("");
+      setDrinkDetails("");
+      setAdditionalNotes("");
+      setAdditionalFee(0);
+      setAppliedPromo(null);
+      setPromoDiscount(0);
+      setCheckoutItems([]);
     } catch (err: unknown) {
       console.error(err);
       const e = err as { message?: string };
@@ -1002,8 +1037,14 @@ export function CheckoutWizard() {
                   onClick={() => {
                     const url = `${window.location.origin}${invoiceUrl}`;
                     const shortId = createdAdminOrder.id.slice(-6).toUpperCase();
-                    const text = `Halo ${createdAdminOrder.name},\n\nPesanan Anda #${shortId} dari ${institutionName} telah berhasil dibuat!\nTotal Tagihan: Rp ${createdAdminOrder.totalPayment.toLocaleString()}\n\nSilakan konfirmasi pesanan dan lakukan tanda tangan digital melalui tautan invoice berikut:\n${url}`;
-                    const waUrl = `https://wa.me/${createdAdminOrder.phone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`;
+                    const text = `Halo ${createdAdminOrder.name},\n\nPesanan Anda #${shortId} dari ${createdAdminOrder.institutionName || "Koperasi"} telah berhasil dibuat!\nTotal Tagihan: Rp ${createdAdminOrder.totalPayment.toLocaleString()}\n\nSilakan konfirmasi pesanan dan lakukan tanda tangan digital melalui tautan invoice berikut:\n${url}`;
+                    const cleanPhone = createdAdminOrder.phone.replace(/\D/g, "");
+                    const whatsappNumber = cleanPhone.startsWith("0")
+                      ? "62" + cleanPhone.slice(1)
+                      : cleanPhone.startsWith("8")
+                        ? "62" + cleanPhone
+                        : cleanPhone;
+                    const waUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(text)}`;
                     window.open(waUrl, "_blank");
                   }}
                   className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20BA5A] border-none text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
@@ -1240,9 +1281,33 @@ export function CheckoutWizard() {
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-bold text-[#111827] leading-snug truncate">{item.itemName}</p>
                             <div className="flex items-center justify-between mt-0.5">
-                              <span className="text-[11px] text-[#6B7280]">
-                                {formatIDR(item.unitPrice)} × {item.quantity}
-                              </span>
+                              {isAdmin ? (
+                                <div className="flex items-center gap-1.5 bg-white border border-[#E5E7EB] rounded-lg p-0.5 shadow-sm">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateItemQty(item.itemId, item.quantity - 1)}
+                                    disabled={item.quantity <= 1}
+                                    className="h-5 w-5 rounded hover:bg-neutral-100 disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center text-[#374151] font-extrabold text-xs transition cursor-pointer"
+                                  >
+                                    -
+                                  </button>
+                                  <span className="text-xs font-extrabold text-[#111827] w-6 text-center select-none">
+                                    {item.quantity}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateItemQty(item.itemId, item.quantity + 1)}
+                                    disabled={item.quantity >= 99}
+                                    className="h-5 w-5 rounded hover:bg-neutral-100 disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center text-[#374151] font-extrabold text-xs transition cursor-pointer"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-[#6B7280]">
+                                  {formatIDR(item.unitPrice)} × {item.quantity}
+                                </span>
+                              )}
                               <span className="text-xs font-bold text-[#111827]">
                                 {formatIDR(item.unitPrice * item.quantity)}
                               </span>

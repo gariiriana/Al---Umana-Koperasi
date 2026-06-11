@@ -94,21 +94,21 @@ describe("Proof of Delivery Capture Validation (Property 18)", () => {
             : null;
 
           // Click submit
-          const submitBtn = screen.getByText("Submit proof");
+          const submitBtn = screen.getByText("Kirim Bukti Pengantaran");
           fireEvent.click(submitBtn);
 
           // Verify validation outcomes
           if (!hasPhoto) {
-            expect(screen.queryByText("Photo proof is required.")).not.toBeNull();
+            expect(screen.queryByText("Foto bukti pengiriman wajib diunggah (minimal 1 foto).")).not.toBeNull();
           } else if (!hasSignatureStrokes) {
             expect(
-              screen.queryByText("Signature is required (at least one stroke).")
+              screen.queryByText("Tanda tangan penerima wajib diisi.")
             ).not.toBeNull();
           } else {
             // Both present, error alerts should not be on screen
-            expect(screen.queryByText("Photo proof is required.")).toBeNull();
+            expect(screen.queryByText("Foto bukti pengiriman wajib diunggah (minimal 1 foto).")).toBeNull();
             expect(
-              screen.queryByText("Signature is required (at least one stroke).")
+              screen.queryByText("Tanda tangan penerima wajib diisi.")
             ).toBeNull();
           }
         }

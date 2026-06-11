@@ -1,5 +1,5 @@
 import { db } from "@/lib/firebase";
-import { collection, doc, getDocs, setDoc, deleteDoc, query, orderBy } from "firebase/firestore";
+import { collection, doc, getDocs, setDoc, deleteDoc } from "firebase/firestore";
 
 export interface DistributionSchedule {
   id: string;
@@ -26,10 +26,11 @@ const SAMPLE_SCHEDULES = [
 
 export async function listAllSchedules(): Promise<DistributionSchedule[]> {
   const col = collection(db, "distribution_schedules");
-  const q = query(col, orderBy("date", "asc"), orderBy("time", "asc"));
-  const snap = await getDocs(q);
+  const snap = await getDocs(col);
   
-  if (snap.empty) {
+  let schedules = snap.docs.map(d => ({ id: d.id, ...d.data() } as DistributionSchedule));
+  
+  if (schedules.length === 0) {
     // Auto-seed if database is empty
     console.log("Seeding distribution schedules collection...");
     const seedPromises = SAMPLE_SCHEDULES.map(async (item) => {
@@ -41,11 +42,12 @@ export async function listAllSchedules(): Promise<DistributionSchedule[]> {
     });
     await Promise.all(seedPromises);
     // Fetch again
-    const reSnap = await getDocs(q);
-    return reSnap.docs.map(d => ({ id: d.id, ...d.data() } as DistributionSchedule));
+    const reSnap = await getDocs(col);
+    schedules = reSnap.docs.map(d => ({ id: d.id, ...d.data() } as DistributionSchedule));
   }
 
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as DistributionSchedule));
+  // Sort client-side: date ascending, time ascending
+  return schedules.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 }
 
 export async function saveSchedule(schedule: Omit<DistributionSchedule, "id" | "createdAt"> & { id?: string }): Promise<void> {

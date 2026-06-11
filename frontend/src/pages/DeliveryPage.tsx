@@ -7,6 +7,8 @@ import { subscribeOrders } from "@/services/realtimeService";
 import type { Order } from "@/types/order";
 import { PICConfirmation } from "@/components/delivery/PICConfirmation";
 import { ProofCapture } from "@/components/delivery/ProofCapture";
+import { ProofModal } from "@/components/delivery/ProofModal";
+import { LiveCamera } from "@/components/LiveCamera";
 
 import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
@@ -146,6 +148,7 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -234,37 +237,53 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
         />
       </div>
 
-      {/* Foto mulai pengantaran - centered file button */}
+      {/* Foto picker using live camera */}
       <div className="space-y-1">
         <label className="block text-[11px] font-bold text-[#374151]">
-          Foto Keberangkatan (Start Delivery)
+          Foto Keberangkatan (Start Delivery) <span className="text-red-500">*</span>
         </label>
         
-        <div className="flex flex-col items-center justify-center border border-dashed border-[#D1D5DB] rounded-lg p-5 bg-[#F9FAFB] hover:bg-[#F3F4F6] transition relative cursor-pointer min-h-[100px] text-center">
-          <input
-            type="file"
-            accept="image/*"
-            title="Pilih Foto Mulai Pengantaran"
-            aria-label="Pilih Foto Mulai Pengantaran"
-            onChange={handleFileChange}
-            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-          />
-          <Camera className="h-5 w-5 text-[#9CA3AF] mb-1.5" />
-          <span className="text-[11px] font-bold text-[#4B5563]">
-            {photoFile ? "Ubah Foto Terpilih" : "Pilih Foto Mulai Pengantaran"}
+        <div
+          onClick={() => setIsCameraOpen(true)}
+          className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-300 hover:border-orange-500 rounded-2xl p-5 bg-[#111827] hover:bg-[#1f2937] transition duration-200 cursor-pointer min-h-[100px] text-center shadow-md select-none group"
+        >
+          <Camera className="h-7 w-7 text-[#fbbf24] mb-1.5 animate-pulse" />
+          <span className="text-[10px] font-extrabold text-white tracking-widest uppercase font-heading">
+            AMBIL FOTO LIVE
           </span>
-          <span className="text-[9px] text-[#9CA3AF] mt-0.5">JPEG, PNG, atau WebP (Maks 15MB)</span>
+          <span className="text-[8px] text-neutral-400 mt-0.5">Watermark Lokasi & Waktu Tersemat</span>
         </div>
 
         {photoPreview && (
-          <div className="mt-2 flex justify-center">
+          <div className="mt-2 relative rounded-xl overflow-hidden border border-[#E5E7EB] group">
             <img
               src={photoPreview}
               alt="Preview keberangkatan"
-              className="h-20 w-20 object-cover rounded-lg border border-[#E5E7EB]"
+              className="w-full h-32 object-cover"
             />
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition duration-150 flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() => setIsCameraOpen(true)}
+                className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition"
+              >
+                Ambil Ulang
+              </button>
+            </div>
           </div>
         )}
+
+        <LiveCamera
+          isOpen={isCameraOpen}
+          onClose={() => setIsCameraOpen(false)}
+          activityType="START_OTW"
+          orderId={order.id}
+          onCapture={(file) => {
+            setPhotoFile(file);
+            setPhotoPreview(URL.createObjectURL(file));
+            setError(null);
+          }}
+        />
       </div>
 
       {/* Upload progress */}
@@ -315,6 +334,10 @@ export function DeliveryPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [step, setStep] = useState<DeliveryStep>("list");
+  const [activeTab, setActiveTab] = useState<"active" | "history">("active");
+  const [isProofModalOpen, setIsProofModalOpen] = useState(false);
+  const [selectedProofFiles, setSelectedProofFiles] = useState<string[]>([]);
+  const [selectedStartPhotoId, setSelectedStartPhotoId] = useState<string | undefined>(undefined);
 
   const active = activeId ? orders.find((o) => o.id === activeId) ?? null : null;
 
@@ -331,6 +354,24 @@ export function DeliveryPage() {
             o.assignedCourierId === user.email?.split("@")[0] ||
             (profile?.displayName && o.assignedCourierId?.toLowerCase() === profile.displayName.toLowerCase()))
       ),
+    [orders, user, profile]
+  );
+
+  const myCompletedDeliveries = useMemo(
+    () =>
+      orders.filter(
+        (o) =>
+          (o.status === "DELIVERED" || o.status === "COMPLETED") &&
+          (!user || 
+            o.assignedCourierId === user.uid || 
+            o.assignedCourierId === profile?.displayName ||
+            o.assignedCourierId === user.email?.split("@")[0] ||
+            (profile?.displayName && o.assignedCourierId?.toLowerCase() === profile.displayName.toLowerCase()))
+      ).sort((a, b) => {
+        const timeA = a.deliveredAt ? new Date(a.deliveredAt).getTime() : 0;
+        const timeB = b.deliveredAt ? new Date(b.deliveredAt).getTime() : 0;
+        return timeB - timeA;
+      }),
     [orders, user, profile]
   );
 
@@ -480,91 +521,217 @@ export function DeliveryPage() {
       {/* ── DELIVERY LIST ─────────────────────────────────────────────── */}
       {step === "list" && (
         <>
-          {myDeliveries.length === 0 ? (
-            <div className="bg-white rounded-lg border border-[#E5E7EB] p-12 text-center space-y-3">
-              <Package className="h-14 w-14 mx-auto text-[#D1D5DB] bg-[#F3F4F6] rounded-full p-3" />
-              <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">Tidak Ada Pengantaran</p>
-              <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-xs mx-auto">
-                Belum ada pesanan yang ditugaskan ke Anda untuk diantarkan.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <AnimatePresence>
-                {myDeliveries.map((o, idx) => (
-                  <motion.div
-                    key={o.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.05, duration: 0.2 }}
-                  >
-                    <div
-                      onClick={() => open(o)}
-                      className="w-full text-left bg-white rounded-lg border border-[#E5E7EB] shadow-xs overflow-hidden hover:border-[#FBBF24] hover:shadow-sm transition-all active:scale-[0.99] cursor-pointer"
-                    >
-                      <div className={
-                        "h-1.5 " +
-                        (o.status === "READY_TO_DELIVER" 
-                          ? "bg-gradient-to-r from-blue-400 to-cyan-400" 
-                          : "bg-gradient-to-r from-orange-400 to-amber-400")
-                      } />
-                      <div className="p-4 sm:p-5">
-                        <div className="flex items-center gap-4">
-                          {/* Number badge */}
-                          <div className={
-                            "h-11 w-11 rounded-lg flex items-center justify-center shrink-0 border " +
-                            (o.status === "READY_TO_DELIVER"
-                              ? "bg-blue-50 border-blue-200 text-blue-600"
-                              : "bg-orange-50 border-orange-200 text-orange-600")
-                          }>
-                            <span className="text-lg font-extrabold font-['Manrope',system-ui,sans-serif]">
-                              {idx + 1}
-                            </span>
-                          </div>
+          {/* Tab selector */}
+          <div className="flex border-b border-[#E5E7EB] mb-4">
+            <button
+              onClick={() => setActiveTab("active")}
+              className={`flex-1 py-2.5 text-center text-xs font-bold font-['Hanken_Grotesk',system-ui,sans-serif] transition-all border-b-2 ${
+                activeTab === "active"
+                  ? "border-[#FBBF24] text-[#111827]"
+                  : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
+              }`}
+            >
+              Tugas Aktif ({myDeliveries.length})
+            </button>
+            <button
+              onClick={() => setActiveTab("history")}
+              className={`flex-1 py-2.5 text-center text-xs font-bold font-['Hanken_Grotesk',system-ui,sans-serif] transition-all border-b-2 ${
+                activeTab === "history"
+                  ? "border-[#FBBF24] text-[#111827]"
+                  : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
+              }`}
+            >
+              Riwayat Selesai ({myCompletedDeliveries.length})
+            </button>
+          </div>
 
-                          {/* Info */}
+          {activeTab === "active" ? (
+            myDeliveries.length === 0 ? (
+              <div className="bg-white rounded-lg border border-[#E5E7EB] p-12 text-center space-y-3">
+                <Package className="h-14 w-14 mx-auto text-[#D1D5DB] bg-[#F3F4F6] rounded-full p-3" />
+                <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">Tidak Ada Pengantaran</p>
+                <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-xs mx-auto">
+                  Belum ada pesanan yang ditugaskan ke Anda untuk diantarkan.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <AnimatePresence>
+                  {myDeliveries.map((o, idx) => (
+                    <motion.div
+                      key={o.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05, duration: 0.2 }}
+                    >
+                      <div
+                        onClick={() => open(o)}
+                        className="w-full text-left bg-white rounded-lg border border-[#E5E7EB] shadow-xs overflow-hidden hover:border-[#FBBF24] hover:shadow-sm transition-all active:scale-[0.99] cursor-pointer"
+                      >
+                        <div className={
+                          "h-1.5 " +
+                          (o.status === "READY_TO_DELIVER" 
+                            ? "bg-gradient-to-r from-blue-400 to-cyan-400" 
+                            : "bg-gradient-to-r from-orange-400 to-amber-400")
+                        } />
+                        <div className="p-4 sm:p-5">
+                          <div className="flex items-center gap-4">
+                            {/* Number badge */}
+                            <div className={
+                              "h-11 w-11 rounded-lg flex items-center justify-center shrink-0 border " +
+                              (o.status === "READY_TO_DELIVER"
+                                ? "bg-blue-50 border-blue-200 text-blue-600"
+                                : "bg-orange-50 border-orange-200 text-orange-600")
+                            }>
+                              <span className="text-lg font-extrabold font-['Manrope',system-ui,sans-serif]">
+                                {idx + 1}
+                              </span>
+                            </div>
+
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="font-['Manrope',system-ui,sans-serif] font-extrabold text-[#111827] text-base truncate">
+                                  {o.institutionName || o.customerName}
+                                </p>
+                                <span className={
+                                  "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold " +
+                                  (o.status === "READY_TO_DELIVER"
+                                    ? "bg-blue-100 text-blue-700"
+                                    : "bg-orange-100 text-orange-700")
+                                }>
+                                  {o.status === "READY_TO_DELIVER" ? "Siap Diambil" : "Sedang Jalan"}
+                                </span>
+                              </div>
+                              {o.recipientName && (
+                                <p className="text-xs text-[#4B5563] font-semibold mt-0.5">
+                                  Penerima: {o.recipientName}
+                                </p>
+                              )}
+                              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                                <span className="inline-flex items-center gap-1 text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
+                                  <Clock className="h-3 w-3" />{o.deliveryTime}
+                                </span>
+                                <span className="inline-flex items-center gap-1 text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
+                                  <Package className="h-3 w-3" />{o.items.length} item
+                                </span>
+                              </div>
+                              <div className="flex items-start gap-1 mt-1">
+                                <MapPin className="h-3 w-3 text-[#9CA3AF] shrink-0 mt-0.5" />
+                                {renderFormattedAddress(o.deliveryAddress)}
+                              </div>
+                            </div>
+
+                            {/* Chevron */}
+                            <ChevronRight className="h-5 w-5 text-[#D1D5DB] shrink-0" />
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            )
+          ) : (
+            myCompletedDeliveries.length === 0 ? (
+              <div className="bg-white rounded-lg border border-[#E5E7EB] p-12 text-center space-y-3">
+                <CheckCircle2 className="h-14 w-14 mx-auto text-[#D1D5DB] bg-[#F3F4F6] rounded-full p-3" />
+                <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">Belum Ada Riwayat</p>
+                <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-xs mx-auto">
+                  Anda belum menyelesaikan pengantaran pesanan apa pun.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <AnimatePresence>
+                  {myCompletedDeliveries.map((o, idx) => {
+                    const shortId = o.id.length > 6 ? o.id.slice(-6).toUpperCase() : o.id.toUpperCase();
+                    return (
+                      <motion.div
+                        key={o.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.05, duration: 0.2 }}
+                        className="bg-white rounded-lg border border-[#E5E7EB] shadow-xs overflow-hidden p-4 sm:p-5 flex flex-col gap-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 border bg-emerald-50 border-emerald-200 text-emerald-600">
+                            <CheckCircle2 className="h-5 w-5" />
+                          </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
                               <p className="font-['Manrope',system-ui,sans-serif] font-extrabold text-[#111827] text-base truncate">
                                 {o.institutionName || o.customerName}
                               </p>
-                              <span className={
-                                "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold " +
-                                (o.status === "READY_TO_DELIVER"
-                                  ? "bg-blue-100 text-blue-700"
-                                  : "bg-orange-100 text-orange-700")
-                              }>
-                                {o.status === "READY_TO_DELIVER" ? "Siap Diambil" : "Sedang Jalan"}
+                              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700">
+                                Selesai Diantar
                               </span>
                             </div>
-                            {o.recipientName && (
-                              <p className="text-xs text-[#4B5563] font-semibold mt-0.5">
-                                Penerima: {o.recipientName}
-                              </p>
+                            <p className="text-xs text-[#6B7280] font-medium mt-0.5">
+                              ID Pesanan: #{shortId}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-[#F3F4F6] pt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-[#4B5563] font-['Hanken_Grotesk',system-ui,sans-serif]">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
+                              <span>Waktu Jadwal: <strong>{o.deliveryTime}</strong></span>
+                            </div>
+                            {o.deliveredAt && (
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
+                                <span>Sampai pada: {new Date(o.deliveredAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</span>
+                              </div>
                             )}
-                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                              <span className="inline-flex items-center gap-1 text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                                <Clock className="h-3 w-3" />{o.deliveryTime}
-                              </span>
-                              <span className="inline-flex items-center gap-1 text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                                <Package className="h-3 w-3" />{o.items.length} item
-                              </span>
-                            </div>
-                            <div className="flex items-start gap-1 mt-1">
-                              <MapPin className="h-3 w-3 text-[#9CA3AF] shrink-0 mt-0.5" />
-                              {renderFormattedAddress(o.deliveryAddress)}
+                            <div className="flex items-start gap-1.5">
+                              <MapPin className="h-3.5 w-3.5 text-neutral-400 shrink-0 mt-0.5" />
+                              <div className="min-w-0 flex-1">
+                                <span className="font-bold">Alamat:</span>
+                                {renderFormattedAddress(o.deliveryAddress)}
+                              </div>
                             </div>
                           </div>
 
-                          {/* Chevron */}
-                          <ChevronRight className="h-5 w-5 text-[#D1D5DB] shrink-0" />
+                          <div className="space-y-2 bg-[#F9FAFB] rounded-xl p-3 border border-[#E5E7EB]">
+                            <span className="font-extrabold text-[#111827] block text-[10px] uppercase tracking-wider">
+                              Detail Pesanan
+                            </span>
+                            <div className="max-h-24 overflow-y-auto space-y-1 pr-1 font-medium text-[#4B5563]">
+                              {o.items.map((item, itemIdx) => (
+                                <div key={itemIdx} className="flex justify-between items-center gap-2">
+                                  <span className="truncate">{item.itemName}</span>
+                                  <span className="font-bold text-[#111827] shrink-0">x{item.quantity}</span>
+                                </div>
+                              ))}
+                            </div>
+                            {o.proofFileIds && o.proofFileIds.length > 0 && (
+                              <div className="pt-2 border-t border-[#E5E7EB] flex items-center justify-between gap-2">
+                                <span className="text-[10px] font-bold text-emerald-800 shrink-0">
+                                  ✓ Bukti & TTD Tersimpan
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedProofFiles(o.proofFileIds || []);
+                                    setSelectedStartPhotoId(o.deliveryStartPhotoId || undefined);
+                                    setIsProofModalOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[10px] rounded-lg transition cursor-pointer border border-emerald-200"
+                                >
+                                  Lihat Bukti Foto
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
+            )
           )}
         </>
       )}
@@ -624,6 +791,12 @@ export function DeliveryPage() {
           />
         </motion.div>
       )}
+      <ProofModal
+        isOpen={isProofModalOpen}
+        onClose={() => setIsProofModalOpen(false)}
+        proofFileIds={selectedProofFiles}
+        deliveryStartPhotoId={selectedStartPhotoId}
+      />
     </div>
   );
 }

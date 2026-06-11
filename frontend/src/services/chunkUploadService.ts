@@ -127,6 +127,8 @@ export interface UploadProgress {
 }
 
 export interface UploadOptions {
+  /** Optional file description to store in the parent document metadata. */
+  description?: string;
   /**
    * Target Firestore collection. Defaults to `'delivery_files'` for
    * backwards compatibility with existing call sites.
@@ -215,8 +217,20 @@ export async function uploadFileInChunks(
     );
   }
 
+  const isResume = typeof opts.resumeFileId === "string" && opts.resumeFileId.length > 0;
+
+  // Compress images to optimize upload speed (only on first upload attempt, not on resume)
+  let fileToUpload = file;
+  if (!isResume) {
+    try {
+      fileToUpload = await compressImage(file);
+    } catch (err) {
+      console.warn("Client-side compression failed, uploading original file:", err);
+    }
+  }
+
   // 2. Compute and bound total chunks (Requirements 7.7, 11.5).
-  const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+  const totalChunks = Math.max(1, Math.ceil(fileToUpload.size / CHUNK_SIZE));
   if (totalChunks > MAX_CHUNKS) {
     throw new ChunkUploadError(
       "CHUNK_LIMIT_EXCEEDED",
@@ -228,7 +242,6 @@ export async function uploadFileInChunks(
 
   // 3. Resolve parent doc: either reuse the supplied id (resume) or
   //    generate a new one.
-  const isResume = typeof opts.resumeFileId === "string" && opts.resumeFileId.length > 0;
   const parentRef = isResume
     ? doc(db, collectionName, opts.resumeFileId as string)
     : doc(collection(db, collectionName));
@@ -241,14 +254,17 @@ export async function uploadFileInChunks(
   //    flip status back to "uploading" without overwriting createdAt.
   if (!isResume) {
     const meta: Record<string, unknown> = {
-      fileName: file.name,
-      fileType: file.type || "application/octet-stream",
-      fileSize: file.size,
+      fileName: fileToUpload.name,
+      fileType: fileToUpload.type || "application/octet-stream",
+      fileSize: fileToUpload.size,
       totalChunks,
       status: "uploading",
       uploadedBy,
       createdAt: serverTimestamp(),
     };
+    if (opts.description) {
+      meta.description = opts.description;
+    }
     // Requirements 7.7 (payment_proofs) and the existing delivery_files
     // schema both carry orderId. Requirement 11.5 (product_images) does
     // not list orderId among the parent fields, so omit it there.
@@ -269,11 +285,11 @@ export async function uploadFileInChunks(
   //    idempotent (Requirements 7.10, 11.6, 11.13).
   let currentIndex = startIndex;
   try {
-    const mime = file.type || "application/octet-stream";
+    const mime = fileToUpload.type || "application/octet-stream";
     for (currentIndex = startIndex; currentIndex < totalChunks; currentIndex++) {
       const start = currentIndex * CHUNK_SIZE;
-      const end = Math.min(start + CHUNK_SIZE, file.size);
-      const slice = file.slice(start, end);
+      const end = Math.min(start + CHUNK_SIZE, fileToUpload.size);
+      const slice = fileToUpload.slice(start, end);
       const base64 = await blobToBase64(slice);
 
       // Chunk 0 carries the full Data_URI prefix; subsequent chunks
@@ -304,9 +320,9 @@ export async function uploadFileInChunks(
     return {
       fileId: parentId,
       totalChunks,
-      fileName: file.name,
-      fileType: file.type,
-      fileSize: file.size,
+      fileName: fileToUpload.name,
+      fileType: fileToUpload.type,
+      fileSize: fileToUpload.size,
     };
   } catch (err) {
     // 7. Best-effort: mark parent as failed so consumers can clean up
@@ -396,4 +412,80 @@ function clampChunkIndex(value: number | undefined, totalChunks: number): number
   if (intValue < 0) return 0;
   if (intValue > totalChunks) return totalChunks;
   return intValue;
+}
+
+/**
+ * Optimize upload speed by compressing large images on the client side.
+ * Converts to JPEG format to reduce size significantly.
+ */
+function compressImage(
+  file: File,
+  maxWidth = 1024,
+  maxHeight = 1024,
+  quality = 0.75
+): Promise<File> {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith("image/")) {
+      resolve(file);
+      return;
+    }
+    // Don't compress very small files or SVGs (like signatures or small icons)
+    if (file.size < 200 * 1024 || file.type === "image/svg+xml") {
+      resolve(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => resolve(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onerror = () => resolve(file);
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              resolve(file);
+              return;
+            }
+            const compressedFile = new File([blob], file.name, {
+              type: "image/jpeg",
+              lastModified: Date.now(),
+            });
+            resolve(compressedFile);
+          },
+          "image/jpeg",
+          quality
+        );
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
 }

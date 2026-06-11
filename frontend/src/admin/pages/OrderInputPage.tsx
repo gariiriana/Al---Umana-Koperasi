@@ -183,7 +183,13 @@ export function OrderInputPage() {
     const url = `${window.location.origin}/invoice/${createdOrder.token}`;
     const shortId = createdOrder.id.slice(-6).toUpperCase();
     const text = `Halo ${createdOrder.name},\n\nPesanan Anda #${shortId} dari ${institutionName} telah berhasil dibuat!\nTotal Tagihan: Rp ${displayTotal.toLocaleString()}\n\nSilakan konfirmasi pesanan dan lakukan tanda tangan digital melalui tautan invoice berikut:\n${url}`;
-    const waUrl = `https://wa.me/${createdOrder.phone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`;
+    const cleanPhone = createdOrder.phone.replace(/\D/g, "");
+    const whatsappNumber = cleanPhone.startsWith("0")
+      ? "62" + cleanPhone.slice(1)
+      : cleanPhone.startsWith("8")
+        ? "62" + cleanPhone
+        : cleanPhone;
+    const waUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(text)}`;
     window.open(waUrl, "_blank");
   };
 

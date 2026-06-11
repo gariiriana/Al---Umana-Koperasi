@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: al-umana-config
+  namespace: al-umana
+  labels:
+    app.kubernetes.io/part-of: al-umana
+data:
+  ENV: "production"
+  # Backend API base URL (internal cluster DNS)
+  VITE_API_BASE_URL: "http://backend-service:8080"
+  # WA Gateway internal URL for backend to call
+  WA_GATEWAY_URL: "http://wa-gateway-service:8000"

@@ -47,6 +47,7 @@
   color-scheme: light;
   color: var(--color-secondary);
   background-color: var(--color-background);
+  overflow-x: hidden;
 }
 
 body {
@@ -55,6 +56,7 @@ body {
   font-family: var(--font-body);
   background-color: var(--color-background);
   color: var(--color-secondary);
+  overflow-x: hidden;
 }
 
 h1,
@@ -112,7 +114,7 @@ h6 {
   width: var(--stock-pct, 100%);
 }
 
-/* ── Hide scrollbar utility ── */
+/* Hide scrollbar utility */
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
@@ -120,5 +122,11 @@ h6 {
   .scrollbar-none {
     scrollbar-width: none;  /* Firefox */
   }
+}
+
+/* Vertical range input slider for camera zoom */
+.vertical-zoom-slider {
+  writing-mode: vertical-lr;
+  direction: rtl;
 }
 
