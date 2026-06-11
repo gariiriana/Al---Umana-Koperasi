@@ -45,13 +45,28 @@ const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
     if (!res.ok) throw new Error(`Failed to fetch image: ${res.statusText}`);
     const blob = await res.blob();
     return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL("image/png"));
+        } else {
+          resolve(null);
+        }
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = () => {
+        resolve(null);
+        URL.revokeObjectURL(img.src);
+      };
+      img.src = URL.createObjectURL(blob);
     });
   } catch (err) {
-    console.error("Error loading logo for PDF:", err);
+    console.error("Error loading image for PDF:", err);
     return null;
   }
 };
@@ -660,8 +675,7 @@ export function OrdersPage() {
               const imgX = cell.x + (cell.width - imgSize) / 2;
               const imgY = cell.y + (cell.height - imgSize) / 2;
               try {
-                const format = item.imageUrl?.toLowerCase().endsWith(".png") ? "PNG" : "JPEG";
-                doc.addImage(item.imageBase64, format, imgX, imgY, imgSize, imgSize);
+                doc.addImage(item.imageBase64, "PNG", imgX, imgY, imgSize, imgSize);
               } catch (e) {
                 console.error("Failed to add cell image to PDF:", e);
               }
