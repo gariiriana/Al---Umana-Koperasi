@@ -13,7 +13,6 @@ import { LiveCamera } from "@/components/LiveCamera";
 import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import { uploadFileInChunks } from "@/services/chunkUploadService";
-import { validateImageUpload } from "@/lib/validators";
 import { dispatchOrder } from "@/services/orderService";
 
 const renderFormattedAddress = (address: string) => {
@@ -149,23 +148,6 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const validation = validateImageUpload(file.type, file.size);
-    if (!validation.accepted) {
-      if (validation.reason === "mime") {
-        setError("MIME tipe tidak diijinkan. Gunakan JPG, PNG, atau WebP.");
-      } else {
-        setError("Ukuran file terlalu besar. Maksimal 15 MB.");
-      }
-      return;
-    }
-    setPhotoFile(file);
-    setPhotoPreview(URL.createObjectURL(file));
-    setError(null);
-  };
 
   const handleSubmit = async () => {
     if (!photoFile) {

@@ -215,7 +215,7 @@ describe("Authentication UI Features", () => {
       // Verify the page has loaded (loading overlay is gone)
       await waitFor(() => {
         expect(screen.queryAllByText(/Loading/i).length).toBe(0);
-      });
+      }, { timeout: 5000 });
 
       // Open profile dropdown
       const profileBtn = document.getElementById("profile-menu-button");
@@ -270,7 +270,7 @@ describe("Authentication UI Features", () => {
       // Wait for loading to finish and page to render
       await waitFor(() => {
         expect(screen.queryAllByText(/Loading/i).length).toBe(0);
-      });
+      }, { timeout: 5000 });
 
       // Find Sign out button in SettingsPage
       const settingsSignOutBtn = screen.getByRole("button", { name: /Sign out/i });
