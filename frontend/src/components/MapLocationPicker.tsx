@@ -297,6 +297,8 @@ export function MapLocationPicker({ lang, onLocationSelected, onClose }: MapLoca
                     setSearchResults([]);
                     setShowResults(false);
                   }}
+                  title={lang === "id" ? "Hapus pencarian" : "Clear search"}
+                  aria-label={lang === "id" ? "Hapus pencarian" : "Clear search"}
                   className="p-0.5 rounded-full hover:bg-neutral-100 text-neutral-400 shrink-0 cursor-pointer"
                 >
                   <X className="h-3.5 w-3.5" />
