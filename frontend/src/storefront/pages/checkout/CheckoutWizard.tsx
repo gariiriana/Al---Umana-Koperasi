@@ -153,14 +153,16 @@ export function CheckoutWizard() {
   const { lang } = useLanguage();
   const t = DICTIONARY[lang];
 
-  const getSavedField = (key: string, fallback: any) => {
+  const getSavedField = <T,>(key: string, fallback: T): T => {
     try {
       const saved = localStorage.getItem("admin_checkout_form");
       if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed[key] !== undefined) return parsed[key];
+        const parsed = JSON.parse(saved) as Record<string, unknown>;
+        if (parsed[key] !== undefined) return parsed[key] as T;
       }
-    } catch {}
+    } catch {
+      // Ignored: silent fallback to parameter value
+    }
     return fallback;
   };
 
