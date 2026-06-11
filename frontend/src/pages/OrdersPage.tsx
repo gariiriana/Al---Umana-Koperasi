@@ -1150,9 +1150,21 @@ export function OrdersPage() {
     const tableBody = filteredOrders.map(o => {
       const itemsList = o.items.map(it => `${it.itemName} (×${it.quantity})`).join("\n");
       const details = itemsList || [o.foodDetails, o.drinkDetails].filter(Boolean).join(" + ") || "-";
+      
+      const address = o.deliveryAddress || "";
+      const mapsUrlMatch = address.match(/https?:\/\/[^\s]+/);
+      const mapsUrl = mapsUrlMatch ? mapsUrlMatch[0] : null;
+      const cleanAddress = mapsUrl ? address.replace(mapsUrl, "").replace(/\s+/g, " ").trim() : address;
+      
+      const recipientInfo = [
+        o.institutionName ? `Instansi: ${o.institutionName}` : "",
+        o.recipientName ? `Penerima: ${o.recipientName}` : "",
+        cleanAddress ? `Lokasi: ${cleanAddress}` : "",
+      ].filter(Boolean).join("\n");
+
       return [
         `#${o.id.slice(-6).toUpperCase()}`,
-        `${o.institutionName}\n${o.recipientName}`,
+        recipientInfo || "-",
         "", // placeholder for Foto column
         details,
         `Rp ${o.totalPrice.toLocaleString()}`,
@@ -1164,7 +1176,7 @@ export function OrdersPage() {
 
     autoTable(doc, {
       startY: y,
-      head: [["ID", "Instansi & Penerima", "Foto", "Detail Pesanan", "Harga", "Jadwal / Tempo", "Status Ops.", "Pembayaran"]],
+      head: [["ID", "Instansi, Penerima & Lokasi", "Foto", "Detail Pesanan", "Harga", "Jadwal / Tempo", "Status Ops.", "Pembayaran"]],
       body: tableBody,
       theme: "striped",
       styles: { lineColor: brandYellowBorder, lineWidth: 0.15 },
