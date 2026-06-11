@@ -35,6 +35,7 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/admin/qc", label: "Quality Control", icon: CheckCircle2 },
   { to: "/admin/production/history", label: "Riwayat", icon: History },
   { to: "/distribusi/scheduler", label: "Delivery Scheduler", icon: Calendar },
+  { to: "/distribusi/schedules", label: "Jadwal Distribusi", icon: Calendar },
   { to: "/distribusi/dispatch", label: "Dispatch", icon: Truck },
   { to: "/distribusi/delivery", label: "Delivery", icon: Package },
   { to: "/admin/products", label: "Daftar Produk", icon: Package2 },
@@ -49,6 +50,7 @@ const LABELS_DICT = {
     "/admin/qc": "Kontrol Kualitas",
     "/admin/production/history": "Riwayat",
     "/distribusi/scheduler": "Penjadwal Pengiriman",
+    "/distribusi/schedules": "Jadwal Distribusi",
     "/distribusi/dispatch": "Pengiriman",
     "/distribusi/delivery": "Pengantaran",
     "/admin/products": "Daftar Produk",
@@ -61,6 +63,7 @@ const LABELS_DICT = {
     "/admin/qc": "Quality Control",
     "/admin/production/history": "History",
     "/distribusi/scheduler": "Delivery Scheduler",
+    "/distribusi/schedules": "Distribution Schedules",
     "/distribusi/dispatch": "Dispatch",
     "/distribusi/delivery": "Delivery",
     "/admin/products": "Product List",
@@ -158,7 +161,7 @@ export function Sidebar({
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="space-y-1">
           {allowedItems.map(({ to, label, icon: Icon }) => {
-            let translatedLabel: string = LABELS_DICT[lang][to as keyof typeof LABELS_DICT["en"]] || label;
+            const translatedLabel: string = LABELS_DICT[lang][to as keyof typeof LABELS_DICT["en"]] || label;
             return (
               <li key={to}>
                 <NavLink

@@ -22,6 +22,7 @@ import { ProductImage } from "@/components/ProductImage";
 import type { InventoryItem } from "@/types/inventory";
 import { useCartAnimation } from "@/contexts/useCartAnimation";
 import { translateCategory } from "@/constants/categories";
+import { formatIDR } from "@/lib/format";
 
 
 
@@ -354,7 +355,22 @@ export function ProductDetailPage() {
               {product.itemName}
             </h2>
 
-
+            {/* Price display */}
+            <div className="flex items-baseline gap-2 pt-1">
+              <span className="text-xl font-extrabold text-[#EE4D2D] font-['Manrope']">
+                {formatIDR(product.price)}
+              </span>
+              {product.discountPercent && product.discountPercent > 0 ? (
+                <>
+                  <span className="text-xs text-neutral-400 line-through">
+                    {formatIDR(Math.round(product.price / (1 - product.discountPercent / 100)))}
+                  </span>
+                  <span className="text-[10px] font-bold text-[#EE4D2D] bg-[#FFEAEB] border border-[#FEE2E2] px-1.5 py-0.5 rounded-sm">
+                    -{product.discountPercent}%
+                  </span>
+                </>
+              ) : null}
+            </div>
           </div>
 
           {/* Divider */}
@@ -420,6 +436,15 @@ export function ProductDetailPage() {
                 </span>
               </div>
 
+              {/* Subtotal row */}
+              <div className="flex items-center justify-between pt-3 border-t border-[#F3F4F6]">
+                <span className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
+                  {t.subtotal}
+                </span>
+                <span className="text-base font-extrabold text-[#EE4D2D] font-['Manrope']">
+                  {formatIDR(product.price * qty)}
+                </span>
+              </div>
             </div>
           ) : (
             <div className="mx-4 mt-3 lg:mx-0 bg-white rounded-2xl p-4 text-center">

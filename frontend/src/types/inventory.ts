@@ -30,6 +30,8 @@ export interface InventoryItem {
   detailImageUrls?: string[];
   /** ISO-8601 server timestamp of the last update. */
   updatedAt: string;
+  /** Product ingredients format description. */
+  ingredients?: string;
 }
 
 /** Payload accepted by create and update endpoints. */
@@ -43,4 +45,6 @@ export interface InventoryItemInput {
   category: string;
   imageUrl?: string;
   detailImageUrls?: string[];
+  ingredients?: string;
 }
+

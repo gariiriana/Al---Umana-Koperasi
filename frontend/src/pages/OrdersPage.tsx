@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Plus, Search, Calendar, Copy, ExternalLink, AlertTriangle, ShieldCheck, CheckCircle2, User, Phone, FileDown, X, Loader2, Upload, Eye } from "lucide-react";
+import { Plus, Search, Calendar, Copy, ExternalLink, AlertTriangle, ShieldCheck, CheckCircle2, User, Phone, FileDown, X, Loader2, Upload, Eye, Image as ImageIcon } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { doc, getDoc } from "firebase/firestore";
@@ -17,6 +17,8 @@ import { uploadFileInChunks } from "@/services/chunkUploadService";
 import { ManualValidationModal } from "@/admin/pages/ManualValidationModal";
 import { formatIDR } from "@/lib/format";
 import { ProductImage } from "@/components/ProductImage";
+import html2canvas from "html2canvas";
+import { aggregateIngredients } from "@/lib/ingredientsParser";
 
 const statusShortLabels: Record<OrderStatus, string> = {
   PENDING: "Pending",
@@ -110,6 +112,8 @@ export function OrdersPage() {
   const [screenshotSrc, setScreenshotSrc] = useState<string | null>(null);
   const [loadingScreenshot, setLoadingScreenshot] = useState(false);
   const [exportingOrderId, setExportingOrderId] = useState<string | null>(null);
+  const [exportingJpgOrder, setExportingJpgOrder] = useState<Order | null>(null);
+  const [exportingJpgOrderId, setExportingJpgOrderId] = useState<string | null>(null);
 
   // Payment proof states
   const [proofImageSrc, setProofImageSrc] = useState<string | null>(null);
@@ -668,22 +672,88 @@ export function OrdersPage() {
         y += notesHeight + 6;
       }
 
-      // Grand Total box
+      // Grand Total box with detailed breakdown
+      const discountAmount = order.discountAmount || 0;
+      const subtotal = order.totalPrice + discountAmount - (order.additionalFee || 0);
+
+      let boxHeight = 12;
+      if (discountAmount > 0) boxHeight += 6;
+      if (order.additionalFee && order.additionalFee > 0) boxHeight += 6;
+
       doc.setFillColor(...brandYellowCream);
       doc.setDrawColor(...brandGold);
       doc.setLineWidth(0.5);
-      doc.rect(14, y, pageW - 28, 12, "FD");
+      doc.rect(14, y, pageW - 28, boxHeight, "FD");
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
+      let boxY = y + 5;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
       doc.setTextColor(...slateDark);
-      doc.text("GRAND TOTAL TAGIHAN:", 18, y + 7.5);
+
+      doc.text("Subtotal Menu:", 18, boxY);
+      doc.text(`Rp ${subtotal.toLocaleString("id-ID")}`, pageW - 18, boxY, { align: "right" });
+      boxY += 5;
+
+      if (discountAmount > 0) {
+        doc.setTextColor(5, 150, 105); // Green
+        doc.setFont("helvetica", "bold");
+        doc.text(`Diskon Promo (${order.promoCode || "PROMO"}):`, 18, boxY);
+        doc.text(`-Rp ${discountAmount.toLocaleString("id-ID")}`, pageW - 18, boxY, { align: "right" });
+        boxY += 5;
+        doc.setTextColor(...slateDark);
+        doc.setFont("helvetica", "normal");
+      }
+
+      if (order.additionalFee && order.additionalFee > 0) {
+        doc.text("Biaya Tambahan:", 18, boxY);
+        doc.text(`Rp ${order.additionalFee.toLocaleString("id-ID")}`, pageW - 18, boxY, { align: "right" });
+        boxY += 5;
+      }
+
+      // Draw line separator inside box
+      doc.setDrawColor(...brandYellowBorder);
+      doc.setLineWidth(0.3);
+      doc.line(18, boxY - 1, pageW - 18, boxY - 1);
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
+      doc.setFontSize(9.5);
       doc.setTextColor(...brandAmberDark);
-      doc.text(`Rp ${order.totalPrice.toLocaleString("id-ID")}`, pageW - 18, y + 7.5, { align: "right" });
-      y += 20;
+      doc.text("GRAND TOTAL TAGIHAN:", 18, boxY + 3.5);
+      doc.text(`Rp ${order.totalPrice.toLocaleString("id-ID")}`, pageW - 18, boxY + 3.5, { align: "right" });
+
+      y += boxHeight + 8;
+
+      // Aggregated Ingredients Composition
+      const ingredients = aggregateIngredients(order.items);
+      if (ingredients.length > 0) {
+        const ingHeight = 8 + (ingredients.length * 5) + 6;
+        if (y + ingHeight > pageH - 20) {
+          doc.addPage();
+          y = 20;
+        }
+
+        doc.setFillColor(...brandYellowCream);
+        doc.setDrawColor(...brandYellowBorder);
+        doc.setLineWidth(0.4);
+        doc.rect(14, y, pageW - 28, ingHeight, "FD");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5);
+        doc.setTextColor(...brandAmberDark);
+        doc.text("TOTAL KEBUTUHAN BAHAN (KOMPOSISI TOTAL)", 18, y + 5);
+
+        let ingY = y + 10;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(...slateDark);
+
+        for (const ing of ingredients) {
+          doc.text(`• ${ing.name}`, 18, ingY);
+          doc.text(`${ing.amount} ${ing.unit}`, pageW - 18, ingY, { align: "right" });
+          ingY += 5;
+        }
+        y += ingHeight + 8;
+      }
 
       // Digital Signature / Manual Validation Render
       if (order.invoiceSignedAt && order.invoiceSignatureData) {
@@ -851,6 +921,40 @@ export function OrdersPage() {
     } finally {
       setExportingOrderId(null);
     }
+  };
+
+  const exportSingleOrderToJPG = async (order: Order) => {
+    setExportingJpgOrderId(order.id);
+    setExportingJpgOrder(order);
+    setTimeout(async () => {
+      const el = document.getElementById("jpg-export-container");
+      if (!el) {
+        showToast({ message: "Gagal menemukan elemen invoice untuk JPG.", variant: "error" });
+        setExportingJpgOrder(null);
+        setExportingJpgOrderId(null);
+        return;
+      }
+      try {
+        const canvas = await html2canvas(el, {
+          useCORS: true,
+          scale: 2,
+          backgroundColor: "#ffffff",
+          logging: false
+        });
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+        const link = document.createElement("a");
+        link.download = `AlUmana_Invoice_${order.id.slice(-6).toUpperCase()}_${order.eventDate}.jpg`;
+        link.href = dataUrl;
+        link.click();
+        showToast({ message: "JPG Invoice berhasil diunduh!", variant: "success" });
+      } catch (err) {
+        console.error("Gagal export JPG:", err);
+        showToast({ message: "Gagal memproses ekspor JPG", variant: "error" });
+      } finally {
+        setExportingJpgOrder(null);
+        setExportingJpgOrderId(null);
+      }
+    }, 300);
   };
 
   const exportOrdersToPDF = async () => {
@@ -1375,6 +1479,19 @@ export function OrdersPage() {
                                 <FileDown className="w-3.5 h-3.5" />
                               )}
                             </button>
+
+                            <button
+                              onClick={() => exportSingleOrderToJPG(o)}
+                              className="text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-lg p-1.5 transition-all flex items-center justify-center cursor-pointer"
+                              title="Unduh JPG Invoice"
+                              disabled={exportingJpgOrderId === o.id}
+                            >
+                              {exportingJpgOrderId === o.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <ImageIcon className="w-3.5 h-3.5" />
+                              )}
+                            </button>
                           </div>
                         </div>
                       </td>
@@ -1460,10 +1577,13 @@ export function OrdersPage() {
                                         <span>{uploadComplaintProgress}%</span>
                                       </div>
                                       <div className="h-1 w-full bg-[#E5E7EB] rounded-full overflow-hidden">
-                                        <div
-                                          className="h-full bg-amber-500 transition-all duration-150"
-                                          style={{ width: `${uploadComplaintProgress}%` }}
-                                        />
+                                        <svg className="h-full w-full">
+                                          <rect
+                                            className="fill-amber-500 transition-all duration-150"
+                                            height="100%"
+                                            width={`${uploadComplaintProgress}%`}
+                                          />
+                                        </svg>
                                       </div>
                                     </div>
                                   )}
@@ -1806,6 +1926,19 @@ export function OrdersPage() {
                           <FileDown className="w-3.5 h-3.5" />
                         )}
                       </button>
+
+                      <button
+                        onClick={() => exportSingleOrderToJPG(o)}
+                        className="flex-1 text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-xl transition-all flex items-center justify-center h-9 cursor-pointer"
+                        title="Unduh JPG Invoice"
+                        disabled={exportingJpgOrderId === o.id}
+                      >
+                        {exportingJpgOrderId === o.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <ImageIcon className="w-3.5 h-3.5" />
+                        )}
+                      </button>
                     </div>
                   ) : (
                     <div className="flex gap-2">
@@ -1847,6 +1980,19 @@ export function OrdersPage() {
                           <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                           <FileDown className="w-4 h-4" />
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => exportSingleOrderToJPG(o)}
+                        className="text-neutral-600 hover:text-[#D97706] hover:bg-amber-50 border border-[#D1D5DB] rounded-xl p-2.5 transition-all flex items-center justify-center h-10 w-10 shrink-0 cursor-pointer"
+                        title="Unduh JPG Invoice"
+                        disabled={exportingJpgOrderId === o.id}
+                      >
+                        {exportingJpgOrderId === o.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <ImageIcon className="w-4 h-4" />
                         )}
                       </button>
                     </div>
@@ -1936,10 +2082,13 @@ export function OrdersPage() {
                               <span>{uploadComplaintProgress}%</span>
                             </div>
                             <div className="h-1 w-full bg-[#E5E7EB] rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-amber-500 transition-all duration-150"
-                                style={{ width: `${uploadComplaintProgress}%` }}
-                              />
+                              <svg className="h-full w-full">
+                                <rect
+                                  className="fill-amber-500 transition-all duration-150"
+                                  height="100%"
+                                  width={`${uploadComplaintProgress}%`}
+                                />
+                              </svg>
                             </div>
                           </div>
                         )}
@@ -2221,10 +2370,13 @@ export function OrdersPage() {
                             <span>{uploadComplaintProgress}%</span>
                           </div>
                           <div className="h-1 w-full bg-[#E5E7EB] rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-amber-500 transition-all duration-150"
-                              style={{ width: `${uploadComplaintProgress}%` }}
-                            />
+                            <svg className="h-full w-full">
+                              <rect
+                                className="fill-amber-500 transition-all duration-150"
+                                height="100%"
+                                width={`${uploadComplaintProgress}%`}
+                              />
+                            </svg>
                           </div>
                         </div>
                       )}
@@ -2351,6 +2503,31 @@ export function OrdersPage() {
                 </div>
               </div>
 
+              {/* Total Ingredients Composition */}
+              {(() => {
+                const ingredients = aggregateIngredients(previewInvoiceOrder.items);
+                if (ingredients.length === 0) return null;
+                return (
+                  <div className="space-y-2">
+                    <h5 className="font-bold text-neutral-500 uppercase tracking-wider text-[10px]">
+                      Total Kebutuhan Bahan
+                    </h5>
+                    <div className="border border-[#E5E7EB] rounded-xl p-4 bg-neutral-50 text-[11px] font-semibold text-[#4B5563]">
+                      <div className="divide-y divide-[#E5E7EB]">
+                        {ingredients.map((ing, idx) => (
+                          <div key={idx} className="py-2 flex justify-between items-center">
+                            <span className="capitalize">{ing.name}</span>
+                            <span className="font-mono font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-0.5">
+                              {ing.amount} {ing.unit}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Food/Drink Details Notes */}
               {(previewInvoiceOrder.foodDetails || previewInvoiceOrder.drinkDetails || previewInvoiceOrder.recipientNotes) && (
                 <div className="space-y-2 p-4 bg-amber-50/50 rounded-xl border border-amber-200/50 text-[#78350F]">
@@ -2433,9 +2610,27 @@ export function OrdersPage() {
               )}
 
               {/* Pricing Totals */}
-              <div className="flex justify-between items-center pt-4 border-t border-[#F3F4F6]">
-                <span className="font-['Manrope'] font-extrabold text-sm text-neutral-900">Grand Total Tagihan:</span>
-                <span className="font-['Manrope'] font-black text-lg text-[#D97706]">{formatIDR(previewInvoiceOrder.totalPrice)}</span>
+              <div className="pt-4 border-t border-[#F3F4F6] space-y-2">
+                <div className="flex justify-between items-center text-xs text-neutral-500">
+                  <span>Subtotal Pesanan:</span>
+                  <span>{formatIDR(previewInvoiceOrder.totalPrice + (previewInvoiceOrder.discountAmount || 0) - (previewInvoiceOrder.additionalFee || 0))}</span>
+                </div>
+                {previewInvoiceOrder.discountAmount !== undefined && previewInvoiceOrder.discountAmount > 0 && (
+                  <div className="flex justify-between items-center text-xs text-emerald-600 font-semibold">
+                    <span>Diskon Promo ({previewInvoiceOrder.promoCode}):</span>
+                    <span>-{formatIDR(previewInvoiceOrder.discountAmount)}</span>
+                  </div>
+                )}
+                {previewInvoiceOrder.additionalFee !== undefined && previewInvoiceOrder.additionalFee > 0 && (
+                  <div className="flex justify-between items-center text-xs text-neutral-500 pb-1">
+                    <span>Biaya Tambahan:</span>
+                    <span>{formatIDR(previewInvoiceOrder.additionalFee)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center pt-2 border-t border-neutral-100">
+                  <span className="font-['Manrope'] font-extrabold text-sm text-neutral-900">Grand Total Tagihan:</span>
+                  <span className="font-['Manrope'] font-black text-lg text-[#D97706]">{formatIDR(previewInvoiceOrder.totalPrice)}</span>
+                </div>
               </div>
             </div>
 
@@ -2459,6 +2654,23 @@ export function OrdersPage() {
                 )}
               </Button>
               <Button
+                onClick={() => exportSingleOrderToJPG(previewInvoiceOrder)}
+                className="bg-amber-500 hover:bg-amber-600 text-[#111827] rounded-xl text-xs py-2 px-4 h-9 flex items-center gap-1.5 font-bold cursor-pointer"
+                disabled={exportingJpgOrderId === previewInvoiceOrder.id}
+              >
+                {exportingJpgOrderId === previewInvoiceOrder.id ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Mengekspor JPG...</span>
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    <span>Unduh JPG</span>
+                  </>
+                )}
+              </Button>
+              <Button
                 onClick={() => setPreviewInvoiceOrder(null)}
                 className="bg-[#1E293B] hover:bg-[#0F172A] text-white rounded-xl text-xs py-2 px-4 h-9 cursor-pointer"
               >
@@ -2466,6 +2678,401 @@ export function OrdersPage() {
               </Button>
             </div>
           </Card>
+        </div>
+      )}
+      {/* Hidden print-ready container for html2canvas JPG export */}
+      {exportingJpgOrder && (
+        <div id="jpg-export-container" className="jpg-exp-container">
+          <style dangerouslySetInnerHTML={{ __html: `
+            .jpg-exp-container {
+              position: fixed;
+              left: -9999px;
+              top: 0;
+              width: 600px;
+              background-color: #ffffff;
+              padding: 32px;
+              font-family: 'Hanken Grotesk', system-ui, sans-serif;
+              color: #1f2937;
+            }
+            .jpg-exp-gold-bar {
+              height: 4px;
+              background-color: #D97706;
+              margin-bottom: 20px;
+            }
+            .jpg-exp-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 1px solid #f3f4f6;
+              padding-bottom: 16px;
+              margin-bottom: 20px;
+            }
+            .jpg-exp-header-left h2 {
+              font-size: 18px;
+              font-weight: 800;
+              color: #D97706;
+              margin: 0;
+            }
+            .jpg-exp-header-left p {
+              font-size: 11px;
+              color: #6b7280;
+              margin: 4px 0 0 0;
+            }
+            .jpg-exp-header-right {
+              text-align: right;
+            }
+            .jpg-exp-badge {
+              display: inline-block;
+              padding: 4px 10px;
+              background-color: #fffbeb;
+              border: 1px solid #fde68a;
+              border-radius: 9999px;
+              font-size: 10px;
+              font-weight: 700;
+              color: #b45309;
+              text-transform: uppercase;
+            }
+            .jpg-exp-header-right p {
+              font-size: 10px;
+              color: #9ca3af;
+              margin: 4px 0 0 0;
+            }
+            .jpg-exp-meta-grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 20px;
+              background-color: #f9fafb;
+              border: 1px solid #e5e7eb;
+              border-radius: 12px;
+              padding: 16px;
+              margin-bottom: 20px;
+              font-size: 11px;
+            }
+            .jpg-exp-meta-title {
+              font-size: 10px;
+              font-weight: 700;
+              text-transform: uppercase;
+              color: #6b7280;
+              margin: 0 0 8px 0;
+            }
+            .jpg-exp-meta-name {
+              font-weight: 700;
+              color: #111827;
+              margin: 0 0 4px 0;
+            }
+            .jpg-exp-meta-text {
+              color: #6b7280;
+              margin: 0 0 4px 0;
+            }
+            .jpg-exp-meta-phone {
+              font-family: monospace;
+              margin: 0 0 4px 0;
+            }
+            .jpg-exp-meta-address {
+              margin: 0;
+            }
+            .jpg-exp-meta-info-line {
+              margin: 0 0 4px 0;
+            }
+            .jpg-exp-meta-info-line span {
+              font-weight: 700;
+            }
+            .jpg-exp-meta-info-line span.due-date {
+              font-weight: 700;
+              color: #dc2626;
+            }
+            .jpg-exp-section {
+              margin-bottom: 20px;
+            }
+            .jpg-exp-section h4 {
+              font-size: 10px;
+              font-weight: 700;
+              text-transform: uppercase;
+              color: #6b7280;
+              margin: 0 0 8px 0;
+            }
+            .jpg-exp-table-wrapper {
+              border: 1px solid #e5e7eb;
+              border-radius: 12px;
+              overflow: hidden;
+            }
+            .jpg-exp-table {
+              width: 100%;
+              border-collapse: collapse;
+              text-align: left;
+              font-size: 11px;
+            }
+            .jpg-exp-table tr.header-row {
+              background-color: #f9fafb;
+              border-bottom: 1px solid #e5e7eb;
+            }
+            .jpg-exp-table th {
+              padding: 8px 12px;
+            }
+            .jpg-exp-table th.w-40 {
+              width: 40px;
+            }
+            .jpg-exp-table th.w-80-center {
+              width: 80px;
+              text-align: center;
+            }
+            .jpg-exp-table td {
+              padding: 8px 12px;
+            }
+            .jpg-exp-table td.qty-cell {
+              text-align: center;
+              font-weight: 700;
+              font-family: monospace;
+            }
+            .jpg-exp-table td.name-cell {
+              font-weight: 700;
+            }
+            .jpg-exp-table tbody tr:not(:last-child) {
+              border-bottom: 1px solid #e5e7eb;
+            }
+            .jpg-exp-image-box {
+              width: 36px;
+              height: 36px;
+              background-color: #f3f4f6;
+              border-radius: 6px;
+              overflow: hidden;
+              border: 1px solid #e5e7eb;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+            .jpg-exp-ingredients-box {
+              border: 1px solid #e5e7eb;
+              border-radius: 12px;
+              padding: 12px;
+              background-color: #f9fafb;
+              font-size: 11px;
+            }
+            .jpg-exp-ingredients-list {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 8px;
+            }
+            .jpg-exp-ingredient-badge {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              background-color: #ffffff;
+              border: 1px solid #e5e7eb;
+              border-radius: 8px;
+              padding: 6px 10px;
+              font-weight: 600;
+            }
+            .jpg-exp-ingredient-badge span.name {
+              text-transform: capitalize;
+            }
+            .jpg-exp-ingredient-badge span.amount {
+              color: #b45309;
+              font-family: monospace;
+              font-weight: 700;
+            }
+            .jpg-exp-pricing-breakdown {
+              border-top: 1px solid #f3f4f6;
+              padding-top: 12px;
+              font-size: 11px;
+              display: flex;
+              flex-direction: column;
+              gap: 4px;
+            }
+            .jpg-exp-pricing-row {
+              display: flex;
+              justify-content: space-between;
+              color: #6b7280;
+            }
+            .jpg-exp-pricing-row.discount {
+              color: #10b981;
+              font-weight: 600;
+            }
+            .jpg-exp-pricing-row.total {
+              border-top: 1px solid #e5e7eb;
+              padding-top: 8px;
+              margin-top: 4px;
+              font-size: 13px;
+              font-weight: 800;
+              color: #D97706;
+            }
+            .jpg-exp-validation-box {
+              border-top: 1px solid #f3f4f6;
+              padding-top: 12px;
+              margin-top: 16px;
+              font-size: 10px;
+              color: #4b5563;
+            }
+            .jpg-exp-ttd-row {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 12px;
+            }
+            .jpg-exp-ttd-row p.title {
+              font-weight: 700;
+              color: #065f46;
+              margin: 0;
+            }
+            .jpg-exp-ttd-row p.subtitle {
+              color: #047857;
+              font-size: 9px;
+              margin: 4px 0 0 0;
+            }
+            .jpg-exp-ttd-image {
+              max-height: 32px;
+              border: 1px solid #e5e7eb;
+              border-radius: 4px;
+              padding: 2px;
+            }
+            .jpg-exp-manual-title {
+              font-weight: 700;
+              color: #92400e;
+              margin: 0;
+            }
+            .jpg-exp-manual-subtitle {
+              color: #b45309;
+              font-size: 9px;
+              margin: 4px 0 0 0;
+            }
+          ` }} />
+
+          {/* Top Gold Border */}
+          <div className="jpg-exp-gold-bar" />
+
+          {/* Koperasi Header */}
+          <div className="jpg-exp-header">
+            <div className="jpg-exp-header-left">
+              <h2>KOPERASI AL-UMANAA</h2>
+              <p>Pesantren Al-Umanaa, Sukabumi, Jawa Barat</p>
+            </div>
+            <div className="jpg-exp-header-right">
+              <span className="jpg-exp-badge">Invoice Resmi</span>
+              <p>ID: #{exportingJpgOrder.id.toUpperCase()}</p>
+            </div>
+          </div>
+
+          {/* Metadata Grid */}
+          <div className="jpg-exp-meta-grid">
+            <div>
+              <h4 className="jpg-exp-meta-title">Pengiriman & Acara</h4>
+              <p className="jpg-exp-meta-name">{exportingJpgOrder.recipientName}</p>
+              <p className="jpg-exp-meta-text">{exportingJpgOrder.institutionName}</p>
+              <p className="jpg-exp-meta-phone">{exportingJpgOrder.recipientPhone}</p>
+              <p className="jpg-exp-meta-address">{exportingJpgOrder.deliveryAddress}</p>
+            </div>
+            <div>
+              <h4 className="jpg-exp-meta-title">Informasi Tagihan</h4>
+              <p className="jpg-exp-meta-info-line">Tanggal Input: <span>{new Date(exportingJpgOrder.createdAt).toLocaleDateString("id-ID")}</span></p>
+              <p className="jpg-exp-meta-info-line">Tanggal Acara: <span>{new Date(exportingJpgOrder.eventDate).toLocaleDateString("id-ID")}</span></p>
+              <p className="jpg-exp-meta-info-line">Waktu Acara: <span>{exportingJpgOrder.deliveryTime}</span></p>
+              <p className="jpg-exp-meta-info-line">Jatuh Tempo: <span className="due-date">{new Date(exportingJpgOrder.paymentDueDate).toLocaleDateString("id-ID")}</span></p>
+              {exportingJpgOrder.kitchen && (
+                <p className="jpg-exp-meta-info-line">Dapur: <span>{exportingJpgOrder.kitchen}</span></p>
+              )}
+            </div>
+          </div>
+
+          {/* Menu Items Table */}
+          <div className="jpg-exp-section">
+            <h4>Rincian Pesanan</h4>
+            <div className="jpg-exp-table-wrapper">
+              <table className="jpg-exp-table">
+                <thead>
+                  <tr className="header-row">
+                    <th className="w-40">Foto</th>
+                    <th>Menu Item</th>
+                    <th className="w-80-center">Jumlah</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exportingJpgOrder.items.map((it, idx) => (
+                    <tr key={idx}>
+                      <td>
+                        <div className="jpg-exp-image-box">
+                          <ProductImage
+                            imageUrl={it.imageUrl}
+                            alt={it.itemName}
+                            className="h-full w-full object-cover"
+                            fallbackClassName="h-3.5 w-3.5 text-neutral-400 mx-auto"
+                          />
+                        </div>
+                      </td>
+                      <td className="name-cell">{it.itemName}</td>
+                      <td className="qty-cell">×{it.quantity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Aggregated Ingredients Composition */}
+          {(() => {
+            const ingredients = aggregateIngredients(exportingJpgOrder.items);
+            if (ingredients.length === 0) return null;
+            return (
+              <div className="jpg-exp-section">
+                <h4>Total Kebutuhan Bahan (Komposisi Total)</h4>
+                <div className="jpg-exp-ingredients-box">
+                  <div className="jpg-exp-ingredients-list">
+                    {ingredients.map((ing, idx) => (
+                      <div key={idx} className="jpg-exp-ingredient-badge">
+                        <span className="name">{ing.name}</span>
+                        <span className="amount">{ing.amount} {ing.unit}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Pricing breakdown */}
+          <div className="jpg-exp-pricing-breakdown">
+            <div className="jpg-exp-pricing-row">
+              <span>Subtotal Pesanan:</span>
+              <span>{formatIDR(exportingJpgOrder.totalPrice + (exportingJpgOrder.discountAmount || 0) - (exportingJpgOrder.additionalFee || 0))}</span>
+            </div>
+            {exportingJpgOrder.discountAmount !== undefined && exportingJpgOrder.discountAmount > 0 && (
+              <div className="jpg-exp-pricing-row discount">
+                <span>Diskon Promo ({exportingJpgOrder.promoCode}):</span>
+                <span>-{formatIDR(exportingJpgOrder.discountAmount)}</span>
+              </div>
+            )}
+            {exportingJpgOrder.additionalFee !== undefined && exportingJpgOrder.additionalFee > 0 && (
+              <div className="jpg-exp-pricing-row">
+                <span>Biaya Tambahan:</span>
+                <span>{formatIDR(exportingJpgOrder.additionalFee)}</span>
+              </div>
+            )}
+            <div className="jpg-exp-pricing-row total">
+              <span>Grand Total Tagihan:</span>
+              <span>{formatIDR(exportingJpgOrder.totalPrice)}</span>
+            </div>
+          </div>
+
+          {/* Signatures / Validations */}
+          {(exportingJpgOrder.invoiceSignedAt || exportingJpgOrder.manualValidation) && (
+            <div className="jpg-exp-validation-box">
+              {exportingJpgOrder.invoiceSignedAt ? (
+                <div className="jpg-exp-ttd-row">
+                  <div>
+                    <p className="title">✓ Tanda Tangan Digital Pelanggan Valid</p>
+                    <p className="subtitle">Diverifikasi: {new Date(exportingJpgOrder.invoiceSignedAt).toLocaleDateString("id-ID")}</p>
+                  </div>
+                  {exportingJpgOrder.invoiceSignatureData && (
+                    <img src={exportingJpgOrder.invoiceSignatureData} alt="TTD" className="jpg-exp-ttd-image" />
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <p className="jpg-exp-manual-title">✓ Validasi Manual Admin ({exportingJpgOrder.manualValidation?.validatedBy})</p>
+                  <p className="jpg-exp-manual-subtitle">No. Kontak: {exportingJpgOrder.manualValidation?.contactPhone}</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

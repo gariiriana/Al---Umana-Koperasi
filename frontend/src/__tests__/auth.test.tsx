@@ -126,8 +126,8 @@ vi.mock("motion/react", () => ({
 }));
 
 vi.mock("@marsidev/react-turnstile", () => ({
-  Turnstile: forwardRef((_props: any, _ref: any) => {
-    return <div data-testid="turnstile-mock" />;
+  Turnstile: forwardRef<HTMLDivElement, Record<string, unknown>>((props, ref) => {
+    return <div data-testid="turnstile-mock" ref={ref} {...props} />;
   }),
 }));
 

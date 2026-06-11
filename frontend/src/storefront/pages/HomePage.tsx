@@ -95,17 +95,6 @@ export function HomePage() {
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
-    const demoProducts = loadDemoFromStorage();
-    if (demoProducts && demoProducts.length > 0) {
-      setIsDemo(true);
-      setState({
-        status: "ready",
-        products: demoProducts,
-        recommended: demoProducts.slice(0, 5),
-      });
-      return;
-    }
-
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -124,11 +113,31 @@ export function HomePage() {
       if (controller.signal.aborted) {
         return;
       }
+
+      // Check if we ended up falling back to demo products
+      const demoProducts = loadDemoFromStorage();
+      const isActuallyDemo = demoProducts && demoProducts.length > 0 && products.length === demoProducts.length && products.every((p, i) => p.id === demoProducts[i].id);
+      setIsDemo(!!isActuallyDemo);
+
       setState({ status: "ready", products, recommended });
     } catch (err) {
       if (!controller.signal.aborted && abortRef.current !== controller) {
         return;
       }
+
+      // Fallback directly to demoProducts if Firestore loading completely failed
+      const demoProducts = loadDemoFromStorage();
+      if (demoProducts && demoProducts.length > 0) {
+        setIsDemo(true);
+        setState({
+          status: "ready",
+          products: demoProducts,
+          recommended: demoProducts.slice(0, 5),
+        });
+        window.clearTimeout(timeoutHandle);
+        return;
+      }
+
       const message = controller.signal.aborted
         ? "connectionError"
         : err instanceof Error

@@ -229,6 +229,25 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------
+    // Promos & Discounts
+    // -------------------------------------------------------------------
+    // Public get allows checkout to validate promo codes without auth.
+    // Only admins can list all, create, update, or delete promos.
+    match /promos/{promoId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------
+    // Distribution Schedules
+    // -------------------------------------------------------------------
+    // Admin and tim_produksi can manage distribution schedules.
+    match /distribution_schedules/{scheduleId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin() || isTimProduksi();
+    }
+
+    // -------------------------------------------------------------------
     // Reviews / Testimonials
     // -------------------------------------------------------------------
     match /reviews/{reviewId} {

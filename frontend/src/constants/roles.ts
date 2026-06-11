@@ -14,6 +14,8 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/admin/orders",
     "/admin/orders/new",
     "/admin/invoices",
+    "/admin/promos",
+    "/distribusi/schedules",
   ],
 
   /**
@@ -27,6 +29,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/admin/products/new",
     "/admin/categories",
     "/admin/food-schedule",
+    "/distribusi/schedules",
   ],
 
   /**
@@ -35,15 +38,18 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   distribusi: [
     "/distribusi/dispatch",
     "/distribusi/scheduler",
+    "/distribusi/schedules",
   ],
 
   kurir: [
     "/distribusi/delivery",
+    "/distribusi/schedules",
   ],
 
   monitoring: [
     "/admin/dashboard",
     "/admin/orders",
+    "/distribusi/schedules",
   ],
 };
 

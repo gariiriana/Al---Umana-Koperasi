@@ -6,6 +6,7 @@ import {
   ShoppingCart,
   Bell,
   HelpCircle,
+  Tag,
   Globe,
   Search,
   ChevronDown,
@@ -667,6 +668,12 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                   <HelpCircle className="h-3.5 w-3.5" />
                   <span>{t.help}</span>
                 </Link>
+                {profile?.role === "admin" && (
+                  <Link to="/admin/promos" className="flex items-center gap-1 hover:opacity-85 transition-opacity font-bold text-amber-200">
+                    <Tag className="h-3.5 w-3.5" />
+                    <span>{lang === "id" ? "Promo" : "Promos"}</span>
+                  </Link>
+                )}
                 <div className="relative">
                   <button
                     type="button"

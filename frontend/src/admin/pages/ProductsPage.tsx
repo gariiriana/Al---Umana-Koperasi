@@ -295,6 +295,7 @@ export function ProductsPage() {
   const [fAvailable, setFAvailable] = useState(true);
   const [fCategory, setFCategory] = useState("");
   const [fImageURL, setFImageURL] = useState("");
+  const [fIngredients, setFIngredients] = useState("");
 
   // Multi-image fields
   const [fDetailImageUrls, setFDetailImageUrls] = useState<string[]>([]);
@@ -707,6 +708,7 @@ export function ProductsPage() {
         setFAvailable(freshItem.available);
         setFCategory(freshItem.category);
         setFImageURL(freshItem.imageUrl || "");
+        setFIngredients(freshItem.ingredients || "");
 
         if (freshItem.imageUrl) {
           setFImagePreview(resolveProductImageURL(freshItem.imageUrl));
@@ -733,6 +735,7 @@ export function ProductsPage() {
       setFAvailable(true);
       setFCategory("");
       setFImageURL("");
+      setFIngredients("");
       setFImagePreview(null);
       setFDetailImageUrls([]);
       setFDetailImagePreviews([]);
@@ -756,6 +759,7 @@ export function ProductsPage() {
     setFAvailable(true);
     setFCategory("");
     setFImageURL("");
+    setFIngredients("");
     setFImagePreview(null);
     setFSelectedFile(null);
     setFUploading(false);
@@ -908,6 +912,7 @@ export function ProductsPage() {
       category: trimmedCategory,
       imageUrl: fImageURL || undefined,
       detailImageUrls: fDetailImageUrls,
+      ingredients: fIngredients.trim() || undefined,
     };
 
     try {
@@ -1716,6 +1721,18 @@ export function ProductsPage() {
                         </label>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Bahan-Bahan (Ingredients) */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-[#4B5563]">Bahan-Bahan (Satu per baris, contoh: Nasi 500 gram)</label>
+                    <textarea
+                      rows={3}
+                      placeholder="Contoh:&#10;Nasi 500 gram&#10;Ayam 100 gr"
+                      className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] resize-none"
+                      value={fIngredients}
+                      onChange={(e) => setFIngredients(e.target.value)}
+                    />
                   </div>
 
                   {drawerError && (

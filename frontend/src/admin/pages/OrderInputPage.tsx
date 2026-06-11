@@ -33,6 +33,7 @@ export function OrderInputPage() {
   const [additionalNotes, setAdditionalNotes] = useState("");
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [totalPriceOverride, setTotalPriceOverride] = useState<number | null>(null);
+  const [additionalFee, setAdditionalFee] = useState<number>(0);
 
   // DB States
   const [menuItems, setMenuItems] = useState<InventoryItem[]>([]);
@@ -65,7 +66,7 @@ export function OrderInputPage() {
     return acc + item.price * item.quantity;
   }, 0);
 
-  const displayTotal = totalPriceOverride !== null ? totalPriceOverride : autoCalculatedTotal;
+  const displayTotal = totalPriceOverride !== null ? totalPriceOverride : (autoCalculatedTotal + additionalFee);
 
   const handleAddItem = (item: InventoryItem) => {
     const existing = selectedItems.find((s) => s.itemId === item.id);
@@ -146,6 +147,7 @@ export function OrderInputPage() {
           quantity: s.quantity,
         })),
         totalPrice: displayTotal,
+        additionalFee,
         additionalNotes: additionalNotes.trim(),
       });
 
@@ -257,6 +259,7 @@ export function OrderInputPage() {
                 setAdditionalNotes("");
                 setSelectedItems([]);
                 setTotalPriceOverride(null);
+                setAdditionalFee(0);
               }}
               variant="outlined"
               className="text-xs"
@@ -565,6 +568,22 @@ export function OrderInputPage() {
               <div className="flex justify-between text-xs text-[#6B7280]">
                 <span>Total Kalkulasi Menu:</span>
                 <span>{formatIDR(autoCalculatedTotal)}</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#6B7280] mb-1">
+                  Biaya Tambahan (Ongkir, Charge, dll.)
+                </label>
+                <input
+                  type="number"
+                  placeholder="e.g. 50000"
+                  className="w-full rounded-lg border border-[#D1D5DB] px-3 py-1.5 text-xs text-[#111827] focus:border-[#FBBF24] focus:outline-none"
+                  value={additionalFee === 0 ? "" : additionalFee}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAdditionalFee(val === "" ? 0 : Number(val));
+                  }}
+                />
               </div>
 
               <div>

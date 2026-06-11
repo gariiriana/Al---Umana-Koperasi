@@ -104,6 +104,9 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     review: data.review as string | undefined,
     reviewPhotoId: data.reviewPhotoId as string | undefined,
     reviewedAt: data.reviewedAt ? toIsoString(data.reviewedAt) : undefined,
+    promoCode: data.promoCode as string | undefined,
+    discountAmount: data.discountAmount as number | undefined,
+    kitchen: data.kitchen as string | undefined,
   };
 }
 

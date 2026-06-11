@@ -12,6 +12,7 @@ import {
   setLineQuantity,
   removeLineItem,
   CartLineItem,
+  formatIDR,
 } from "@/services/cartService";
 
 
@@ -313,8 +314,15 @@ export function CartPage() {
                   </div>
 
                   {/* Price & Quantity Stepper */}
-                  <div className="flex items-center justify-between">
-
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex flex-col">
+                      <span className="text-xs text-neutral-500 font-medium">
+                        {t.unitPrice}: {formatIDR(item.unitPrice)}
+                      </span>
+                      <span className="text-sm font-extrabold text-[#EE4D2D] font-['Manrope']">
+                        {formatIDR(item.unitPrice * item.quantity)}
+                      </span>
+                    </div>
 
                     {/* Quantity Stepper */}
                     <div className="flex items-center gap-2 bg-[#F3F4F6] rounded-full p-1 border border-[#E5E7EB]">
@@ -349,22 +357,33 @@ export function CartPage() {
           </div>
 
           {/* Sticky Summary & Checkout Footer */}
-          <div className="bg-white border-t border-[#E5E7EB] fixed bottom-14 lg:bottom-0 left-0 right-0 p-4 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] max-w-[480px] lg:max-w-7xl mx-auto z-10">
-            <div className="flex items-center justify-end">
-              <button
-                onClick={() => {
-                  if (selectedItemIds.size === 0) return;
-                  navigate("/checkout/address", {
-                    state: { selectedItemIds: Array.from(selectedItemIds) }
-                  });
-                }}
-                disabled={selectedItemIds.size === 0}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-12 px-6 rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-extrabold text-[#111827] shadow-md transition-all cursor-pointer disabled:bg-[#E5E7EB] disabled:text-[#9CA3AF] disabled:cursor-not-allowed"
-              >
-                {t.proceedToAddress}
-                <ArrowRight className="h-4 w-4" />
-              </button>
+          <div className="bg-white border-t border-[#E5E7EB] fixed bottom-14 lg:bottom-0 left-0 right-0 p-4 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] max-w-[480px] lg:max-w-7xl mx-auto z-10 flex items-center justify-between gap-4">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">
+                {t.totalPayment}
+              </span>
+              <span className="text-base font-extrabold text-[#EE4D2D] font-['Manrope']">
+                {formatIDR(
+                  items
+                    .filter((item) => selectedItemIds.has(item.itemId))
+                    .reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)
+                )}
+              </span>
             </div>
+
+            <button
+              onClick={() => {
+                if (selectedItemIds.size === 0) return;
+                navigate("/checkout/address", {
+                  state: { selectedItemIds: Array.from(selectedItemIds) }
+                });
+              }}
+              disabled={selectedItemIds.size === 0}
+              className="inline-flex items-center justify-center gap-2 min-h-12 px-6 rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-sm font-extrabold text-[#111827] shadow-md transition-all cursor-pointer disabled:bg-[#E5E7EB] disabled:text-[#9CA3AF] disabled:cursor-not-allowed shrink-0"
+            >
+              {t.proceedToAddress}
+              <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
       )}

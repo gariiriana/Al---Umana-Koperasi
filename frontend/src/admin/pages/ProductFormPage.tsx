@@ -137,6 +137,7 @@ export function ProductFormPage() {
   const [available, setAvailable] = useState(true);
   const [category, setCategory] = useState("");
   const [imageURL, setImageURL] = useState("");
+  const [ingredients, setIngredients] = useState("");
 
   // Categories autocomplete options (Requirement 13.1)
   const [categoriesList, setCategoriesList] = useState<string[]>([]);
@@ -174,6 +175,7 @@ export function ProductFormPage() {
         setAvailable(item.available);
         setCategory(item.category);
         setImageURL(item.imageUrl || "");
+        setIngredients(item.ingredients || "");
 
         if (item.imageUrl) {
           const remoteUrl = resolveProductImageURL(item.imageUrl);
@@ -371,6 +373,7 @@ export function ProductFormPage() {
       available: (quantity === "" || quantity === 0) ? false : available,
       category: trimmedCategory,
       imageUrl: imageURL || undefined,
+      ingredients: ingredients.trim() || undefined,
     };
 
     try {
@@ -600,6 +603,18 @@ export function ProductFormPage() {
                 </label>
               </div>
             </div>
+          </div>
+
+          {/* Bahan-Bahan (Ingredients) */}
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#4B5563]">Bahan-Bahan (Satu per baris, contoh: Nasi 500 gram)</label>
+            <textarea
+              rows={3}
+              placeholder="Contoh:&#10;Nasi 500 gram&#10;Ayam 100 gr"
+              className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] resize-none"
+              value={ingredients}
+              onChange={(e) => setIngredients(e.target.value)}
+            />
           </div>
 
           {error && (

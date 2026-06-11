@@ -12,6 +12,7 @@ import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import { uploadFileInChunks } from "@/services/chunkUploadService";
 import { validateImageUpload } from "@/lib/validators";
+import { ProductImage } from "@/components/ProductImage";
 
 
 function CookingTimer({ timerEnd, status }: { timerEnd?: string; status: string }) {
@@ -67,7 +68,7 @@ function CookingTimer({ timerEnd, status }: { timerEnd?: string; status: string 
 function OrderCard({ order, busyId, onStart, onComplete }: {
   order: Order;
   busyId: string | null;
-  onStart: (o: Order, duration: number, photoId: string) => Promise<void>;
+  onStart: (o: Order, duration: number, photoId: string, kitchen: string) => Promise<void>;
   onComplete: (o: Order) => void;
 }) {
   const isBusy = busyId === order.id;
@@ -76,6 +77,8 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
 
   const [showStartForm, setShowStartForm] = useState(false);
   const [duration, setDuration] = useState<number | "">("");
+  const [selectedKitchen, setSelectedKitchen] = useState<string>("");
+  const [customKitchen, setCustomKitchen] = useState<string>("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -100,6 +103,14 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
   };
 
   const handleConfirmStart = async () => {
+    if (!selectedKitchen) {
+      setCardError("Dapur produksi wajib dipilih.");
+      return;
+    }
+    if (selectedKitchen === "Dapur Eksternal" && !customKitchen.trim()) {
+      setCardError("Nama dapur eksternal wajib diisi.");
+      return;
+    }
     if (!photoFile) {
       setCardError("Foto mulai memasak wajib diunggah.");
       return;
@@ -115,10 +126,13 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
         orderId: order.id,
         onProgress: (p) => setUploadProgress(Math.round(p.fraction * 100)),
       });
-      await onStart(order, duration as number, result.fileId);
+      const kitchenName = selectedKitchen === "Dapur Eksternal" ? customKitchen.trim() : selectedKitchen;
+      await onStart(order, duration as number, result.fileId, kitchenName);
       setShowStartForm(false);
       setPhotoFile(null);
       setPhotoPreview(null);
+      setSelectedKitchen("");
+      setCustomKitchen("");
     } catch (err) {
       setCardError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -181,6 +195,19 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
             </span>
           </div>
 
+          {/* Dapur Produksi badge */}
+          {order.kitchen && (
+            <div className="flex items-center gap-2 mb-4 bg-purple-50/50 rounded-lg px-3 py-2 border border-purple-100">
+              <ChefHat className="h-3.5 w-3.5 text-purple-600 shrink-0" />
+              <span className="text-xs font-['Hanken_Grotesk',system-ui,sans-serif] text-purple-700 font-semibold">
+                Dapur:
+              </span>
+              <span className="text-xs font-bold text-purple-950 font-['Hanken_Grotesk',system-ui,sans-serif]">
+                {order.kitchen}
+              </span>
+            </div>
+          )}
+
           {/* Cooking timer */}
           {isInProduction && <CookingTimer timerEnd={order.productionTimerEnd} status={order.status} />}
 
@@ -192,11 +219,19 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
             </div>
             <ul className="divide-y divide-[#F3F4F6]">
               {order.items.map((it) => (
-                <li key={it.itemId} className="flex items-center justify-between px-3 py-2">
-                  <span className="text-sm font-['Hanken_Grotesk',system-ui,sans-serif] text-[#374151] truncate">
+                <li key={it.itemId} className="flex items-center gap-3 px-3 py-2">
+                  <div className="w-9 h-9 bg-neutral-100 rounded-lg overflow-hidden border border-neutral-200 shrink-0 flex items-center justify-center">
+                    <ProductImage
+                      imageUrl={it.imageUrl || ""}
+                      alt={it.itemName}
+                      className="h-full w-full object-cover"
+                      fallbackClassName="h-3.5 w-3.5 text-neutral-400"
+                    />
+                  </div>
+                  <span className="text-sm font-['Hanken_Grotesk',system-ui,sans-serif] text-[#374151] truncate flex-1">
                     {it.itemName}
                   </span>
-                  <span className="ml-3 shrink-0 inline-flex items-center justify-center h-6 w-8 rounded bg-[#F3F4F6] text-xs font-bold text-[#111827] font-['Hanken_Grotesk',system-ui,sans-serif]">
+                  <span className="shrink-0 inline-flex items-center justify-center h-6 w-8 rounded bg-[#F3F4F6] text-xs font-bold text-[#111827] font-['Hanken_Grotesk',system-ui,sans-serif]">
                     ×{it.quantity}
                   </span>
                 </li>
@@ -220,10 +255,45 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
                   </div>
                 )}
 
+                {/* Kitchen Selector */}
+                <div className="space-y-1">
+                  <label htmlFor="kitchen-select" className="block text-[11px] font-bold text-[#374151]">
+                    Pilih Dapur Produksi <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="kitchen-select"
+                    aria-label="Pilih Dapur Produksi"
+                    value={selectedKitchen}
+                    onChange={(e) => setSelectedKitchen(e.target.value)}
+                    className="w-full bg-white border border-[#D1D5DB] rounded-lg px-2.5 py-1.5 text-xs font-medium text-[#111827] focus:outline-none focus:ring-2 focus:ring-amber-200 cursor-pointer"
+                  >
+                    <option value="">-- Pilih Dapur --</option>
+                    <option value="Dapur Bakrie">Dapur Bakrie</option>
+                    <option value="Dapur Katring">Dapur Katring</option>
+                    <option value="Dapur Hangat Saji">Dapur Hangat Saji</option>
+                    <option value="Dapur Eksternal">Dapur Eksternal (Input Manual)</option>
+                  </select>
+                </div>
+
+                {selectedKitchen === "Dapur Eksternal" && (
+                  <div className="space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                    <label className="block text-[11px] font-bold text-[#374151]">
+                      Nama Dapur Eksternal <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={customKitchen}
+                      onChange={(e) => setCustomKitchen(e.target.value)}
+                      className="w-full bg-white border border-[#D1D5DB] rounded-lg px-2.5 py-1.5 text-xs font-medium text-[#111827] focus:outline-none focus:ring-2 focus:ring-amber-200"
+                      placeholder="Masukkan nama dapur eksternal..."
+                    />
+                  </div>
+                )}
+
                 {/* Duration selector */}
                 <div className="space-y-1">
                   <label className="block text-[11px] font-bold text-[#374151]">
-                    Estimasi Waktu Memasak (Menit)
+                    Estimasi Waktu Memasak (Menit) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -362,7 +432,7 @@ export function ProductionPage() {
   );
   const queue = [...inProduction, ...confirmed];
 
-  const start = async (o: Order, durationMinutes: number, photoId: string) => {
+  const start = async (o: Order, durationMinutes: number, photoId: string, kitchen: string) => {
     setBusyId(o.id);
     setError(null);
     try {
@@ -373,6 +443,7 @@ export function ProductionPage() {
         productionStartPhotoId: photoId,
         productionDurationMinutes: durationMinutes,
         productionTimerEnd: timerEnd.toISOString(),
+        kitchen: kitchen,
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));

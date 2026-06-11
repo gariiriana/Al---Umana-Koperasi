@@ -15,6 +15,7 @@ export function QCReviewPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedFail, setExpandedFail] = useState<string | null>(null);
+  const [checklists, setChecklists] = useState<Record<string, { rasa: boolean; ukuran: boolean; jenis: boolean; kesesuaian: boolean }>>({});
 
   useEffect(() => subscribeOrders(setOrders, console.error), []);
 
@@ -26,11 +27,29 @@ export function QCReviewPage() {
     [orders]
   );
 
+  const toggleCheck = (orderId: string, field: "rasa" | "ukuran" | "jenis" | "kesesuaian") => {
+    setChecklists((prev) => {
+      const current = prev[orderId] || { rasa: false, ukuran: false, jenis: false, kesesuaian: false };
+      return {
+        ...prev,
+        [orderId]: {
+          ...current,
+          [field]: !current[field],
+        },
+      };
+    });
+  };
+
   const pass = async (o: Order) => {
     setBusyId(o.id);
     setError(null);
     try {
       await transitionOrder(o.id, { action: "qc-pass" });
+      setChecklists((prev) => {
+        const updated = { ...prev };
+        delete updated[o.id];
+        return updated;
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
     } finally {
@@ -48,6 +67,11 @@ export function QCReviewPage() {
       await transitionOrder(o.id, { action: "qc-fail", reason });
       setReasons((s) => ({ ...s, [o.id]: "" }));
       setExpandedFail(null);
+      setChecklists((prev) => {
+        const updated = { ...prev };
+        delete updated[o.id];
+        return updated;
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
     } finally {
@@ -189,6 +213,52 @@ export function QCReviewPage() {
                         )}
                       </AnimatePresence>
 
+                      {/* QC Checklist */}
+                      <div className="mb-5 p-4 bg-purple-50/40 rounded-lg border border-purple-100/60 text-xs font-['Hanken_Grotesk'] space-y-3">
+                        <p className="font-bold text-purple-950 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                          <ClipboardCheck className="h-4 w-4 text-purple-700" />
+                          Checklist Verifikasi Kualitas (QC)
+                        </p>
+                        <div className="grid grid-cols-2 gap-2 text-[#374151] font-semibold">
+                          <label className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-neutral-200 hover:border-purple-200 cursor-pointer transition">
+                            <input
+                              type="checkbox"
+                              checked={!!checklists[o.id]?.rasa}
+                              onChange={() => toggleCheck(o.id, "rasa")}
+                              className="text-purple-600 focus:ring-purple-400 rounded"
+                            />
+                            <span>Rasa</span>
+                          </label>
+                          <label className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-neutral-200 hover:border-purple-200 cursor-pointer transition">
+                            <input
+                              type="checkbox"
+                              checked={!!checklists[o.id]?.ukuran}
+                              onChange={() => toggleCheck(o.id, "ukuran")}
+                              className="text-purple-600 focus:ring-purple-400 rounded"
+                            />
+                            <span>Ukuran</span>
+                          </label>
+                          <label className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-neutral-200 hover:border-purple-200 cursor-pointer transition">
+                            <input
+                              type="checkbox"
+                              checked={!!checklists[o.id]?.jenis}
+                              onChange={() => toggleCheck(o.id, "jenis")}
+                              className="text-purple-600 focus:ring-purple-400 rounded"
+                            />
+                            <span>Jenis Produk</span>
+                          </label>
+                          <label className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-neutral-200 hover:border-purple-200 cursor-pointer transition">
+                            <input
+                              type="checkbox"
+                              checked={!!checklists[o.id]?.kesesuaian}
+                              onChange={() => toggleCheck(o.id, "kesesuaian")}
+                              className="text-purple-600 focus:ring-purple-400 rounded"
+                            />
+                            <span>Kesesuaian Produk</span>
+                          </label>
+                        </div>
+                      </div>
+
                       {/* Action buttons */}
                       <div className="flex gap-2.5">
                         {!isExpanded ? (
@@ -196,8 +266,8 @@ export function QCReviewPage() {
                             {/* Pass */}
                             <button
                               onClick={() => pass(o)}
-                              disabled={isBusy}
-                              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold text-sm font-['Hanken_Grotesk',system-ui,sans-serif] rounded-lg transition-all shadow-xs disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed active:scale-[0.98]"
+                              disabled={isBusy || !(checklists[o.id]?.rasa && checklists[o.id]?.ukuran && checklists[o.id]?.jenis && checklists[o.id]?.kesesuaian)}
+                              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold text-sm font-['Hanken_Grotesk',system-ui,sans-serif] rounded-lg transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-[0.98]"
                             >
                               {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                               Lulus QC

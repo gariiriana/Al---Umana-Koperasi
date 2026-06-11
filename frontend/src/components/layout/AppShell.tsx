@@ -1,4 +1,4 @@
-import { LogOut, Settings, Bell, Globe, HelpCircle } from "lucide-react";
+import { LogOut, Settings, Bell, Globe, HelpCircle, Tag } from "lucide-react";
 import { useState, useEffect, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -110,6 +110,20 @@ export function AppShell({
               <HelpCircle className="h-4.5 w-4.5" />
               <span className="hidden sm:inline">{lang === "id" ? "Tutorial" : "Tutorials"}</span>
             </Link>
+
+            {userRole === "admin" && (
+              <>
+                <span className="h-5 w-px bg-white/20 shrink-0 self-center" />
+                <Link
+                  to="/admin/promos"
+                  className="flex items-center gap-1.5 hover:bg-white/10 rounded-lg px-2.5 py-1.5 transition-colors text-white font-bold text-xs"
+                  title={lang === "id" ? "Promo & Diskon" : "Promos & Discounts"}
+                >
+                  <Tag className="h-4.5 w-4.5" />
+                  <span className="hidden sm:inline">{lang === "id" ? "Promo" : "Promos"}</span>
+                </Link>
+              </>
+            )}
 
             <span className="h-5 w-px bg-white/20 shrink-0 self-center" />
 

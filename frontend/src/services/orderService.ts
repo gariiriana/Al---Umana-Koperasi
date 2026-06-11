@@ -45,6 +45,8 @@ export interface CreateOrderPayload {
   deliveryTime: string;
   items: OrderLineItem[];
   paymentMethod: PaymentMethod;
+  promoCode?: string;
+  discountAmount?: number;
 }
 
 export interface ListOrdersFilter {
@@ -91,6 +93,7 @@ function localDataToOrder(id: string, data: DocumentData): Order {
     foodDetails: (data.foodDetails as string) ?? "",
     drinkDetails: (data.drinkDetails as string) ?? "",
     totalPrice: (data.totalPrice as number) ?? 0,
+    additionalFee: (data.additionalFee as number) ?? 0,
     additionalNotes: data.additionalNotes as string | undefined,
     paymentStatus: (data.paymentStatus as Order["paymentStatus"]) ?? "BELUM_DIBAYAR",
     paymentDueDate: (data.paymentDueDate as string) ?? "",
@@ -139,6 +142,9 @@ function localDataToOrder(id: string, data: DocumentData): Order {
     review: data.review as string | undefined,
     reviewPhotoId: data.reviewPhotoId as string | undefined,
     reviewedAt: toIsoStringOrUndefined(data.reviewedAt),
+    promoCode: data.promoCode as string | undefined,
+    discountAmount: data.discountAmount as number | undefined,
+    kitchen: data.kitchen as string | undefined,
   };
 }
 
@@ -155,6 +161,7 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     foodDetails: (data.foodDetails as string) ?? "",
     drinkDetails: (data.drinkDetails as string) ?? "",
     totalPrice: (data.totalPrice as number) ?? 0,
+    additionalFee: (data.additionalFee as number) ?? 0,
     additionalNotes: data.additionalNotes as string | undefined,
     paymentStatus: (data.paymentStatus as Order["paymentStatus"]) ?? "BELUM_DIBAYAR",
     paymentDueDate: (data.paymentDueDate as string) ?? "",
@@ -205,6 +212,9 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     review: data.review as string | undefined,
     reviewPhotoId: data.reviewPhotoId as string | undefined,
     reviewedAt: toIsoStringOrUndefined(data.reviewedAt),
+    promoCode: data.promoCode as string | undefined,
+    discountAmount: data.discountAmount as number | undefined,
+    kitchen: data.kitchen as string | undefined,
   };
 }
 
@@ -232,6 +242,8 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
     deliveryAddress: payload.deliveryAddress,
     deliveryTime: payload.deliveryTime,
     paymentMethod: payload.paymentMethod,
+    promoCode: payload.promoCode || "",
+    discountAmount: payload.discountAmount || 0,
     createdAt: now,
     updatedAt: now,
   };
@@ -243,6 +255,8 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
     // 1. Fetch stock for all items in parallel (READS PHASE)
     const itemRefs = payload.items.map((item) => doc(db, "inventory", item.itemId));
     const itemSnaps = await Promise.all(itemRefs.map((ref) => tx.get(ref)));
+
+    const enrichedItems: OrderLineItem[] = [];
 
     for (let i = 0; i < payload.items.length; i++) {
       const item = payload.items[i];
@@ -261,6 +275,12 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
       if (currentQty < item.quantity) {
         outOfStockItems.push(item.itemId);
       }
+
+      enrichedItems.push({
+        ...item,
+        imageUrl: (data.imageUrl as string) ?? "",
+        ingredients: (data.ingredients as string) ?? "",
+      });
     }
 
     // 2. Branch depending on stock availability (WRITES PHASE)
@@ -269,6 +289,7 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
       orderData.outOfStockItems = outOfStockItems;
       orderData.rejectionReason = "items unavailable: " + outOfStockItems.join(", ");
     } else {
+      orderData.items = enrichedItems; // Save enriched items with imageUrl and ingredients
       // Deduct stock (WRITES ONLY)
       for (const item of payload.items) {
         const itemRef = doc(db, "inventory", item.itemId);
@@ -998,7 +1019,10 @@ export interface CreateAdminOrderPayload {
   drinkDetails: string;
   items: OrderLineItem[];
   totalPrice: number;
+  additionalFee?: number;
   additionalNotes?: string;
+  promoCode?: string;
+  discountAmount?: number;
 }
 
 export async function createAdminOrder(payload: CreateAdminOrderPayload): Promise<Order> {
@@ -1025,12 +1049,15 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
     foodDetails: payload.foodDetails,
     drinkDetails: payload.drinkDetails,
     totalPrice: payload.totalPrice,
+    additionalFee: payload.additionalFee || 0,
     additionalNotes: payload.additionalNotes || "",
     paymentStatus: "BELUM_DIBAYAR",
     paymentDueDate: dueDate,
     invoiceToken: invoiceToken,
     status: "PENDING",
     items: payload.items,
+    promoCode: payload.promoCode || "",
+    discountAmount: payload.discountAmount || 0,
     createdAt: now,
     updatedAt: now,
   };
@@ -1048,8 +1075,13 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
     const itemSnaps = await Promise.all(itemRefs.map((ref) => tx.get(ref)));
 
     let snapIdx = 0;
+    const enrichedItems: OrderLineItem[] = [];
+
     for (const item of payload.items) {
-      if (!item.itemId) continue;
+      if (!item.itemId) {
+        enrichedItems.push(item);
+        continue;
+      }
       const itemSnap = itemSnaps[snapIdx++];
       if (!itemSnap.exists()) {
         outOfStockItems.push(item.itemId);
@@ -1065,11 +1097,19 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
       if (currentQty < item.quantity) {
         outOfStockItems.push(item.itemId);
       }
+
+      enrichedItems.push({
+        ...item,
+        imageUrl: (data.imageUrl as string) ?? "",
+        ingredients: (data.ingredients as string) ?? "",
+      });
     }
 
     if (outOfStockItems.length > 0) {
       throw new Error("Stok tidak mencukupi untuk item: " + outOfStockItems.join(", "));
     }
+
+    orderData.items = enrichedItems; // Save enriched items with imageUrl and ingredients
 
     // Deduct stock (WRITES ONLY)
     for (const item of payload.items) {

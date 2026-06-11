@@ -47,6 +47,8 @@ const NotificationsPage = lazy(() => import("@/storefront/pages/NotificationsPag
 const ProfilePage = lazy(() => import("@/storefront/pages/ProfilePage").then(module => ({ default: module.ProfilePage })));
 const TestimoniPage = lazy(() => import("@/storefront/pages/TestimoniPage").then(module => ({ default: module.TestimoniPage })));
 const NotFoundPage = lazy(() => import("@/pages/NotFoundPage").then(module => ({ default: module.NotFoundPage })));
+const PromosPage = lazy(() => import("@/admin/pages/PromosPage").then(module => ({ default: module.PromosPage })));
+const SchedulesPage = lazy(() => import("@/pages/SchedulesPage").then(module => ({ default: module.SchedulesPage })));
 
 import {
   CategoryIndexStub,
@@ -414,6 +416,19 @@ function RoutesTree() {
         }
       />
       <Route
+        path="/admin/promos"
+        element={
+          <Protected>
+            <ShelledRoute
+              pageTitle="Promo & Diskon"
+              allowedRoles={["admin"]}
+            >
+              <PromosPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
         path="/admin/production"
         element={
           <Protected>
@@ -481,6 +496,19 @@ function RoutesTree() {
               allowedRoles={["distribusi"]}
             >
               <DeliverySchedulerPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/distribusi/schedules"
+        element={
+          <Protected>
+            <ShelledRoute
+              pageTitle="Jadwal Distribusi"
+              allowedRoles={["admin", "monitoring", "tim_produksi", "distribusi", "kurir"]}
+            >
+              <SchedulesPage />
             </ShelledRoute>
           </Protected>
         }

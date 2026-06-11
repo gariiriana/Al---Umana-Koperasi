@@ -47,6 +47,48 @@ export interface ListAllItemsOptions {
  * List every inventory item visible to administrators.
  * Unlike the public catalog endpoint, this does not filter by `available` or `quantity > 0`.
  */
+function syncDemoStorage(action: 'create' | 'update' | 'delete', item: InventoryItem) {
+  try {
+    const raw = localStorage.getItem("al_umana_demo_products_v1");
+    if (!raw) return;
+    let products = JSON.parse(raw) as InventoryItem[];
+    if (!Array.isArray(products)) return;
+    if (action === 'create') {
+      products.push(item);
+    } else if (action === 'update') {
+      products = products.map(p => p.id === item.id ? { ...p, ...item } : p);
+    } else if (action === 'delete') {
+      products = products.filter(p => p.id !== item.id);
+    }
+    localStorage.setItem("al_umana_demo_products_v1", JSON.stringify(products));
+  } catch (err) {
+    console.error("Failed to sync demo storage:", err);
+  }
+}
+
+function syncDemoStock(id: string, quantity: number) {
+  try {
+    const raw = localStorage.getItem("al_umana_demo_products_v1");
+    if (!raw) return;
+    let products = JSON.parse(raw) as InventoryItem[];
+    if (!Array.isArray(products)) return;
+    products = products.map(p => {
+      if (p.id === id) {
+        const available = quantity === 0 ? false : p.available;
+        return { ...p, quantity, available };
+      }
+      return p;
+    });
+    localStorage.setItem("al_umana_demo_products_v1", JSON.stringify(products));
+  } catch (err) {
+    console.error("Failed to sync demo stock:", err);
+  }
+}
+
+/**
+ * List every inventory item visible to administrators.
+ * Unlike the public catalog endpoint, this does not filter by `available` or `quantity > 0`.
+ */
 export async function listAllItems(
   opts: ListAllItemsOptions = {}
 ): Promise<InventoryItem[]> {
@@ -70,6 +112,7 @@ export async function listAllItems(
       imageUrl: (data.imageUrl as string) ?? "",
       detailImageUrls: Array.isArray(data.detailImageUrls) ? (data.detailImageUrls as string[]) : [],
       updatedAt: formatUpdatedAt(data.updatedAt),
+      ingredients: (data.ingredients as string) ?? "",
     } as InventoryItem;
   });
 }
@@ -94,6 +137,7 @@ export async function getItem(id: string): Promise<InventoryItem> {
     imageUrl: (data.imageUrl as string) ?? "",
     detailImageUrls: Array.isArray(data.detailImageUrls) ? (data.detailImageUrls as string[]) : [],
     updatedAt: formatUpdatedAt(data.updatedAt),
+    ingredients: (data.ingredients as string) ?? "",
   } as InventoryItem;
 }
 
@@ -110,10 +154,13 @@ export async function createItem(input: InventoryItemInput): Promise<InventoryIt
     category: input.category ?? "",
     imageUrl: input.imageUrl ?? "",
     detailImageUrls: input.detailImageUrls ?? [],
+    ingredients: input.ingredients ?? "",
     updatedAt: new Date().toISOString(),
   };
   const docRef = await addDoc(colRef, data);
-  return { id: docRef.id, ...data } as InventoryItem;
+  const newItem = { id: docRef.id, ...data } as InventoryItem;
+  syncDemoStorage('create', newItem);
+  return newItem;
 }
 
 /** Replace an existing inventory item. Returns the persisted document. */
@@ -132,10 +179,13 @@ export async function updateItem(
     category: input.category ?? "",
     imageUrl: input.imageUrl ?? "",
     detailImageUrls: input.detailImageUrls ?? [],
+    ingredients: input.ingredients ?? "",
     updatedAt: new Date().toISOString(),
   };
   await setDoc(docRef, data, { merge: true });
-  return { id, ...data } as InventoryItem;
+  const updated = { id, ...data } as InventoryItem;
+  syncDemoStorage('update', updated);
+  return updated;
 }
 
 /**
@@ -152,6 +202,7 @@ export async function patchStock(id: string, quantity: number): Promise<void> {
     updates.available = false;
   }
   await updateDoc(docRef, updates);
+  syncDemoStock(id, quantity);
 }
 
 /** Permanently delete an image and all its associated chunks from Firestore. */
@@ -189,6 +240,7 @@ export async function deleteItem(id: string): Promise<void> {
     }
   }
   await deleteDoc(docRef);
+  syncDemoStorage('delete', { id } as InventoryItem);
 }
 
 /**

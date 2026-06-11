@@ -13,6 +13,8 @@ import type { OrderType } from "@/types/order";
 import { formatIDR } from "@/lib/format";
 import type { ReverseGeoResult } from "@/components/MapLocationPicker";
 import { ProductImage } from "@/components/ProductImage";
+import { listPromos, type Promo } from "@/services/promoService";
+import { aggregateIngredients } from "@/lib/ingredientsParser";
 
 const MapLocationPicker = lazy(() =>
   import("@/components/MapLocationPicker").then((m) => ({ default: m.MapLocationPicker }))
@@ -151,6 +153,17 @@ export function CheckoutWizard() {
   const { lang } = useLanguage();
   const t = DICTIONARY[lang];
 
+  const getSavedField = (key: string, fallback: any) => {
+    try {
+      const saved = localStorage.getItem("admin_checkout_form");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed[key] !== undefined) return parsed[key];
+      }
+    } catch {}
+    return fallback;
+  };
+
   const [checkoutItems, setCheckoutItems] = useState<CartLineItem[]>([]);
   const [loadingCart, setLoadingCart] = useState(true);
   const step = location.pathname.endsWith("/payment") ? "payment" : "address";
@@ -159,10 +172,10 @@ export function CheckoutWizard() {
   const directCheckoutItems = (location.state as { directCheckoutItems?: CartLineItem[] } | null)?.directCheckoutItems;
 
   // Address Step Fields (step-by-step)
-  const [customerName, setCustomerName] = useState("");
+  const [customerName, setCustomerName] = useState(() => getSavedField("customerName", ""));
   const [address, setAddress] = useState("");
   const [addrKabupaten, setAddrKabupaten] = useState("");
-  const [addrKecamatan, setAddrKecamatan] = useState("");
+  const [addrKecamatan, setAddrKecamatan] = useState(""); 
   const [addrDesa, setAddrDesa] = useState("");
   const [addrRtRw, setAddrRtRw] = useState("");
   const [addrPostalCode, setAddrPostalCode] = useState("");
@@ -180,11 +193,16 @@ export function CheckoutWizard() {
   const [showMapPicker, setShowMapPicker] = useState(false);
 
   const handleMapLocationSelected = (result: ReverseGeoResult) => {
-    setAddrKabupaten(result.kabupaten);
-    setAddrKecamatan(result.kecamatan);
-    setAddrDesa(result.desa);
-    setAddrPostalCode(result.postalCode);
-    setAddrMapsUrl(result.mapsUrl);
+    if (isAdmin) {
+      setDeliveryAddress(result.displayAddress);
+      setAdminMapsUrl(result.mapsUrl);
+    } else {
+      setAddrKabupaten(result.kabupaten);
+      setAddrKecamatan(result.kecamatan);
+      setAddrDesa(result.desa);
+      setAddrPostalCode(result.postalCode);
+      setAddrMapsUrl(result.mapsUrl);
+    }
   };
 
   // Payment Step Fields
@@ -194,23 +212,362 @@ export function CheckoutWizard() {
   const [outOfStockItems, setOutOfStockItems] = useState<string[]>([]);
 
   // Admin Form Fields
-  const [orderType, setOrderType] = useState<OrderType>("event");
-  const [institutionName, setInstitutionName] = useState("");
-  const [recipientPhone, setRecipientPhone] = useState("");
-  const [recipientNotes, setRecipientNotes] = useState("");
-  const [eventDate, setEventDate] = useState("");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [deliveryTime, setDeliveryTime] = useState("");
-  const [foodDetails, setFoodDetails] = useState("");
-  const [drinkDetails, setDrinkDetails] = useState("");
-  const [additionalNotes, setAdditionalNotes] = useState("");
-  const [totalPriceOverride, setTotalPriceOverride] = useState<number | null>(null);
+  const [orderType, setOrderType] = useState<OrderType>(() => getSavedField("orderType", "event"));
+  const [institutionName, setInstitutionName] = useState(() => getSavedField("institutionName", ""));
+  const [recipientPhone, setRecipientPhone] = useState(() => getSavedField("recipientPhone", ""));
+  const [recipientNotes, setRecipientNotes] = useState(() => getSavedField("recipientNotes", ""));
+  const [eventDate, setEventDate] = useState(() => getSavedField("eventDate", ""));
+  const [deliveryAddress, setDeliveryAddress] = useState(() => getSavedField("deliveryAddress", ""));
+  const [deliveryTime, setDeliveryTime] = useState(() => getSavedField("deliveryTime", ""));
+  const [foodDetails, setFoodDetails] = useState(() => getSavedField("foodDetails", ""));
+  const [drinkDetails, setDrinkDetails] = useState(() => getSavedField("drinkDetails", ""));
+  const [additionalNotes, setAdditionalNotes] = useState(() => getSavedField("additionalNotes", ""));
+  const [additionalFee, setAdditionalFee] = useState<number>(() => getSavedField("additionalFee", 0));
 
   // Admin Success State
   const [createdAdminOrder, setCreatedAdminOrder] = useState<{ id: string; token: string; phone: string; name: string; totalPayment: number } | null>(null);
   const [adminCopied, setAdminCopied] = useState(false);
 
   const isAdmin = profile?.role === "admin";
+
+  // Promo states
+  const [appliedPromo, setAppliedPromo] = useState<Promo | null>(() => getSavedField("appliedPromo", null));
+  const [promoDiscount, setPromoDiscount] = useState(0);
+
+  // States & logic for promo selector modal
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const [availablePromos, setAvailablePromos] = useState<Promo[]>([]);
+  const [loadingPromos, setLoadingPromos] = useState(false);
+  const [adminMapsUrl, setAdminMapsUrl] = useState(() => getSavedField("adminMapsUrl", ""));
+
+  const subtotal = computeCartTotal(checkoutItems);
+  const grandTotal = Math.max(0, subtotal - promoDiscount) + DELIVERY_FEE + SERVICE_FEE;
+
+  useEffect(() => {
+    if (isAdmin) {
+      const formState = {
+        orderType,
+        institutionName,
+        customerName,
+        recipientPhone,
+        eventDate,
+        deliveryTime,
+        deliveryAddress,
+        adminMapsUrl,
+        recipientNotes,
+        foodDetails,
+        drinkDetails,
+        additionalNotes,
+        additionalFee,
+        appliedPromo,
+      };
+      localStorage.setItem("admin_checkout_form", JSON.stringify(formState));
+    }
+  }, [
+    isAdmin,
+    orderType,
+    institutionName,
+    customerName,
+    recipientPhone,
+    eventDate,
+    deliveryTime,
+    deliveryAddress,
+    adminMapsUrl,
+    recipientNotes,
+    foodDetails,
+    drinkDetails,
+    additionalNotes,
+    additionalFee,
+    appliedPromo,
+  ]);
+
+  useEffect(() => {
+    if (showPromoModal) {
+      const fetchPromos = async () => {
+        setLoadingPromos(true);
+        try {
+          const data = await listPromos();
+          setAvailablePromos(data.filter((p) => p.active));
+        } catch (err) {
+          console.error("Gagal memuat daftar promo:", err);
+        } finally {
+          setLoadingPromos(false);
+        }
+      };
+      void fetchPromos();
+    }
+  }, [showPromoModal]);
+
+  const handleSelectPromoFromModal = (promo: Promo) => {
+    if (subtotal < promo.minPurchase) return;
+
+    let discount = 0;
+    if (promo.discountType === "percentage") {
+      discount = Math.round((subtotal * promo.value) / 100);
+      if (promo.maxDiscount && discount > promo.maxDiscount) {
+        discount = promo.maxDiscount;
+      }
+    } else {
+      discount = promo.value;
+    }
+
+    setAppliedPromo(promo);
+    setPromoDiscount(discount);
+    setShowPromoModal(false);
+  };
+
+  // Enriched items state (with ingredients/imageUrl from DB)
+  const [enrichedCheckoutItems, setEnrichedCheckoutItems] = useState<(CartLineItem & { ingredients?: string })[]>([]);
+
+  useEffect(() => {
+    if (checkoutItems.length === 0) {
+      setEnrichedCheckoutItems([]);
+      return;
+    }
+    let active = true;
+    const enrich = async () => {
+      try {
+        const { getProduct } = await import("@/services/catalogService");
+        const enriched = await Promise.all(
+          checkoutItems.map(async (item) => {
+            try {
+              const prod = await getProduct(item.itemId);
+              return {
+                ...item,
+                ingredients: prod.ingredients || "",
+                imageUrl: prod.imageUrl || item.imageUrl || "",
+              };
+            } catch (err) {
+              console.warn("Failed to enrich checkout item:", item.itemId, err);
+              return item;
+            }
+          })
+        );
+        if (active) {
+          setEnrichedCheckoutItems(enriched);
+        }
+      } catch (err) {
+        console.error("Enrichment error:", err);
+      }
+    };
+    void enrich();
+    return () => {
+      active = false;
+    };
+  }, [checkoutItems]);
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setPromoDiscount(0);
+  };
+
+  // Re-verify promo whenever subtotal changes
+  useEffect(() => {
+    if (appliedPromo) {
+      if (subtotal < appliedPromo.minPurchase) {
+        setAppliedPromo(null);
+        setPromoDiscount(0);
+      } else {
+        let discount = 0;
+        if (appliedPromo.discountType === "percentage") {
+          discount = Math.round((subtotal * appliedPromo.value) / 100);
+          if (appliedPromo.maxDiscount && discount > appliedPromo.maxDiscount) {
+            discount = appliedPromo.maxDiscount;
+          }
+        } else {
+          discount = appliedPromo.value;
+        }
+        setPromoDiscount(discount);
+      }
+    }
+  }, [subtotal, appliedPromo, lang]);
+
+  const renderPromoSection = () => (
+    <div className="bg-white border border-[#E5E7EB] rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-3">
+      <h3 className="font-['Manrope',system-ui,sans-serif] text-xs font-bold text-[#111827] uppercase tracking-wider flex items-center gap-1.5">
+        <ShoppingBag className="h-4 w-4 text-[#FBBF24]" />
+        {lang === "id" ? "Promo & Voucher Belanja" : "Promo & Voucher"}
+      </h3>
+      {appliedPromo ? (
+        <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
+          <div className="space-y-0.5">
+            <span className="font-mono text-xs font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 rounded px-2 py-0.5">
+              {appliedPromo.code}
+            </span>
+            <p className="text-[11px] font-semibold text-emerald-700 mt-1">
+              {lang === "id" ? "Potongan" : "Discount"}: -{formatIDR(promoDiscount)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleRemovePromo}
+            className="text-xs font-bold text-red-600 hover:underline cursor-pointer"
+          >
+            {lang === "id" ? "Hapus" : "Remove"}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowPromoModal(true)}
+          className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#FBBF24] hover:bg-[#F59E0B] text-xs font-bold text-[#111827] rounded-xl transition cursor-pointer shadow-sm hover:shadow"
+        >
+          {lang === "id" ? "Lihat Promo & Voucher Belanja" : "View Available Promos"}
+        </button>
+      )}
+    </div>
+  );
+
+  const renderPromoModal = () => (
+    <AnimatePresence>
+      {showPromoModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowPromoModal(false)}
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+          />
+
+          {/* Modal Content */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ type: "spring", duration: 0.3 }}
+            className="relative bg-white rounded-3xl max-w-lg w-full p-6 shadow-xl border border-[#E5E7EB] font-['Hanken_Grotesk',system-ui,sans-serif] flex flex-col max-h-[85vh] z-10"
+            role="dialog"
+            aria-modal="true"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-[#F3F4F6] shrink-0">
+              <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-extrabold text-[#111827] flex items-center gap-2">
+                <ShoppingBag className="h-5 w-5 text-[#FBBF24]" />
+                {lang === "id" ? "Promo & Voucher Tersedia" : "Available Promos & Vouchers"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPromoModal(false)}
+                aria-label={lang === "id" ? "Tutup" : "Close"}
+                title={lang === "id" ? "Tutup" : "Close"}
+                className="p-1 rounded-full text-[#9CA3AF] hover:text-[#4B5563] hover:bg-[#F3F4F6] transition cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Promo List (Scrollable) */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
+              {loadingPromos ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-2">
+                  <Loader2 className="h-8 w-8 animate-spin text-[#FBBF24]" />
+                  <p className="text-xs font-semibold text-[#6B7280]">
+                    {lang === "id" ? "Memuat promo..." : "Loading promos..."}
+                  </p>
+                </div>
+              ) : availablePromos.length === 0 ? (
+                <div className="py-12 text-center">
+                  <p className="text-sm font-bold text-[#6B7280]">
+                    {lang === "id" ? "Belum Ada Promo Aktif" : "No Active Promos Available"}
+                  </p>
+                  <p className="text-xs text-[#9CA3AF] mt-1">
+                    {lang === "id" ? "Silakan hubungi admin untuk info diskon." : "Please contact admin for discount info."}
+                  </p>
+                </div>
+              ) : (
+                availablePromos.map((p) => {
+                  const isEligible = subtotal >= p.minPurchase;
+                  return (
+                    <div
+                      key={p.code}
+                      className={`border rounded-2xl p-4 transition-all flex flex-col gap-3 relative overflow-hidden ${
+                        isEligible
+                          ? "bg-white border-[#E5E7EB] hover:border-amber-300 hover:shadow-md"
+                          : "bg-neutral-50 border-[#E5E7EB] opacity-75"
+                      }`}
+                    >
+                      {/* Decorative Tag Pattern */}
+                      <div className="absolute right-0 top-0 w-8 h-8 flex items-center justify-center opacity-10">
+                        <ShoppingBag className="w-12 h-12 rotate-12" />
+                      </div>
+
+                      {/* Top Info */}
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="space-y-1">
+                          <span className="font-mono text-xs font-extrabold text-[#D97706] bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                            {p.code}
+                          </span>
+                          <h4 className="font-bold text-[#111827] text-sm pt-1">
+                            {p.discountType === "percentage"
+                              ? `${p.value}% OFF`
+                              : `${formatIDR(p.value)} OFF`}
+                          </h4>
+                        </div>
+                        <div>
+                          {isEligible ? (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                              {lang === "id" ? "Memenuhi Syarat" : "Eligible"}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+                              {lang === "id" ? "Min. Belanja Belum Cukup" : "Min. Spend Not Met"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Description */}
+                      {p.description && (
+                        <p className="text-xs text-[#6B7280] leading-relaxed">
+                          {p.description}
+                        </p>
+                      )}
+
+                      {/* Limit Info */}
+                      <div className="text-[10px] font-semibold text-[#9CA3AF] flex flex-wrap gap-x-4 gap-y-1">
+                        <span>
+                          {lang === "id" ? "Min. Belanja:" : "Min. Spend:"}{" "}
+                          <span className="font-mono font-bold text-[#4B5563]">
+                            {formatIDR(p.minPurchase)}
+                          </span>
+                        </span>
+                        {p.maxDiscount && (
+                          <span>
+                            {lang === "id" ? "Maks. Potongan:" : "Max Discount:"}{" "}
+                            <span className="font-mono font-bold text-[#4B5563]">
+                              {formatIDR(p.maxDiscount)}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Action Button */}
+                      <button
+                        type="button"
+                        disabled={!isEligible}
+                        onClick={() => handleSelectPromoFromModal(p)}
+                        className={`w-full py-2 px-4 rounded-xl text-xs font-bold transition-all text-center ${
+                          isEligible
+                            ? "bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] cursor-pointer shadow-sm hover:shadow"
+                            : "bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed"
+                        }`}
+                      >
+                        {lang === "id" ? "Gunakan Promo" : "Use Promo"}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
 
   const handleAdminSubmitOrder = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -236,13 +593,18 @@ export function CheckoutWizard() {
         recipientPhone: recipientPhone.trim(),
         recipientNotes: recipientNotes.trim(),
         eventDate,
-        deliveryAddress: deliveryAddress.trim(),
+        deliveryAddress: adminMapsUrl.trim()
+          ? `${deliveryAddress.trim()} ${adminMapsUrl.trim()}`
+          : deliveryAddress.trim(),
         deliveryTime: deliveryTime.trim(),
         foodDetails: foodDetails.trim() || checkoutItems.map(s => `${s.itemName} (${s.quantity})`).join(", "),
         drinkDetails: drinkDetails.trim(),
         items: itemsPayload,
-        totalPrice: totalPriceOverride !== null ? totalPriceOverride : subtotal,
+        totalPrice: (subtotal - promoDiscount) + additionalFee,
+        additionalFee: additionalFee,
         additionalNotes: additionalNotes.trim(),
+        promoCode: appliedPromo?.code || undefined,
+        discountAmount: promoDiscount || undefined,
       });
 
       // Clear checkout items from cart on success (in background)
@@ -257,8 +619,10 @@ export function CheckoutWizard() {
         token: order.invoiceToken || "",
         phone: order.recipientPhone,
         name: order.recipientName,
-        totalPayment: totalPriceOverride !== null ? totalPriceOverride : subtotal,
+        totalPayment: (subtotal - promoDiscount) + additionalFee,
       });
+
+      localStorage.removeItem("admin_checkout_form");
     } catch (err: unknown) {
       console.error(err);
       const e = err as { message?: string };
@@ -271,7 +635,23 @@ export function CheckoutWizard() {
   // Initialize fields once profile loads
   useEffect(() => {
     if (profile) {
-      setCustomerName(profile.displayName || "");
+      if (profile.role === "admin") {
+        const saved = localStorage.getItem("admin_checkout_form");
+        if (!saved) {
+          setCustomerName("");
+        } else {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.customerName === undefined) {
+              setCustomerName("");
+            }
+          } catch {
+            setCustomerName("");
+          }
+        }
+      } else {
+        setCustomerName(profile.displayName || "");
+      }
       const ext = profile as unknown as { savedAddresses?: SavedAddress[] };
       const addrs = ext.savedAddresses || [];
       setProfileAddresses(addrs);
@@ -376,9 +756,6 @@ export function CheckoutWizard() {
       </div>
     );
   }
-
-  const subtotal = computeCartTotal(checkoutItems);
-  const grandTotal = subtotal + DELIVERY_FEE + SERVICE_FEE;
 
   // Step 1 validation & save address (7-field step-by-step)
   const handleProceedToPayment = async () => {
@@ -509,6 +886,8 @@ export function CheckoutWizard() {
       paymentMethod,
       deliveryLat: parsedLat,
       deliveryLng: parsedLng,
+      promoCode: appliedPromo?.code || undefined,
+      discountAmount: promoDiscount || undefined,
     };
 
     // Set 15-second timeout for the creation request per Requirement 6.2 / 6.8
@@ -774,11 +1153,11 @@ export function CheckoutWizard() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-semibold text-[#4B5563]">Waktu Pengantaran / Jam Acara</label>
+                        <label className="text-xs font-semibold text-[#4B5563]">Harus Sampai Kapan & Jam Berapa?</label>
                         <input
                           type="text"
                           required
-                          placeholder="e.g. 10:00 WIB atau Makan Siang"
+                          placeholder="Contoh: Harus sampai sebelum jam 10:00 WIB"
                           className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                           value={deliveryTime}
                           onChange={(e) => setDeliveryTime(e.target.value)}
@@ -787,7 +1166,17 @@ export function CheckoutWizard() {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-[#4B5563]">Alamat Pengiriman</label>
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs font-semibold text-[#4B5563]">Alamat Pengiriman</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowMapPicker(true)}
+                          className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <MapPin className="h-3.5 w-3.5" />
+                          Pilih di Peta
+                        </button>
+                      </div>
                       <input
                         type="text"
                         required
@@ -795,6 +1184,17 @@ export function CheckoutWizard() {
                         className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                         value={deliveryAddress}
                         onChange={(e) => setDeliveryAddress(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[#4B5563]">Link Google Maps (Pilihan)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. https://maps.app.goo.gl/..."
+                        className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                        value={adminMapsUrl}
+                        onChange={(e) => setAdminMapsUrl(e.target.value)}
                       />
                     </div>
 
@@ -877,6 +1277,30 @@ export function CheckoutWizard() {
                     <span className="text-sm font-extrabold text-[#111827]">{formatIDR(subtotal)}</span>
                   </div>
                 </div>
+
+                {/* Total Ingredients Card */}
+                {(() => {
+                  const ingredients = aggregateIngredients(enrichedCheckoutItems);
+                  if (ingredients.length === 0) return null;
+                  return (
+                    <div className="bg-white border border-[#E5E7EB] rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-3">
+                      <h3 className="font-['Manrope',system-ui,sans-serif] text-xs font-bold text-[#111827] uppercase tracking-wider flex items-center gap-1.5">
+                        <FileText className="h-4 w-4 text-[#FBBF24]" />
+                        {lang === "id" ? "Total Komposisi Bahan Produksi" : "Total Ingredients Composition"}
+                      </h3>
+                      <div className="divide-y divide-[#F3F4F6] text-xs font-semibold text-[#4B5563]">
+                        {ingredients.map((ing, idx) => (
+                          <div key={idx} className="py-2.5 flex justify-between items-center">
+                            <span className="capitalize">{ing.name}</span>
+                            <span className="font-mono font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1">
+                              {ing.amount} {ing.unit}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="space-y-4">
@@ -924,39 +1348,47 @@ export function CheckoutWizard() {
                         onChange={(e) => setAdditionalNotes(e.target.value)}
                       />
                     </div>
-
                     <hr className="border-[#F3F4F6] pt-1" />
 
                     <div>
                       <div className="flex justify-between items-center mb-1">
                         <label className="text-xs font-semibold text-[#6B7280]">
-                          Override Total Tagihan (Manual)
+                          Biaya Tambahan / Tagihan Manual
                         </label>
-                        {totalPriceOverride !== null && (
+                        {additionalFee > 0 && (
                           <button
                             type="button"
                             className="text-[10px] text-[#EF4444] hover:underline cursor-pointer focus:outline-none"
-                            onClick={() => setTotalPriceOverride(null)}
+                            onClick={() => setAdditionalFee(0)}
                           >
-                            Batal Override
+                            Reset
                           </button>
                         )}
                       </div>
                       <input
                         type="number"
-                        placeholder="e.g. 500000 (kosongkan jika pakai total menu)"
+                        placeholder="e.g. 50000 (ongkir, charge, dll.)"
                         className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-                        value={totalPriceOverride === null ? "" : totalPriceOverride}
+                        value={additionalFee === 0 ? "" : additionalFee}
                         onChange={(e) => {
                           const val = e.target.value;
-                          setTotalPriceOverride(val === "" ? null : Number(val));
+                          setAdditionalFee(val === "" ? 0 : Number(val));
                         }}
                       />
                     </div>
 
+                    {renderPromoSection()}
+
+                    {promoDiscount > 0 && (
+                      <div className="flex justify-between items-center text-xs text-emerald-600 font-semibold mb-1">
+                        <span>{lang === "id" ? "Diskon Promo:" : "Promo Discount:"}</span>
+                        <span>-{formatIDR(promoDiscount)}</span>
+                      </div>
+                    )}
+
                     <div className="flex justify-between items-center pt-3 border-t border-[#E5E7EB]">
                       <span className="text-xs font-bold text-[#111827]">Total Tagihan:</span>
-                      <span className="text-sm font-extrabold text-[#D97706]">{formatIDR(totalPriceOverride !== null ? totalPriceOverride : subtotal)}</span>
+                      <span className="text-sm font-extrabold text-[#D97706]">{formatIDR((subtotal - promoDiscount) + additionalFee)}</span>
                     </div>
                   </div>
                 </div>
@@ -979,12 +1411,29 @@ export function CheckoutWizard() {
                     </>
                   ) : (
                     <>
-                      Buat Pesanan & Invoice ({formatIDR(totalPriceOverride !== null ? totalPriceOverride : subtotal)})
+                      Buat Pesanan & Invoice ({formatIDR((subtotal - promoDiscount) + additionalFee)})
                     </>
                   )}
                 </button>
               </div>
             </form>
+          )}
+          {renderPromoModal()}
+          {showMapPicker && (
+            <Suspense fallback={
+              <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center">
+                <div className="bg-white rounded-2xl p-6 flex items-center gap-3 shadow-2xl">
+                  <div className="h-5 w-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm font-semibold text-neutral-700">{lang === "en" ? "Loading map..." : "Memuat peta..."}</span>
+                </div>
+              </div>
+            }>
+              <MapLocationPicker
+                lang={lang}
+                onLocationSelected={handleMapLocationSelected}
+                onClose={() => setShowMapPicker(false)}
+              />
+            </Suspense>
           )}
         </div>
       </div>
@@ -1351,6 +1800,30 @@ export function CheckoutWizard() {
                       )}
                     </div>
 
+                    {/* Total Ingredients Card */}
+                    {(() => {
+                      const ingredients = aggregateIngredients(enrichedCheckoutItems);
+                      if (ingredients.length === 0) return null;
+                      return (
+                        <div className="bg-white border border-[#E5E7EB] rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-3">
+                          <h3 className="font-['Manrope',system-ui,sans-serif] text-xs font-bold text-[#111827] uppercase tracking-wider flex items-center gap-1.5">
+                            <FileText className="h-4 w-4 text-[#FBBF24]" />
+                            {lang === "id" ? "Total Komposisi Bahan Produksi" : "Total Ingredients Composition"}
+                          </h3>
+                          <div className="divide-y divide-[#F3F4F6] text-xs font-semibold text-[#4B5563]">
+                            {ingredients.map((ing, idx) => (
+                              <div key={idx} className="py-2.5 flex justify-between items-center">
+                                <span className="capitalize">{ing.name}</span>
+                                <span className="font-mono font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1">
+                                  {ing.amount} {ing.unit}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                   {addressError && (
                     <p className="text-xs font-semibold text-[#EF4444] font-['Hanken_Grotesk',system-ui,sans-serif]">
                       {addressError}
@@ -1477,38 +1950,9 @@ export function CheckoutWizard() {
                       {t.instructionTitle}
                     </h4>
                     <div className="text-xs text-[#4B5563] font-['Hanken_Grotesk',system-ui,sans-serif] space-y-2 leading-relaxed">
-                      {!isAdmin ? (
-                        <>
-                          <p className="font-semibold text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
-                            {lang === "en" 
-                              ? "The final price for this order will be determined by the Admin. You will be notified once the Admin inputs the final price, and you can upload the payment proof afterwards." 
-                              : "Harga final untuk pesanan ini akan ditentukan oleh Admin. Anda akan menerima notifikasi setelah Admin memasukkan harga final, dan Anda dapat mengunggah bukti transfer setelahnya."}
-                          </p>
-                          {paymentMethod === "bank_transfer" ? (
-                            <p>
-                              {lang === "en" ? "Cooperative bank account for transfer:" : "Rekening transfer bank koperasi:"}
-                              <br />
-                              🏦 **{t.instructionBankTitle}**
-                              <br />
-                              {lang === "en" ? "Account:" : "Rekening:"} **123-456-7890**
-                              <br />
-                              {lang === "en" ? "Account Holder:" : "Atas Nama:"} **{t.bankName}**
-                            </p>
-                          ) : (
-                            <p>
-                              {lang === "en" ? "Cooperative E-Wallet for transfer:" : "E-Wallet transfer koperasi:"}
-                              <br />
-                              📱 **{t.instructionEwalletTitle}**
-                              <br />
-                              {lang === "en" ? "Number:" : "Nomor:"} **0812-3456-7890**
-                              <br />
-                              {lang === "en" ? "Account Holder:" : "Atas Nama:"} **{t.bankName}**
-                            </p>
-                          )}
-                        </>
-                      ) : paymentMethod === "bank_transfer" ? (
+                      {paymentMethod === "bank_transfer" ? (
                         <p>
-                          {lang === "en" ? "Please transfer the total payment of" : "Silakan transfer total pembayaran sebesar"} **{formatIDR(grandTotal)}** {lang === "en" ? "to the cooperative bank account:" : "ke rekening koperasi:"}
+                          {lang === "en" ? "Please transfer the total payment of" : "Silakan transfer total pembayaran sebesar"} **{formatIDR(grandTotal)}** {lang === "en" ? "to the cooperative bank account:" : "ke rekening bank koperasi:"}
                           <br />
                           🏦 **{t.instructionBankTitle}**
                           <br />
@@ -1527,7 +1971,7 @@ export function CheckoutWizard() {
                           {lang === "en" ? "Account Holder:" : "Atas Nama:"} **{t.bankName}**
                         </p>
                       )}
-                      {isAdmin && (
+                      {!isAdmin && (
                         <p className="text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
                           {t.instructionAlert}
                         </p>
@@ -1536,33 +1980,40 @@ export function CheckoutWizard() {
                   </div>
                 )}
 
+                {/* Promo Code Entry */}
+                {renderPromoSection()}
+
                 {/* Billing Summary */}
-                {isAdmin && (
-                  <div className="bg-white rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-3">
-                    <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
-                      {t.costSummary}
-                    </h3>
-                    <div className="space-y-2 text-xs font-['Hanken_Grotesk',system-ui,sans-serif] text-[#6B7280]">
-                      <div className="flex justify-between">
-                        <span>{t.productSubtotal}</span>
-                        <span className="font-semibold text-[#111827]">{formatIDR(subtotal)}</span>
+                <div className="bg-white rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-3">
+                  <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827]">
+                    {t.costSummary}
+                  </h3>
+                  <div className="space-y-2 text-xs font-['Hanken_Grotesk',system-ui,sans-serif] text-[#6B7280]">
+                    <div className="flex justify-between">
+                      <span>{t.productSubtotal}</span>
+                      <span className="font-semibold text-[#111827]">{formatIDR(subtotal)}</span>
+                    </div>
+                    {promoDiscount > 0 && (
+                      <div className="flex justify-between text-emerald-600 font-semibold">
+                        <span>{lang === "id" ? "Diskon Promo" : "Promo Discount"}</span>
+                        <span>-{formatIDR(promoDiscount)}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span>{t.shippingFee}</span>
-                        <span className="font-semibold text-[#111827]">{formatIDR(DELIVERY_FEE)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>{t.serviceFee}</span>
-                        <span className="font-semibold text-[#111827]">{formatIDR(SERVICE_FEE)}</span>
-                      </div>
-                      <hr className="border-[#F3F4F6] pt-1" />
-                      <div className="flex justify-between text-sm font-bold text-[#111827] font-['Manrope',system-ui,sans-serif]">
-                        <span>{t.totalPayment}</span>
-                        <span className="text-base font-extrabold text-[#111827]">{formatIDR(grandTotal)}</span>
-                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span>{t.shippingFee}</span>
+                      <span className="font-semibold text-[#111827]">{formatIDR(DELIVERY_FEE)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>{t.serviceFee}</span>
+                      <span className="font-semibold text-[#111827]">{formatIDR(SERVICE_FEE)}</span>
+                    </div>
+                    <hr className="border-[#F3F4F6] pt-1" />
+                    <div className="flex justify-between text-sm font-bold text-[#111827] font-['Manrope',system-ui,sans-serif]">
+                      <span>{t.totalPayment}</span>
+                      <span className="text-base font-extrabold text-[#111827]">{formatIDR(grandTotal)}</span>
                     </div>
                   </div>
-                )}
+                </div>
 
                 {submitError && (
                   <div className="bg-red-50 border border-red-200 text-red-900 p-4 rounded-2xl text-xs space-y-2 font-['Hanken_Grotesk',system-ui,sans-serif]">
@@ -1599,6 +2050,8 @@ export function CheckoutWizard() {
             )}
           </AnimatePresence>
         )}
+
+        {renderPromoModal()}
       </div>
     </div>
   );

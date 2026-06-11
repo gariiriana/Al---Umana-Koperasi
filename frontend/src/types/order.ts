@@ -27,6 +27,7 @@ export interface OrderLineItem {
   itemName: string;
   quantity: number;
   imageUrl?: string;
+  ingredients?: string;
 }
 
 export interface ManualValidation {
@@ -48,6 +49,7 @@ export interface Order {
   foodDetails: string;
   drinkDetails: string;
   totalPrice: number;
+  additionalFee?: number;
   additionalNotes?: string;
   paymentStatus: PaymentStatus;
   paymentDueDate: string;
@@ -98,6 +100,9 @@ export interface Order {
   review?: string;
   reviewPhotoId?: string;
   reviewedAt?: string;
+  promoCode?: string;
+  discountAmount?: number;
+  kitchen?: string;
   createdAt: string;
   updatedAt: string;
 }

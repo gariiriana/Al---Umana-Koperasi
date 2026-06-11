@@ -1,12 +1,14 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import SignatureCanvas from "react-signature-canvas";
-import { Loader2, FileText, Calendar, User, Phone, MapPin, Printer, ShieldCheck, AlertCircle } from "lucide-react";
+import { Loader2, FileText, Calendar, User, Phone, MapPin, Printer, ShieldCheck, AlertCircle, Clock } from "lucide-react";
 import { getOrderByInvoiceToken, signInvoice } from "@/services/invoiceService";
 import type { Order } from "@/types/order";
 import { formatIDR } from "@/lib/format";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { ProductImage } from "@/components/ProductImage";
+import { aggregateIngredients } from "@/lib/ingredientsParser";
 
 export function InvoicePage() {
   const { token } = useParams<{ token: string }>();
@@ -240,11 +242,34 @@ export function InvoicePage() {
                 </div>
                 <div className="flex items-start gap-2">
                   <MapPin className="w-4 h-4 text-[#9CA3AF] shrink-0 mt-0.5" />
-                  <span>{order.deliveryAddress}</span>
+                  {(() => {
+                    const address = order.deliveryAddress || "";
+                    const mapsUrlMatch = address.match(/https?:\/\/[^\s]+/);
+                    const mapsUrl = mapsUrlMatch ? mapsUrlMatch[0] : null;
+                    const cleanAddress = mapsUrl ? address.replace(mapsUrl, "").replace(/\s+/g, " ").trim() : address;
+                    return (
+                      <div className="space-y-1">
+                        <span>{cleanAddress}</span>
+                        {mapsUrl && (
+                          <div className="mt-1">
+                            <a
+                              href={mapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:underline cursor-pointer bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1"
+                            >
+                              <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                              <span>Buka Link Peta ↗</span>
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
-
+ 
             <div className="space-y-3">
               <h4 className="text-xs font-bold text-[#6B7280] uppercase tracking-wider">
                 Informasi Tagihan
@@ -254,13 +279,15 @@ export function InvoicePage() {
                   <Calendar className="w-4 h-4 text-[#9CA3AF]" />
                   <span>Tanggal Acara: <span className="font-bold">{new Date(order.eventDate).toLocaleDateString("id-ID", { dateStyle: "long" })}</span></span>
                 </div>
+                {order.deliveryTime && (
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[#9CA3AF]" />
+                    <span>Waktu Pengiriman: <span className="font-bold">{order.deliveryTime}</span></span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-[#9CA3AF]" />
                   <span>Jatuh Tempo: <span className="font-bold text-red-600">{new Date(order.paymentDueDate).toLocaleDateString("id-ID", { dateStyle: "long" })}</span></span>
-                </div>
-                <div className="pt-2 border-t border-[#E5E7EB] flex justify-between items-center text-xs font-semibold uppercase">
-                  <span className="text-[#6B7280]">Jenis Pesanan:</span>
-                  <span className="text-[#111827]">{order.orderType}</span>
                 </div>
               </div>
             </div>
@@ -275,6 +302,7 @@ export function InvoicePage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB] text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">
+                    <th className="py-3 px-4 w-12">Foto</th>
                     <th className="py-3 px-4">Menu Item</th>
                     <th className="py-3 px-4 text-center">Jumlah</th>
                   </tr>
@@ -282,6 +310,14 @@ export function InvoicePage() {
                 <tbody className="divide-y divide-[#E5E7EB] text-sm text-[#374151]">
                   {order.items.map((it, idx) => (
                     <tr key={idx} className="hover:bg-neutral-50/50">
+                      <td className="py-3.5 px-4">
+                        <ProductImage
+                          imageUrl={it.imageUrl || ""}
+                          alt={it.itemName}
+                          className="h-10 w-10 rounded-lg object-cover bg-white border border-neutral-200 shrink-0"
+                          fallbackClassName="h-4 w-4 text-[#9CA3AF]"
+                        />
+                      </td>
                       <td className="py-3.5 px-4 font-bold text-[#111827]">{it.itemName}</td>
                       <td className="py-3.5 px-4 text-center font-bold font-mono">×{it.quantity}</td>
                     </tr>
@@ -290,6 +326,31 @@ export function InvoicePage() {
               </table>
             </div>
           </div>
+
+          {/* Total Ingredients Composition */}
+          {(() => {
+            const ingredients = aggregateIngredients(order.items);
+            if (ingredients.length === 0) return null;
+            return (
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-[#6B7280] uppercase tracking-wider">
+                  Total Kebutuhan Bahan
+                </h4>
+                <div className="border border-[#E5E7EB] rounded-2xl p-5 bg-[#F9FAFB] text-xs font-semibold text-[#4B5563]">
+                  <div className="divide-y divide-[#E5E7EB]">
+                    {ingredients.map((ing, idx) => (
+                      <div key={idx} className="py-2.5 flex justify-between items-center">
+                        <span className="capitalize">{ing.name}</span>
+                        <span className="font-mono font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1">
+                          {ing.amount} {ing.unit}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Food/Drink Details Notes */}
           {(order.foodDetails || order.drinkDetails || order.recipientNotes) && (
@@ -319,9 +380,27 @@ export function InvoicePage() {
           )}
 
           {/* Pricing Totals */}
-          <div className="flex justify-between items-center pt-6 border-t border-[#F3F4F6]">
-            <span className="font-['Manrope'] font-extrabold text-base text-[#111827]">Grand Total Tagihan:</span>
-            <span className="font-['Manrope'] font-black text-2xl text-[#D97706]">{formatIDR(order.totalPrice)}</span>
+          <div className="pt-6 border-t border-[#F3F4F6] space-y-2">
+            <div className="flex justify-between items-center text-xs text-[#6B7280]">
+              <span>Subtotal Pesanan:</span>
+              <span>{formatIDR(order.totalPrice + (order.discountAmount || 0) - (order.additionalFee || 0))}</span>
+            </div>
+            {order.discountAmount !== undefined && order.discountAmount > 0 && (
+              <div className="flex justify-between items-center text-xs text-emerald-600 font-semibold">
+                <span>Diskon Promo ({order.promoCode}):</span>
+                <span>-{formatIDR(order.discountAmount)}</span>
+              </div>
+            )}
+            {order.additionalFee !== undefined && order.additionalFee > 0 && (
+              <div className="flex justify-between items-center text-xs text-[#6B7280]">
+                <span>Biaya Tambahan:</span>
+                <span>{formatIDR(order.additionalFee)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center pt-2 border-t border-neutral-100">
+              <span className="font-['Manrope'] font-extrabold text-base text-[#111827]">Grand Total Tagihan:</span>
+              <span className="font-['Manrope'] font-black text-2xl text-[#D97706]">{formatIDR(order.totalPrice)}</span>
+            </div>
           </div>
         </Card>
 
