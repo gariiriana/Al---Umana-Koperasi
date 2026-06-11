@@ -1045,6 +1045,27 @@ export function OrdersPage() {
   };
 
   const exportOrdersToPDF = async () => {
+    // Pre-load product images for all items in all filtered orders in parallel
+    const allItemIds = Array.from(new Set(filteredOrders.flatMap(o => o.items.map(it => it.itemId))));
+    
+    const productMap: Record<string, string | null> = {};
+    await Promise.all(
+      allItemIds.map(async (id) => {
+        try {
+          const product = await getProduct(id);
+          if (product && product.imageUrl) {
+            const base64 = await getBase64ImageFromUrl(product.imageUrl);
+            productMap[id] = base64;
+          } else {
+            productMap[id] = null;
+          }
+        } catch (e) {
+          console.error("Failed to fetch product for bulk export:", e);
+          productMap[id] = null;
+        }
+      })
+    );
+
     const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
@@ -1126,46 +1147,52 @@ export function OrdersPage() {
     };
 
     // ─── Orders table ───
-    const tableBody = filteredOrders.map(o => [
-      `#${o.id.slice(-6).toUpperCase()}`,
-      `${o.institutionName}\n${o.recipientName}`,
-      [o.foodDetails, o.drinkDetails].filter(Boolean).join(" + ") || "-",
-      `Rp ${o.totalPrice.toLocaleString()}`,
-      `${o.eventDate}\n${o.deliveryTime}`,
-      statusLabels[o.status] || o.status,
-      paymentLabels[o.paymentStatus] || o.paymentStatus,
-    ]);
+    const tableBody = filteredOrders.map(o => {
+      const itemsList = o.items.map(it => `${it.itemName} (×${it.quantity})`).join("\n");
+      const details = itemsList || [o.foodDetails, o.drinkDetails].filter(Boolean).join(" + ") || "-";
+      return [
+        `#${o.id.slice(-6).toUpperCase()}`,
+        `${o.institutionName}\n${o.recipientName}`,
+        "", // placeholder for Foto column
+        details,
+        `Rp ${o.totalPrice.toLocaleString()}`,
+        `${o.eventDate}\n${o.deliveryTime}`,
+        statusLabels[o.status] || o.status,
+        paymentLabels[o.paymentStatus] || o.paymentStatus,
+      ];
+    });
 
     autoTable(doc, {
       startY: y,
-      head: [["ID", "Instansi & Penerima", "Detail Pesanan", "Harga", "Jadwal / Tempo", "Status Ops.", "Pembayaran"]],
+      head: [["ID", "Instansi & Penerima", "Foto", "Detail Pesanan", "Harga", "Jadwal / Tempo", "Status Ops.", "Pembayaran"]],
       body: tableBody,
       theme: "striped",
       styles: { lineColor: brandYellowBorder, lineWidth: 0.15 },
       headStyles: { fillColor: brandGold, textColor: white, fontStyle: "bold", fontSize: 8, halign: "center", cellPadding: 2.5 },
-      bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59], cellPadding: 2.5, overflow: "linebreak" },
+      bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59], cellPadding: 2.5, overflow: "linebreak", minCellHeight: 12, valign: "middle" },
       columnStyles: {
-        0: { halign: "center", cellWidth: 22, fontStyle: "bold" },
-        1: { cellWidth: 50 },
-        2: { cellWidth: 65 },
-        3: { halign: "right", cellWidth: 30, fontStyle: "bold" },
-        4: { halign: "center", cellWidth: 35 },
-        5: { halign: "center", cellWidth: 34 },
-        6: { halign: "center", cellWidth: 33 },
+        0: { halign: "center", cellWidth: 20, fontStyle: "bold" },
+        1: { cellWidth: 45 },
+        2: { cellWidth: 16 }, // Foto column
+        3: { cellWidth: 72 }, // Detail Pesanan
+        4: { halign: "right", cellWidth: 26, fontStyle: "bold" },
+        5: { halign: "center", cellWidth: 30 },
+        6: { halign: "center", cellWidth: 30 },
+        7: { halign: "center", cellWidth: 30 },
       },
       alternateRowStyles: { fillColor: brandYellowCream },
       margin: { left: 14, right: 14 },
       didParseCell: (data) => {
-        // Color code payment status
-        if (data.section === "body" && data.column.index === 6) {
+        // Color code payment status (index 7)
+        if (data.section === "body" && data.column.index === 7) {
           const val = String(data.cell.raw);
           if (val === "Lunas") data.cell.styles.textColor = [5, 150, 105];
           else if (val === "Jatuh Tempo") data.cell.styles.textColor = [220, 38, 38];
           else data.cell.styles.textColor = [180, 83, 9];
           data.cell.styles.fontStyle = "bold";
         }
-        // Color code operational status
-        if (data.section === "body" && data.column.index === 5) {
+        // Color code operational status (index 6)
+        if (data.section === "body" && data.column.index === 6) {
           const val = String(data.cell.raw);
           if (val === "Selesai" || val === "Terkirim") data.cell.styles.textColor = [5, 150, 105];
           else if (val === "Gagal" || val === "Ditolak") data.cell.styles.textColor = [220, 38, 38];
@@ -1173,6 +1200,40 @@ export function OrdersPage() {
           data.cell.styles.fontStyle = "bold";
         }
       },
+      didDrawCell: (data) => {
+        // Draw product photos in index 2
+        if (data.section === "body" && data.column.index === 2) {
+          const orderObj = filteredOrders[data.row.index];
+          if (orderObj && orderObj.items && orderObj.items.length > 0) {
+            const cell = data.cell;
+            const imgSize = 6; // 6mm x 6mm
+            const spacing = 1;
+            
+            orderObj.items.slice(0, 2).forEach((it, idx) => {
+              const imgBase64 = productMap[it.itemId];
+              if (imgBase64) {
+                const imgX = cell.x + 1 + idx * (imgSize + spacing);
+                const imgY = cell.y + (cell.height - imgSize) / 2;
+                try {
+                  doc.addImage(imgBase64, "PNG", imgX, imgY, imgSize, imgSize);
+                } catch (e) {
+                  console.error("Failed to add list image to PDF:", e);
+                }
+              }
+            });
+            
+            // Draw a "+" indicator if more than 2 items
+            if (orderObj.items.length > 2) {
+              const textX = cell.x + 1 + 2 * (imgSize + spacing) + 1;
+              const textY = cell.y + cell.height / 2 + 1;
+              doc.setFont("helvetica", "bold");
+              doc.setFontSize(8);
+              doc.setTextColor(100, 100, 100);
+              doc.text("+", textX, textY);
+            }
+          }
+        }
+      }
     });
 
     // ─── Summary Card ───
