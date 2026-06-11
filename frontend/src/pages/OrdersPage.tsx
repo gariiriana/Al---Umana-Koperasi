@@ -48,11 +48,29 @@ const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
+        
+        // Downscale to a maximum dimension of 256px to save space
+        const maxDim = 256;
+        let width = img.naturalWidth;
+        let height = img.naturalHeight;
+        
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          ctx.drawImage(img, 0, 0);
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(img, 0, 0, width, height);
           resolve(canvas.toDataURL("image/png"));
         } else {
           resolve(null);
