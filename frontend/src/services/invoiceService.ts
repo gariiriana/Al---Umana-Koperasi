@@ -12,6 +12,7 @@ interface FirestoreOrderData {
   foodDetails?: string;
   drinkDetails?: string;
   totalPrice?: number;
+  additionalFee?: number;
   additionalNotes?: string;
   paymentStatus?: PaymentStatus;
   paymentDueDate?: string;
@@ -22,6 +23,8 @@ interface FirestoreOrderData {
   items?: OrderLineItem[];
   deliveryAddress?: string;
   deliveryTime?: string;
+  promoCode?: string;
+  discountAmount?: number;
   createdAt?: unknown;
   updatedAt?: unknown;
 }
@@ -50,6 +53,7 @@ function parseOrder(snapId: string, data: FirestoreOrderData): Order {
     foodDetails: data.foodDetails || "",
     drinkDetails: data.drinkDetails || "",
     totalPrice: data.totalPrice || 0,
+    additionalFee: data.additionalFee,
     additionalNotes: data.additionalNotes,
     paymentStatus: data.paymentStatus || "BELUM_DIBAYAR",
     paymentDueDate: data.paymentDueDate || "",
@@ -60,6 +64,8 @@ function parseOrder(snapId: string, data: FirestoreOrderData): Order {
     items: data.items || [],
     deliveryAddress: data.deliveryAddress || "",
     deliveryTime: data.deliveryTime || "",
+    promoCode: data.promoCode,
+    discountAmount: data.discountAmount,
     createdAt: toIsoString(data.createdAt),
     updatedAt: toIsoString(data.updatedAt),
   };
