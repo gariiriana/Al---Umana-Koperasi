@@ -46,6 +46,26 @@ Using dynamic React wrappers (`React.lazy` and `<Suspense>`), the initial client
 - Heavy libraries (`jspdf`, `leaflet` maps, `html2canvas`) are completely code-split into distinct chunks.
 - The index bundle was reduced by **53%** (from **2.18 MB** to **1.07 MB**), resulting in rapid page render cycles and reduced mobile battery drain.
 
+### 5. Secure Live-HUD Camera & Anti-Spoofing Engine
+
+A custom client-side camera application matching Al-Umanaa's premium palette (Charcoal `#111827` and Amber `#fbbf24`) with secure watermark embedding:
+
+- **Time/Clock Anti-Tampering**: Synchronizes with the backend servers on start to calculate local clock offset. It uses a monotonic counter (`performance.now()`) to track time, rendering local timezone spoofing useless.
+- **GPS Verification & Timezone Validation**: Rejects mock location inputs, zero/negative accuracy, and automated browser agents. Compares coordinates within Indonesian boundaries against the device's timezone offset (WIB, WITA, WIT) to block active fake-GPS apps.
+- **Nominatim Geocoding**: Reverse geocodes GPS coordinates to precise Indonesian village, district, and regional names to overlay directly onto the image watermark.
+- **HUD Interface**: Supports pinch-to-zoom/sliders, front/back camera toggling, and flash controls.
+
+### 6. Signature Autosave & Responsive Image Compression
+
+- **Draft Autosaving**: Captures active signatures and proof-of-delivery photos, saving a base64 draft to `localStorage`. Reconstructs binaries and signature canvas strokes seamlessly if the page is reloaded.
+- **Canvas-based Compression**: Automatically resizes images to $\le 1280$px at 80% JPEG quality before entering the chunk-loading pipeline. This speeds up chunk uploads and protects device bandwidth.
+
+### 7. Triple-Proof Delivery Audit & Historical Ordering
+
+- **Unified 3-Column Proofs**: Renders a comprehensive delivery lifecycle audit: departure (Start OTW photo with location watermark), arrival (delivery documentation photo), and recipient validation (digital signature).
+- **Multi-Role Audit Dashboards**: Exposes full proof logs across the Distributor dispatch panel, Admin, and Monitoring invoice modals.
+- **Chronological Descents**: Real-time Completed Delivery queues are sorted in descending order (`deliveredAt` descending) so supervisors and drivers immediately see the most recent status updates.
+
 ---
 
 ## High-Level System Architecture
