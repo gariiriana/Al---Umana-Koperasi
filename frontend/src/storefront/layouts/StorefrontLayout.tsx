@@ -401,16 +401,16 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
       <div className="min-h-screen bg-[#F3F4F6]">
 
         {/* ── MOBILE HORIZONTAL HEADER (<lg) ─────────────────────────── */}
-        <header className="lg:hidden bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-[#111827] sticky top-0 z-30 shadow-sm px-3 py-2.5 flex items-center justify-between gap-1.5 w-full overflow-hidden">
+        <header className="lg:hidden bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-[#111827] sticky top-0 z-30 shadow-sm px-2.5 py-2 flex items-center justify-between gap-1 inset-x-0">
           {/* Logo / Brand & Order List Icon */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Link to="/" className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 shrink-0 min-w-0">
+            <Link to="/" className="flex items-center gap-1 min-w-0">
               <img
                 src="/logo.png"
                 alt="Al Umanaa"
-                className="h-8 w-8 object-contain bg-white rounded-full p-0.5 border border-amber-200"
+                className="h-7 w-7 object-contain bg-white rounded-full p-0.5 border border-amber-200 shrink-0"
               />
-              <span className="font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-white tracking-wide">
+              <span className="font-['Manrope',system-ui,sans-serif] text-xs sm:text-sm font-extrabold text-white tracking-wide truncate max-w-[85px] min-[360px]:max-w-[110px] min-[400px]:max-w-none">
                 Al-Umanaa <span className="hidden sm:inline font-light text-amber-100 text-xs">{lang === "id" ? "Koperasi" : "Cooperative"}</span>
               </span>
             </Link>
@@ -419,17 +419,17 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                 <span className="inline-block h-4 w-px bg-white/20 shrink-0 self-center" />
                 {profile.role !== "admin" && (
                   <>
-                    <Link to="/admin/dashboard" className="p-1 text-white hover:opacity-85 transition-opacity" title={lang === "id" ? "Dasbor Monitoring" : "Monitoring Dashboard"}>
-                      <LayoutDashboard className="h-5 w-5" />
+                    <Link to="/admin/dashboard" className="p-0.5 text-white hover:opacity-85 transition-opacity" title={lang === "id" ? "Dasbor Monitoring" : "Monitoring Dashboard"}>
+                      <LayoutDashboard className="h-4.5 w-4.5" />
                     </Link>
-                    <Link to="/admin/orders" className="p-1 text-white hover:opacity-85 transition-opacity" title={lang === "id" ? "Pesanan & Pembayaran" : "Orders & Payment"}>
-                      <ShoppingCart className="h-5 w-5" />
+                    <Link to="/admin/orders" className="p-0.5 text-white hover:opacity-85 transition-opacity" title={lang === "id" ? "Pesanan & Pembayaran" : "Orders & Payment"}>
+                      <ShoppingCart className="h-4.5 w-4.5" />
                     </Link>
                   </>
                 )}
                 {profile.role === "admin" && (
-                  <Link to="/admin/orders" className="p-1 text-white hover:opacity-85 transition-opacity" title={lang === "id" ? "Catatan" : "Invoices"}>
-                    <FileText className="h-5 w-5" />
+                  <Link to="/admin/orders" className="p-0.5 text-white hover:opacity-85 transition-opacity" title={lang === "id" ? "Catatan" : "Invoices"}>
+                    <FileText className="h-4.5 w-4.5" />
                   </Link>
                 )}
               </>
@@ -437,17 +437,17 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
           </div>
 
           {/* Right side: Language + Auth / Profile */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             {profile && ["admin", "monitoring"].includes(profile.role) && user && (
               <span className="inline-block h-4 w-px bg-white/20 shrink-0 self-center" />
             )}
 
             {/* Notification Bell for Mobile */}
             {user && (
-              <Link to="/notifications" className="relative p-1 text-white hover:opacity-85 transition-opacity">
-                <Bell className="h-5 w-5" />
+              <Link to="/notifications" className="relative p-0.5 text-white hover:opacity-85 transition-opacity">
+                <Bell className="h-4.5 w-4.5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 bg-red-600 text-white text-[9px] font-bold h-4 min-w-4 px-1 rounded-full flex items-center justify-center border border-[#F59E0B] shadow-xs">
+                  <span className="absolute -top-0.5 -right-0.5 bg-red-600 text-white text-[8px] font-bold h-3.5 min-w-3.5 px-0.5 rounded-full flex items-center justify-center border border-[#F59E0B] shadow-xs">
                     {unreadCount}
                   </span>
                 )}
@@ -463,11 +463,11 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                   setIsLangOpen(!isLangOpen);
                   setIsProfileOpen(false);
                 }}
-                className="flex items-center hover:opacity-85 cursor-pointer focus:outline-none text-amber-50 text-xs p-1"
+                className="flex items-center hover:opacity-85 cursor-pointer focus:outline-none text-amber-50 text-xs p-0.5"
                 aria-label="Pilih Bahasa"
                 title="Pilih Bahasa"
               >
-                <Globe className="h-4 w-4" />
+                <Globe className="h-4.5 w-4.5" />
               </button>
               {isLangOpen && (
                 <>
@@ -504,9 +504,9 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                     setIsProfileOpen(!isProfileOpen);
                     setIsLangOpen(false);
                   }}
-                  className="flex items-center font-bold text-white focus:outline-none cursor-pointer hover:opacity-85 text-xs p-1"
+                  className="flex items-center font-bold text-white focus:outline-none cursor-pointer hover:opacity-85 text-xs p-0.5"
                 >
-                  <div className="h-6 w-6 rounded-full bg-white text-[#B45309] flex items-center justify-center text-[10px] font-extrabold overflow-hidden border border-white/20 shrink-0">
+                  <div className="h-5.5 w-5.5 rounded-full bg-white text-[#B45309] flex items-center justify-center text-[9px] font-extrabold overflow-hidden border border-white/20 shrink-0">
                     {(profile?.photoURL || user?.photoURL) ? (
                       <img src={profile?.photoURL || user?.photoURL || ""} alt="Avatar" className="h-full w-full object-cover" />
                     ) : (
@@ -518,28 +518,84 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                 {isProfileOpen && (
                   <>
                     <div className="fixed inset-0 z-40 cursor-default" onClick={() => setIsProfileOpen(false)} />
-                    <div className="absolute right-0 mt-2 w-48 rounded-xl bg-white border border-[#E5E7EB] shadow-lg py-1.5 z-50 text-neutral-800 font-['Hanken_Grotesk',system-ui,sans-serif] text-xs">
-                      <div className="px-4 py-2 border-b border-neutral-100 font-bold text-neutral-500 truncate max-w-full">
+                    <div className="absolute right-0 mt-2 w-56 rounded-xl bg-white border border-[#E5E7EB] shadow-lg py-1 z-50 text-neutral-800 font-['Hanken_Grotesk',system-ui,sans-serif] text-[11px]">
+                      <div className="px-3 py-2 border-b border-neutral-100 font-bold text-neutral-400 truncate text-[10px]">
                         {user.displayName || user.email}
                       </div>
                       <Link
                         to="/profile"
                         onClick={() => setIsProfileOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold border-b border-neutral-100"
+                        className="flex items-center gap-2.5 px-3 py-2 hover:bg-[#F3F4F6] font-semibold border-b border-neutral-100 whitespace-nowrap"
                       >
-                        <User className="h-4 w-4 text-neutral-500" />
+                        <User className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
                         <span>{t.myAccount}</span>
                       </Link>
 
                       {profile && ["admin", "monitoring", "tim_produksi", "distribusi", "kurir"].includes(profile.role) && (
                         <>
+                          {profile.role === "admin" && (
+                            <>
+                              <div className="px-3 py-1.5 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-neutral-100">
+                                {lang === "id" ? "Akses Peran" : "Role Access"}
+                              </div>
+                              <Link
+                                to="/admin/dashboard"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-amber-50 font-semibold text-amber-700 border-b border-neutral-100 whitespace-nowrap"
+                              >
+                                <LayoutDashboard className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                <span>{lang === "id" ? "Monitoring" : "Monitoring"}</span>
+                              </Link>
+                              <Link
+                                to="/admin/production"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-emerald-50 font-semibold text-emerald-700 border-b border-neutral-100 whitespace-nowrap"
+                              >
+                                <Factory className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                                <span>{lang === "id" ? "Produksi" : "Production"}</span>
+                              </Link>
+                              <Link
+                                to="/distribusi/dispatch"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-blue-50 font-semibold text-blue-700 border-b border-neutral-100 whitespace-nowrap"
+                              >
+                                <Truck className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                                <span>{lang === "id" ? "Distribusi" : "Distribution"}</span>
+                              </Link>
+                              <Link
+                                to="/distribusi/scheduler"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-sky-50 font-semibold text-sky-700 border-b border-neutral-100 whitespace-nowrap"
+                              >
+                                <Calendar className="h-3.5 w-3.5 text-sky-500 shrink-0" />
+                                <span>{lang === "id" ? "Jadwal Kirim" : "Delivery Schedule"}</span>
+                              </Link>
+                              <Link
+                                to="/distribusi/delivery"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-indigo-50 font-semibold text-indigo-700 border-b border-neutral-100 whitespace-nowrap"
+                              >
+                                <Package className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                                <span>{lang === "id" ? "Kurir" : "Courier"}</span>
+                              </Link>
+                              <Link
+                                to="/admin/settings"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-violet-50 font-semibold text-violet-700 border-b border-neutral-100 whitespace-nowrap"
+                              >
+                                <Settings className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+                                <span>{lang === "id" ? "Pengaturan" : "Settings"}</span>
+                              </Link>
+                            </>
+                          )}
+
                           {["tim_produksi", "distribusi", "kurir"].includes(profile.role) && (
                             <Link
                               to={adminPanelLink}
                               onClick={() => setIsProfileOpen(false)}
-                              className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-violet-700"
+                              className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-violet-50 font-semibold text-violet-700 whitespace-nowrap"
                             >
-                              <Settings className="h-4 w-4 text-violet-500" />
+                              <Settings className="h-3.5 w-3.5 text-violet-500 shrink-0" />
                               <span>{t.adminPanel}</span>
                             </Link>
                           )}
@@ -547,9 +603,9 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                             <Link
                               to="/admin/settings"
                               onClick={() => setIsProfileOpen(false)}
-                              className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-violet-700 border-t border-neutral-100"
+                              className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-violet-50 font-semibold text-violet-700 border-t border-neutral-100 whitespace-nowrap"
                             >
-                              <Settings className="h-4 w-4 text-violet-500" />
+                              <Settings className="h-3.5 w-3.5 text-violet-500 shrink-0" />
                               <span>{lang === "id" ? "Pengaturan" : "Settings"}</span>
                             </Link>
                           )}
@@ -561,9 +617,9 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                           setIsProfileOpen(false);
                           requestSignOut?.();
                         }}
-                        className="w-full flex items-center gap-2 px-4 py-2 hover:bg-red-50 text-red-600 text-left font-bold cursor-pointer border-t border-neutral-100 mt-1 pt-2"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-red-50 text-red-600 text-left font-bold cursor-pointer border-t border-neutral-100 whitespace-nowrap"
                       >
-                        <LogOut className="h-4 w-4" />
+                        <LogOut className="h-3.5 w-3.5 shrink-0" />
                         <span>{t.signOut}</span>
                       </button>
                     </div>

@@ -84,16 +84,16 @@ export function AppShell({
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* ── Top header ─────────────────────────────────────────── */}
-        <header className="sticky top-0 z-30 bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-white shadow-md px-3 py-2.5 md:px-4 md:py-3 flex items-center justify-between gap-2 md:gap-4 font-['Hanken_Grotesk',system-ui,sans-serif]">
+        <header className="sticky top-0 z-30 bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-white shadow-md px-2.5 py-2 md:px-4 md:py-3 flex items-center justify-between gap-1.5 md:gap-4 font-['Hanken_Grotesk',system-ui,sans-serif] inset-x-0">
           {/* Left: Logo & Cooperative Name */}
-          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
-            <Link to={userRole ? (ROLE_DEFAULT_REDIRECT[userRole] ?? "/") : "/"} className="flex items-center gap-1.5 md:gap-2">
+          <div className="flex items-center gap-1 md:gap-2 shrink-0 min-w-0">
+            <Link to={userRole ? (ROLE_DEFAULT_REDIRECT[userRole] ?? "/") : "/"} className="flex items-center gap-1 md:gap-2 min-w-0">
               <img
                 src="/logo.png"
                 alt="Al Umanaa"
-                className="h-8 w-8 md:h-9 md:w-9 object-contain bg-white rounded-full p-0.5 border border-amber-200 shrink-0"
+                className="h-7 w-7 md:h-9 md:w-9 object-contain bg-white rounded-full p-0.5 border border-amber-200 shrink-0"
               />
-              <span className="font-['Manrope',system-ui,sans-serif] text-sm md:text-base font-extrabold text-white tracking-wide">
+              <span className="font-['Manrope',system-ui,sans-serif] text-xs sm:text-sm md:text-base font-extrabold text-white tracking-wide truncate max-w-[85px] min-[360px]:max-w-[110px] min-[400px]:max-w-none">
                 Al-Umanaa <span className="hidden sm:inline font-light text-amber-100 text-xs">{lang === "id" ? "Koperasi" : "Cooperative"}</span>
               </span>
             </Link>

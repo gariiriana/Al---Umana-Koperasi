@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Lock, Mail, Eye, EyeOff } from "lucide-react";
 import { doc, getDoc } from "firebase/firestore";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-// import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
+import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
 
 const DICTIONARY = {
   id: {
@@ -51,15 +51,13 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  // const turnstileRef = useRef<any>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileInstance | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    // Bypass Turnstile check for testing
-    /*
     if (!turnstileToken) {
       setError(
         lang === "id"
@@ -68,7 +66,6 @@ export function LoginPage() {
       );
       return;
     }
-    */
 
     setSubmitting(true);
     try {
@@ -107,8 +104,8 @@ export function LoginPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed");
       // Reset Turnstile on authentication error
-      // turnstileRef.current?.reset();
-      // setTurnstileToken(null);
+      turnstileRef.current?.reset();
+      setTurnstileToken(null);
     } finally {
       setSubmitting(false);
     }
@@ -133,7 +130,7 @@ export function LoginPage() {
 
       {/* ── Card ─────────────────────────────────────────────────────────── */}
       <div className="relative z-10 w-full max-w-md">
-        <div className="bg-[#111827]/40 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-[0_24px_50px_-12px_rgba(0,0,0,0.6)]">
+        <div className="bg-[#111827]/40 backdrop-blur-xl border border-white/10 rounded-3xl p-4 sm:p-8 shadow-[0_24px_50px_-12px_rgba(0,0,0,0.6)]">
           
           {/* Brand Logo & Text unified inside the card */}
           <div className="text-center mb-6">
@@ -201,20 +198,20 @@ export function LoginPage() {
               </div>
             </div>
 
-            {/* Turnstile Bypassed for testing
-            <div className="flex justify-center py-2">
-              <Turnstile
-                ref={turnstileRef}
-                siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
-                onSuccess={(token) => setTurnstileToken(token)}
-                onExpire={() => setTurnstileToken(null)}
-                onError={() => setTurnstileToken(null)}
-                options={{
-                  theme: "dark",
-                }}
-              />
+            <div className="flex justify-center py-2 w-full overflow-hidden">
+              <div className="scale-90 min-[370px]:scale-95 min-[400px]:scale-100 origin-center transition-transform">
+                <Turnstile
+                  ref={turnstileRef}
+                  siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
+                  onSuccess={(token) => setTurnstileToken(token)}
+                  onExpire={() => setTurnstileToken(null)}
+                  onError={() => setTurnstileToken(null)}
+                  options={{
+                    theme: "dark",
+                  }}
+                />
+              </div>
             </div>
-            */}
 
             {error && (
               <p
