@@ -159,7 +159,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
     if (!profile) return "/";
     if (profile.role === "admin" || profile.role === "monitoring") return "/admin/dashboard";
     if (profile.role === "tim_produksi") return "/admin/production";
-    if (profile.role === "distribusi") return "/distribusi/dispatch";
+    if (profile.role === "distribusi") return "/distribusi/handover";
     if (profile.role === "kurir") return "/distribusi/delivery";
     return "/";
   })();
@@ -555,12 +555,12 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                                 <span>{lang === "id" ? "Produksi" : "Production"}</span>
                               </Link>
                               <Link
-                                to="/distribusi/dispatch"
+                                to="/distribusi/handover"
                                 onClick={() => setIsProfileOpen(false)}
                                 className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-blue-50 font-semibold text-blue-700 border-b border-neutral-100 whitespace-nowrap"
                               >
                                 <Truck className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                                <span>{lang === "id" ? "Distribusi" : "Distribution"}</span>
+                                <span>{lang === "id" ? "Handover" : "Handover"}</span>
                               </Link>
                               <Link
                                 to="/distribusi/scheduler"
@@ -818,12 +818,12 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                                 <span>{lang === "id" ? "Fitur Produksi" : "Production Features"}</span>
                               </Link>
                               <Link
-                                to="/distribusi/dispatch"
+                                to="/distribusi/handover"
                                 onClick={() => setIsProfileOpen(false)}
                                 className="flex items-center gap-2 px-4 py-2 hover:bg-[#F3F4F6] font-semibold text-blue-700 border-b border-neutral-100"
                               >
                                 <Truck className="h-4 w-4 text-blue-500" />
-                                <span>{lang === "id" ? "Fitur Distribusi" : "Distribution Features"}</span>
+                                <span>{lang === "id" ? "Fitur Handover" : "Handover Features"}</span>
                               </Link>
                               <Link
                                 to="/distribusi/scheduler"

@@ -4,15 +4,17 @@ import { X, Loader2 } from "lucide-react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/Button";
+import type { KitchenSignature } from "@/types/order";
 
 interface ProofModalProps {
   isOpen: boolean;
   onClose: () => void;
   proofFileIds: string[];
   deliveryStartPhotoId?: string;
+  kitchenSignatures?: KitchenSignature[];
 }
 
-export function ProofModal({ isOpen, onClose, proofFileIds, deliveryStartPhotoId }: ProofModalProps) {
+export function ProofModal({ isOpen, onClose, proofFileIds, deliveryStartPhotoId, kitchenSignatures }: ProofModalProps) {
   const [photos, setPhotos] = useState<{ src: string; description?: string }[]>([]);
   const [sigSrc, setSigSrc] = useState<string | null>(null);
   const [startPhotoSrc, setStartPhotoSrc] = useState<string | null>(null);
@@ -151,7 +153,8 @@ export function ProofModal({ isOpen, onClose, proofFileIds, deliveryStartPhotoId
             {error}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Left Column: Start OTW Photo */}
             <div className="space-y-4">
               <span className="block text-xs font-bold text-[#374151] uppercase tracking-wide">
@@ -214,6 +217,35 @@ export function ProofModal({ isOpen, onClose, proofFileIds, deliveryStartPhotoId
               )}
             </div>
           </div>
+          
+          {/* Tanda Tangan Serah Terima Dapur */}
+          {kitchenSignatures && kitchenSignatures.length > 0 && (
+            <div className="border-t border-[#F3F4F6] pt-4 mt-2 space-y-4">
+              <span className="block text-xs font-bold text-[#374151] uppercase tracking-wide font-['Manrope',system-ui,sans-serif]">
+                Tanda Tangan Serah Terima Dapur Produksi ({kitchenSignatures.length})
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {kitchenSignatures.map((ks, idx) => (
+                  <div key={idx} className="border border-[#E5E7EB] rounded-2xl p-4 bg-neutral-50 flex flex-col justify-between space-y-3 shadow-2xs font-['Hanken_Grotesk']">
+                    <div className="flex justify-between items-center bg-[#FDF2E9] border border-orange-100 rounded-lg px-2.5 py-1">
+                      <span className="text-xs font-black text-[#B45309]">{ks.kitchenName}</span>
+                      <span className="text-[10px] text-[#6B7280]">
+                        {new Date(ks.signedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB
+                      </span>
+                    </div>
+                    <div className="aspect-video w-full flex items-center justify-center bg-white rounded-lg border border-[#E5E7EB] p-2">
+                      <img src={ks.signatureDataUrl} alt={`TTD ${ks.kitchenName}`} className="max-h-20 object-contain" />
+                    </div>
+                    <div className="text-center text-xs">
+                      <span className="text-neutral-400 font-medium">Staf Dapur: </span>
+                      <span className="font-extrabold text-[#374151]">{ks.staffName}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          </>
         )}
 
         <div className="flex justify-end pt-3 border-t border-[#F3F4F6] mt-2">

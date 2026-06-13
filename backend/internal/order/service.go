@@ -138,6 +138,7 @@ func (s *Service) CreateOrder(ctx context.Context, req CreateOrderRequest, custo
 		DeliveryTime:    req.DeliveryTime,
 		PaymentMethod:   req.PaymentMethod,
 		Status:          StatusPlacing,
+		IsPreOrder:      req.IsPreOrder,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
@@ -153,6 +154,14 @@ func (s *Service) CreateOrder(ctx context.Context, req CreateOrderRequest, custo
 
 	final := pending
 	final.ID = id
+
+	if req.IsPreOrder {
+		// Skip stock check for pre-orders
+		if err := s.transitionAfterStock(ctx, id, &final, nil); err != nil {
+			return nil, err
+		}
+		return &CreateOrderResult{Order: &final}, nil
+	}
 
 	if s.stock == nil {
 		// No stock checker wired (e.g. tests / dev without inventory). Treat
@@ -252,21 +261,20 @@ func (s *Service) StartProduction(ctx context.Context, orderID, actorUID string)
 	return o, nil
 }
 
-// CompleteProduction transitions an order from IN_PRODUCTION to READY,
-// signalling the QC team via the order's status change. The transition is
-// rejected if the order is not currently IN_PRODUCTION.
+// CompleteProduction transitions an order from IN_PRODUCTION to READY_TO_DELIVER.
+// The transition is rejected if the order is not currently IN_PRODUCTION.
 func (s *Service) CompleteProduction(ctx context.Context, orderID string) (*Order, error) {
 	o, err := s.repo.Get(ctx, orderID)
 	if err != nil {
 		return nil, err
 	}
-	if err := ValidateTransition(o.Status, StatusReady); err != nil {
+	if err := ValidateTransition(o.Status, StatusReadyToDeliver); err != nil {
 		return nil, err
 	}
-	if err := s.repo.UpdateStatus(ctx, orderID, StatusReady); err != nil {
+	if err := s.repo.UpdateStatus(ctx, orderID, StatusReadyToDeliver); err != nil {
 		return nil, err
 	}
-	o.Status = StatusReady
+	o.Status = StatusReadyToDeliver
 	return o, nil
 }
 

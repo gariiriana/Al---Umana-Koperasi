@@ -106,6 +106,8 @@ func ValidateCreateOrder(req CreateOrderRequest) []common.FieldError {
 		}
 
 		switch {
+		case req.IsPreOrder && it.Quantity == 0:
+			// valid for pre-orders
 		case it.Quantity < MinQuantity && it.Quantity > 0:
 			errs = append(errs, common.FieldError{Field: fieldPrefix + ".quantity", Reason: reasonQuantityBelowMinimum})
 		case it.Quantity <= 0:

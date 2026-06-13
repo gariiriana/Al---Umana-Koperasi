@@ -40,7 +40,7 @@ func TestStateMachineProperty_ValidateTransitions(t *testing.T) {
 		case StatusConfirmed:
 			expectedValid = (to == StatusInProduction)
 		case StatusInProduction:
-			expectedValid = (to == StatusReady)
+			expectedValid = (to == StatusReady || to == StatusReadyToDeliver)
 		case StatusReady:
 			expectedValid = (to == StatusReadyToDeliver || to == StatusConfirmed)
 		case StatusReadyToDeliver:

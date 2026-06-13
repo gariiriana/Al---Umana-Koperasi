@@ -23,7 +23,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
    */
   tim_produksi: [
     "/admin/production",
-    "/admin/qc",
     "/admin/production/history",
     "/admin/products",
     "/admin/products/new",
@@ -36,7 +35,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
    * Distribusi: mengelola pengiriman, penugasan kurir, dan delivery scheduler.
    */
   distribusi: [
-    "/distribusi/dispatch",
+    "/distribusi/handover",
     "/distribusi/scheduler",
     "/distribusi/schedules",
   ],
@@ -68,7 +67,7 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   admin: "/",
   monitoring: "/admin/dashboard",
   tim_produksi: "/admin/production",
-  distribusi: "/distribusi/dispatch",
+  distribusi: "/distribusi/handover",
   kurir: "/distribusi/delivery",
 };
 

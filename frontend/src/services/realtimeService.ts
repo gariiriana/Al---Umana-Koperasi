@@ -108,6 +108,9 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     promoCode: data.promoCode as string | undefined,
     discountAmount: data.discountAmount as number | undefined,
     kitchen: data.kitchen as string | undefined,
+    itemKitchens: data.itemKitchens as Record<string, string> | undefined,
+    qaStartChecklist: data.qaStartChecklist as Order["qaStartChecklist"] | undefined,
+    isPreOrder: !!data.isPreOrder,
   };
 }
 

@@ -153,7 +153,7 @@ export const WA_MESSAGES = {
     `Halo ${name},\n\nKabar baik! Pesanan #${shortId} Anda saat ini sedang dikerjakan oleh Tim Produksi Koperasi.`,
 
   ready: (name: string, shortId: string) => 
-    `Halo ${name},\n\nPesanan #${shortId} Anda telah selesai diproduksi dan sedang memasuki proses Quality Control (QC).`,
+    `Halo ${name},\n\nPesanan #${shortId} Anda telah selesai diproduksi dan siap diserahkan ke Kurir untuk dikirim.`,
 
   readyToDeliver: (name: string, shortId: string) => 
     `Halo ${name},\n\nPesanan #${shortId} Anda telah lolos uji QC dan siap diserahkan ke Kurir untuk dikirim.`,

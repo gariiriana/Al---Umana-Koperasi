@@ -13,6 +13,7 @@ type CreateOrderRequest struct {
 	DeliveryTime    string          `json:"deliveryTime"`
 	PaymentMethod   PaymentMethod   `json:"paymentMethod"`
 	Items           []OrderLineItem `json:"items"`
+	IsPreOrder      bool            `json:"isPreOrder"`
 }
 
 // QC decision values accepted by QCDecisionRequest.Decision.

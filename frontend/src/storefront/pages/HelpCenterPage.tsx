@@ -77,18 +77,7 @@ const FAQ_DATA: FAQItem[] = [
       en: "1. Open Production: Navigate to the 'Production' page in the admin sidebar.\n2. Select Queue: Find the new orders with a PENDING status.\n3. Start Production: Click the 'Mulai Produksi' button to advance the status to IN_PRODUCTION.",
     },
   },
-  {
-    id: "faq-prod-2",
-    category: "production",
-    question: {
-      id: "Bagaimana melakukan Quality Control (QC) setelah produksi selesai?",
-      en: "How do I perform Quality Control (QC) after production is finished?",
-    },
-    answer: {
-      id: "1. Tinjau Antrean QC: Buka menu 'Quality Control' (QC) di sidebar.\n2. Cek Kelayakan: Periksa produk apakah telah diproduksi dengan benar sesuai pesanan.\n3. Lolos QC: Klik tombol 'Lolos QC' untuk mengubah status pesanan menjadi Siap Dikirim (READY_TO_DELIVER).",
-      en: "1. Open QC Queue: Go to the 'Quality Control' (QC) page in the sidebar.\n2. Inspect Quality: Check if the product matches the order specs and is in good condition.\n3. Pass QC: Click the 'Lolos QC' button to mark the order as READY_TO_DELIVER.",
-    },
-  },
+
   {
     id: "faq-prod-3",
     category: "production",
@@ -117,12 +106,12 @@ const FAQ_DATA: FAQItem[] = [
     id: "faq-prod-5",
     category: "production",
     question: {
-      id: "Bagaimana cara melihat riwayat produksi dan kontrol kualitas (QC) yang telah selesai?",
-      en: "How do I view the completed production and quality control (QC) history?",
+      id: "Bagaimana cara melihat riwayat produksi yang telah selesai?",
+      en: "How do I view the completed production history?",
     },
     answer: {
-      id: "1. Buka Halaman Riwayat: Masuk ke halaman 'Riwayat' di bawah menu produksi di sidebar.\n2. Tinjau Data: Anda akan melihat daftar semua pesanan yang telah selesai diproduksi dan lolos QC beserta catatan waktunya.",
-      en: "1. Open History Page: Go to the 'Riwayat' page under the production menu in the sidebar.\n2. Review Data: You will see a list of all orders that have completed production and passed QC, along with their timestamps.",
+      id: "1. Buka Halaman Riwayat: Masuk ke halaman 'Riwayat' di bawah menu produksi di sidebar.\n2. Tinjau Data: Anda akan melihat daftar semua pesanan yang telah selesai diproduksi beserta catatan waktunya.",
+      en: "1. Open History Page: Go to the 'Riwayat' page under the production menu in the sidebar.\n2. Review Data: You will see a list of all orders that have completed production, along with their timestamps.",
     },
   },
   // Distribution FAQs
@@ -208,8 +197,8 @@ const FAQ_DATA: FAQItem[] = [
       en: "What operational metrics are displayed on the Dashboard?",
     },
     answer: {
-      id: "Dasbor menampilkan total omzet penjualan koperasi (harian/bulanan), jumlah pesanan berdasarkan status (Pending, Produksi, QC, Siap Dikirim, Pengiriman, Selesai), daftar kurir aktif, dan log aktivitas pengantaran real-time.",
-      en: "The Dashboard showcases cooperative sales revenue (daily/monthly), order volume breakdown by status (Pending, In Production, QC, Ready, Out for Delivery, Completed), active couriers, and real-time delivery logs.",
+      id: "Dasbor menampilkan total omzet penjualan koperasi (harian/bulanan), jumlah pesanan berdasarkan status (Pending, Produksi, Siap Dikirim, Pengiriman, Selesai), daftar kurir aktif, dan log aktivitas pengantaran real-time.",
+      en: "The Dashboard showcases cooperative sales revenue (daily/monthly), order volume breakdown by status (Pending, In Production, Ready, Out for Delivery, Completed), active couriers, and real-time delivery logs.",
     },
   },
   {

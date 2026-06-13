@@ -59,9 +59,10 @@ const (
 // invariant is enforced by the validation layer rather than by the type
 // itself.
 type OrderLineItem struct {
-	ItemID   string `json:"itemId" firestore:"itemId"`
-	ItemName string `json:"itemName" firestore:"itemName"`
-	Quantity int    `json:"quantity" firestore:"quantity"`
+	ItemID      string `json:"itemId" firestore:"itemId"`
+	ItemName    string `json:"itemName" firestore:"itemName"`
+	Quantity    int    `json:"quantity" firestore:"quantity"`
+	Ingredients string `json:"ingredients,omitempty" firestore:"ingredients,omitempty"`
 }
 
 // Order is the canonical record for an order moving through the fulfillment
@@ -79,6 +80,7 @@ type Order struct {
 	DeliveryAddress     string          `json:"deliveryAddress" firestore:"deliveryAddress"`
 	DeliveryTime        string          `json:"deliveryTime" firestore:"deliveryTime"`
 	Status              OrderStatus     `json:"status" firestore:"status"`
+	IsPreOrder          bool            `json:"isPreOrder" firestore:"isPreOrder"`
 	RejectionReason     string          `json:"rejectionReason,omitempty" firestore:"rejectionReason,omitempty"`
 	OutOfStockItems     []string        `json:"outOfStockItems,omitempty" firestore:"outOfStockItems,omitempty"`
 	AssignedCourierID   string          `json:"assignedCourierId,omitempty" firestore:"assignedCourierId,omitempty"`
@@ -100,7 +102,17 @@ type Order struct {
 	PaymentApprovedAt   *time.Time    `json:"paymentApprovedAt,omitempty" firestore:"paymentApprovedAt,omitempty"`
 	PaymentRejectedBy   string        `json:"paymentRejectedBy,omitempty" firestore:"paymentRejectedBy,omitempty"`
 	PaymentRejectedAt   *time.Time    `json:"paymentRejectedAt,omitempty" firestore:"paymentRejectedAt,omitempty"`
-	PaymentRejectReason string        `json:"paymentRejectionReason,omitempty" firestore:"paymentRejectionReason,omitempty"`
-	CreatedAt           time.Time     `json:"createdAt" firestore:"createdAt"`
-	UpdatedAt           time.Time     `json:"updatedAt" firestore:"updatedAt"`
+	PaymentRejectReason string            `json:"paymentRejectionReason,omitempty" firestore:"paymentRejectionReason,omitempty"`
+	Kitchen             string            `json:"kitchen,omitempty" firestore:"kitchen,omitempty"`
+	ItemKitchens        map[string]string `json:"itemKitchens,omitempty" firestore:"itemKitchens,omitempty"`
+	QaStartChecklist    *QaStartChecklist `json:"qaStartChecklist,omitempty" firestore:"qaStartChecklist,omitempty"`
+	CreatedAt           time.Time         `json:"createdAt" firestore:"createdAt"`
+	UpdatedAt           time.Time         `json:"updatedAt" firestore:"updatedAt"`
+}
+
+// QaStartChecklist matches the frontend initial production QA checklist.
+type QaStartChecklist struct {
+	Kebersihan       bool `json:"kebersihan" firestore:"kebersihan"`
+	KelengkapanBahan bool `json:"kelengkapanBahan" firestore:"kelengkapanBahan"`
+	SuhuPenyimpanan  bool `json:"suhuPenyimpanan" firestore:"suhuPenyimpanan"`
 }

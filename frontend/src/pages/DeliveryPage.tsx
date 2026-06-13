@@ -1,18 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft, Camera, AlertCircle, Loader2, Navigation, Phone, MessageCircle } from "lucide-react";
+import { MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft, AlertCircle, Loader2, Navigation, Phone, MessageCircle, Search, X } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeOrders } from "@/services/realtimeService";
-import type { Order } from "@/types/order";
+import type { Order, KitchenSignature } from "@/types/order";
 import { PICConfirmation } from "@/components/delivery/PICConfirmation";
 import { ProofCapture } from "@/components/delivery/ProofCapture";
 import { ProofModal } from "@/components/delivery/ProofModal";
-import { LiveCamera } from "@/components/LiveCamera";
+import { SignaturePad } from "@/components/delivery/SignaturePad";
 
 import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
-import { uploadFileInChunks } from "@/services/chunkUploadService";
 import { dispatchOrder } from "@/services/orderService";
 
 const renderFormattedAddress = (address: string) => {
@@ -84,225 +83,212 @@ const renderFormattedAddress = (address: string) => {
 
 type DeliveryStep = "list" | "start" | "pic" | "proof";
 
-function DeliveryTimer({ timerEnd, status }: { timerEnd?: string; status: string }) {
-  const [timeLeft, setTimeLeft] = useState<number>(0);
 
-  useEffect(() => {
-    if (status !== "OUT_FOR_DELIVERY" || !timerEnd) {
-      setTimeLeft(0);
-      return;
-    }
-
-    const calculateTime = () => {
-      const difference = new Date(timerEnd).getTime() - Date.now();
-      return Math.max(0, Math.floor(difference / 1000));
-    };
-
-    setTimeLeft(calculateTime());
-
-    const interval = setInterval(() => {
-      const remaining = calculateTime();
-      setTimeLeft(remaining);
-      if (remaining <= 0) {
-        clearInterval(interval);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [timerEnd, status]);
-
-  if (status !== "OUT_FOR_DELIVERY" || !timerEnd) return null;
-
-  const minutes = Math.floor(timeLeft / 60);
-  const seconds = timeLeft % 60;
-  const formatted = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-
-  const isOvertime = timeLeft <= 0;
-
-  return (
-    <div className={`flex items-center justify-between p-3 rounded-lg border ${
-      isOvertime 
-        ? "bg-red-50 border-red-200 text-red-700 animate-pulse" 
-        : "bg-orange-50 border-orange-200 text-orange-800"
-    } mb-4 font-['Manrope',system-ui,sans-serif]`}>
-      <span className="text-xs font-bold flex items-center gap-1.5">
-        <Clock className="h-4 w-4 shrink-0" />
-        {isOvertime ? "Waktu Pengantaran Habis!" : "Sisa Waktu Pengantaran:"}
-      </span>
-      <span className="text-base font-mono font-extrabold tracking-wider">{formatted}</span>
-    </div>
-  );
-}
 
 interface StartDeliveryFormProps {
   order: Order;
-  onStart: (duration: number, photoId: string) => Promise<void>;
+  onStart: (kitchenSignatures: KitchenSignature[]) => Promise<void>;
   onCancel: () => void;
 }
 
 function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps) {
-  const [duration, setDuration] = useState<number | "">("");
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
+
+  // QC Checklist states
+  const [qcProductCheck, setQcProductCheck] = useState<Record<string, boolean>>({});
+  const [qcQuantityCheck, setQcQuantityCheck] = useState<Record<string, boolean>>({});
+
+  // Kitchen signatures and staff names states
+  const [signatures, setSignatures] = useState<Record<string, string | null>>({});
+  const [staffNames, setStaffNames] = useState<Record<string, string>>({});
+
+  const uniqueKitchens = useMemo(() => {
+    const kitchens = new Set<string>();
+    order.items.forEach((item) => {
+      const k = order.itemKitchens?.[item.itemId];
+      if (k && k.trim() !== "") {
+        kitchens.add(k);
+      }
+    });
+    if (kitchens.size === 0) {
+      kitchens.add("Dapur Produksi");
+    }
+    return Array.from(kitchens);
+  }, [order]);
+
+  const isQcComplete = order.items.every(
+    (item) => qcProductCheck[item.itemId] && qcQuantityCheck[item.itemId]
+  );
+
+  const isSignaturesComplete = uniqueKitchens.every(
+    (k) => signatures[k] && staffNames[k]?.trim().length > 0
+  );
+
+  const isFormValid = isQcComplete && isSignaturesComplete;
 
   const handleSubmit = async () => {
-    if (!photoFile) {
-      setError("Foto mulai pengantaran wajib diunggah.");
+    if (!isFormValid) {
+      setError("Semua checklist QC dan tanda tangan serah terima dapur wajib diisi.");
       return;
     }
-    if (!duration) {
-      setError("Estimasi durasi perjalanan wajib diisi.");
-      return;
-    }
-    setUploading(true);
+    setSubmitting(true);
     setError(null);
     try {
-      const result = await uploadFileInChunks(photoFile, {
-        orderId: order.id,
-        onProgress: (p) => setUploadProgress(Math.round(p.fraction * 100)),
-      });
-      await onStart(duration as number, result.fileId);
+      const now = new Date().toISOString();
+      const kitchenSignaturesList: KitchenSignature[] = uniqueKitchens.map((k) => ({
+        kitchenName: k,
+        signatureDataUrl: signatures[k]!,
+        staffName: staffNames[k].trim(),
+        signedAt: now,
+      }));
+      await onStart(kitchenSignaturesList);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setUploading(false);
-      setUploadProgress(0);
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-lg border border-[#E5E7EB] p-5 space-y-4 font-['Hanken_Grotesk'] text-xs">
-      <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
-        Mulai Pengantaran
-      </h3>
-      <p className="text-[#6B7280] leading-relaxed">
-        Unggah foto saat kurir akan berangkat dan pilih estimasi waktu perjalanan untuk pesanan <span className="font-bold text-[#111827]">{order.customerName}</span>.
-      </p>
+    <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 sm:p-6 space-y-6 font-['Hanken_Grotesk'] text-xs shadow-xs">
+      <div>
+        <h3 className="font-['Manrope',system-ui,sans-serif] text-lg font-extrabold text-[#111827]">
+          Mulai Pengantaran
+        </h3>
+        <p className="text-[#6B7280] leading-relaxed mt-1">
+          Lakukan pengecekan QC dan kumpulkan tanda tangan serah terima dari staf dapur sebelum berangkat.
+        </p>
+      </div>
 
       {/* Address Details for Courier */}
-      <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-3 flex gap-2">
-        <MapPin className="h-4 w-4 text-[#6B7280] shrink-0 mt-0.5" />
+      <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-4 flex gap-3">
+        <MapPin className="h-5 w-5 text-[#4B5563] shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
-          <span className="font-bold text-[#111827] block mb-0.5">Alamat Pengantaran</span>
+          <span className="font-bold text-[#111827] text-sm block mb-1">Alamat Pengantaran</span>
           {renderFormattedAddress(order.deliveryAddress)}
         </div>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-2.5 rounded-lg font-medium flex items-center gap-1.5">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-          {error}
-        </div>
-      )}
-
-      {/* Estimasi durasi */}
-      <div className="space-y-1">
-        <label className="block text-[11px] font-bold text-[#374151]">
-          Estimasi Durasi Perjalanan (Menit)
-        </label>
-        <input
-          type="number"
-          min={1}
-          value={duration}
-          onChange={(e) => {
-            const val = e.target.value;
-            setDuration(val === "" ? "" : Math.max(1, Number(val)));
-          }}
-          title="Estimasi Durasi Perjalanan"
-          aria-label="Estimasi Durasi Perjalanan"
-          className="w-full bg-white border border-[#D1D5DB] rounded-lg px-2.5 py-1.5 text-xs font-medium text-[#111827] focus:outline-none focus:ring-2 focus:ring-orange-200"
-          placeholder="Contoh: 20"
-        />
-      </div>
-
-      {/* Foto picker using live camera */}
-      <div className="space-y-1">
-        <label className="block text-[11px] font-bold text-[#374151]">
-          Foto Keberangkatan (Start Delivery) <span className="text-red-500">*</span>
-        </label>
-        
-        <div
-          onClick={() => setIsCameraOpen(true)}
-          className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-300 hover:border-orange-500 rounded-2xl p-5 bg-[#111827] hover:bg-[#1f2937] transition duration-200 cursor-pointer min-h-[100px] text-center shadow-md select-none group"
-        >
-          <Camera className="h-7 w-7 text-[#fbbf24] mb-1.5 animate-pulse" />
-          <span className="text-[10px] font-extrabold text-white tracking-widest uppercase font-heading">
-            AMBIL FOTO LIVE
-          </span>
-          <span className="text-[8px] text-neutral-400 mt-0.5">Watermark Lokasi & Waktu Tersemat</span>
+      {/* SECTION 1: QUALITY CONTROL */}
+      <div className="border border-blue-100 bg-blue-50/20 rounded-2xl p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <span className="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-black text-blue-700">1</span>
+          <h4 className="font-['Manrope',system-ui,sans-serif] font-extrabold text-[#111827] text-sm">
+            Checklist Kelayakan (QC) Produk & Jumlah
+          </h4>
         </div>
 
-        {photoPreview && (
-          <div className="mt-2 relative rounded-xl overflow-hidden border border-[#E5E7EB] group">
-            <img
-              src={photoPreview}
-              alt="Preview keberangkatan"
-              className="w-full h-32 object-cover"
-            />
-            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition duration-150 flex items-center justify-center">
-              <button
-                type="button"
-                onClick={() => setIsCameraOpen(true)}
-                className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition"
-              >
-                Ambil Ulang
-              </button>
+        <div className="divide-y divide-neutral-100 bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
+          {order.items.map((item) => (
+            <div key={item.itemId} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-bold text-neutral-800 text-sm">{item.itemName}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] bg-neutral-100 text-neutral-600 font-extrabold px-1.5 py-0.5 rounded">
+                    Jumlah: x{item.quantity}
+                  </span>
+                  {order.itemKitchens?.[item.itemId] && (
+                    <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded">
+                      Dapur: {order.itemKitchens[item.itemId]}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!qcProductCheck[item.itemId]}
+                    onChange={(e) => setQcProductCheck(prev => ({ ...prev, [item.itemId]: e.target.checked }))}
+                    className="h-4 w-4 rounded border-[#D1D5DB] text-[#FBBF24] focus:ring-[#FBBF24]"
+                  />
+                  <span className="font-semibold text-neutral-600">Produk Sesuai</span>
+                </label>
+
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!qcQuantityCheck[item.itemId]}
+                    onChange={(e) => setQcQuantityCheck(prev => ({ ...prev, [item.itemId]: e.target.checked }))}
+                    className="h-4 w-4 rounded border-[#D1D5DB] text-[#FBBF24] focus:ring-[#FBBF24]"
+                  />
+                  <span className="font-semibold text-neutral-600">Jumlah Sesuai</span>
+                </label>
+              </div>
             </div>
-          </div>
-        )}
-
-        <LiveCamera
-          isOpen={isCameraOpen}
-          onClose={() => setIsCameraOpen(false)}
-          activityType="START_OTW"
-          orderId={order.id}
-          onCapture={(file) => {
-            setPhotoFile(file);
-            setPhotoPreview(URL.createObjectURL(file));
-            setError(null);
-          }}
-        />
+          ))}
+        </div>
       </div>
 
-      {/* Upload progress */}
-      {uploading && (
-        <div className="space-y-1">
-          <div className="flex justify-between text-[10px] text-[#6B7280]">
-            <span>Mengunggah foto…</span>
-            <span>{uploadProgress}%</span>
-          </div>
-          <div
-            role="progressbar"
-            title="Progres Upload"
-            aria-label="Progres Upload"
-            className="h-1.5 w-full bg-[#E5E7EB] rounded-full overflow-hidden"
-          >
-            <div
-              className="h-full bg-orange-500 transition-all duration-150"
-              ref={(el) => { if (el) el.style.width = `${uploadProgress}%`; }}
-            />
-          </div>
+      {/* SECTION 2: KITCHEN SIGNATURES */}
+      <div className="border border-orange-100 bg-orange-50/20 rounded-2xl p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <span className="h-6 w-6 rounded-full bg-orange-100 flex items-center justify-center text-xs font-black text-orange-700">2</span>
+          <h4 className="font-['Manrope',system-ui,sans-serif] font-extrabold text-[#111827] text-sm">
+            Tanda Tangan Serah Terima Staf Dapur
+          </h4>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {uniqueKitchens.map((kitchen) => (
+            <div key={kitchen} className="bg-white border border-[#E5E7EB] rounded-xl p-4 space-y-3 shadow-2xs">
+              <div className="flex justify-between items-center bg-[#FDF2E9] border border-orange-100 rounded-lg px-2.5 py-1">
+                <span className="font-black text-[#B45309] text-xs uppercase tracking-wider">{kitchen}</span>
+                {signatures[kitchen] ? (
+                  <span className="text-[10px] font-bold text-emerald-600">✓ TTD Berhasil</span>
+                ) : (
+                  <span className="text-[10px] font-bold text-red-500">* Wajib TTD</span>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold text-neutral-500 uppercase">Nama Petugas Dapur</label>
+                <input
+                  type="text"
+                  value={staffNames[kitchen] || ""}
+                  onChange={(e) => setStaffNames(prev => ({ ...prev, [kitchen]: e.target.value }))}
+                  placeholder="Ketik nama staf dapur..."
+                  className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent focus:outline-none font-semibold text-xs text-neutral-800 transition"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold text-neutral-500 uppercase">Coretan Tanda Tangan</label>
+                <SignaturePad
+                  height={120}
+                  onDrawEnd={(dataUrl) => {
+                    setSignatures(prev => ({ ...prev, [kitchen]: dataUrl }));
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl font-semibold flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+          <span>{error}</span>
         </div>
       )}
 
       {/* Action buttons */}
-      <div className="flex gap-2 pt-1">
+      <div className="flex gap-3 pt-2">
         <button
           onClick={handleSubmit}
-          disabled={uploading}
-          className="flex-1 flex items-center justify-center gap-2 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold rounded-lg transition shadow-xs disabled:opacity-50 cursor-pointer text-center"
+          disabled={submitting || !isFormValid}
+          className="flex-1 flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold rounded-xl transition shadow-md shadow-amber-700/15 disabled:from-neutral-100 disabled:to-neutral-100 disabled:text-neutral-400 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer text-center text-xs"
         >
-          {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-          Mulai Pengantaran
+          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          Mulai Pengantaran (Sudah QC & Serah Terima)
         </button>
         <button
           onClick={onCancel}
-          disabled={uploading}
-          className="px-3 py-2 bg-[#F3F4F6] hover:bg-[#E5E7EB] text-xs font-bold text-[#374151] rounded-lg transition cursor-pointer"
+          disabled={submitting}
+          className="px-4 py-3 bg-[#F3F4F6] hover:bg-[#E5E7EB] text-xs font-bold text-[#374151] rounded-xl transition cursor-pointer"
         >
           Batal
         </button>
@@ -320,6 +306,8 @@ export function DeliveryPage() {
   const [isProofModalOpen, setIsProofModalOpen] = useState(false);
   const [selectedProofFiles, setSelectedProofFiles] = useState<string[]>([]);
   const [selectedStartPhotoId, setSelectedStartPhotoId] = useState<string | undefined>(undefined);
+  const [selectedKitchenSignatures, setSelectedKitchenSignatures] = useState<KitchenSignature[] | undefined>(undefined);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const active = activeId ? orders.find((o) => o.id === activeId) ?? null : null;
 
@@ -356,6 +344,32 @@ export function DeliveryPage() {
       }),
     [orders, user, profile]
   );
+
+  const filteredDeliveries = useMemo(() => {
+    if (!searchQuery.trim()) return myDeliveries;
+    const q = searchQuery.toLowerCase().trim();
+    return myDeliveries.filter(
+      (o) =>
+        o.institutionName?.toLowerCase().includes(q) ||
+        o.recipientName?.toLowerCase().includes(q) ||
+        o.customerName?.toLowerCase().includes(q) ||
+        o.id.toLowerCase().includes(q) ||
+        o.items.some((item) => item.itemName.toLowerCase().includes(q))
+    );
+  }, [myDeliveries, searchQuery]);
+
+  const filteredCompletedDeliveries = useMemo(() => {
+    if (!searchQuery.trim()) return myCompletedDeliveries;
+    const q = searchQuery.toLowerCase().trim();
+    return myCompletedDeliveries.filter(
+      (o) =>
+        o.institutionName?.toLowerCase().includes(q) ||
+        o.recipientName?.toLowerCase().includes(q) ||
+        o.customerName?.toLowerCase().includes(q) ||
+        o.id.toLowerCase().includes(q) ||
+        o.items.some((item) => item.itemName.toLowerCase().includes(q))
+    );
+  }, [myCompletedDeliveries, searchQuery]);
 
   const activeEnRouteOrderIds = useMemo(() => {
     return myDeliveries.filter((o) => o.status === "OUT_FOR_DELIVERY").map((o) => o.id);
@@ -494,9 +508,7 @@ export function DeliveryPage() {
               })}
             </div>
           </div>
-          {active.status === "OUT_FOR_DELIVERY" && (
-            <DeliveryTimer timerEnd={active.deliveryTimerEnd} status={active.status} />
-          )}
+
         </div>
       )}
 
@@ -527,19 +539,48 @@ export function DeliveryPage() {
             </button>
           </div>
 
+          {/* Search bar */}
+          <div className="relative mb-4">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-[#9CA3AF]" />
+            </span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari berdasarkan nama instansi, penerima, produk, atau ID pesanan..."
+              className="w-full rounded-full border border-[#E5E7EB] bg-[#F9FAFB] pl-9 pr-10 py-2 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition font-['Hanken_Grotesk']"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                title="Bersihkan pencarian"
+                aria-label="Bersihkan pencarian"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#9CA3AF] hover:text-[#4B5563] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
           {activeTab === "active" ? (
-            myDeliveries.length === 0 ? (
+            filteredDeliveries.length === 0 ? (
               <div className="bg-white rounded-lg border border-[#E5E7EB] p-12 text-center space-y-3">
                 <Package className="h-14 w-14 mx-auto text-[#D1D5DB] bg-[#F3F4F6] rounded-full p-3" />
-                <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">Tidak Ada Pengantaran</p>
+                <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">
+                  {searchQuery ? "Hasil Pencarian Kosong" : "Tidak Ada Pengantaran"}
+                </p>
                 <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-xs mx-auto">
-                  Belum ada pesanan yang ditugaskan ke Anda untuk diantarkan.
+                  {searchQuery
+                    ? "Tidak ada tugas aktif yang cocok dengan kata kunci pencarian Anda."
+                    : "Belum ada pesanan yang ditugaskan ke Anda untuk diantarkan."}
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
                 <AnimatePresence>
-                  {myDeliveries.map((o, idx) => (
+                  {filteredDeliveries.map((o, idx) => (
                     <motion.div
                       key={o.id}
                       initial={{ opacity: 0, y: 10 }}
@@ -615,18 +656,22 @@ export function DeliveryPage() {
               </div>
             )
           ) : (
-            myCompletedDeliveries.length === 0 ? (
+            filteredCompletedDeliveries.length === 0 ? (
               <div className="bg-white rounded-lg border border-[#E5E7EB] p-12 text-center space-y-3">
                 <CheckCircle2 className="h-14 w-14 mx-auto text-[#D1D5DB] bg-[#F3F4F6] rounded-full p-3" />
-                <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">Belum Ada Riwayat</p>
+                <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">
+                  {searchQuery ? "Hasil Pencarian Kosong" : "Belum Ada Riwayat"}
+                </p>
                 <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-xs mx-auto">
-                  Anda belum menyelesaikan pengantaran pesanan apa pun.
+                  {searchQuery
+                    ? "Tidak ada riwayat selesai yang cocok dengan kata kunci pencarian Anda."
+                    : "Anda belum menyelesaikan pengantaran pesanan apa pun."}
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
                 <AnimatePresence>
-                  {myCompletedDeliveries.map((o, idx) => {
+                  {filteredCompletedDeliveries.map((o, idx) => {
                     const shortId = o.id.length > 6 ? o.id.slice(-6).toUpperCase() : o.id.toUpperCase();
                     return (
                       <motion.div
@@ -684,7 +729,13 @@ export function DeliveryPage() {
                               {o.items.map((item, itemIdx) => (
                                 <div key={itemIdx} className="flex justify-between items-center gap-2">
                                   <span className="truncate">{item.itemName}</span>
-                                  <span className="font-bold text-[#111827] shrink-0">x{item.quantity}</span>
+                                  {o.isPreOrder ? (
+                                    <span className="shrink-0 inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-[9px] font-bold text-amber-700 font-['Hanken_Grotesk',system-ui,sans-serif]">
+                                      Pra-pesanan
+                                    </span>
+                                  ) : (
+                                    <span className="font-bold text-[#111827] shrink-0">x{item.quantity}</span>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -698,6 +749,7 @@ export function DeliveryPage() {
                                   onClick={() => {
                                     setSelectedProofFiles(o.proofFileIds || []);
                                     setSelectedStartPhotoId(o.deliveryStartPhotoId || undefined);
+                                    setSelectedKitchenSignatures(o.kitchenSignatures || undefined);
                                     setIsProofModalOpen(true);
                                   }}
                                   className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[10px] rounded-lg transition cursor-pointer border border-emerald-200"
@@ -727,15 +779,12 @@ export function DeliveryPage() {
         >
           <StartDeliveryForm
             order={active}
-            onStart={async (durationMinutes, photoId) => {
+            onStart={async (kitchenSignatures) => {
               const now = new Date();
-              const timerEnd = new Date(now.getTime() + durationMinutes * 60 * 1000);
               await dispatchOrder(active.id);
               await updateDoc(doc(db, "orders", active.id), {
-                deliveryStartPhotoId: photoId,
-                deliveryDurationMinutes: durationMinutes,
                 deliveryStartedAt: now.toISOString(),
-                deliveryTimerEnd: timerEnd.toISOString(),
+                kitchenSignatures,
               });
               setStep("pic");
             }}
@@ -778,6 +827,7 @@ export function DeliveryPage() {
         onClose={() => setIsProofModalOpen(false)}
         proofFileIds={selectedProofFiles}
         deliveryStartPhotoId={selectedStartPhotoId}
+        kitchenSignatures={selectedKitchenSignatures}
       />
     </div>
   );

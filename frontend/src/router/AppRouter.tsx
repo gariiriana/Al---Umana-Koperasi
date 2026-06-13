@@ -25,13 +25,13 @@ const DashboardPage = lazy(() => import("@/pages/DashboardPage").then(module => 
 const OrdersPage = lazy(() => import("@/pages/OrdersPage").then(module => ({ default: module.OrdersPage })));
 const ProductionPage = lazy(() => import("@/pages/ProductionPage").then(module => ({ default: module.ProductionPage })));
 const ProductionHistoryPage = lazy(() => import("@/pages/ProductionHistoryPage").then(module => ({ default: module.ProductionHistoryPage })));
-const QCReviewPage = lazy(() => import("@/pages/QCReviewPage").then(module => ({ default: module.QCReviewPage })));
-const DispatchPage = lazy(() => import("@/pages/DispatchPage").then(module => ({ default: module.DispatchPage })));
+const HandoverPage = lazy(() => import("@/pages/HandoverPage").then(module => ({ default: module.HandoverPage })));
 const DeliveryPage = lazy(() => import("@/pages/DeliveryPage").then(module => ({ default: module.DeliveryPage })));
 const TrackingPage = lazy(() => import("@/pages/TrackingPage").then(module => ({ default: module.TrackingPage })));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage").then(module => ({ default: module.SettingsPage })));
 const ProductsPage = lazy(() => import("@/admin/pages/ProductsPage").then(module => ({ default: module.ProductsPage })));
 const ProductFormPage = lazy(() => import("@/admin/pages/ProductFormPage").then(module => ({ default: module.ProductFormPage })));
+const OrderInputPage = lazy(() => import("@/admin/pages/OrderInputPage").then(module => ({ default: module.OrderInputPage })));
 const CategoriesPage = lazy(() => import("@/admin/pages/CategoriesPage").then(module => ({ default: module.CategoriesPage })));
 const InvoicesPage = lazy(() => import("@/admin/pages/InvoicesPage").then(module => ({ default: module.InvoicesPage })));
 const FoodSchedulePage = lazy(() => import("@/admin/pages/FoodSchedulePage").then(module => ({ default: module.FoodSchedulePage })));
@@ -400,7 +400,13 @@ function RoutesTree() {
       />
       <Route
         path="/admin/orders/new"
-        element={<Navigate to="/" replace />}
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Input Pesanan Baru" allowedRoles={["admin"]}>
+              <OrderInputPage />
+            </ShelledRoute>
+          </Protected>
+        }
       />
       <Route
         path="/admin/invoices"
@@ -454,16 +460,7 @@ function RoutesTree() {
           </Protected>
         }
       />
-      <Route
-        path="/admin/qc"
-        element={
-          <Protected>
-            <ShelledRoute pageTitle="Quality Control" allowedRoles={["tim_produksi"]}>
-              <QCReviewPage />
-            </ShelledRoute>
-          </Protected>
-        }
-      />
+
       <Route
         path="/admin/food-schedule"
         element={
@@ -475,14 +472,14 @@ function RoutesTree() {
         }
       />
       <Route
-        path="/distribusi/dispatch"
+        path="/distribusi/handover"
         element={
           <Protected>
             <ShelledRoute
-              pageTitle="Dispatch"
+              pageTitle="Handover"
               allowedRoles={["distribusi"]}
             >
-              <DispatchPage />
+              <HandoverPage />
             </ShelledRoute>
           </Protected>
         }
@@ -613,7 +610,7 @@ function RoutesTree() {
       <Route path="/qc" element={<Navigate to="/admin/qc" replace />} />
       <Route
         path="/dispatch"
-        element={<Navigate to="/distribusi/dispatch" replace />}
+        element={<Navigate to="/distribusi/handover" replace />}
       />
       <Route
         path="/delivery"

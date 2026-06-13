@@ -49,7 +49,8 @@ var validTransitions = map[OrderStatus]map[OrderStatus]struct{}{
 		StatusInProduction: {},
 	},
 	StatusInProduction: {
-		StatusReady: {},
+		StatusReady:          {},
+		StatusReadyToDeliver: {},
 	},
 	StatusReady: {
 		StatusReadyToDeliver: {},

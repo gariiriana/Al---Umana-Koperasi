@@ -308,7 +308,7 @@ export function DashboardPage() {
     y += 4;
 
     const statusLabels: Record<string, string> = {
-      PENDING: "Menunggu", IN_PRODUCTION: "Produksi", QC: "Uji QC",
+      PENDING: "Menunggu", IN_PRODUCTION: "Produksi", QC: "QA",
       READY_TO_DELIVER: "Siap Kirim", OUT_FOR_DELIVERY: "Dikirim",
       COMPLETED: "Selesai", DELIVERY_FAILED: "Gagal",
     };
@@ -466,7 +466,16 @@ export function DashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        subtitle="Real-time view of every order in the pipeline."
+        subtitle={
+          <span className="flex items-center gap-2">
+            Real-time view of every order in the pipeline.
+            {profile?.role && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 animate-in fade-in duration-300">
+                {{ admin: "Admin", tim_produksi: "Tim Produksi", distribusi: "Distribusi", kurir: "Kurir", monitoring: "Monitoring" }[profile.role] || profile.role}
+              </span>
+            )}
+          </span>
+        }
         actions={
           <button
             onClick={exportDashboardToPDF}
@@ -1153,7 +1162,7 @@ export function DashboardPage() {
                       </span>
                     </div>
                     <div>
-                      <span className="text-[#9CA3AF] block font-medium">3. Selesai Masak & QC Review</span>
+                      <span className="text-[#9CA3AF] block font-medium">3. Selesai Masak & QA Review</span>
                       <span className="font-bold text-slate-800">
                         {order.qcReviewedAt ? (
                           `${new Date(order.qcReviewedAt).toLocaleString("id-ID")} WIB (QC: ${qcName})`

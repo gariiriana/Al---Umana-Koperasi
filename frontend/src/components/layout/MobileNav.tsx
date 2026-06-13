@@ -2,7 +2,6 @@ import { NavLink } from "react-router-dom";
 import { motion } from "motion/react";
 import {
   BadgeCheck,
-  CheckCircle2,
   Factory,
   FileText,
   LayoutDashboard,
@@ -30,9 +29,8 @@ export const MOBILE_NAV_ITEMS: readonly MobileNavItem[] = [
   { to: "/admin/products",          label: "Produk",        icon: Package2 },
   { to: "/admin/payment-approvals", label: "Pembayaran",    icon: BadgeCheck },
   { to: "/admin/production",        label: "Produksi",      icon: Factory },
-  { to: "/admin/qc",               label: "QC",            icon: CheckCircle2 },
   { to: "/admin/production/history", label: "Riwayat",       icon: History },
-  { to: "/distribusi/dispatch",     label: "Pengiriman",    icon: Send },
+  { to: "/distribusi/handover",     label: "Handover",      icon: Send },
   { to: "/distribusi/delivery",     label: "Antar",         icon: Truck },
 ] as const;
 

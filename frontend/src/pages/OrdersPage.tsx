@@ -713,7 +713,7 @@ export function OrdersPage() {
       const tableItemsBody = itemsWithImages.map((it) => [
         "", // placeholder for image column
         it.itemName,
-        `× ${it.quantity}`
+        order.isPreOrder ? "Pra-pesanan" : `× ${it.quantity}`
       ]);
 
       autoTable(doc, {
@@ -758,7 +758,7 @@ export function OrdersPage() {
 
       // Food/Drink Details Notes & Grand Total
       const notesLines: string[] = [];
-      if (order.foodDetails) notesLines.push(`Detail Makanan: ${order.foodDetails}`);
+      if (order.foodDetails) notesLines.push(`Request Menu: ${order.foodDetails}`);
       if (order.drinkDetails) notesLines.push(`Detail Minuman: ${order.drinkDetails}`);
       if (order.recipientNotes) notesLines.push(`Catatan Lokasi: ${order.recipientNotes}`);
 
@@ -858,7 +858,7 @@ export function OrdersPage() {
       y += boxHeight + 8;
 
       // Aggregated Ingredients Composition
-      const ingredients = aggregateIngredients(order.items);
+      const ingredients = !order.isPreOrder ? aggregateIngredients(order.items) : [];
       if (ingredients.length > 0) {
         const ingHeight = 8 + (ingredients.length * 5) + 6;
         if (y + ingHeight > pageH - 20) {
@@ -1182,7 +1182,7 @@ export function OrdersPage() {
 
     // ─── Status labels ───
     const statusLabels: Record<string, string> = {
-      PENDING: "Menunggu", IN_PRODUCTION: "Produksi", QC: "Uji QC",
+      PENDING: "Menunggu", IN_PRODUCTION: "Produksi", QC: "QA",
       READY_TO_DELIVER: "Siap Kirim", OUT_FOR_DELIVERY: "Dikirim",
       COMPLETED: "Selesai", DELIVERY_FAILED: "Gagal",
       PLACING: "Memproses", AWAITING_PAYMENT_PROOF: "Bukti Bayar",
@@ -1195,7 +1195,7 @@ export function OrdersPage() {
 
     // ─── Orders table ───
     const tableBody = filteredOrders.map(o => {
-      const itemsList = o.items.map(it => `${it.itemName} (×${it.quantity})`).join("\n");
+      const itemsList = o.items.map(it => o.isPreOrder ? `${it.itemName} (Pra-pesanan)` : `${it.itemName} (×${it.quantity})`).join("\n");
       const details = itemsList || [o.foodDetails, o.drinkDetails].filter(Boolean).join(" + ") || "-";
       
       const address = o.deliveryAddress || "";
@@ -1617,7 +1617,7 @@ export function OrdersPage() {
                               onClick={() => handleTransition(o.id, "complete-production")}
                               disabled={transitioningId === o.id}
                             >
-                              Kirim ke QC
+                              Selesai Masak
                             </button>
                           )}
                           {!isMonitoring && o.status === "QC" && (
@@ -2065,7 +2065,7 @@ export function OrdersPage() {
                       onClick={() => handleTransition(o.id, "complete-production")}
                       disabled={transitioningId === o.id}
                     >
-                      Kirim ke QC
+                      Selesai Masak
                     </button>
                   )}
                   {!isMonitoring && o.status === "QC" && (
@@ -2698,7 +2698,9 @@ export function OrdersPage() {
                             </div>
                           </td>
                           <td className="py-2 px-4 font-bold text-neutral-900">{it.itemName}</td>
-                          <td className="py-2 px-4 text-center font-bold font-mono">×{it.quantity}</td>
+                          <td className="py-2 px-4 text-center font-bold font-mono">
+                            {previewInvoiceOrder.isPreOrder ? "Pra-pesanan" : `×${it.quantity}`}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -2708,6 +2710,7 @@ export function OrdersPage() {
 
               {/* Total Ingredients Composition */}
               {(() => {
+                if (previewInvoiceOrder.isPreOrder) return null;
                 const ingredients = aggregateIngredients(previewInvoiceOrder.items);
                 if (ingredients.length === 0) return null;
                 return (
@@ -2738,7 +2741,7 @@ export function OrdersPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
                     {previewInvoiceOrder.foodDetails && (
                       <div>
-                        <span className="font-bold">Detail Makanan:</span>
+                        <span className="font-bold">Request Menu:</span>
                         <p className="mt-0.5">{previewInvoiceOrder.foodDetails}</p>
                       </div>
                     )}
@@ -2867,6 +2870,36 @@ export function OrdersPage() {
                         </div>
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Tanda Tangan Serah Terima Dapur */}
+              {previewInvoiceOrder.kitchenSignatures && previewInvoiceOrder.kitchenSignatures.length > 0 && (
+                <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200 font-['Hanken_Grotesk']">
+                  <h5 className="font-bold text-neutral-500 uppercase tracking-wider text-[10px]">
+                    Tanda Tangan Serah Terima Dapur Produksi
+                  </h5>
+                  <div className="border border-[#E5E7EB] rounded-xl overflow-hidden bg-neutral-50 p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {previewInvoiceOrder.kitchenSignatures.map((ks, idx) => (
+                        <div key={idx} className="bg-white border border-[#E5E7EB] rounded-xl p-3 shadow-2xs flex flex-col justify-between space-y-2">
+                          <div className="flex justify-between items-center bg-neutral-50 rounded-lg px-2 py-0.5 border border-[#E5E7EB]">
+                            <span className="text-[11px] font-black text-[#111827]">{ks.kitchenName}</span>
+                            <span className="text-[9px] text-[#6B7280]">
+                              {new Date(ks.signedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB
+                            </span>
+                          </div>
+                          <div className="aspect-video w-full flex items-center justify-center bg-neutral-50/30 rounded-lg border border-[#E5E7EB] p-2">
+                            <img src={ks.signatureDataUrl} alt={`TTD ${ks.kitchenName}`} className="max-h-24 object-contain" />
+                          </div>
+                          <div className="text-center text-[11px]">
+                            <span className="text-neutral-400 font-medium">Staf: </span>
+                            <span className="font-extrabold text-[#374151]">{ks.staffName}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
@@ -3288,7 +3321,9 @@ export function OrdersPage() {
                         </div>
                       </td>
                       <td className="name-cell">{it.itemName}</td>
-                      <td className="qty-cell">×{it.quantity}</td>
+                      <td className="qty-cell">
+                        {exportingJpgOrder.isPreOrder ? "Pra-pesanan" : `×${it.quantity}`}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -3298,6 +3333,7 @@ export function OrdersPage() {
 
           {/* Aggregated Ingredients Composition */}
           {(() => {
+            if (exportingJpgOrder.isPreOrder) return null;
             const ingredients = aggregateIngredients(exportingJpgOrder.items);
             if (ingredients.length === 0) return null;
             return (

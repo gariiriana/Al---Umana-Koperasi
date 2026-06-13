@@ -361,7 +361,6 @@ describe("Authentication UI Features", () => {
 
       // Verify only allowed navigation links are visible
       expect(document.querySelector('a[href="/admin/production"]')).not.toBeNull();
-      expect(document.querySelector('a[href="/admin/qc"]')).not.toBeNull();
 
       // Open profile dropdown to check Settings link
       const profileBtn = document.getElementById("profile-menu-button");
@@ -404,7 +403,7 @@ describe("Authentication UI Features", () => {
         expect(document.querySelector('a[href="/admin/payment-approvals"]')).toBeNull();
         expect(document.querySelector('a[href="/admin/production"]')).toBeNull();
         expect(document.querySelector('a[href="/admin/qc"]')).toBeNull();
-        expect(document.querySelector('a[href="/distribusi/dispatch"]')).toBeNull();
+        expect(document.querySelector('a[href="/distribusi/handover"]')).toBeNull();
         expect(document.querySelector('a[href="/distribusi/delivery"]')).toBeNull();
       });
 
@@ -415,7 +414,7 @@ describe("Authentication UI Features", () => {
       expect(document.querySelector('a[href="/admin/settings"]')).not.toBeNull();
       expect(document.querySelector('a[href="/admin/dashboard"]')).not.toBeNull();
       expect(document.querySelector('a[href="/admin/production"]')).not.toBeNull();
-      expect(document.querySelector('a[href="/distribusi/dispatch"]')).not.toBeNull();
+      expect(document.querySelector('a[href="/distribusi/handover"]')).not.toBeNull();
       expect(document.querySelector('a[href="/distribusi/scheduler"]')).not.toBeNull();
       expect(document.querySelector('a[href="/distribusi/delivery"]')).not.toBeNull();
       expect(document.querySelector('a[href="/orders"]')).toBeNull();

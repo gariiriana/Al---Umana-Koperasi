@@ -63,6 +63,7 @@ export interface Order {
   items: OrderLineItem[];
   deliveryAddress: string;
   deliveryTime: string;
+  isPreOrder?: boolean;
 
   // Optional/Legacy fields (kept for backward compatibility and references)
   customerId?: string;
@@ -104,7 +105,22 @@ export interface Order {
   promoCode?: string;
   discountAmount?: number;
   kitchen?: string;
+  /** Per-item kitchen assignment: maps itemId → kitchen name. */
+  itemKitchens?: Record<string, string>;
+  qaStartChecklist?: {
+    kebersihan: boolean;
+    kelengkapanBahan: boolean;
+    suhuPenyimpanan: boolean;
+  };
+  kitchenSignatures?: KitchenSignature[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface KitchenSignature {
+  kitchenName: string;
+  signatureDataUrl: string;
+  staffName: string;
+  signedAt: string;
 }
 

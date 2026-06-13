@@ -4,7 +4,7 @@ import type { Order, OrderStatus } from "@/types/order";
 const PIPELINE: { key: OrderStatus; label: string; color: string; track: string; textColor: string }[] = [
   { key: "PENDING",          label: "Menunggu",   color: "#6B7280", track: "#E5E7EB", textColor: "text-[#6B7280]" },
   { key: "IN_PRODUCTION",    label: "Produksi",   color: "#D97706", track: "#FEF3C7", textColor: "text-[#D97706]" },
-  { key: "QC",               label: "Uji QC",     color: "#7C3AED", track: "#EDE9FE", textColor: "text-[#7C3AED]" },
+  { key: "QC",               label: "QA",         color: "#7C3AED", track: "#EDE9FE", textColor: "text-[#7C3AED]" },
   { key: "READY_TO_DELIVER", label: "Siap Kirim", color: "#2563EB", track: "#DBEAFE", textColor: "text-[#2563EB]" },
   { key: "OUT_FOR_DELIVERY", label: "Dikirim",    color: "#EA580C", track: "#FFEDD5", textColor: "text-[#EA580C]" },
   { key: "COMPLETED",        label: "Selesai",    color: "#059669", track: "#D1FAE5", textColor: "text-[#059669]" },

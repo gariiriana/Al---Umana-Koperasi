@@ -16,11 +16,115 @@ interface SelectedItem extends OrderLineItem {
   unit: string;
 }
 
+interface OrderTemplate {
+  id: string;
+  templateName: string;
+  orderType: OrderType;
+  isPreOrder: boolean;
+  institutionName: string;
+  recipientName: string;
+  recipientPhone: string;
+  recipientNotes: string;
+  deliveryAddress: string;
+  deliveryTime: string;
+  foodDetails: string;
+  drinkDetails: string;
+  additionalNotes: string;
+  items: SelectedItem[];
+  additionalFee: number;
+}
+
 export function OrderInputPage() {
   const { showToast } = useToast();
 
+  // Template States
+  const [templates, setTemplates] = useState<OrderTemplate[]>([]);
+  const [activeTemplateId, setActiveTemplateId] = useState<string>("");
+  const [newTemplateName, setNewTemplateName] = useState<string>("");
+
+  // Load templates on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("admin_order_templates");
+      if (stored) {
+        setTemplates(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.error("Failed to load templates", e);
+    }
+  }, []);
+
+  // Save as template
+  const handleSaveAsTemplate = () => {
+    if (!newTemplateName.trim()) {
+      showToast({ message: "Silakan isi nama template terlebih dahulu", variant: "error" });
+      return;
+    }
+    const template: OrderTemplate = {
+      id: Date.now().toString(),
+      templateName: newTemplateName.trim(),
+      orderType,
+      isPreOrder,
+      institutionName,
+      recipientName,
+      recipientPhone,
+      recipientNotes,
+      deliveryAddress,
+      deliveryTime,
+      foodDetails,
+      drinkDetails,
+      additionalNotes,
+      items: selectedItems,
+      additionalFee,
+    };
+    const updated = [...templates, template];
+    setTemplates(updated);
+    localStorage.setItem("admin_order_templates", JSON.stringify(updated));
+    setActiveTemplateId(template.id);
+    setNewTemplateName("");
+    showToast({ message: `Template "${template.templateName}" berhasil disimpan!`, variant: "success" });
+  };
+
+  // Apply template
+  const handleApplyTemplate = (id: string) => {
+    setActiveTemplateId(id);
+    if (!id) {
+      return;
+    }
+    const template = templates.find((t) => t.id === id);
+    if (!template) return;
+
+    setOrderType(template.orderType);
+    setIsPreOrder(template.isPreOrder);
+    setInstitutionName(template.institutionName || "");
+    setRecipientName(template.recipientName || "");
+    setRecipientPhone(template.recipientPhone || "");
+    setRecipientNotes(template.recipientNotes || "");
+    setDeliveryAddress(template.deliveryAddress || "");
+    setDeliveryTime(template.deliveryTime || "");
+    setFoodDetails(template.foodDetails || "");
+    setDrinkDetails(template.drinkDetails || "");
+    setAdditionalNotes(template.additionalNotes || "");
+    setSelectedItems(template.items || []);
+    setAdditionalFee(template.additionalFee || 0);
+
+    showToast({ message: `Template "${template.templateName}" berhasil diterapkan!`, variant: "success" });
+  };
+
+  // Delete template
+  const handleDeleteTemplate = () => {
+    if (!activeTemplateId) return;
+    const templateName = templates.find((t) => t.id === activeTemplateId)?.templateName;
+    const updated = templates.filter((t) => t.id !== activeTemplateId);
+    setTemplates(updated);
+    localStorage.setItem("admin_order_templates", JSON.stringify(updated));
+    setActiveTemplateId("");
+    showToast({ message: `Template "${templateName}" berhasil dihapus`, variant: "info" });
+  };
+
   // Form Fields
   const [orderType, setOrderType] = useState<OrderType>("event");
+  const [isPreOrder, setIsPreOrder] = useState(false);
   const [institutionName, setInstitutionName] = useState("");
   const [recipientName, setRecipientName] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
@@ -62,7 +166,7 @@ export function OrderInputPage() {
   }, [showToast]);
 
   // Calculate prices
-  const autoCalculatedTotal = selectedItems.reduce((acc, item) => {
+  const autoCalculatedTotal = isPreOrder ? 0 : selectedItems.reduce((acc, item) => {
     return acc + item.price * item.quantity;
   }, 0);
 
@@ -73,6 +177,10 @@ export function OrderInputPage() {
     const finalItemPrice = Math.round(item.price * (1 - (item.discountPercent || 0) / 100));
     
     if (existing) {
+      if (isPreOrder) {
+        showToast({ message: `${item.itemName} sudah ditambahkan`, variant: "error" });
+        return;
+      }
       if (existing.quantity >= item.quantity) {
         showToast({ message: `Stok tidak mencukupi. Stok saat ini: ${item.quantity}`, variant: "error" });
         return;
@@ -83,7 +191,7 @@ export function OrderInputPage() {
         )
       );
     } else {
-      if (item.quantity < 1) {
+      if (!isPreOrder && item.quantity < 1) {
         showToast({ message: "Stok produk kosong!", variant: "error" });
         return;
       }
@@ -92,7 +200,7 @@ export function OrderInputPage() {
         {
           itemId: item.id,
           itemName: item.itemName,
-          quantity: 1,
+          quantity: isPreOrder ? 0 : 1,
           price: finalItemPrice,
           unit: item.unit,
         },
@@ -106,6 +214,7 @@ export function OrderInputPage() {
   };
 
   const handleQtyChange = (itemId: string, qty: number) => {
+    if (isPreOrder) return;
     const menuItem = menuItems.find((m) => m.id === itemId);
     if (!menuItem) return;
     if (qty > menuItem.quantity) {
@@ -132,6 +241,7 @@ export function OrderInputPage() {
     try {
       const order = await createAdminOrder({
         orderType,
+        isPreOrder,
         institutionName: institutionName.trim(),
         recipientName: recipientName.trim(),
         recipientPhone: recipientPhone.trim(),
@@ -139,7 +249,7 @@ export function OrderInputPage() {
         eventDate,
         deliveryAddress: deliveryAddress.trim(),
         deliveryTime: deliveryTime.trim(),
-        foodDetails: foodDetails.trim() || selectedItems.map(s => `${s.itemName} (${s.quantity} ${s.unit})`).join(", "),
+        foodDetails: foodDetails.trim() || selectedItems.map(s => `${s.itemName}${isPreOrder ? " (Pra-pesanan)" : ` (${s.quantity} ${s.unit})`}`).join(", "),
         drinkDetails: drinkDetails.trim(),
         items: selectedItems.map((s) => ({
           itemId: s.itemId,
@@ -253,6 +363,7 @@ export function OrderInputPage() {
             <Button
               onClick={() => {
                 setCreatedOrder(null);
+                setIsPreOrder(false);
                 setInstitutionName("");
                 setRecipientName("");
                 setRecipientPhone("");
@@ -294,6 +405,59 @@ export function OrderInputPage() {
         </div>
       </div>
 
+      {/* Template Manager */}
+      <Card className="p-4 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="space-y-1">
+          <h4 className="font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-[#111827]">
+            Template Pesanan Admin
+          </h4>
+          <p className="text-[11px] text-[#6B7280]">
+            Pilih template untuk mengisi form otomatis, atau simpan inputan saat ini sebagai template.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+          <select
+            value={activeTemplateId}
+            onChange={(e) => handleApplyTemplate(e.target.value)}
+            title="Pilih Template Pesanan"
+            aria-label="Pilih Template Pesanan"
+            className="flex-1 md:flex-initial rounded-lg border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#111827] focus:border-[#FBBF24] focus:outline-none cursor-pointer"
+          >
+            <option value="">-- Pilih Template --</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>{t.templateName}</option>
+            ))}
+          </select>
+          {activeTemplateId && (
+            <Button
+              type="button"
+              variant="outlined"
+              onClick={handleDeleteTemplate}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300 text-xs px-3 py-1.5"
+            >
+              Hapus
+            </Button>
+          )}
+          <div className="flex items-center gap-1.5 w-full md:w-auto mt-2 md:mt-0">
+            <input
+              type="text"
+              placeholder="Nama template baru..."
+              value={newTemplateName}
+              onChange={(e) => setNewTemplateName(e.target.value)}
+              className="flex-1 md:w-48 rounded-lg border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#111827] focus:border-[#FBBF24] focus:outline-none"
+            />
+            <Button
+              type="button"
+              variant="outlined"
+              onClick={handleSaveAsTemplate}
+              className="text-xs px-3 py-1.5 border-amber-300 text-[#B45309] hover:bg-amber-50"
+            >
+              Simpan Template
+            </Button>
+          </div>
+        </div>
+      </Card>
+
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Form Inputs (Left & Middle Columns) */}
         <div className="lg:col-span-2 space-y-6">
@@ -302,7 +466,7 @@ export function OrderInputPage() {
               Informasi Pelanggan & Acara
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-[#374151] mb-1">
                   Jenis Pesanan
@@ -317,7 +481,7 @@ export function OrderInputPage() {
                       onChange={() => setOrderType("event")}
                       className="accent-[#FBBF24] w-4 h-4"
                     />
-                    Event (Jatuh tempo 7 hari)
+                    Event
                   </label>
                   <label className="flex items-center gap-2 text-sm text-[#374151] cursor-pointer">
                     <input
@@ -328,7 +492,31 @@ export function OrderInputPage() {
                       onChange={() => setOrderType("rutin")}
                       className="accent-[#FBBF24] w-4 h-4"
                     />
-                    Rutin (Jatuh tempo 1 bulan)
+                    Rutin
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#374151] mb-1">
+                  Metode Pemesanan
+                </label>
+                <div className="flex gap-4 mt-2">
+                  <label className="flex items-center gap-2 text-sm text-[#374151] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isPreOrder}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setIsPreOrder(checked);
+                        setSelectedItems(prev => prev.map(item => ({
+                          ...item,
+                          quantity: checked ? 0 : 1
+                        })));
+                      }}
+                      className="accent-[#FBBF24] w-4 h-4 rounded animate-none focus:ring-0 focus:outline-none"
+                    />
+                    Pra-pesanan
                   </label>
                 </div>
               </div>
@@ -472,32 +660,38 @@ export function OrderInputPage() {
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <div className="flex items-center border border-[#D1D5DB] rounded-lg overflow-hidden h-8">
-                        <button
-                          type="button"
-                          className="px-2 hover:bg-[#F9FAFB] text-[#374151] h-full"
-                          onClick={() => handleQtyChange(s.itemId, s.quantity - 1)}
-                        >
-                          -
-                        </button>
-                        <input title="Jumlah Porsi" placeholder="Qty" aria-label="Jumlah Porsi"
-                          type="number"
-                          value={s.quantity}
-                          min={1}
-                          onChange={(e) => handleQtyChange(s.itemId, parseInt(e.target.value, 10) || 1)}
-                          className="w-12 text-center text-xs border-x border-[#D1D5DB] h-full focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          className="px-2 hover:bg-[#F9FAFB] text-[#374151] h-full"
-                          onClick={() => handleQtyChange(s.itemId, s.quantity + 1)}
-                        >
-                          +
-                        </button>
-                      </div>
+                      {isPreOrder ? (
+                        <span className="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-bold rounded-lg">
+                          Pra-pesanan
+                        </span>
+                      ) : (
+                        <div className="flex items-center border border-[#D1D5DB] rounded-lg overflow-hidden h-8">
+                          <button
+                            type="button"
+                            className="px-2 hover:bg-[#F9FAFB] text-[#374151] h-full"
+                            onClick={() => handleQtyChange(s.itemId, s.quantity - 1)}
+                          >
+                            -
+                          </button>
+                          <input title="Jumlah Porsi" placeholder="Qty" aria-label="Jumlah Porsi"
+                            type="number"
+                            value={s.quantity}
+                            min={1}
+                            onChange={(e) => handleQtyChange(s.itemId, parseInt(e.target.value, 10) || 1)}
+                            className="w-12 text-center text-xs border-x border-[#D1D5DB] h-full focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            className="px-2 hover:bg-[#F9FAFB] text-[#374151] h-full"
+                            onClick={() => handleQtyChange(s.itemId, s.quantity + 1)}
+                          >
+                            +
+                          </button>
+                        </div>
+                      )}
 
                       <div className="w-20 text-right font-semibold text-[#111827]">
-                        {formatIDR(s.price * s.quantity)}
+                        {isPreOrder ? "—" : formatIDR(s.price * s.quantity)}
                       </div>
 
                       <button title="Hapus Menu" aria-label="Hapus Menu"
@@ -532,7 +726,7 @@ export function OrderInputPage() {
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-[#6B7280] mb-1">
-                  Detail Makanan (Deskripsi tambahan)
+                  Deskripsi request menu diluar katalog
                 </label>
                 <textarea
                   placeholder="e.g. Nasi Kotak Ayam Bakar sambal pisah"

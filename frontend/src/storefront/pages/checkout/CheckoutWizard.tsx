@@ -1198,9 +1198,9 @@ export function CheckoutWizard() {
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-[#4B5563]">Harus Sampai Kapan & Jam Berapa?</label>
                         <input
-                          type="text"
+                          type="datetime-local"
                           required
-                          placeholder="Contoh: Harus sampai sebelum jam 10:00 WIB"
+                          title="Pilih tanggal dan jam deadline pengiriman"
                           className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                           value={deliveryTime}
                           onChange={(e) => setDeliveryTime(e.target.value)}
@@ -1373,13 +1373,13 @@ export function CheckoutWizard() {
               <div className="space-y-4">
                 <div className="bg-white rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.05)] space-y-4">
                   <h3 className="font-['Manrope',system-ui,sans-serif] text-sm font-bold text-[#111827] border-b border-[#F3F4F6] pb-3">
-                    Detail Makanan & Minuman Tambahan
+                    Request Menu Diluar Katalog
                   </h3>
 
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-semibold text-[#6B7280] mb-1">
-                        Detail Makanan (Deskripsi tambahan)
+                        Deskripsi request menu diluar katalog
                       </label>
                       <textarea
                         placeholder="e.g. Nasi Kotak Ayam Bakar sambal pisah"

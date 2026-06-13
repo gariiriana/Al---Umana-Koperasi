@@ -201,3 +201,27 @@ func TestValidationProperty_QCFailReason(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateCreateOrder_PreOrder(t *testing.T) {
+	req := CreateOrderRequest{
+		CustomerName:    "Yayasan Al-Umanaa",
+		DeliveryAddress: "Sukabumi",
+		DeliveryTime:    "Makan Siang",
+		PaymentMethod:   PaymentCOD,
+		IsPreOrder:      true,
+		Items: []OrderLineItem{
+			{ItemID: "item_001", ItemName: "Nasi Kotak", Quantity: 0},
+		},
+	}
+	errs := ValidateCreateOrder(req)
+	if len(errs) > 0 {
+		t.Fatalf("expected valid pre-order to pass validation, but got errors: %v", errs)
+	}
+
+	// Negative quantity should still fail
+	req.Items[0].Quantity = -5
+	errs = ValidateCreateOrder(req)
+	if len(errs) == 0 {
+		t.Fatalf("expected pre-order with negative quantity to fail validation")
+	}
+}

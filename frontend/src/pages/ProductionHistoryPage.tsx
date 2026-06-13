@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { History, ClipboardCheck, Clock, ChefHat, CheckCircle2, XCircle, ImageOff, FileDown, Loader2 } from "lucide-react";
+import { History, ClipboardCheck, Clock, ChefHat, CheckCircle2, XCircle, ImageOff, FileDown, Loader2, Search, X } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { subscribeOrders } from "@/services/realtimeService";
 import { getProduct } from "@/services/catalogService";
@@ -165,6 +165,7 @@ export function ProductionHistoryPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [activeTab, setActiveTab] = useState<"production" | "qc">("production");
   const [exporting, setExporting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const exportHistoryToPDF = async () => {
     if (productionHistory.length === 0) {
@@ -270,7 +271,7 @@ export function ProductionHistoryPage() {
 
       const tableBody = productionHistory.map((o, index) => {
         const items = itemsWithImagesMap[o.id] || [];
-        const itemsText = items.map((it) => `${it.itemName} (x${it.quantity})`).join("\n") + "\n\n\n";
+        const itemsText = items.map((it) => `${it.itemName}${o.isPreOrder ? " (Pra-pesanan)" : ` (x${it.quantity})`}`).join("\n") + "\n\n\n";
         
         return [
           String(index + 1),
@@ -372,7 +373,7 @@ export function ProductionHistoryPage() {
   // meaning it has been in production (productionStartPhotoId is present).
   const productionHistory = useMemo(() => {
     return orders
-      .filter((o) => o.productionStartPhotoId && o.status !== "PENDING" && o.status !== "IN_PRODUCTION")
+      .filter((o) => o.productionStartedAt && o.status !== "PENDING" && o.status !== "IN_PRODUCTION")
       .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
   }, [orders]);
 
@@ -388,6 +389,30 @@ export function ProductionHistoryPage() {
         return dateB - dateA;
       });
   }, [orders]);
+
+  const filteredProductionHistory = useMemo(() => {
+    if (!searchQuery.trim()) return productionHistory;
+    const q = searchQuery.toLowerCase().trim();
+    return productionHistory.filter(
+      (o) =>
+        o.customerName?.toLowerCase().includes(q) ||
+        o.id.toLowerCase().includes(q) ||
+        o.items.some((it) => it.itemName.toLowerCase().includes(q))
+    );
+  }, [productionHistory, searchQuery]);
+
+  const filteredQcHistory = useMemo(() => {
+    if (!searchQuery.trim()) return qcHistory;
+    const q = searchQuery.toLowerCase().trim();
+    return qcHistory.filter(
+      (o) =>
+        o.customerName?.toLowerCase().includes(q) ||
+        o.id.toLowerCase().includes(q) ||
+        o.qcReviewedBy?.toLowerCase().includes(q) ||
+        o.qcFailReason?.toLowerCase().includes(q) ||
+        o.items.some((it) => it.itemName.toLowerCase().includes(q))
+    );
+  }, [qcHistory, searchQuery]);
 
   const renderStatusBadge = (status: string) => {
     switch (status) {
@@ -470,25 +495,54 @@ export function ProductionHistoryPage() {
         </button>
       </div>
 
+      {/* Search Bar */}
+      <div className="relative">
+        <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <Search className="h-4 w-4 text-[#9CA3AF]" />
+        </span>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder={
+            activeTab === "production"
+              ? "Cari riwayat produksi berdasarkan nama pelanggan, produk, atau ID pesanan..."
+              : "Cari riwayat QC berdasarkan nama pelanggan, produk, pemeriksa, atau alasan..."
+          }
+          className="w-full rounded-full border border-[#E5E7EB] bg-white pl-9 pr-10 py-2 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition font-['Hanken_Grotesk']"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            title="Bersihkan pencarian"
+            aria-label="Bersihkan pencarian"
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#9CA3AF] hover:text-[#4B5563] cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
       {/* History Lists */}
       <div className="space-y-4">
         {activeTab === "production" ? (
-          productionHistory.length === 0 ? (
+          filteredProductionHistory.length === 0 ? (
             <div className="bg-white rounded-lg border border-[#E5E7EB] p-12 text-center space-y-3">
               <ChefHat className="h-14 w-14 mx-auto text-amber-300 bg-amber-50 rounded-full p-3" />
               <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">
-                {lang === "id" ? "Belum Ada Riwayat" : "No Production History"}
+                {searchQuery ? "Hasil Pencarian Kosong" : (lang === "id" ? "Belum Ada Riwayat" : "No Production History")}
               </p>
               <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                {lang === "id" 
-                  ? "Pesanan yang selesai diproduksi akan tercatat di sini." 
-                  : "Completed cooking orders will be logged here."}
+                {searchQuery
+                  ? "Tidak ada riwayat produksi yang cocok dengan kata kunci."
+                  : (lang === "id" ? "Pesanan yang selesai diproduksi akan tercatat di sini." : "Completed cooking orders will be logged here.")}
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               <AnimatePresence>
-                {productionHistory.map((o) => {
+                {filteredProductionHistory.map((o) => {
                   const totalQty = o.items.reduce((s, i) => s + i.quantity, 0);
                   return (
                     <motion.div
@@ -520,13 +574,19 @@ export function ProductionHistoryPage() {
                         <div className="border border-[#F3F4F6] rounded-lg overflow-hidden text-xs">
                           <div className="bg-[#F9FAFB] px-3 py-1.5 border-b border-[#F3F4F6] flex justify-between font-bold text-[#6B7280]">
                             <span>Item</span>
-                            <span>{totalQty} unit</span>
+                            <span>{o.isPreOrder ? "Pra-pesanan" : `${totalQty} unit`}</span>
                           </div>
                           <ul className="divide-y divide-[#F3F4F6] max-h-32 overflow-y-auto">
                             {o.items.map((it) => (
-                              <li key={it.itemId} className="flex justify-between px-3 py-1.5">
+                              <li key={it.itemId} className="flex justify-between px-3 py-1.5 items-center">
                                 <span className="truncate text-[#4B5563]">{it.itemName}</span>
-                                <span className="font-bold text-[#111827]">×{it.quantity}</span>
+                                {o.isPreOrder ? (
+                                  <span className="shrink-0 inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-[9px] font-bold text-amber-700 font-['Hanken_Grotesk',system-ui,sans-serif]">
+                                    Pra-pesanan
+                                  </span>
+                                ) : (
+                                  <span className="font-bold text-[#111827]">×{it.quantity}</span>
+                                )}
                               </li>
                             ))}
                           </ul>
@@ -550,22 +610,22 @@ export function ProductionHistoryPage() {
             </div>
           )
         ) : (
-          qcHistory.length === 0 ? (
+          filteredQcHistory.length === 0 ? (
             <div className="bg-white rounded-lg border border-[#E5E7EB] p-12 text-center space-y-3">
               <ClipboardCheck className="h-14 w-14 mx-auto text-purple-300 bg-purple-50 rounded-full p-3" />
               <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">
-                {lang === "id" ? "Belum Ada Riwayat QC" : "No QC History"}
+                {searchQuery ? "Hasil Pencarian Kosong" : (lang === "id" ? "Belum Ada Riwayat QC" : "No QC History")}
               </p>
               <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                {lang === "id" 
-                  ? "Hasil pemeriksaan kualitas produk akan tercatat di sini." 
-                  : "Quality Control review outcomes will be shown here."}
+                {searchQuery
+                  ? "Tidak ada riwayat pemeriksaan QC yang cocok dengan kata kunci."
+                  : (lang === "id" ? "Hasil pemeriksaan kualitas produk akan tercatat di sini." : "Quality Control review outcomes will be shown here.")}
               </p>
             </div>
           ) : (
             <div className="space-y-3">
               <AnimatePresence>
-                {qcHistory.map((o) => {
+                {filteredQcHistory.map((o) => {
                   const isPassed = !o.qcFailReason;
                   const formattedQCDate = o.qcReviewedAt 
                     ? new Date(o.qcReviewedAt).toLocaleString(lang === "id" ? "id-ID" : "en-US", {
@@ -610,7 +670,7 @@ export function ProductionHistoryPage() {
 
                           {/* Items inline */}
                           <div className="text-xs font-['Hanken_Grotesk'] text-gray-500 pt-1">
-                            <strong>Item:</strong> {o.items.map((it) => `${it.itemName} (x${it.quantity})`).join(", ")}
+                            <strong>Item:</strong> {o.items.map((it) => `${it.itemName}${o.isPreOrder ? " (Pra-pesanan)" : ` (x${it.quantity})`}`).join(", ")}
                           </div>
 
                           {!isPassed && o.qcFailReason && (

@@ -148,6 +148,9 @@ function localDataToOrder(id: string, data: DocumentData): Order {
     promoCode: data.promoCode as string | undefined,
     discountAmount: data.discountAmount as number | undefined,
     kitchen: data.kitchen as string | undefined,
+    itemKitchens: data.itemKitchens as Record<string, string> | undefined,
+    qaStartChecklist: data.qaStartChecklist as Order["qaStartChecklist"] | undefined,
+    isPreOrder: !!data.isPreOrder,
   };
 }
 
@@ -219,6 +222,9 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     promoCode: data.promoCode as string | undefined,
     discountAmount: data.discountAmount as number | undefined,
     kitchen: data.kitchen as string | undefined,
+    itemKitchens: data.itemKitchens as Record<string, string> | undefined,
+    qaStartChecklist: data.qaStartChecklist as Order["qaStartChecklist"] | undefined,
+    isPreOrder: !!data.isPreOrder,
   };
 }
 
@@ -484,9 +490,9 @@ export async function transitionOrder(
 
       case "complete-production":
         if (currentStatus !== "IN_PRODUCTION") {
-          throw new Error(`Invalid transition ${currentStatus} -> QC`);
+          throw new Error(`Invalid transition ${currentStatus} -> READY_TO_DELIVER`);
         }
-        updates.status = "QC";
+        updates.status = "READY_TO_DELIVER";
         break;
 
       case "qc-pass":
@@ -542,7 +548,7 @@ export async function transitionOrder(
     if (payload.action === "start-production") {
       msg = `Halo ${updatedOrder.recipientName},\n\nPesanan Anda #${shortId} saat ini sedang diproses oleh Tim Produksi Koperasi.`;
     } else if (payload.action === "complete-production") {
-      msg = `Halo ${updatedOrder.recipientName},\n\nPesanan Anda #${shortId} telah selesai diproduksi dan sedang memasuki proses Quality Control (QC).`;
+      msg = `Halo ${updatedOrder.recipientName},\n\nPesanan Anda #${shortId} telah selesai diproduksi dan siap diserahkan ke Kurir untuk dikirim.`;
     } else if (payload.action === "qc-pass") {
       msg = `Halo ${updatedOrder.recipientName},\n\nPesanan Anda #${shortId} telah lolos uji QC dan siap diserahkan ke Kurir untuk dikirim.`;
     } else if (payload.action === "qc-fail") {
@@ -567,10 +573,10 @@ export async function transitionOrder(
       type: "production",
     },
     "complete-production": {
-      title: `Pesanan Masuk Tahap QC #${shortId}`,
-      titleEn: `Order Entering QC #${shortId}`,
-      message: `Pesanan #${shortId} selesai diproduksi dan memasuki Quality Control.`,
-      messageEn: `Order #${shortId} production complete, entering Quality Control.`,
+      title: `Pesanan Siap Dikirim #${shortId}`,
+      titleEn: `Order Ready to Deliver #${shortId}`,
+      message: `Pesanan #${shortId} selesai diproduksi dan siap dikirim!`,
+      messageEn: `Order #${shortId} production complete and ready for delivery!`,
       type: "production",
     },
     "qc-pass": {
@@ -1031,6 +1037,7 @@ export interface CreateAdminOrderPayload {
   additionalNotes?: string;
   promoCode?: string;
   discountAmount?: number;
+  isPreOrder?: boolean;
 }
 
 export async function createAdminOrder(payload: CreateAdminOrderPayload): Promise<Order> {
@@ -1064,6 +1071,7 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
     invoiceToken: invoiceToken,
     status: "PENDING",
     items: payload.items,
+    isPreOrder: !!payload.isPreOrder,
     promoCode: payload.promoCode || "",
     discountAmount: payload.discountAmount || 0,
     createdAt: now,
@@ -1092,7 +1100,9 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
       }
       const itemSnap = itemSnaps[snapIdx++];
       if (!itemSnap.exists()) {
-        outOfStockItems.push(item.itemId);
+        if (!payload.isPreOrder) {
+          outOfStockItems.push(item.itemId);
+        }
         continue;
       }
       const data = itemSnap.data();
@@ -1102,7 +1112,7 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
         available: data.available as boolean | undefined,
       });
 
-      if (currentQty < item.quantity) {
+      if (!payload.isPreOrder && currentQty < item.quantity) {
         outOfStockItems.push(item.itemId);
       }
 
@@ -1120,17 +1130,19 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
     orderData.items = enrichedItems; // Save enriched items with imageUrl and ingredients
 
     // Deduct stock (WRITES ONLY)
-    for (const item of payload.items) {
-      if (!item.itemId) continue;
-      const itemRef = doc(db, "inventory", item.itemId);
-      const data = inventoryDataMap.get(item.itemId);
-      const currentQty = data?.quantity ?? 0;
-      const newQty = currentQty - item.quantity;
-      tx.update(itemRef, {
-        quantity: newQty,
-        available: newQty > 0 ? (data?.available ?? true) : false,
-        updatedAt: now.toISOString(),
-      });
+    if (!payload.isPreOrder) {
+      for (const item of payload.items) {
+        if (!item.itemId) continue;
+        const itemRef = doc(db, "inventory", item.itemId);
+        const data = inventoryDataMap.get(item.itemId);
+        const currentQty = data?.quantity ?? 0;
+        const newQty = currentQty - item.quantity;
+        tx.update(itemRef, {
+          quantity: newQty,
+          available: newQty > 0 ? (data?.available ?? true) : false,
+          updatedAt: now.toISOString(),
+        });
+      }
     }
 
     tx.set(orderDocRef, orderData);

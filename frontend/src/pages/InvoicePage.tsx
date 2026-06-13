@@ -319,7 +319,9 @@ export function InvoicePage() {
                         />
                       </td>
                       <td className="py-3.5 px-4 font-bold text-[#111827]">{it.itemName}</td>
-                      <td className="py-3.5 px-4 text-center font-bold font-mono">×{it.quantity}</td>
+                      <td className="py-3.5 px-4 text-center font-bold font-mono">
+                        {order.isPreOrder ? "Pra-pesanan" : `×${it.quantity}`}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -329,6 +331,7 @@ export function InvoicePage() {
 
           {/* Total Ingredients Composition */}
           {(() => {
+            if (order.isPreOrder) return null;
             const ingredients = aggregateIngredients(order.items);
             if (ingredients.length === 0) return null;
             return (
@@ -359,7 +362,7 @@ export function InvoicePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-[#78350F]">
                 {order.foodDetails && (
                   <div>
-                    <span className="font-bold">Detail Makanan:</span>
+                    <span className="font-bold">Request Menu:</span>
                     <p className="mt-1">{order.foodDetails}</p>
                   </div>
                 )}
