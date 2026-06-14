@@ -114,8 +114,18 @@ export function LoginPage() {
   return (
     <div className="relative min-h-screen flex items-center justify-center px-4 overflow-hidden">
 
-      {/* ── Static Gradient Background ───────────────────────────────── */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#111827] via-[#1c1005] to-[#78350F]" />
+      <video
+        src="https://www.alumanaa.com/wp-content/uploads/2020/03/Hero-Video-Compressed.mp4"
+        className="absolute inset-0 w-full h-full object-cover"
+        autoPlay
+        muted
+        loop
+        playsInline
+        aria-hidden="true"
+      />
+
+      {/* ── Dark amber overlay ───────────────────────────────────────────── */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#111827]/80 via-[#1c1005]/70 to-[#78350F]/60" />
 
       {/* ── Card ─────────────────────────────────────────────────────────── */}
       <div className="relative z-10 w-full max-w-md">

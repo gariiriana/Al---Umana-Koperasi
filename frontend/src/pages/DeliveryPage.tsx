@@ -1,18 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft, AlertCircle, Loader2, Navigation, Phone, MessageCircle, Search, X } from "lucide-react";
+import { MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft, AlertCircle, Loader2, Navigation, Phone, Search, X } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 import { subscribeOrders } from "@/services/realtimeService";
 import type { Order, KitchenSignature } from "@/types/order";
-import { PICConfirmation } from "@/components/delivery/PICConfirmation";
 import { ProofCapture } from "@/components/delivery/ProofCapture";
 import { ProofModal } from "@/components/delivery/ProofModal";
-import { SignaturePad } from "@/components/delivery/SignaturePad";
+import { ProductImage } from "@/components/ProductImage";
+import { LiveCamera } from "@/components/LiveCamera";
+import { Camera, Trash2 } from "lucide-react";
 
 import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import { dispatchOrder } from "@/services/orderService";
+import { pushNotification } from "@/services/notificationWriter";
 
 const renderFormattedAddress = (address: string) => {
   if (!address) return null;
@@ -81,7 +84,7 @@ const renderFormattedAddress = (address: string) => {
   );
 };
 
-type DeliveryStep = "list" | "start" | "pic" | "proof";
+type DeliveryStep = "list" | "start" | "proof";
 
 
 
@@ -99,9 +102,19 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
   const [qcProductCheck, setQcProductCheck] = useState<Record<string, boolean>>({});
   const [qcQuantityCheck, setQcQuantityCheck] = useState<Record<string, boolean>>({});
 
-  // Kitchen signatures and staff names states
+  // Kitchen signatures (now photos) and staff names states
   const [signatures, setSignatures] = useState<Record<string, string | null>>({});
   const [staffNames, setStaffNames] = useState<Record<string, string>>({});
+  const [activeKitchenCamera, setActiveKitchenCamera] = useState<string | null>(null);
+
+  const handleCapturePhoto = (kitchen: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setSignatures((prev) => ({ ...prev, [kitchen]: dataUrl }));
+    };
+    reader.readAsDataURL(file);
+  };
 
   const uniqueKitchens = useMemo(() => {
     const kitchens = new Set<string>();
@@ -129,7 +142,7 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
 
   const handleSubmit = async () => {
     if (!isFormValid) {
-      setError("Semua checklist QC dan tanda tangan serah terima dapur wajib diisi.");
+      setError("Semua checklist QC dan foto serah terima dapur wajib diisi.");
       return;
     }
     setSubmitting(true);
@@ -182,16 +195,41 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
         <div className="divide-y divide-neutral-100 bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
           {order.items.map((item) => (
             <div key={item.itemId} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-bold text-neutral-800 text-sm">{item.itemName}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[10px] bg-neutral-100 text-neutral-600 font-extrabold px-1.5 py-0.5 rounded">
-                    Jumlah: x{item.quantity}
-                  </span>
-                  {order.itemKitchens?.[item.itemId] && (
-                    <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded">
-                      Dapur: {order.itemKitchens[item.itemId]}
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="w-10 h-10 bg-neutral-100 rounded-lg overflow-hidden border border-neutral-200 shrink-0 flex items-center justify-center">
+                  <ProductImage
+                    imageUrl={item.imageUrl || ""}
+                    alt={item.itemName}
+                    className="h-full w-full object-cover"
+                    fallbackClassName="h-3 w-3 text-neutral-400"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-neutral-800 text-sm">{item.itemName}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[10px] bg-neutral-100 text-neutral-600 font-extrabold px-1.5 py-0.5 rounded">
+                      Jumlah: x{item.quantity}
                     </span>
+                    {order.itemKitchens?.[item.itemId] && (
+                      <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded">
+                        Dapur: {order.itemKitchens[item.itemId]}
+                      </span>
+                    )}
+                  </div>
+                  {(item.deliveryAddress || item.deliveryTime || item.recipientName) && (
+                    <div className="text-[10px] text-[#4B5563] border-t border-[#E5E7EB] pt-1.5 mt-1.5 space-y-0.5 font-medium leading-tight">
+                      {item.recipientName && (
+                        <p><strong className="text-neutral-500">Penerima:</strong> {item.recipientName}</p>
+                      )}
+                      {item.deliveryTime && (
+                        <p><strong className="text-neutral-500">Jadwal:</strong> {item.deliveryTime.replace("T", " ")}</p>
+                      )}
+                      {item.deliveryAddress && (
+                        <p className="break-words line-clamp-2" title={item.deliveryAddress}>
+                          <strong className="text-neutral-500">Alamat:</strong> {item.deliveryAddress.split(" | ")[0]}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -222,12 +260,12 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
         </div>
       </div>
 
-      {/* SECTION 2: KITCHEN SIGNATURES */}
+      {/* SECTION 2: KITCHEN PHOTOS HANDOVER */}
       <div className="border border-orange-100 bg-orange-50/20 rounded-2xl p-4 space-y-4">
         <div className="flex items-center gap-2">
           <span className="h-6 w-6 rounded-full bg-orange-100 flex items-center justify-center text-xs font-black text-orange-700">2</span>
           <h4 className="font-['Manrope',system-ui,sans-serif] font-extrabold text-[#111827] text-sm">
-            Tanda Tangan Serah Terima Staf Dapur
+            Foto Serah Terima Dapur (Kamera Live)
           </h4>
         </div>
 
@@ -237,15 +275,16 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
               <div className="flex justify-between items-center bg-[#FDF2E9] border border-orange-100 rounded-lg px-2.5 py-1">
                 <span className="font-black text-[#B45309] text-xs uppercase tracking-wider">{kitchen}</span>
                 {signatures[kitchen] ? (
-                  <span className="text-[10px] font-bold text-emerald-600">✓ TTD Berhasil</span>
+                  <span className="text-[10px] font-bold text-emerald-600">✓ Foto Berhasil</span>
                 ) : (
-                  <span className="text-[10px] font-bold text-red-500">* Wajib TTD</span>
+                  <span className="text-[10px] font-bold text-red-500">* Wajib Foto Live</span>
                 )}
               </div>
 
               <div className="space-y-1">
-                <label className="block text-[10px] font-bold text-neutral-500 uppercase">Nama Petugas Dapur</label>
+                <label htmlFor={`staff-${kitchen}`} className="block text-[10px] font-bold text-neutral-500 uppercase">Nama Petugas Dapur</label>
                 <input
+                  id={`staff-${kitchen}`}
                   type="text"
                   value={staffNames[kitchen] || ""}
                   onChange={(e) => setStaffNames(prev => ({ ...prev, [kitchen]: e.target.value }))}
@@ -254,14 +293,31 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-[10px] font-bold text-neutral-500 uppercase">Coretan Tanda Tangan</label>
-                <SignaturePad
-                  height={120}
-                  onDrawEnd={(dataUrl) => {
-                    setSignatures(prev => ({ ...prev, [kitchen]: dataUrl }));
-                  }}
-                />
+              <div className="space-y-2">
+                <label className="block text-[10px] font-bold text-neutral-500 uppercase">Dokumentasi Live Camera</label>
+                
+                {signatures[kitchen] ? (
+                  <div className="relative border border-[#E5E7EB] rounded-lg overflow-hidden max-w-[200px] mx-auto">
+                    <img src={signatures[kitchen]!} alt={`Handover ${kitchen}`} className="w-full h-auto object-cover max-h-32" />
+                    <button
+                      type="button"
+                      onClick={() => setSignatures(prev => ({ ...prev, [kitchen]: null }))}
+                      className="absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-700 text-white rounded-full transition shadow-md cursor-pointer"
+                      title="Hapus foto"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setActiveKitchenCamera(kitchen)}
+                    className="w-full flex items-center justify-center gap-1.5 py-3 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl transition cursor-pointer"
+                  >
+                    <Camera className="h-4 w-4 text-amber-600 animate-pulse" />
+                    <span>Ambil Foto Live</span>
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -293,12 +349,37 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
           Batal
         </button>
       </div>
+
+      {activeKitchenCamera && (
+        <LiveCamera
+          isOpen={true}
+          onClose={() => setActiveKitchenCamera(null)}
+          activityType="HANDOVER"
+          orderId={order.id}
+          onCapture={(file) => handleCapturePhoto(activeKitchenCamera, file)}
+        />
+      )}
     </div>
   );
 }
 
+const getOrderDeadline = (order: Order): number => {
+  if (!order.eventDate) return Infinity;
+  const datePart = order.eventDate.slice(0, 10);
+  let time = "12:00";
+  if (order.deliveryTime) {
+    const match = order.deliveryTime.match(/(\d{2})[:.](\d{2})/);
+    if (match) {
+      time = `${match[1]}:${match[2]}`;
+    }
+  }
+  const ts = Date.parse(`${datePart}T${time}`);
+  return isNaN(ts) ? Infinity : ts;
+};
+
 export function DeliveryPage() {
   const { user, profile } = useAuth();
+  const { showToast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [step, setStep] = useState<DeliveryStep>("list");
@@ -308,6 +389,67 @@ export function DeliveryPage() {
   const [selectedStartPhotoId, setSelectedStartPhotoId] = useState<string | undefined>(undefined);
   const [selectedKitchenSignatures, setSelectedKitchenSignatures] = useState<KitchenSignature[] | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [reportingSick, setReportingSick] = useState(false);
+  const [showSickConfirm, setShowSickConfirm] = useState(false);
+
+  const handleSickReport = async () => {
+    if (!activeId) return;
+    const currentActiveOrder = orders.find((o) => o.id === activeId);
+    if (!currentActiveOrder) return;
+    
+    setReportingSick(true);
+    try {
+      const orderRef = doc(db, "orders", activeId);
+      const updates: Record<string, string | boolean | Date> = {
+        assignedCourierId: "",
+        courierSickReported: true,
+        updatedAt: new Date(),
+      };
+
+      if (currentActiveOrder.status === "OUT_FOR_DELIVERY") {
+        updates.status = "READY_TO_DELIVER";
+      }
+
+      await updateDoc(orderRef, updates);
+      showToast({ message: "Laporan sakit berhasil dikirim. Penugasan batal.", variant: "success" });
+
+      const sid = activeId.length > 6 ? activeId.slice(-6).toUpperCase() : activeId.toUpperCase();
+      // Notify Admin
+      pushNotification({
+        recipientId: "admin",
+        type: "delivery",
+        title: `⚠️ Kurir Sakit / Batal Tugas #${sid}`,
+        titleEn: `⚠️ Courier Sick / Cancel Task #${sid}`,
+        message: `Kurir membatalkan pengantaran pesanan #${sid} karena sakit/berhalangan. Segera tugaskan kurir baru.`,
+        messageEn: `Courier canceled delivery for order #${sid} due to sickness. Please assign a new courier immediately.`,
+        orderId: activeId,
+        orderShortId: sid,
+        actorRole: "kurir",
+      }).catch((e) => console.error("[handleSickReport Admin Push Notif Error]", e));
+
+      // Notify Distribusi
+      pushNotification({
+        recipientId: "distribusi",
+        type: "delivery",
+        title: `⚠️ Kurir Sakit / Batal Tugas #${sid}`,
+        titleEn: `⚠️ Courier Sick / Cancel Task #${sid}`,
+        message: `Kurir membatalkan pengantaran pesanan #${sid} karena sakit/berhalangan. Segera tugaskan kurir baru.`,
+        messageEn: `Courier canceled delivery for order #${sid} due to sickness. Please assign a new courier immediately.`,
+        orderId: activeId,
+        orderShortId: sid,
+        actorRole: "kurir",
+      }).catch((e) => console.error("[handleSickReport Distribusi Push Notif Error]", e));
+
+      setShowSickConfirm(false);
+      reset();
+    } catch (err) {
+      console.error("Failed to report sick:", err);
+      showToast({ message: "Gagal mengirim laporan sakit", variant: "error" });
+    } finally {
+      setReportingSick(false);
+    }
+  };
 
   const active = activeId ? orders.find((o) => o.id === activeId) ?? null : null;
 
@@ -323,7 +465,14 @@ export function DeliveryPage() {
             o.assignedCourierId === profile?.displayName ||
             o.assignedCourierId === user.email?.split("@")[0] ||
             (profile?.displayName && o.assignedCourierId?.toLowerCase() === profile.displayName.toLowerCase()))
-      ),
+      ).sort((a, b) => {
+        const deadlineA = getOrderDeadline(a);
+        const deadlineB = getOrderDeadline(b);
+        if (deadlineA !== deadlineB) {
+          return deadlineA - deadlineB;
+        }
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }),
     [orders, user, profile]
   );
 
@@ -422,15 +571,9 @@ export function DeliveryPage() {
     if (o.status === "READY_TO_DELIVER") {
       setStep("start");
     } else {
-      setStep("pic");
+      setStep("proof");
     }
   };
-
-  // Step indicators
-  const steps = [
-    { key: "pic", label: "Konfirmasi PIC" },
-    { key: "proof", label: "Foto Bukti" },
-  ];
 
   return (
     <div className="space-y-5">
@@ -468,49 +611,11 @@ export function DeliveryPage() {
       {active && step !== "list" && (
         <CustomerInfoCard
           order={active}
+          onSickReport={() => setShowSickConfirm(true)}
         />
       )}
 
-      {/* Step progress (only when active and not starting) */}
-      {active && step !== "list" && step !== "start" && (
-        <div className="space-y-3">
-          <div className="bg-white rounded-lg border border-[#E5E7EB] p-4">
-            <div className="flex items-center gap-0">
-              {steps.map((s, idx) => {
-                const isDone = step === "proof" && s.key === "pic";
-                const isActive = step === s.key;
-                return (
-                  <div key={s.key} className="flex items-center flex-1">
-                    <div className="flex flex-col items-center gap-1 flex-1">
-                      <div className={
-                        "h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-all " +
-                        (isDone ? "bg-emerald-500 text-white" :
-                          isActive ? "bg-[#FBBF24] text-[#111827]" :
-                            "bg-[#F3F4F6] text-[#9CA3AF]")
-                      }>
-                        {isDone ? <CheckCircle2 className="h-4 w-4" /> : idx + 1}
-                      </div>
-                      <span className={
-                        "text-[10px] font-semibold font-['Hanken_Grotesk',system-ui,sans-serif] text-center " +
-                        (isActive ? "text-[#111827]" : "text-[#9CA3AF]")
-                      }>
-                        {s.label}
-                      </span>
-                    </div>
-                    {idx < steps.length - 1 && (
-                      <div className={
-                        "h-0.5 w-8 mb-4 mx-1 rounded-full transition-all " +
-                        (step === "proof" ? "bg-emerald-400" : "bg-[#E5E7EB]")
-                      } />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
 
-        </div>
-      )}
 
       {/* ── DELIVERY LIST ─────────────────────────────────────────────── */}
       {step === "list" && (
@@ -548,7 +653,7 @@ export function DeliveryPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari berdasarkan nama instansi, penerima, produk, atau ID pesanan..."
+              placeholder="Cari berdasarkan nama instansi, pemesan, produk, atau ID pesanan..."
               className="w-full rounded-full border border-[#E5E7EB] bg-[#F9FAFB] pl-9 pr-10 py-2 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition font-['Hanken_Grotesk']"
             />
             {searchQuery && (
@@ -617,19 +722,41 @@ export function DeliveryPage() {
                                 <p className="font-['Manrope',system-ui,sans-serif] font-extrabold text-[#111827] text-base truncate">
                                   {o.institutionName || o.customerName}
                                 </p>
-                                <span className={
-                                  "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold " +
-                                  (o.status === "READY_TO_DELIVER"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : "bg-orange-100 text-orange-700")
-                                }>
-                                  {o.status === "READY_TO_DELIVER" ? "Siap Diambil" : "Sedang Jalan"}
-                                </span>
+                                <div className="flex flex-col items-end gap-1 shrink-0">
+                                  <span className={
+                                    "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold " +
+                                    (o.status === "READY_TO_DELIVER"
+                                      ? "bg-blue-100 text-blue-700"
+                                      : "bg-orange-100 text-orange-700")
+                                  }>
+                                    {o.status === "READY_TO_DELIVER" ? "Siap Diambil" : "Sedang Jalan"}
+                                  </span>
+                                  {(() => {
+                                    const deadline = getOrderDeadline(o);
+                                    const isPast = deadline !== Infinity && Date.now() > deadline;
+                                    return isPast ? (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-red-100 text-red-700 animate-pulse border border-red-300">
+                                        <AlertCircle className="h-2.5 w-2.5 text-red-600" /> TERLEWAT
+                                      </span>
+                                    ) : null;
+                                  })()}
+                                </div>
                               </div>
-                              {o.recipientName && (
-                                <p className="text-xs text-[#4B5563] font-semibold mt-0.5">
-                                  Penerima: {o.recipientName}
-                                </p>
+                              {o.customerName ? (
+                                <>
+                                  <p className="text-xs text-[#4B5563] font-semibold mt-0.5">
+                                    Pemesan: {o.customerName}
+                                  </p>
+                                  <p className="text-xs text-[#4B5563] font-semibold mt-0.5">
+                                    Penerima: {o.recipientName}
+                                  </p>
+                                </>
+                              ) : (
+                                o.recipientName && (
+                                  <p className="text-xs text-[#4B5563] font-semibold mt-0.5">
+                                    Pemesan: {o.recipientName}
+                                  </p>
+                                )
                               )}
                               <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                                 <span className="inline-flex items-center gap-1 text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
@@ -725,16 +852,41 @@ export function DeliveryPage() {
                             <span className="font-extrabold text-[#111827] block text-[10px] uppercase tracking-wider">
                               Detail Pesanan
                             </span>
-                            <div className="max-h-24 overflow-y-auto space-y-1 pr-1 font-medium text-[#4B5563]">
+                            <div className="max-h-24 overflow-y-auto space-y-1.5 pr-1 font-medium text-[#4B5563]">
                               {o.items.map((item, itemIdx) => (
-                                <div key={itemIdx} className="flex justify-between items-center gap-2">
-                                  <span className="truncate">{item.itemName}</span>
-                                  {o.isPreOrder ? (
-                                    <span className="shrink-0 inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-[9px] font-bold text-amber-700 font-['Hanken_Grotesk',system-ui,sans-serif]">
-                                      Pra-pesanan
-                                    </span>
-                                  ) : (
-                                    <span className="font-bold text-[#111827] shrink-0">x{item.quantity}</span>
+                                <div key={itemIdx} className="flex flex-col gap-1 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg p-1.5 font-medium text-[#4B5563]">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 bg-neutral-100 rounded overflow-hidden border border-neutral-200 shrink-0 flex items-center justify-center">
+                                      <ProductImage
+                                        imageUrl={item.imageUrl || ""}
+                                        alt={item.itemName}
+                                        className="h-full w-full object-cover"
+                                        fallbackClassName="h-2.5 w-2.5 text-neutral-400"
+                                      />
+                                    </div>
+                                    <span className="truncate flex-1 text-xs">{item.itemName}</span>
+                                    {o.isPreOrder ? (
+                                      <span className="shrink-0 inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-[9px] font-bold text-amber-700 font-['Hanken_Grotesk',system-ui,sans-serif]">
+                                        Pra-pesanan
+                                      </span>
+                                    ) : (
+                                      <span className="font-bold text-[#111827] shrink-0">x{item.quantity}</span>
+                                    )}
+                                  </div>
+                                  {(item.deliveryAddress || item.deliveryTime || item.recipientName) && (
+                                    <div className="text-[9px] text-[#4B5563] border-t border-[#E5E7EB] pt-1 mt-0.5 space-y-0.5 font-medium leading-tight">
+                                      {item.recipientName && (
+                                        <p className="truncate"><strong className="text-neutral-500">Penerima:</strong> {item.recipientName}</p>
+                                      )}
+                                      {item.deliveryTime && (
+                                        <p className="truncate"><strong className="text-neutral-500">Jadwal:</strong> {item.deliveryTime.replace("T", " ")}</p>
+                                      )}
+                                      {item.deliveryAddress && (
+                                        <p className="break-words line-clamp-2" title={item.deliveryAddress}>
+                                          <strong className="text-neutral-500">Alamat:</strong> {item.deliveryAddress.split(" | ")[0]}
+                                        </p>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               ))}
@@ -786,23 +938,8 @@ export function DeliveryPage() {
                 deliveryStartedAt: now.toISOString(),
                 kitchenSignatures,
               });
-              setStep("pic");
+              setStep("proof");
             }}
-            onCancel={reset}
-          />
-        </motion.div>
-      )}
-
-      {/* ── PIC CONFIRMATION ──────────────────────────────────────────── */}
-      {step === "pic" && active && (
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <PICConfirmation
-            customerName={(active.recipientName || active.customerName || "") as string}
-            onConfirm={() => setStep("proof")}
             onCancel={reset}
           />
         </motion.div>
@@ -817,7 +954,8 @@ export function DeliveryPage() {
         >
           <ProofCapture
             orderId={active.id}
-            customerName={(active.recipientName || active.customerName || "") as string}
+            customerName={(active.customerName || active.recipientName || "") as string}
+            recipientName={active.recipientName}
             onComplete={reset}
           />
         </motion.div>
@@ -829,16 +967,49 @@ export function DeliveryPage() {
         deliveryStartPhotoId={selectedStartPhotoId}
         kitchenSignatures={selectedKitchenSignatures}
       />
+
+      {/* Confirmation Modal for Courier Sick */}
+      {showSickConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4 border border-[#E5E7EB] shadow-xl font-['Hanken_Grotesk'] text-left">
+            <h4 className="font-['Manrope'] font-extrabold text-base text-red-600">Konfirmasi Batal Tugas</h4>
+            <p className="text-xs text-neutral-600 leading-relaxed">
+              Apakah Anda yakin ingin melaporkan sakit dan membatalkan pengantaran ini? Tugas ini akan dikembalikan ke status antrean dan dialihkan ke kurir lain.
+            </p>
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={handleSickReport}
+                disabled={reportingSick}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {reportingSick && <Loader2 className="h-3 w-3 animate-spin text-white" />}
+                Ya, Laporkan Sakit
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSickConfirm(false)}
+                disabled={reportingSick}
+                className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function CustomerInfoCard({
   order,
+  onSickReport,
 }: {
   order: Order;
+  onSickReport: () => void;
 }) {
-  const displayName = order.recipientName || order.customerName || "Penerima";
+  const displayName = order.customerName || order.recipientName || "Pemesan";
   const institutionName = order.institutionName;
   const phoneNumber = order.recipientPhone;
   const recipientNotes = order.recipientNotes;
@@ -860,7 +1031,7 @@ function CustomerInfoCard({
     <div className="bg-white rounded-lg p-4 border border-[#E5E7EB] shadow-xs space-y-3 font-['Hanken_Grotesk'] text-xs">
       <div className="flex items-center justify-between">
         <h4 className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">
-          Detail Penerima & Instansi
+          Detail Pemesan & Instansi
         </h4>
         <span className="text-[9px] font-extrabold text-[#B45309] bg-amber-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
           {order.orderType === "event" ? "Event" : "Rutin"}
@@ -874,9 +1045,20 @@ function CustomerInfoCard({
               {institutionName}
             </p>
           )}
-          <p className="font-bold text-[#4B5563] text-xs">
-            Penerima: {displayName}
-          </p>
+          {order.customerName ? (
+            <>
+              <p className="font-bold text-[#4B5563] text-xs">
+                Pemesan: {order.customerName}
+              </p>
+              <p className="font-bold text-[#4B5563] text-xs">
+                Penerima: {order.recipientName}
+              </p>
+            </>
+          ) : (
+            <p className="font-bold text-[#4B5563] text-xs">
+              Pemesan: {order.recipientName || "Pemesan"}
+            </p>
+          )}
           {phoneNumber ? (
             <p className="text-[10px] text-[#6B7280] font-medium">
               No. HP: {phoneNumber}
@@ -888,7 +1070,7 @@ function CustomerInfoCard({
           )}
           {recipientNotes && (
             <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-2 mt-1">
-              <span className="font-bold text-amber-800 text-[10px] block mb-0.5">Catatan Penerima:</span>
+              <span className="font-bold text-amber-800 text-[10px] block mb-0.5">Catatan Pemesan:</span>
               <p className="text-[11px] text-amber-900 leading-relaxed font-medium">{recipientNotes}</p>
             </div>
           )}
@@ -913,11 +1095,30 @@ function CustomerInfoCard({
                 title="Kirim WhatsApp"
                 aria-label="Kirim WhatsApp"
               >
-                <MessageCircle className="h-4 w-4" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  className="h-4 w-4"
+                >
+                  <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232" />
+                </svg>
               </a>
             )}
           </div>
         )}
+      </div>
+
+      {/* Sick Report Option */}
+      <div className="pt-2.5 border-t border-[#F3F4F6] flex justify-between items-center">
+        <span className="text-[10px] text-neutral-400 font-medium">Kurir berhalangan / sakit?</span>
+        <button
+          type="button"
+          onClick={onSickReport}
+          className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-extrabold text-[10px] rounded-lg transition border border-red-200 cursor-pointer"
+        >
+          Laporkan Sakit & Batal
+        </button>
       </div>
     </div>
   );

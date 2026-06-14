@@ -97,7 +97,7 @@ export function DashboardPage() {
     const oneHour = 60 * 60 * 1000;
     return orders.filter(o => {
       if (o.status !== "READY_TO_DELIVER" && o.status !== "OUT_FOR_DELIVERY") return false;
-      const eventTime = new Date(`${o.eventDate}T${o.deliveryTime.includes(":") ? o.deliveryTime : "12:00"}`).getTime();
+      const eventTime = new Date(`${(o.eventDate || "").slice(0, 10)}T${o.deliveryTime.includes(":") ? o.deliveryTime : "12:00"}`).getTime();
       if (isNaN(eventTime)) return false;
       const diff = eventTime - now;
       return diff > -oneHour && diff <= oneHour;
@@ -1055,7 +1055,14 @@ export function DashboardPage() {
                     </h4>
                     <div className="text-xs space-y-1.5 text-slate-700">
                       <p><span className="text-[#9CA3AF] font-medium block">Instansi / Customer:</span> <strong className="text-[#111827]">{order.institutionName || order.customerName}</strong></p>
-                      <p><span className="text-[#9CA3AF] font-medium block">Nama Penerima:</span> <strong className="text-[#111827]">{order.recipientName}</strong></p>
+                      {order.customerName ? (
+                        <>
+                          <p><span className="text-[#9CA3AF] font-medium block">Nama Pemesan:</span> <strong className="text-[#111827]">{order.customerName}</strong></p>
+                          <p><span className="text-[#9CA3AF] font-medium block">Nama Penerima:</span> <strong className="text-[#111827]">{order.recipientName}</strong></p>
+                        </>
+                      ) : (
+                        <p><span className="text-[#9CA3AF] font-medium block">Nama Pemesan:</span> <strong className="text-[#111827]">{order.recipientName}</strong></p>
+                      )}
                       <p><span className="text-[#9CA3AF] font-medium block">No. Telepon:</span> <a href={`tel:${order.recipientPhone}`} className="text-amber-700 hover:underline font-mono font-bold">{order.recipientPhone}</a></p>
                       <p><span className="text-[#9CA3AF] font-medium block">Alamat Pengiriman:</span> <span className="font-medium text-[#374151]">{order.deliveryAddress}</span></p>
                       {order.recipientNotes && <p><span className="text-[#9CA3AF] font-medium block">Catatan Penerima:</span> <span className="italic text-slate-500">"{order.recipientNotes}"</span></p>}

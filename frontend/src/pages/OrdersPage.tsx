@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Plus, Search, Calendar, Copy, ExternalLink, AlertTriangle, ShieldCheck, CheckCircle2, User, Phone, FileDown, X, Loader2, Upload, Eye, Image as ImageIcon } from "lucide-react";
+import { Plus, Search, Calendar, Copy, ExternalLink, AlertTriangle, ShieldCheck, CheckCircle2, User, Phone, FileDown, X, Loader2, Upload, Eye, Image as ImageIcon, Trash2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { doc, getDoc } from "firebase/firestore";
@@ -8,7 +8,7 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeOrders } from "@/services/realtimeService";
-import { transitionOrder, updatePaymentStatus, manuallyValidateOrder, updateAdminNotes, type TransitionAction } from "@/services/orderService";
+import { transitionOrder, updatePaymentStatus, manuallyValidateOrder, updateAdminNotes, deleteOrder, type TransitionAction } from "@/services/orderService";
 import type { Order, OrderStatus, PaymentStatus } from "@/types/order";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Card } from "@/components/ui/Card";
@@ -369,6 +369,17 @@ export function OrdersPage() {
     }
   };
 
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!window.confirm("Apakah Anda yakin ingin menghapus pesanan ini secara permanen dari sistem?")) return;
+    try {
+      await deleteOrder(orderId);
+      showToast({ message: "Pesanan berhasil dihapus", variant: "success" });
+    } catch (err) {
+      console.error("Error deleting order:", err);
+      showToast({ message: "Gagal menghapus pesanan", variant: "error" });
+    }
+  };
+
   const handleComplaintFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -662,8 +673,15 @@ export function OrdersPage() {
       y += 5;
       doc.text(`Instansi: ${order.institutionName}`, 14, y);
       y += 4;
-      doc.text(`Penerima: ${order.recipientName}`, 14, y);
-      y += 4;
+      if (order.customerName) {
+        doc.text(`Pemesan: ${order.customerName}`, 14, y);
+        y += 4;
+        doc.text(`Penerima: ${order.recipientName}`, 14, y);
+        y += 4;
+      } else {
+        doc.text(`Pemesan: ${order.recipientName}`, 14, y);
+        y += 4;
+      }
       doc.text(`Telepon: ${order.recipientPhone}`, 14, y);
       y += 4;
       
@@ -687,9 +705,20 @@ export function OrdersPage() {
       rightY += 5;
       doc.text(`Tanggal Input: ${new Date(order.createdAt).toLocaleDateString("id-ID")}`, pageW / 2 + 10, rightY);
       rightY += 4;
-      doc.text(`Tanggal Acara: ${new Date(order.eventDate).toLocaleDateString("id-ID")}`, pageW / 2 + 10, rightY);
+      const pFormat = (dStr: string) => {
+        if (!dStr) return "—";
+        const dObj = new Date(dStr);
+        if (isNaN(dObj.getTime())) return dStr;
+        const fd = dObj.toLocaleDateString("id-ID");
+        if (dStr.includes("T")) {
+          const ft = dObj.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", hour12: false });
+          return `${fd} ${ft}`;
+        }
+        return fd;
+      };
+      doc.text(`Jam Pemberangkatan: ${pFormat(order.eventDate)}`, pageW / 2 + 10, rightY);
       rightY += 4;
-      doc.text(`Waktu Acara: ${order.deliveryTime}`, pageW / 2 + 10, rightY);
+      doc.text(`Harus Sampai: ${order.deliveryTime}`, pageW / 2 + 10, rightY);
       rightY += 4;
       doc.setFont("helvetica", "bold");
       doc.text(`Jatuh Tempo: ${new Date(order.paymentDueDate).toLocaleDateString("id-ID")}`, pageW / 2 + 10, rightY);
@@ -710,11 +739,17 @@ export function OrdersPage() {
       doc.text("RINCIAN PESANAN", 14, y);
       y += 4;
 
-      const tableItemsBody = itemsWithImages.map((it) => [
-        "", // placeholder for image column
-        it.itemName,
-        order.isPreOrder ? "Pra-pesanan" : `× ${it.quantity}`
-      ]);
+      const tableItemsBody = itemsWithImages.map((it) => {
+        let nameText = it.itemName;
+        if (it.recipientName || it.deliveryAddress || it.deliveryTime) {
+          nameText += `\n*Kirim ke: ${it.recipientName || "—"} - ${it.deliveryAddress ? it.deliveryAddress.split(" | ")[0] : "—"} - ${it.deliveryTime ? it.deliveryTime.replace("T", " ") : "—"}`;
+        }
+        return [
+          "", // placeholder for image column
+          nameText,
+          order.isPreOrder ? "Pra-pesanan" : `× ${it.quantity}`
+        ];
+      });
 
       autoTable(doc, {
         startY: y,
@@ -1195,7 +1230,13 @@ export function OrdersPage() {
 
     // ─── Orders table ───
     const tableBody = filteredOrders.map(o => {
-      const itemsList = o.items.map(it => o.isPreOrder ? `${it.itemName} (Pra-pesanan)` : `${it.itemName} (×${it.quantity})`).join("\n");
+      const itemsList = o.items.map(it => {
+        let itStr = o.isPreOrder ? `${it.itemName} (Pra-pesanan)` : `${it.itemName} (×${it.quantity})`;
+        if (it.recipientName || it.deliveryAddress || it.deliveryTime) {
+          itStr += `\n*Kirim ke: ${it.recipientName || "—"} - ${it.deliveryAddress ? it.deliveryAddress.split(" | ")[0] : "—"} - ${it.deliveryTime ? it.deliveryTime.replace("T", " ") : "—"}`;
+        }
+        return itStr;
+      }).join("\n");
       const details = itemsList || [o.foodDetails, o.drinkDetails].filter(Boolean).join(" + ") || "-";
       
       const address = o.deliveryAddress || "";
@@ -1205,7 +1246,7 @@ export function OrdersPage() {
       
       const recipientInfo = [
         o.institutionName ? `Instansi: ${o.institutionName}` : "",
-        o.recipientName ? `Penerima: ${o.recipientName}` : "",
+        o.recipientName ? `Pemesan: ${o.recipientName}` : "",
         cleanAddress ? `Lokasi: ${cleanAddress}` : "",
       ].filter(Boolean).join("\n");
 
@@ -1223,7 +1264,7 @@ export function OrdersPage() {
 
     autoTable(doc, {
       startY: y,
-      head: [["ID", "Instansi, Penerima & Lokasi", "Foto", "Detail Pesanan", "Harga", "Jadwal / Tempo", "Status Ops.", "Pembayaran"]],
+      head: [["ID", "Instansi, Pemesan & Lokasi", "Foto", "Detail Pesanan", "Harga", "Jadwal / Tempo", "Status Ops.", "Pembayaran"]],
       body: tableBody,
       theme: "striped",
       styles: { lineColor: brandYellowBorder, lineWidth: 0.15 },
@@ -1388,7 +1429,7 @@ export function OrdersPage() {
             <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-[#9CA3AF]" />
             <input
               type="text"
-              placeholder="Cari berdasarkan instansi, penerima, nomor telepon, atau ID..."
+              placeholder="Cari berdasarkan instansi, pemesan, nomor telepon, atau ID..."
               className="pl-10 w-full rounded-xl border border-[#D1D5DB] bg-white px-4 py-2 text-sm text-[#111827] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -1439,7 +1480,7 @@ export function OrdersPage() {
               <thead>
                 <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB] text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">
                   <th className="py-4 px-4 whitespace-nowrap">ID / Tipe</th>
-                  <th className="py-4 px-4">Instansi & Penerima</th>
+                  <th className="py-4 px-4">Instansi & Pemesan</th>
                   <th className="py-4 px-4">Detail Pesanan & Harga</th>
                   <th className="py-4 px-4 whitespace-nowrap">Waktu Input & Acara / Tempo</th>
                   <th className="py-4 px-4 whitespace-nowrap">Status Operasional</th>
@@ -1479,10 +1520,22 @@ export function OrdersPage() {
                       {/* Instansi & Penerima */}
                       <td className="py-4 px-4">
                         <div className="font-bold text-[#111827]">{o.institutionName}</div>
-                        <div className="text-xs text-[#6B7280] flex items-center gap-1.5 mt-1 font-medium">
-                          <User className="w-3.5 h-3.5 text-[#9CA3AF]" />
-                          {o.recipientName}
-                        </div>
+                        {o.customerName ? (
+                          <>
+                            <div className="text-xs text-[#6B7280] flex items-center gap-1.5 mt-1 font-medium">
+                              <User className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                              <span>Pemesan: {o.customerName}</span>
+                            </div>
+                            <div className="text-xs text-[#6B7280] flex items-center gap-1.5 mt-0.5 font-medium ml-5">
+                              <span>Penerima: {o.recipientName}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-xs text-[#6B7280] flex items-center gap-1.5 mt-1 font-medium">
+                            <User className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                            {o.recipientName}
+                          </div>
+                        )}
                         <div className="text-xs text-[#6B7280] flex items-center gap-1.5 mt-0.5 font-mono">
                           <Phone className="w-3.5 h-3.5 text-[#9CA3AF]" />
                           {o.recipientPhone}
@@ -1517,7 +1570,17 @@ export function OrdersPage() {
                         </div>
                         <div className="flex items-center gap-1 text-xs text-[#374151]">
                           <Calendar className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
-                          <span>Acara: {new Date(o.eventDate).toLocaleDateString("id-ID")}</span>
+                          <span>Berangkat: {(() => {
+                            if (!o.eventDate) return "—";
+                            const dObj = new Date(o.eventDate);
+                            if (isNaN(dObj.getTime())) return o.eventDate;
+                            const fd = dObj.toLocaleDateString("id-ID");
+                            if (o.eventDate.includes("T")) {
+                              const ft = dObj.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", hour12: false });
+                              return `${fd} ${ft}`;
+                            }
+                            return fd;
+                          })()}</span>
                         </div>
                         <div className={`flex items-center gap-1 text-xs font-semibold mt-1.5 ${
                           dueInfo.isOverdue ? "text-[#EF4444]" : dueInfo.isWarning ? "text-[#F59E0B]" : "text-[#6B7280]"
@@ -1699,6 +1762,16 @@ export function OrdersPage() {
                                 <ImageIcon className="w-3.5 h-3.5" />
                               )}
                             </button>
+
+                            {!isMonitoring && (
+                              <button
+                                onClick={() => handleDeleteOrder(o.id)}
+                                className="text-red-600 hover:text-white hover:bg-red-600 border border-red-200 hover:border-red-600 rounded-lg p-1.5 transition-all flex items-center justify-center cursor-pointer"
+                                title="Hapus Pesanan"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -1940,10 +2013,22 @@ export function OrdersPage() {
                     {o.institutionName}
                   </div>
                   <div className="space-y-0.5 text-[#6B7280] text-[9px]">
-                    <div className="flex items-center gap-1 font-medium truncate">
-                      <User className="w-3 h-3 text-[#9CA3AF] shrink-0" />
-                      <span>{o.recipientName}</span>
-                    </div>
+                    {o.customerName ? (
+                      <>
+                        <div className="flex items-center gap-1 font-medium truncate">
+                          <User className="w-3 h-3 text-[#9CA3AF] shrink-0" />
+                          <span>Pemesan: {o.customerName}</span>
+                        </div>
+                        <div className="flex items-center gap-1 font-medium truncate ml-4">
+                          <span>Penerima: {o.recipientName}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-1 font-medium truncate">
+                        <User className="w-3 h-3 text-[#9CA3AF] shrink-0" />
+                        <span>{o.recipientName}</span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-1 font-mono truncate">
                       <Phone className="w-3 h-3 text-[#9CA3AF] shrink-0" />
                       <span>{o.recipientPhone}</span>
@@ -1970,7 +2055,17 @@ export function OrdersPage() {
                 <div className="space-y-0.5 text-[9px] text-[#374151]">
                   <div className="flex items-center gap-1 truncate">
                     <Calendar className="w-3 h-3 text-[#9CA3AF] shrink-0" />
-                    <span>Acara: {new Date(o.eventDate).toLocaleDateString("id-ID")}</span>
+                    <span>Berangkat: {(() => {
+                      if (!o.eventDate) return "—";
+                      const dObj = new Date(o.eventDate);
+                      if (isNaN(dObj.getTime())) return o.eventDate;
+                      const fd = dObj.toLocaleDateString("id-ID");
+                      if (o.eventDate.includes("T")) {
+                        const ft = dObj.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", hour12: false });
+                        return `${fd} ${ft}`;
+                      }
+                      return fd;
+                    })()}</span>
                   </div>
                   <div className={`flex items-center gap-1 font-semibold ${
                     dueInfo.isOverdue ? "text-[#EF4444]" : dueInfo.isWarning ? "text-[#F59E0B]" : "text-[#6B7280]"
@@ -2198,6 +2293,16 @@ export function OrdersPage() {
                           <ImageIcon className="w-3.5 h-3.5" />
                         )}
                       </button>
+
+                      {!isMonitoring && (
+                        <button
+                          onClick={() => handleDeleteOrder(o.id)}
+                          className="text-red-600 hover:text-white hover:bg-red-600 border border-red-200 hover:border-red-600 rounded-lg transition-all flex items-center justify-center h-8 w-8 shrink-0 cursor-pointer"
+                          title="Hapus Pesanan"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2648,7 +2753,14 @@ export function OrdersPage() {
                     Detail Pengiriman & Acara
                   </h5>
                   <div className="space-y-1 text-neutral-700">
-                    <p className="font-semibold text-neutral-900">{previewInvoiceOrder.recipientName}</p>
+                    {previewInvoiceOrder.customerName ? (
+                      <>
+                        <p className="font-semibold text-neutral-900 text-xs sm:text-sm">Pemesan: {previewInvoiceOrder.customerName}</p>
+                        <p className="font-semibold text-neutral-900 text-xs sm:text-sm">Penerima: {previewInvoiceOrder.recipientName}</p>
+                      </>
+                    ) : (
+                      <p className="font-semibold text-neutral-900">{previewInvoiceOrder.recipientName}</p>
+                    )}
                     <p className="text-[10px] text-neutral-500">{previewInvoiceOrder.institutionName}</p>
                     <p className="font-mono text-[10px]">{previewInvoiceOrder.recipientPhone}</p>
                     <p className="text-[10px] leading-relaxed">{previewInvoiceOrder.deliveryAddress}</p>
@@ -2660,7 +2772,17 @@ export function OrdersPage() {
                     Informasi Tagihan
                   </h5>
                   <div className="space-y-1 text-neutral-700">
-                    <p>Tanggal Acara: <span className="font-bold">{new Date(previewInvoiceOrder.eventDate).toLocaleDateString("id-ID", { dateStyle: "long" })}</span></p>
+                    <p>Jam Pemberangkatan: <span className="font-bold">{(() => {
+                      if (!previewInvoiceOrder.eventDate) return "—";
+                      const dObj = new Date(previewInvoiceOrder.eventDate);
+                      if (isNaN(dObj.getTime())) return previewInvoiceOrder.eventDate;
+                      const fd = dObj.toLocaleDateString("id-ID", { dateStyle: "long" });
+                      if (previewInvoiceOrder.eventDate.includes("T")) {
+                        const ft = dObj.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", hour12: false });
+                        return `${fd} ${ft}`;
+                      }
+                      return fd;
+                    })()}</span></p>
                     <p>Jatuh Tempo: <span className="font-bold text-red-600">{new Date(previewInvoiceOrder.paymentDueDate).toLocaleDateString("id-ID", { dateStyle: "long" })}</span></p>
                     <div className="pt-1.5 border-t border-[#E5E7EB] mt-1.5 flex justify-between items-center text-[10px] font-semibold uppercase">
                       <span className="text-neutral-500">Tipe Pesanan:</span>
@@ -2697,7 +2819,14 @@ export function OrdersPage() {
                               />
                             </div>
                           </td>
-                          <td className="py-2 px-4 font-bold text-neutral-900">{it.itemName}</td>
+                          <td className="py-2 px-4 font-bold text-neutral-900">
+                            <div>{it.itemName}</div>
+                            {(it.recipientName || it.deliveryAddress || it.deliveryTime) && (
+                              <div className="text-[10px] text-amber-700 font-semibold mt-1 leading-normal font-sans">
+                                *Kirim ke: {it.recipientName || "—"} - {it.deliveryAddress ? it.deliveryAddress.split(" | ")[0] : "—"} - {it.deliveryTime ? it.deliveryTime.replace("T", " ") : "—"}
+                              </div>
+                            )}
+                          </td>
                           <td className="py-2 px-4 text-center font-bold font-mono">
                             {previewInvoiceOrder.isPreOrder ? "Pra-pesanan" : `×${it.quantity}`}
                           </td>
@@ -2992,9 +3121,23 @@ export function OrdersPage() {
                   </>
                 )}
               </Button>
+              {!isMonitoring && (
+                <Button
+                  onClick={async () => {
+                    if (previewInvoiceOrder) {
+                      await handleDeleteOrder(previewInvoiceOrder.id);
+                      setPreviewInvoiceOrder(null);
+                    }
+                  }}
+                  className="bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs py-2 px-4 h-9 cursor-pointer font-bold flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus Pesanan</span>
+                </Button>
+              )}
               <Button
                 onClick={() => setPreviewInvoiceOrder(null)}
-                className="bg-[#1E293B] hover:bg-[#0F172A] text-white rounded-xl text-xs py-2 px-4 h-9 cursor-pointer"
+                className="bg-[#1E293B] hover:bg-[#0F172A] text-white rounded-xl text-xs py-2 px-4 h-9 cursor-pointer font-bold"
               >
                 Tutup
               </Button>
@@ -3278,7 +3421,14 @@ export function OrdersPage() {
           <div className="jpg-exp-meta-grid">
             <div>
               <h4 className="jpg-exp-meta-title">Pengiriman & Acara</h4>
-              <p className="jpg-exp-meta-name">{exportingJpgOrder.recipientName}</p>
+              {exportingJpgOrder.customerName ? (
+                <>
+                  <p className="jpg-exp-meta-name">Pemesan: {exportingJpgOrder.customerName}</p>
+                  <p className="jpg-exp-meta-name">Penerima: {exportingJpgOrder.recipientName}</p>
+                </>
+              ) : (
+                <p className="jpg-exp-meta-name">{exportingJpgOrder.recipientName}</p>
+              )}
               <p className="jpg-exp-meta-text">{exportingJpgOrder.institutionName}</p>
               <p className="jpg-exp-meta-phone">{exportingJpgOrder.recipientPhone}</p>
               <p className="jpg-exp-meta-address">{exportingJpgOrder.deliveryAddress}</p>
@@ -3286,8 +3436,18 @@ export function OrdersPage() {
             <div>
               <h4 className="jpg-exp-meta-title">Informasi Tagihan</h4>
               <p className="jpg-exp-meta-info-line">Tanggal Input: <span>{new Date(exportingJpgOrder.createdAt).toLocaleDateString("id-ID")}</span></p>
-              <p className="jpg-exp-meta-info-line">Tanggal Acara: <span>{new Date(exportingJpgOrder.eventDate).toLocaleDateString("id-ID")}</span></p>
-              <p className="jpg-exp-meta-info-line">Waktu Acara: <span>{exportingJpgOrder.deliveryTime}</span></p>
+              <p className="jpg-exp-meta-info-line">Jam Pemberangkatan: <span>{(() => {
+                if (!exportingJpgOrder.eventDate) return "—";
+                const dObj = new Date(exportingJpgOrder.eventDate);
+                if (isNaN(dObj.getTime())) return exportingJpgOrder.eventDate;
+                const fd = dObj.toLocaleDateString("id-ID");
+                if (exportingJpgOrder.eventDate.includes("T")) {
+                  const ft = dObj.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", hour12: false });
+                  return `${fd} ${ft}`;
+                }
+                return fd;
+              })()}</span></p>
+              <p className="jpg-exp-meta-info-line">Harus Sampai: <span>{exportingJpgOrder.deliveryTime}</span></p>
               <p className="jpg-exp-meta-info-line">Jatuh Tempo: <span className="due-date">{new Date(exportingJpgOrder.paymentDueDate).toLocaleDateString("id-ID")}</span></p>
               {exportingJpgOrder.kitchen && (
                 <p className="jpg-exp-meta-info-line">Dapur: <span>{exportingJpgOrder.kitchen}</span></p>
@@ -3320,7 +3480,14 @@ export function OrdersPage() {
                           />
                         </div>
                       </td>
-                      <td className="name-cell">{it.itemName}</td>
+                      <td className="name-cell">
+                        <div>{it.itemName}</div>
+                        {(it.recipientName || it.deliveryAddress || it.deliveryTime) && (
+                          <div className="text-[10px] text-amber-700 font-semibold mt-1 leading-normal">
+                            *Kirim ke: {it.recipientName || "—"} - {it.deliveryAddress ? it.deliveryAddress.split(" | ")[0] : "—"} - {it.deliveryTime ? it.deliveryTime.replace("T", " ") : "—"}
+                          </div>
+                        )}
+                      </td>
                       <td className="qty-cell">
                         {exportingJpgOrder.isPreOrder ? "Pra-pesanan" : `×${it.quantity}`}
                       </td>

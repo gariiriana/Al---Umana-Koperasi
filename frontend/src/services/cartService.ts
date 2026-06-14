@@ -62,6 +62,11 @@ export interface CartLineItem {
   // Using `unknown` keeps the call sites SDK-agnostic; consumers that need
   // the underlying `Timestamp` can cast.
   updatedAt?: unknown;
+  
+  // Custom admin fields for per-item destinations
+  deliveryAddress?: string;
+  deliveryTime?: string;
+  recipientName?: string;
 }
 
 /** Hard cap on a single line's quantity (Requirements 3.4, 3.5). */
@@ -95,6 +100,15 @@ function snapshotToLine(snap: QueryDocumentSnapshot<DocumentData>): CartLineItem
   }
   if (typeof data.imageUrl === "string") {
     line.imageUrl = data.imageUrl;
+  }
+  if (typeof data.deliveryAddress === "string") {
+    line.deliveryAddress = data.deliveryAddress;
+  }
+  if (typeof data.deliveryTime === "string") {
+    line.deliveryTime = data.deliveryTime;
+  }
+  if (typeof data.recipientName === "string") {
+    line.recipientName = data.recipientName;
   }
   return line;
 }

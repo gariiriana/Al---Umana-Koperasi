@@ -22,7 +22,7 @@ export interface LiveCameraProps {
   isOpen: boolean;
   onClose: () => void;
   onCapture: (file: File) => void;
-  activityType: "PRODUKSI" | "PENGIRIMAN" | "START_OTW";
+  activityType: "PRODUKSI" | "PENGIRIMAN" | "START_OTW" | "HANDOVER";
   orderId: string;
 }
 
@@ -68,6 +68,8 @@ export function LiveCamera({
         return "BUKTI PENGIRIMAN";
       case "START_OTW":
         return "MULAI PERJALANAN";
+      case "HANDOVER":
+        return "SERAH TERIMA DAPUR";
       default:
         return "KEGIATAN";
     }

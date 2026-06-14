@@ -16,7 +16,7 @@ export async function getUpcomingDeliveries(hoursAhead = 1): Promise<Order[]> {
     // Parse delivery target time
     const targetTime = o.deliveryTimerEnd 
       ? new Date(o.deliveryTimerEnd).getTime()
-      : new Date(`${o.eventDate}T${o.deliveryTime.includes(":") ? o.deliveryTime : "12:00"}`).getTime();
+      : new Date(`${(o.eventDate || "").slice(0, 10)}T${o.deliveryTime.includes(":") ? o.deliveryTime : "12:00"}`).getTime();
       
     if (isNaN(targetTime)) return false;
     return targetTime >= now && targetTime <= limitTime;

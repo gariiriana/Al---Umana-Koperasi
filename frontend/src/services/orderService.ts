@@ -356,6 +356,19 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
       orderShortId: shortId,
       actorRole: "pelanggan",
     }).catch((e) => console.error("[createOrder Push Notif Error]", e));
+
+    // Push in-app notification to admin
+    pushNotification({
+      recipientId: "admin",
+      type: "order",
+      title: `Pesanan Baru Masuk #${shortId}`,
+      titleEn: `New Order Placed #${shortId}`,
+      message: `Pesanan baru #${shortId} oleh ${order.customerName || "Pelanggan"} telah dibuat. Silakan periksa detail pesanan.`,
+      messageEn: `New order #${shortId} by ${order.customerName || "Customer"} has been placed. Please review the details.`,
+      orderId: order.id,
+      orderShortId: shortId,
+      actorRole: "pelanggan",
+    }).catch((e) => console.error("[createOrder Admin Push Notif Error]", e));
   }
 
   return order;
@@ -624,6 +637,48 @@ export async function transitionOrder(
     }).catch((e) => console.error("[transitionOrder Push Notif Error]", e));
   }
 
+  if (notifData) {
+    // 1. Admin gets all transitions
+    pushNotification({
+      recipientId: "admin",
+      type: notifData.type,
+      title: notifData.title,
+      titleEn: notifData.titleEn,
+      message: notifData.message,
+      messageEn: notifData.messageEn,
+      orderId: updatedOrder.id,
+      orderShortId: shortId,
+      actorRole: "tim_produksi",
+    }).catch((e) => console.error("[transitionOrder Admin Push Notif Error]", e));
+
+    // 2. Route to tim_produksi or distribusi
+    if (payload.action === "qc-fail") {
+      pushNotification({
+        recipientId: "tim_produksi",
+        type: "production",
+        title: `Ulangi Produksi #${shortId}`,
+        titleEn: `Redo Production #${shortId}`,
+        message: `Pesanan #${shortId} gagal QC: "${payload.reason}". Harap siapkan kembali pesanan.`,
+        messageEn: `Order #${shortId} failed QC: "${payload.reason}". Please prepare the order again.`,
+        orderId: updatedOrder.id,
+        orderShortId: shortId,
+        actorRole: "tim_produksi",
+      }).catch((e) => console.error("[transitionOrder Produksi Push Notif Error]", e));
+    } else {
+      pushNotification({
+        recipientId: "distribusi",
+        type: notifData.type,
+        title: notifData.title,
+        titleEn: notifData.titleEn,
+        message: notifData.message,
+        messageEn: notifData.messageEn,
+        orderId: updatedOrder.id,
+        orderShortId: shortId,
+        actorRole: "tim_produksi",
+      }).catch((e) => console.error("[transitionOrder Distribusi Push Notif Error]", e));
+    }
+  }
+
   return updatedOrder;
 }
 
@@ -650,6 +705,33 @@ export async function assignCourier(id: string, courierId: string): Promise<Orde
       actorRole: "distribusi",
     }).catch((e) => console.error("[assignCourier Push Notif Error]", e));
   }
+
+  // Push in-app notification to Courier (personal)
+  pushNotification({
+    recipientId: courierId,
+    type: "delivery",
+    title: `Tugas Pengantar Baru #${sid}`,
+    titleEn: `New Delivery Assignment #${sid}`,
+    message: `Anda ditugaskan untuk mengirim pesanan #${sid} ke alamat: ${updatedOrder.deliveryAddress.split(" | ")[0]}.`,
+    messageEn: `You have been assigned to deliver order #${sid} to address: ${updatedOrder.deliveryAddress.split(" | ")[0]}.`,
+    orderId: id,
+    orderShortId: sid,
+    actorRole: "distribusi",
+  }).catch((e) => console.error("[assignCourier Courier Push Notif Error]", e));
+
+  // Push in-app notification to Admin
+  pushNotification({
+    recipientId: "admin",
+    type: "delivery",
+    title: `Kurir Ditugaskan #${sid}`,
+    titleEn: `Courier Assigned #${sid}`,
+    message: `Kurir baru telah ditugaskan untuk mengirim pesanan #${sid}.`,
+    messageEn: `A new courier has been assigned to deliver order #${sid}.`,
+    orderId: id,
+    orderShortId: sid,
+    actorRole: "distribusi",
+  }).catch((e) => console.error("[assignCourier Admin Push Notif Error]", e));
+
   return updatedOrder;
 }
 
@@ -685,6 +767,32 @@ export async function dispatchOrder(id: string): Promise<Order> {
       actorRole: "distribusi",
     }).catch((e) => console.error("[dispatchOrder Push Notif Error]", e));
   }
+
+  // Push in-app notification to Admin
+  pushNotification({
+    recipientId: "admin",
+    type: "delivery",
+    title: `Pesanan Mulai Dikirim #${shortId}`,
+    titleEn: `Order Delivery Started #${shortId}`,
+    message: `Pesanan #${shortId} sedang diantarkan oleh Kurir ke alamat: ${updatedOrder.deliveryAddress.split(" | ")[0]}.`,
+    messageEn: `Order #${shortId} is being delivered by the Courier to address: ${updatedOrder.deliveryAddress.split(" | ")[0]}.`,
+    orderId: updatedOrder.id,
+    orderShortId: shortId,
+    actorRole: "kurir",
+  }).catch((e) => console.error("[dispatchOrder Admin Push Notif Error]", e));
+
+  // Push in-app notification to Distribusi
+  pushNotification({
+    recipientId: "distribusi",
+    type: "delivery",
+    title: `Pesanan Mulai Dikirim #${shortId}`,
+    titleEn: `Order Delivery Started #${shortId}`,
+    message: `Pesanan #${shortId} sedang diantarkan oleh Kurir ke alamat: ${updatedOrder.deliveryAddress.split(" | ")[0]}.`,
+    messageEn: `Order #${shortId} is being delivered by the Courier to address: ${updatedOrder.deliveryAddress.split(" | ")[0]}.`,
+    orderId: updatedOrder.id,
+    orderShortId: shortId,
+    actorRole: "kurir",
+  }).catch((e) => console.error("[dispatchOrder Distribusi Push Notif Error]", e));
 
   return updatedOrder;
 }
@@ -733,6 +841,32 @@ export async function confirmDelivery(
       actorRole: "kurir",
     }).catch((e) => console.error("[confirmDelivery Push Notif Error]", e));
   }
+
+  // Push in-app notification to Admin
+  pushNotification({
+    recipientId: "admin",
+    type: "delivery",
+    title: `Pengiriman Sukses #${shortId}`,
+    titleEn: `Delivery Completed #${shortId}`,
+    message: `Pesanan #${shortId} telah berhasil diserahkan oleh Kurir.`,
+    messageEn: `Order #${shortId} has been successfully delivered by the Courier.`,
+    orderId: updatedOrder.id,
+    orderShortId: shortId,
+    actorRole: "kurir",
+  }).catch((e) => console.error("[confirmDelivery Admin Push Notif Error]", e));
+
+  // Push in-app notification to Distribusi
+  pushNotification({
+    recipientId: "distribusi",
+    type: "delivery",
+    title: `Pengiriman Sukses #${shortId}`,
+    titleEn: `Delivery Completed #${shortId}`,
+    message: `Pesanan #${shortId} telah berhasil diserahkan oleh Kurir.`,
+    messageEn: `Order #${shortId} has been successfully delivered by the Courier.`,
+    orderId: updatedOrder.id,
+    orderShortId: shortId,
+    actorRole: "kurir",
+  }).catch((e) => console.error("[confirmDelivery Distribusi Push Notif Error]", e));
 
   return updatedOrder;
 }
@@ -867,6 +1001,34 @@ export async function attachPaymentProof(
     WA_MESSAGES.paymentUploaded(updatedOrder.customerName || "", shortId)
   ).catch((e) => console.error("[attachPaymentProof WA Notif Error]", e));
 
+  // Push in-app notification to Customer
+  if (updatedOrder.customerId) {
+    pushNotification({
+      recipientId: updatedOrder.customerId,
+      type: "payment",
+      title: `Bukti Pembayaran Dikirim #${shortId}`,
+      titleEn: `Payment Proof Uploaded #${shortId}`,
+      message: `Bukti pembayaran pesanan #${shortId} Anda telah diunggah dan sedang menunggu persetujuan Admin.`,
+      messageEn: `Your payment proof for order #${shortId} has been uploaded and is awaiting Admin approval.`,
+      orderId: updatedOrder.id,
+      orderShortId: shortId,
+      actorRole: "pelanggan",
+    }).catch((e) => console.error("[attachPaymentProof Customer Push Notif Error]", e));
+  }
+
+  // Push in-app notification to Admin
+  pushNotification({
+    recipientId: "admin",
+    type: "payment",
+    title: `Bukti Pembayaran Baru #${shortId}`,
+    titleEn: `New Payment Proof Uploaded #${shortId}`,
+    message: `Pelanggan ${updatedOrder.customerName || "Pelanggan"} mengunggah bukti pembayaran untuk pesanan #${shortId}. Segera validasi.`,
+    messageEn: `Customer ${updatedOrder.customerName || "Customer"} uploaded payment proof for order #${shortId}. Please validate.`,
+    orderId: updatedOrder.id,
+    orderShortId: shortId,
+    actorRole: "pelanggan",
+  }).catch((e) => console.error("[attachPaymentProof Admin Push Notif Error]", e));
+
   return updatedOrder;
 }
 
@@ -906,6 +1068,32 @@ export async function approvePayment(orderId: string): Promise<Order> {
       actorRole: "admin",
     }).catch((e) => console.error("[approvePayment Push Notif Error]", e));
   }
+
+  // Push in-app notification to Tim Produksi
+  pushNotification({
+    recipientId: "tim_produksi",
+    type: "production",
+    title: `Pesanan Siap Dimasak #${shortId}`,
+    titleEn: `Order Ready to Cook #${shortId}`,
+    message: `Pesanan #${shortId} telah dikonfirmasi. Silakan mulai proses produksi.`,
+    messageEn: `Order #${shortId} has been confirmed. Please start the production process.`,
+    orderId,
+    orderShortId: shortId,
+    actorRole: "admin",
+  }).catch((e) => console.error("[approvePayment Produksi Push Notif Error]", e));
+
+  // Push in-app notification to Distribusi
+  pushNotification({
+    recipientId: "distribusi",
+    type: "delivery",
+    title: `Pesanan Siap Diproduksi #${shortId}`,
+    titleEn: `Order Ready for Production #${shortId}`,
+    message: `Pesanan #${shortId} telah dikonfirmasi dan mengantre untuk diproduksi.`,
+    messageEn: `Order #${shortId} has been confirmed and is queued for production.`,
+    orderId,
+    orderShortId: shortId,
+    actorRole: "admin",
+  }).catch((e) => console.error("[approvePayment Distribusi Push Notif Error]", e));
 
   return updatedOrder;
 }
@@ -1038,6 +1226,7 @@ export interface CreateAdminOrderPayload {
   promoCode?: string;
   discountAmount?: number;
   isPreOrder?: boolean;
+  customerName?: string;
 }
 
 export async function createAdminOrder(payload: CreateAdminOrderPayload): Promise<Order> {
@@ -1058,6 +1247,7 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
     recipientName: payload.recipientName,
     recipientPhone: payload.recipientPhone,
     recipientNotes: payload.recipientNotes || "",
+    customerName: payload.customerName || "",
     eventDate: payload.eventDate,
     deliveryAddress: payload.deliveryAddress,
     deliveryTime: payload.deliveryTime,
@@ -1084,7 +1274,7 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
 
     // 1. Fetch and verify stock for all items in parallel (READS PHASE)
     const itemRefs = payload.items.map((item) => {
-      if (!item.itemId) return null;
+      if (!item.itemId || item.itemId.startsWith("manual_")) return null;
       return doc(db, "inventory", item.itemId);
     }).filter((ref): ref is Exclude<typeof ref, null> => ref !== null);
 
@@ -1094,8 +1284,13 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
     const enrichedItems: OrderLineItem[] = [];
 
     for (const item of payload.items) {
-      if (!item.itemId) {
-        enrichedItems.push(item);
+      if (!item.itemId || item.itemId.startsWith("manual_")) {
+        // Enrich manual/custom items directly
+        enrichedItems.push({
+          ...item,
+          imageUrl: "",
+          ingredients: "",
+        });
         continue;
       }
       const itemSnap = itemSnaps[snapIdx++];
@@ -1124,7 +1319,7 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
     }
 
     if (outOfStockItems.length > 0) {
-      throw new Error("Stok tidak mencukupi untuk item: " + outOfStockItems.join(", "));
+      orderData.stockWarnings = outOfStockItems;
     }
 
     orderData.items = enrichedItems; // Save enriched items with imageUrl and ingredients
@@ -1132,14 +1327,15 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
     // Deduct stock (WRITES ONLY)
     if (!payload.isPreOrder) {
       for (const item of payload.items) {
-        if (!item.itemId) continue;
+        if (!item.itemId || item.itemId.startsWith("manual_")) continue;
         const itemRef = doc(db, "inventory", item.itemId);
         const data = inventoryDataMap.get(item.itemId);
-        const currentQty = data?.quantity ?? 0;
+        if (!data) continue;
+        const currentQty = data.quantity;
         const newQty = currentQty - item.quantity;
         tx.update(itemRef, {
           quantity: newQty,
-          available: newQty > 0 ? (data?.available ?? true) : false,
+          available: newQty > 0 ? (data.available ?? true) : false,
           updatedAt: now.toISOString(),
         });
       }
@@ -1173,6 +1369,19 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
       actorRole: "admin",
     }).catch((e) => console.error("[createAdminOrder Push Notif Error]", e));
   }
+
+  // Push in-app notification to all admins
+  pushNotification({
+    recipientId: "admin",
+    type: "order",
+    title: `Pesanan Baru Dibuat Admin #${shortId}`,
+    titleEn: `New Admin Order #${shortId}`,
+    message: `Pesanan baru #${shortId} untuk ${order.recipientName || order.customerName} dari ${order.institutionName || "-"} telah dibuat oleh Admin.`,
+    messageEn: `New order #${shortId} for ${order.recipientName || order.customerName} from ${order.institutionName || "-"} has been created by Admin.`,
+    orderId: order.id,
+    orderShortId: shortId,
+    actorRole: "admin",
+  }).catch((e) => console.error("[createAdminOrder Admin Push Notif Error]", e));
 
   return order;
 }
@@ -1256,16 +1465,68 @@ export async function generateInvoiceToken(orderId: string): Promise<string> {
 }
 
 export async function assignMultipleOrders(courierId: string, orderIds: string[]): Promise<void> {
+  const orders: Order[] = [];
   await runTransaction(db, async (tx) => {
     const now = new Date();
-    for (const id of orderIds) {
-      const docRef = doc(db, "orders", id);
-      tx.update(docRef, {
+    const refs = orderIds.map(id => doc(db, "orders", id));
+    const snaps = await Promise.all(refs.map(ref => tx.get(ref)));
+    
+    for (let i = 0; i < orderIds.length; i++) {
+      const snap = snaps[i];
+      if (snap.exists()) {
+        orders.push(snapshotToOrder(snap));
+      }
+      tx.update(refs[i], {
         assignedCourierId: courierId,
         updatedAt: now,
       });
     }
   });
+
+  // Push notifications for each order!
+  for (const o of orders) {
+    const sid = shortOrderId(o.id);
+    // Notify customer
+    if (o.customerId) {
+      pushNotification({
+        recipientId: o.customerId,
+        type: "delivery",
+        title: `Kurir Ditugaskan #${sid}`,
+        titleEn: `Courier Assigned #${sid}`,
+        message: `Kurir telah ditugaskan untuk pesanan #${sid}. Pesanan Anda akan segera dikirim.`,
+        messageEn: `A courier has been assigned to order #${sid}. Your order will be shipped soon.`,
+        orderId: o.id,
+        orderShortId: sid,
+        actorRole: "distribusi",
+      }).catch((e) => console.error("[assignMultipleOrders Customer Notif Error]", e));
+    }
+    
+    // Notify courier (specifically targeted user ID)
+    pushNotification({
+      recipientId: courierId,
+      type: "delivery",
+      title: `Tugas Pengantar Baru #${sid}`,
+      titleEn: `New Delivery Assignment #${sid}`,
+      message: `Anda ditugaskan untuk mengirim pesanan #${sid} ke alamat: ${o.deliveryAddress.split(" | ")[0]}.`,
+      messageEn: `You have been assigned to deliver order #${sid} to address: ${o.deliveryAddress.split(" | ")[0]}.`,
+      orderId: o.id,
+      orderShortId: sid,
+      actorRole: "distribusi",
+    }).catch((e) => console.error("[assignMultipleOrders Courier Notif Error]", e));
+
+    // Notify admin
+    pushNotification({
+      recipientId: "admin",
+      type: "delivery",
+      title: `Kurir Ditugaskan #${sid}`,
+      titleEn: `Courier Assigned #${sid}`,
+      message: `Kurir baru telah ditugaskan untuk mengirim pesanan #${sid}.`,
+      messageEn: `A new courier has been assigned to deliver order #${sid}.`,
+      orderId: o.id,
+      orderShortId: sid,
+      actorRole: "distribusi",
+    }).catch((e) => console.error("[assignMultipleOrders Admin Notif Error]", e));
+  }
 }
 
 export async function updateAdminNotes(
@@ -1285,5 +1546,10 @@ export async function updateAdminNotes(
   }
   await updateDocAndReturn(docRef, updates);
   return getOrder(orderId);
+}
+
+export async function deleteOrder(orderId: string): Promise<void> {
+  const docRef = doc(db, "orders", orderId);
+  await deleteDoc(docRef);
 }
 

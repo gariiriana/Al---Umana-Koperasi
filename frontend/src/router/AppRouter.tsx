@@ -18,6 +18,7 @@ import {
 } from "@/constants/roles";
 import { StorefrontLayout } from "@/storefront/layouts/StorefrontLayout";
 import { HomePage } from "@/storefront/pages/HomePage";
+import { subscribeNotifications } from "@/services/notificationService";
 
 const LoginPage = lazy(() => import("@/pages/LoginPage").then(module => ({ default: module.LoginPage })));
 const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage").then(module => ({ default: module.ForgotPasswordPage })));
@@ -503,7 +504,7 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Jadwal Distribusi"
-              allowedRoles={["admin", "monitoring", "tim_produksi", "distribusi", "kurir"]}
+              allowedRoles={["admin", "monitoring", "tim_produksi", "kurir"]}
             >
               <SchedulesPage />
             </ShelledRoute>
@@ -645,6 +646,52 @@ function GlobalSignOutModal() {
   );
 }
 
+function BrowserNotificationListener() {
+  const { user, profile } = useAuth();
+
+  useEffect(() => {
+    if (!user) return;
+
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
+
+    const subscriptionStartTime = Date.now();
+
+    const unsubscribe = subscribeNotifications(
+      user.uid,
+      profile?.role,
+      (notifications) => {
+        const newUnread = notifications.filter(
+          (n) => !n.read && Date.parse(n.createdAt) > subscriptionStartTime
+        );
+
+        if (newUnread.length > 0 && typeof window !== "undefined" && "Notification" in window) {
+          if (Notification.permission === "granted") {
+            newUnread.forEach((n) => {
+              const sessionKey = `browser-notif-shown-${n.id}`;
+              if (!sessionStorage.getItem(sessionKey)) {
+                sessionStorage.setItem(sessionKey, "true");
+                new window.Notification(n.title, {
+                  body: n.message,
+                  icon: "/logo.png",
+                });
+              }
+            });
+          }
+        }
+      },
+      (err) => console.error("Global notification listener error:", err)
+    );
+
+    return () => unsubscribe();
+  }, [user, profile?.role]);
+
+  return null;
+}
+
 export function AppRouter() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -668,6 +715,7 @@ export function AppRouter() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <BrowserNotificationListener />
         <Suspense fallback={<LoadingScreen message="Memuat halaman..." />}>
           <RoutesTree />
         </Suspense>

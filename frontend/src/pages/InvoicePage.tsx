@@ -277,12 +277,22 @@ export function InvoicePage() {
               <div className="space-y-2 text-sm text-[#374151]">
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-[#9CA3AF]" />
-                  <span>Tanggal Acara: <span className="font-bold">{new Date(order.eventDate).toLocaleDateString("id-ID", { dateStyle: "long" })}</span></span>
+                  <span>Jam Pemberangkatan: <span className="font-bold">{(() => {
+                    if (!order.eventDate) return "—";
+                    const dObj = new Date(order.eventDate);
+                    if (isNaN(dObj.getTime())) return order.eventDate;
+                    const fd = dObj.toLocaleDateString("id-ID", { dateStyle: "long" });
+                    if (order.eventDate.includes("T")) {
+                      const ft = dObj.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", hour12: false });
+                      return `${fd} ${ft}`;
+                    }
+                    return fd;
+                  })()}</span></span>
                 </div>
                 {order.deliveryTime && (
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-[#9CA3AF]" />
-                    <span>Waktu Pengiriman: <span className="font-bold">{order.deliveryTime}</span></span>
+                    <span>Harus Sampai: <span className="font-bold">{order.deliveryTime}</span></span>
                   </div>
                 )}
                 <div className="flex items-center gap-2">
@@ -318,7 +328,14 @@ export function InvoicePage() {
                           fallbackClassName="h-4 w-4 text-[#9CA3AF]"
                         />
                       </td>
-                      <td className="py-3.5 px-4 font-bold text-[#111827]">{it.itemName}</td>
+                      <td className="py-3.5 px-4 font-bold text-[#111827]">
+                        <div>{it.itemName}</div>
+                        {(it.recipientName || it.deliveryAddress || it.deliveryTime) && (
+                          <div className="text-[10px] text-amber-700 font-semibold mt-1 leading-normal">
+                            *Kirim ke: {it.recipientName || "—"} - {it.deliveryAddress ? it.deliveryAddress.split(" | ")[0] : "—"} - {it.deliveryTime ? it.deliveryTime.replace("T", " ") : "—"}
+                          </div>
+                        )}
+                      </td>
                       <td className="py-3.5 px-4 text-center font-bold font-mono">
                         {order.isPreOrder ? "Pra-pesanan" : `×${it.quantity}`}
                       </td>

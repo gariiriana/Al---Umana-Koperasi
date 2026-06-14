@@ -11,6 +11,18 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { formatIDR } from "@/lib/format";
 
+const TIME_OPTIONS = (() => {
+  const opts = [];
+  for (let h = 1; h < 24; h++) {
+    const hStr = h.toString().padStart(2, "0");
+    for (let m = 0; m < 60; m += 15) {
+      opts.push(`${hStr}:${m.toString().padStart(2, "0")}`);
+    }
+  }
+  opts.push("23:59");
+  return opts;
+})();
+
 interface SelectedItem extends OrderLineItem {
   price: number;
   unit: string;
@@ -32,6 +44,7 @@ interface OrderTemplate {
   additionalNotes: string;
   items: SelectedItem[];
   additionalFee: number;
+  customerName?: string;
 }
 
 export function OrderInputPage() {
@@ -66,7 +79,7 @@ export function OrderInputPage() {
       orderType,
       isPreOrder,
       institutionName,
-      recipientName,
+      recipientName: recipientNames.length > 0 ? recipientNames.join(", ") : customerName.trim(),
       recipientPhone,
       recipientNotes,
       deliveryAddress,
@@ -76,6 +89,7 @@ export function OrderInputPage() {
       additionalNotes,
       items: selectedItems,
       additionalFee,
+      customerName: customerName.trim(),
     };
     const updated = [...templates, template];
     setTemplates(updated);
@@ -97,11 +111,20 @@ export function OrderInputPage() {
     setOrderType(template.orderType);
     setIsPreOrder(template.isPreOrder);
     setInstitutionName(template.institutionName || "");
-    setRecipientName(template.recipientName || "");
+    setCustomerName(template.customerName || template.recipientName || "");
+    setRecipientNames(template.customerName ? (template.recipientName || "").split(", ").filter(Boolean) : []);
     setRecipientPhone(template.recipientPhone || "");
     setRecipientNotes(template.recipientNotes || "");
     setDeliveryAddress(template.deliveryAddress || "");
     setDeliveryTime(template.deliveryTime || "");
+    if (template.deliveryTime && template.deliveryTime.includes("T")) {
+      const parts = template.deliveryTime.split("T");
+      setDeliveryDateOnly(parts[0]);
+      setDeliveryTimeOnly(parts[1]);
+    } else {
+      setDeliveryDateOnly("");
+      setDeliveryTimeOnly("12:00");
+    }
     setFoodDetails(template.foodDetails || "");
     setDrinkDetails(template.drinkDetails || "");
     setAdditionalNotes(template.additionalNotes || "");
@@ -126,12 +149,52 @@ export function OrderInputPage() {
   const [orderType, setOrderType] = useState<OrderType>("event");
   const [isPreOrder, setIsPreOrder] = useState(false);
   const [institutionName, setInstitutionName] = useState("");
-  const [recipientName, setRecipientName] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [recipientNames, setRecipientNames] = useState<string[]>([]);
+  const [newRecipientName, setNewRecipientName] = useState("");
+
+  const handleAddRecipient = () => {
+    const name = newRecipientName.trim();
+    if (name && !recipientNames.includes(name)) {
+      setRecipientNames([...recipientNames, name]);
+      setNewRecipientName("");
+    }
+  };
+
+  const handleRemoveRecipient = (index: number) => {
+    setRecipientNames(recipientNames.filter((_, i) => i !== index));
+  };
+
   const [recipientPhone, setRecipientPhone] = useState("");
   const [recipientNotes, setRecipientNotes] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryTime, setDeliveryTime] = useState("");
+
+  // Split states for Jam Pemberangkatan (eventDate: YYYY-MM-DDTHH:MM)
+  const [eventDateOnly, setEventDateOnly] = useState("");
+  const [eventTimeOnly, setEventTimeOnly] = useState("08:00");
+
+  // Split states for Harus Sampai (deliveryTime: YYYY-MM-DDTHH:MM)
+  const [deliveryDateOnly, setDeliveryDateOnly] = useState("");
+  const [deliveryTimeOnly, setDeliveryTimeOnly] = useState("12:00");
+
+  // Sync with main state
+  useEffect(() => {
+    if (eventDateOnly) {
+      setEventDate(`${eventDateOnly}T${eventTimeOnly}`);
+    } else {
+      setEventDate("");
+    }
+  }, [eventDateOnly, eventTimeOnly]);
+
+  useEffect(() => {
+    if (deliveryDateOnly) {
+      setDeliveryTime(`${deliveryDateOnly}T${deliveryTimeOnly}`);
+    } else {
+      setDeliveryTime("");
+    }
+  }, [deliveryDateOnly, deliveryTimeOnly]);
   const [foodDetails, setFoodDetails] = useState("");
   const [drinkDetails, setDrinkDetails] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
@@ -144,6 +207,42 @@ export function OrderInputPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingMenu, setLoadingMenu] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Manual Custom Item States
+  const [manualItemName, setManualItemName] = useState("");
+  const [manualItemPrice, setManualItemPrice] = useState("");
+  const [manualItemQty, setManualItemQty] = useState(1);
+  const [manualItemUnit, setManualItemUnit] = useState("Porsi");
+
+  const handleAddManualItem = () => {
+    if (!manualItemName.trim()) {
+      showToast({ message: "Nama menu kustom tidak boleh kosong", variant: "error" });
+      return;
+    }
+    const price = Number(manualItemPrice) || 0;
+    if (price <= 0) {
+      showToast({ message: "Harga menu kustom harus lebih dari 0", variant: "error" });
+      return;
+    }
+    const qty = manualItemQty || 1;
+
+    const newItem: SelectedItem = {
+      itemId: `manual_${Date.now()}`,
+      itemName: manualItemName.trim(),
+      quantity: qty,
+      price: price,
+      unit: manualItemUnit.trim() || "Porsi",
+    };
+
+    setSelectedItems([...selectedItems, newItem]);
+    showToast({ message: `Menu kustom "${newItem.itemName}" ditambahkan`, variant: "success" });
+
+    // Reset manual fields
+    setManualItemName("");
+    setManualItemPrice("");
+    setManualItemQty(1);
+    setManualItemUnit("Porsi");
+  };
 
   // Success State
   const [createdOrder, setCreatedOrder] = useState<{ id: string; token: string; phone: string; name: string } | null>(null);
@@ -182,8 +281,7 @@ export function OrderInputPage() {
         return;
       }
       if (existing.quantity >= item.quantity) {
-        showToast({ message: `Stok tidak mencukupi. Stok saat ini: ${item.quantity}`, variant: "error" });
-        return;
+        showToast({ message: `Peringatan: Jumlah melebihi stok yang tersedia (${item.quantity})`, variant: "info" });
       }
       setSelectedItems(
         selectedItems.map((s) =>
@@ -192,8 +290,7 @@ export function OrderInputPage() {
       );
     } else {
       if (!isPreOrder && item.quantity < 1) {
-        showToast({ message: "Stok produk kosong!", variant: "error" });
-        return;
+        showToast({ message: `Peringatan: Stok produk kosong (${item.itemName})`, variant: "info" });
       }
       setSelectedItems([
         ...selectedItems,
@@ -216,10 +313,8 @@ export function OrderInputPage() {
   const handleQtyChange = (itemId: string, qty: number) => {
     if (isPreOrder) return;
     const menuItem = menuItems.find((m) => m.id === itemId);
-    if (!menuItem) return;
-    if (qty > menuItem.quantity) {
-      showToast({ message: `Stok tidak mencukupi. Stok saat ini: ${menuItem.quantity}`, variant: "error" });
-      return;
+    if (menuItem && qty > menuItem.quantity) {
+      showToast({ message: `Peringatan: Jumlah melebihi stok yang tersedia (${menuItem.quantity})`, variant: "info" });
     }
     setSelectedItems(
       selectedItems.map((s) =>
@@ -243,7 +338,7 @@ export function OrderInputPage() {
         orderType,
         isPreOrder,
         institutionName: institutionName.trim(),
-        recipientName: recipientName.trim(),
+        recipientName: recipientNames.length > 0 ? recipientNames.join(", ") : customerName.trim(),
         recipientPhone: recipientPhone.trim(),
         recipientNotes: recipientNotes.trim(),
         eventDate,
@@ -259,9 +354,15 @@ export function OrderInputPage() {
         totalPrice: displayTotal,
         additionalFee,
         additionalNotes: additionalNotes.trim(),
+        customerName: customerName.trim(),
       });
 
-      showToast({ message: "Pesanan berhasil dibuat!", variant: "success" });
+      if (order.stockWarnings && order.stockWarnings.length > 0) {
+        showToast({ message: "Pesanan berhasil dibuat, namun beberapa item melebihi stok!", variant: "info" });
+      } else {
+        showToast({ message: "Pesanan berhasil dibuat!", variant: "success" });
+      }
+
       setCreatedOrder({
         id: order.id,
         token: order.invoiceToken || "",
@@ -365,12 +466,18 @@ export function OrderInputPage() {
                 setCreatedOrder(null);
                 setIsPreOrder(false);
                 setInstitutionName("");
-                setRecipientName("");
+                setCustomerName("");
+                setRecipientNames([]);
+                setNewRecipientName("");
                 setRecipientPhone("");
                 setRecipientNotes("");
                 setEventDate("");
+                setEventDateOnly("");
+                setEventTimeOnly("08:00");
                 setDeliveryAddress("");
                 setDeliveryTime("");
+                setDeliveryDateOnly("");
+                setDeliveryTimeOnly("12:00");
                 setFoodDetails("");
                 setDrinkDetails("");
                 setAdditionalNotes("");
@@ -532,29 +639,120 @@ export function OrderInputPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Input
-                label="Nama Penerima"
+                label="Nama Pemesan"
                 required
                 placeholder="e.g. Ustadz Ahmad"
-                value={recipientName}
-                onChange={(e) => setRecipientName(e.target.value)}
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
               />
               <Input
-                label="Nomor Telepon Penerima"
+                label="Nomor Telepon Pemesan"
                 required
                 placeholder="e.g. 08123456789"
                 value={recipientPhone}
                 onChange={(e) => setRecipientPhone(e.target.value)}
               />
-              <Input
-                label="Tanggal Acara"
-                required
-                type="date"
-                value={eventDate}
-                onChange={(e) => setEventDate(e.target.value)}
-              />
+              
+              {/* Jam Pemberangkatan */}
+              <div>
+                <label className="block text-xs font-semibold text-[#374151] mb-1">
+                  Jam Pemberangkatan
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    required
+                    title="Tanggal Pemberangkatan"
+                    className="flex-1 bg-[#F9FAFB] border border-[#D1D5DB] rounded-lg px-3 py-2.5 text-sm text-[#111827] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40"
+                    value={eventDateOnly}
+                    onChange={(e) => setEventDateOnly(e.target.value)}
+                  />
+                  <select
+                    title="Waktu Pemberangkatan"
+                    className="bg-[#F9FAFB] border border-[#D1D5DB] rounded-lg px-3 py-2.5 text-sm text-[#111827] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40 cursor-pointer"
+                    value={eventTimeOnly}
+                    onChange={(e) => setEventTimeOnly(e.target.value)}
+                  >
+                    {TIME_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Harus Sampai */}
+              <div>
+                <label className="block text-xs font-semibold text-[#374151] mb-1">
+                  Harus Sampai
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    required
+                    title="Tanggal Harus Sampai"
+                    className="flex-1 bg-[#F9FAFB] border border-[#D1D5DB] rounded-lg px-3 py-2.5 text-sm text-[#111827] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40"
+                    value={deliveryDateOnly}
+                    onChange={(e) => setDeliveryDateOnly(e.target.value)}
+                  />
+                  <select
+                    title="Waktu Harus Sampai"
+                    className="bg-[#F9FAFB] border border-[#D1D5DB] rounded-lg px-3 py-2.5 text-sm text-[#111827] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40 cursor-pointer"
+                    value={deliveryTimeOnly}
+                    onChange={(e) => setDeliveryTimeOnly(e.target.value)}
+                  >
+                    {TIME_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-[#374151] mb-1">
+                Nama Penerima
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newRecipientName}
+                  onChange={(e) => setNewRecipientName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddRecipient();
+                    }
+                  }}
+                  placeholder="e.g. Ustadz Ahmad / Nama Penerima Lainnya"
+                  className="flex-1 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddRecipient}
+                  className="px-4 py-2 bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] font-bold text-xs rounded-2xl transition-colors cursor-pointer"
+                >
+                  Tambah
+                </button>
+              </div>
+              {recipientNames.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-2.5">
+                  {recipientNames.map((name, index) => (
+                    <span key={index} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800">
+                      {name}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRecipient(index)}
+                        className="text-amber-500 hover:text-amber-700 font-bold ml-1 focus:outline-none"
+                      >
+                        &times;
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
               <Input
                 label="Alamat Pengiriman"
                 required
@@ -562,19 +760,12 @@ export function OrderInputPage() {
                 value={deliveryAddress}
                 onChange={(e) => setDeliveryAddress(e.target.value)}
               />
-              <Input
-                label="Waktu Pengantaran / Jam Acara"
-                required
-                placeholder="e.g. 10:00 WIB atau Makan Siang"
-                value={deliveryTime}
-                onChange={(e) => setDeliveryTime(e.target.value)}
-              />
             </div>
 
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-[#374151] mb-1">
-                  Catatan Lokasi / Penerima (Opsional)
+                  Keterangan Tambahan (Opsional)
                 </label>
                 <textarea
                   placeholder="e.g. Gedung A Lantai 2, hubungi via WA jika sudah di gerbang"
@@ -601,6 +792,57 @@ export function OrderInputPage() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
+              </div>
+            </div>
+
+            {/* Form Menu Kustom (Manual) */}
+            <div className="bg-[#FAF5FF] border border-[#E9D5FF] rounded-xl p-4 space-y-3">
+              <h4 className="font-['Manrope',system-ui,sans-serif] text-xs font-extrabold text-[#7C3AED] flex items-center gap-1.5">
+                <Plus className="w-3.5 h-3.5" /> Tambah Menu Kustom (Luar Katalog)
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Nama Menu..."
+                    className="w-full rounded-lg border border-[#D1D5DB] bg-white px-3 py-2 text-xs text-[#111827] focus:border-[#7C3AED] focus:outline-none"
+                    value={manualItemName}
+                    onChange={(e) => setManualItemName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <input
+                    type="number"
+                    placeholder="Harga (Rp)..."
+                    className="w-full rounded-lg border border-[#D1D5DB] bg-white px-3 py-2 text-xs text-[#111827] focus:border-[#7C3AED] focus:outline-none"
+                    value={manualItemPrice}
+                    onChange={(e) => setManualItemPrice(e.target.value)}
+                  />
+                </div>
+                <div className="flex gap-1">
+                  <input
+                    type="number"
+                    placeholder="Qty"
+                    className="w-20 rounded-lg border border-[#D1D5DB] bg-white px-3 py-2 text-xs text-[#111827] focus:border-[#7C3AED] focus:outline-none"
+                    value={manualItemQty}
+                    onChange={(e) => setManualItemQty(parseInt(e.target.value, 10) || 1)}
+                    min={1}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Satuan (Porsi/Pcs)"
+                    className="flex-1 rounded-lg border border-[#D1D5DB] bg-white px-3 py-2 text-xs text-[#111827] focus:border-[#7C3AED] focus:outline-none"
+                    value={manualItemUnit}
+                    onChange={(e) => setManualItemUnit(e.target.value)}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleAddManualItem}
+                  className="bg-[#7C3AED] hover:bg-[#6D28D9] text-white border-none text-xs h-9 px-3 py-2 rounded-lg flex items-center justify-center font-bold cursor-pointer"
+                >
+                  Tambah Kustom
+                </Button>
               </div>
             </div>
 

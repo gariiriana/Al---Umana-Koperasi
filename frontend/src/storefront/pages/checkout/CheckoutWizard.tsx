@@ -34,7 +34,7 @@ const DICTIONARY = {
     emptyPrompt: "Keranjang belanja Anda kosong. Silakan tambahkan barang sebelum checkout.",
     shopNow: "Belanja Sekarang",
     confirmTitle: "Konfirmasi Alamat Pengiriman",
-    receiverName: "Nama Penerima",
+    receiverName: "Nama Pemesan",
     fullName: "Nama Lengkap",
     fullAddress: "Alamat Lengkap",
     detecting: "Mendeteksi…",
@@ -49,7 +49,7 @@ const DICTIONARY = {
     timeLunch: "Makan Siang (12:00 - 13:00)",
     timeAfternoon: "Makan Sore (15:00 - 16:00)",
     timeDinner: "Makan Malam (18:00 - 19:00)",
-    nameError: "Nama penerima tidak boleh kosong.",
+    nameError: "Nama pemesan tidak boleh kosong.",
     addressError: "Alamat pengiriman harus antara 10 dan 500 karakter.",
     saving: "Menyimpan…",
     proceedToPayment: "Lanjut ke Pembayaran",
@@ -146,6 +146,18 @@ interface SavedAddress {
   specificDetails: string;
 }
 
+const TIME_OPTIONS = (() => {
+  const opts = [];
+  for (let h = 1; h < 24; h++) {
+    const hStr = h.toString().padStart(2, "0");
+    for (let m = 0; m < 60; m += 15) {
+      opts.push(`${hStr}:${m.toString().padStart(2, "0")}`);
+    }
+  }
+  opts.push("23:59");
+  return opts;
+})();
+
 export function CheckoutWizard() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
@@ -175,6 +187,21 @@ export function CheckoutWizard() {
 
   // Address Step Fields (step-by-step)
   const [customerName, setCustomerName] = useState(() => getSavedField("customerName", ""));
+  const [recipientNames, setRecipientNames] = useState<string[]>([]);
+  const [newRecipientName, setNewRecipientName] = useState("");
+
+  const handleAddRecipient = () => {
+    const name = newRecipientName.trim();
+    if (name && !recipientNames.includes(name)) {
+      setRecipientNames([...recipientNames, name]);
+      setNewRecipientName("");
+    }
+  };
+
+  const handleRemoveRecipient = (index: number) => {
+    setRecipientNames(recipientNames.filter((_, i) => i !== index));
+  };
+
   const [address, setAddress] = useState("");
   const [addrKabupaten, setAddrKabupaten] = useState("");
   const [addrKecamatan, setAddrKecamatan] = useState(""); 
@@ -218,9 +245,47 @@ export function CheckoutWizard() {
   const [institutionName, setInstitutionName] = useState(() => getSavedField("institutionName", ""));
   const [recipientPhone, setRecipientPhone] = useState(() => getSavedField("recipientPhone", ""));
   const [recipientNotes, setRecipientNotes] = useState(() => getSavedField("recipientNotes", ""));
-  const [eventDate, setEventDate] = useState(() => getSavedField("eventDate", ""));
+  const [eventDate, setEventDate] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState(() => getSavedField("deliveryAddress", ""));
-  const [deliveryTime, setDeliveryTime] = useState(() => getSavedField("deliveryTime", ""));
+  const [deliveryTime, setDeliveryTime] = useState("");
+
+  // Split states for Jam Pemberangkatan (eventDate: YYYY-MM-DDTHH:MM)
+  const [eventDateOnly, setEventDateOnly] = useState(() => {
+    const initial = getSavedField<string>("eventDate", "");
+    return initial ? initial.split("T")[0] : "";
+  });
+  const [eventTimeOnly, setEventTimeOnly] = useState(() => {
+    const initial = getSavedField<string>("eventDate", "");
+    return initial && initial.includes("T") ? initial.split("T")[1] : "08:00";
+  });
+
+  // Split states for Harus Sampai (deliveryTime: YYYY-MM-DDTHH:MM)
+  const [deliveryDateOnly, setDeliveryDateOnly] = useState(() => {
+    const initial = getSavedField<string>("deliveryTime", "");
+    return initial ? initial.split("T")[0] : "";
+  });
+  const [deliveryTimeOnly, setDeliveryTimeOnly] = useState(() => {
+    const initial = getSavedField<string>("deliveryTime", "");
+    return initial && initial.includes("T") ? initial.split("T")[1] : "12:00";
+  });
+
+  // Sync with main state
+  useEffect(() => {
+    if (eventDateOnly) {
+      setEventDate(`${eventDateOnly}T${eventTimeOnly}`);
+    } else {
+      setEventDate("");
+    }
+  }, [eventDateOnly, eventTimeOnly]);
+
+  useEffect(() => {
+    if (deliveryDateOnly) {
+      setDeliveryTime(`${deliveryDateOnly}T${deliveryTimeOnly}`);
+    } else {
+      setDeliveryTime("");
+    }
+  }, [deliveryDateOnly, deliveryTimeOnly]);
+
   const [foodDetails, setFoodDetails] = useState(() => getSavedField("foodDetails", ""));
   const [drinkDetails, setDrinkDetails] = useState(() => getSavedField("drinkDetails", ""));
   const [additionalNotes, setAdditionalNotes] = useState(() => getSavedField("additionalNotes", ""));
@@ -601,13 +666,17 @@ export function CheckoutWizard() {
       itemId: item.itemId,
       itemName: item.itemName,
       quantity: item.quantity,
+      notes: item.notes || "",
+      deliveryAddress: item.deliveryAddress ? item.deliveryAddress.trim() : undefined,
+      deliveryTime: item.deliveryTime || undefined,
+      recipientName: item.recipientName || undefined,
     }));
 
     try {
       const order = await createAdminOrder({
         orderType,
         institutionName: institutionName.trim(),
-        recipientName: customerName.trim(), // using customerName as recipientName
+        recipientName: recipientNames.length > 0 ? recipientNames.join(", ") : customerName.trim(),
         recipientPhone: recipientPhone.trim(),
         recipientNotes: recipientNotes.trim(),
         eventDate,
@@ -623,6 +692,7 @@ export function CheckoutWizard() {
         additionalNotes: additionalNotes.trim(),
         promoCode: appliedPromo?.code || undefined,
         discountAmount: promoDiscount || undefined,
+        customerName: customerName.trim(),
       });
 
       // Clear checkout items from cart on success (in background)
@@ -1159,7 +1229,7 @@ export function CheckoutWizard() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <label className="text-xs font-semibold text-[#4B5563]">Nama Penerima</label>
+                        <label className="text-xs font-semibold text-[#4B5563]">Nama Pemesan</label>
                         <input
                           type="text"
                           required
@@ -1170,7 +1240,7 @@ export function CheckoutWizard() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-semibold text-[#4B5563]">Nomor Telepon Penerima</label>
+                        <label className="text-xs font-semibold text-[#4B5563]">Nomor Telepon Pemesan</label>
                         <input
                           type="text"
                           required
@@ -1182,29 +1252,97 @@ export function CheckoutWizard() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold text-[#4B5563]">Tanggal Acara</label>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[#4B5563] block">Nama Penerima</label>
+                      <div className="flex gap-2">
                         <input
-                          type="date"
-                          required
-                          title="Tanggal Acara"
-                          placeholder="Pilih Tanggal Acara"
-                          className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-                          value={eventDate}
-                          onChange={(e) => setEventDate(e.target.value)}
+                          type="text"
+                          value={newRecipientName}
+                          onChange={(e) => setNewRecipientName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddRecipient();
+                            }
+                          }}
+                          placeholder="e.g. Ustadz Ahmad / Nama Penerima Lainnya"
+                          className="flex-1 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                         />
+                        <button
+                          type="button"
+                          onClick={handleAddRecipient}
+                          className="px-4 py-2 bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] font-bold text-xs rounded-2xl transition-colors cursor-pointer"
+                        >
+                          Tambah
+                        </button>
                       </div>
+                      {recipientNames.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-2.5">
+                          {recipientNames.map((name, index) => (
+                            <span key={index} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800">
+                              {name}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveRecipient(index)}
+                                className="text-amber-500 hover:text-amber-700 font-bold ml-1 focus:outline-none"
+                              >
+                                &times;
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Jam Pemberangkatan */}
                       <div className="space-y-1">
-                        <label className="text-xs font-semibold text-[#4B5563]">Harus Sampai Kapan & Jam Berapa?</label>
-                        <input
-                          type="datetime-local"
-                          required
-                          title="Pilih tanggal dan jam deadline pengiriman"
-                          className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-                          value={deliveryTime}
-                          onChange={(e) => setDeliveryTime(e.target.value)}
-                        />
+                        <label className="text-xs font-semibold text-[#4B5563] block">Jam Pemberangkatan</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="date"
+                            required
+                            title="Tanggal Pemberangkatan"
+                            className="flex-1 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-3 py-2.5 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                            value={eventDateOnly}
+                            onChange={(e) => setEventDateOnly(e.target.value)}
+                          />
+                          <select
+                            title="Waktu Pemberangkatan"
+                            className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-3 py-2.5 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] cursor-pointer"
+                            value={eventTimeOnly}
+                            onChange={(e) => setEventTimeOnly(e.target.value)}
+                          >
+                            {TIME_OPTIONS.map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Harus Sampai */}
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-[#4B5563] block">Harus Sampai</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="date"
+                            required
+                            title="Tanggal Harus Sampai"
+                            className="flex-1 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-3 py-2.5 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                            value={deliveryDateOnly}
+                            onChange={(e) => setDeliveryDateOnly(e.target.value)}
+                          />
+                          <select
+                            title="Waktu Harus Sampai"
+                            className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-3 py-2.5 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] cursor-pointer"
+                            value={deliveryTimeOnly}
+                            onChange={(e) => setDeliveryTimeOnly(e.target.value)}
+                          >
+                            {TIME_OPTIONS.map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     </div>
 
@@ -1243,7 +1381,7 @@ export function CheckoutWizard() {
 
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-[#374151]">
-                        Catatan Lokasi / Penerima (Opsional)
+                        Keterangan Tambahan (Opsional)
                       </label>
                       <textarea
                         placeholder="e.g. Gedung A Lantai 2, hubungi via WA jika sudah di gerbang"
@@ -1335,6 +1473,177 @@ export function CheckoutWizard() {
                             }}
                           />
                         </div>
+
+                        {/* Admin-only per-item custom destination settings */}
+                        {isAdmin && (
+                          <div className="space-y-2 pt-1">
+                            <label className="flex items-center gap-2 text-[10px] sm:text-xs font-bold text-neutral-600 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={!!item.deliveryAddress}
+                                onChange={async (e) => {
+                                  const checked = e.target.checked;
+                                  const newAddr = checked ? (deliveryAddress || " ") : undefined;
+                                  const newTime = checked ? (deliveryTime || "") : undefined;
+                                  const newRecipient = checked ? (recipientNames.join(", ") || customerName || "") : undefined;
+                                  
+                                  setCheckoutItems((prev) =>
+                                    prev.map((it) =>
+                                      it.itemId === item.itemId
+                                        ? {
+                                            ...it,
+                                            deliveryAddress: newAddr,
+                                            deliveryTime: newTime,
+                                            recipientName: newRecipient,
+                                          }
+                                        : it
+                                    )
+                                  );
+
+                                  if (!directCheckoutItems && user) {
+                                    try {
+                                      await updateDoc(doc(db, "carts", user.uid, "items", item.itemId), {
+                                        deliveryAddress: newAddr === undefined ? null : newAddr,
+                                        deliveryTime: newTime === undefined ? null : newTime,
+                                        recipientName: newRecipient === undefined ? null : newRecipient,
+                                      });
+                                    } catch (err) {
+                                      console.error(err);
+                                    }
+                                  }
+                                }}
+                                className="accent-[#FBBF24] w-3.5 h-3.5 rounded animate-none focus:ring-0 focus:outline-none"
+                              />
+                              Kirim ke alamat/jadwal berbeda
+                            </label>
+
+                            {!!item.deliveryAddress && (() => {
+                              const itDate = item.deliveryTime ? item.deliveryTime.split("T")[0] : "";
+                              const itTime = item.deliveryTime && item.deliveryTime.includes("T") ? item.deliveryTime.split("T")[1] : "12:00";
+
+                              return (
+                                <div className="space-y-2.5 pt-2 pl-3 border-l-2 border-[#FEF08A] mt-1 font-['Hanken_Grotesk'] text-xs">
+                                  {/* Recipient */}
+                                  <div className="space-y-1">
+                                    <label className="block font-semibold text-[#4B5563]">Nama Penerima Khusus</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      placeholder="e.g. Ustadz Ahmad / Nama Penerima Lainnya"
+                                      className="w-full bg-white border border-[#E5E7EB] rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#FBBF24]"
+                                      value={item.recipientName || ""}
+                                      onChange={async (e) => {
+                                        const val = e.target.value;
+                                        setCheckoutItems((prev) =>
+                                          prev.map((it) =>
+                                            it.itemId === item.itemId ? { ...it, recipientName: val } : it
+                                          )
+                                        );
+                                        if (!directCheckoutItems && user) {
+                                          try {
+                                            await updateDoc(doc(db, "carts", user.uid, "items", item.itemId), {
+                                              recipientName: val,
+                                            });
+                                          } catch (err) {
+                                            console.error("Failed to update recipient name:", err);
+                                          }
+                                        }
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Schedule */}
+                                  <div className="space-y-1">
+                                    <label className="block font-semibold text-[#4B5563]">Jadwal Pengantaran Khusus</label>
+                                    <div className="flex gap-2">
+                                      <input
+                                        type="date"
+                                        required
+                                        title="Tanggal Pengantaran Khusus"
+                                        className="flex-1 bg-white border border-[#E5E7EB] rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#FBBF24]"
+                                        value={itDate}
+                                        onChange={async (e) => {
+                                          const newDate = e.target.value;
+                                          const combTime = newDate ? `${newDate}T${itTime}` : "";
+                                          setCheckoutItems((prev) =>
+                                            prev.map((it) =>
+                                              it.itemId === item.itemId ? { ...it, deliveryTime: combTime } : it
+                                            )
+                                          );
+                                          if (!directCheckoutItems && user) {
+                                            try {
+                                              await updateDoc(doc(db, "carts", user.uid, "items", item.itemId), {
+                                                deliveryTime: combTime,
+                                              });
+                                            } catch (err) {
+                                              console.error("Failed to update delivery time:", err);
+                                            }
+                                          }
+                                        }}
+                                      />
+                                      <select
+                                        title="Jam Pengantaran Khusus"
+                                        className="bg-white border border-[#E5E7EB] rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#FBBF24] cursor-pointer"
+                                        value={itTime}
+                                        onChange={async (e) => {
+                                          const newTime = e.target.value;
+                                          const combTime = itDate ? `${itDate}T${newTime}` : `T${newTime}`;
+                                          setCheckoutItems((prev) =>
+                                            prev.map((it) =>
+                                              it.itemId === item.itemId ? { ...it, deliveryTime: combTime } : it
+                                            )
+                                          );
+                                          if (!directCheckoutItems && user) {
+                                            try {
+                                              await updateDoc(doc(db, "carts", user.uid, "items", item.itemId), {
+                                                deliveryTime: combTime,
+                                              });
+                                            } catch (err) {
+                                              console.error("Failed to update delivery time:", err);
+                                            }
+                                          }
+                                        }}
+                                      >
+                                        {TIME_OPTIONS.map((opt) => (
+                                          <option key={opt} value={opt}>{opt}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                  {/* Address */}
+                                  <div className="space-y-1">
+                                    <label className="block font-semibold text-[#4B5563]">Alamat Pengiriman Khusus</label>
+                                    <textarea
+                                      required
+                                      rows={2}
+                                      placeholder="Masukkan alamat lengkap pengiriman khusus item ini..."
+                                      className="w-full bg-white border border-[#E5E7EB] rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#FBBF24]"
+                                      value={item.deliveryAddress === " " ? "" : (item.deliveryAddress || "")}
+                                      onChange={async (e) => {
+                                        const val = e.target.value;
+                                        setCheckoutItems((prev) =>
+                                          prev.map((it) =>
+                                            it.itemId === item.itemId ? { ...it, deliveryAddress: val || " " } : it
+                                          )
+                                        );
+                                        if (!directCheckoutItems && user) {
+                                          try {
+                                            await updateDoc(doc(db, "carts", user.uid, "items", item.itemId), {
+                                              deliveryAddress: val || " ",
+                                            });
+                                          } catch (err) {
+                                            console.error("Failed to update delivery address:", err);
+                                          }
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1855,6 +2164,22 @@ export function CheckoutWizard() {
                                 }}
                               />
                             </div>
+
+                            {/* Read-only Custom Address Summary for Admin */}
+                            {isAdmin && (item.deliveryAddress || item.deliveryTime || item.recipientName) && (
+                              <div className="text-[10px] text-[#4B5563] bg-[#FFFDF5] border border-amber-100 rounded-xl p-2 space-y-0.5 font-medium leading-normal">
+                                <span className="font-extrabold text-[#D97706] block text-[9px] uppercase tracking-wide">Pengiriman Khusus</span>
+                                {item.recipientName && (
+                                  <p><strong className="text-neutral-500">Penerima:</strong> {item.recipientName}</p>
+                                )}
+                                {item.deliveryTime && (
+                                  <p><strong className="text-neutral-500">Jadwal:</strong> {item.deliveryTime}</p>
+                                )}
+                                {item.deliveryAddress && (
+                                  <p className="break-words"><strong className="text-neutral-500">Alamat:</strong> {item.deliveryAddress}</p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

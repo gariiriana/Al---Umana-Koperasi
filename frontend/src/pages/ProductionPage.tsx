@@ -11,7 +11,9 @@ import type { Order } from "@/types/order";
 import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import { ProductImage } from "@/components/ProductImage";
-import { parseIngredients } from "@/lib/ingredientsParser";const formatSimpleAddress = (address: string) => {
+import { parseIngredients } from "@/lib/ingredientsParser";
+
+const formatSimpleAddress = (address: string) => {
   if (!address) return "";
   const parts = address.split(" | ");
   if (parts.length === 7) {
@@ -22,6 +24,25 @@ import { parseIngredients } from "@/lib/ingredientsParser";const formatSimpleAdd
     return parts[0];
   }
   return address.replace(/https?:\/\/[^\s]+/, "").trim();
+};
+
+const isOrderPastDeadline = (order: Order): boolean => {
+  if (!order.eventDate) return false;
+  const datePart = order.eventDate.slice(0, 10);
+  let time = "12:00";
+  if (order.deliveryTime) {
+    const match = order.deliveryTime.match(/(\d{2})[:.](\d{2})/);
+    if (match) {
+      time = `${match[1]}:${match[2]}`;
+    }
+  }
+  const ts = Date.parse(`${datePart}T${time}`);
+  if (isNaN(ts)) return false;
+  
+  const activeStatuses = ["PENDING", "IN_PRODUCTION", "QC", "READY_TO_DELIVER", "OUT_FOR_DELIVERY", "READY"];
+  if (!activeStatuses.includes(order.status)) return false;
+  
+  return Date.now() > ts;
 };
 
 function OrderCard({ order, busyId, onStart, onComplete }: {
@@ -37,6 +58,7 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
   const isBusy = busyId === order.id;
   const isInProduction = order.status === "IN_PRODUCTION";
   const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
+  const isPast = isOrderPastDeadline(order);
 
   const [showStartForm, setShowStartForm] = useState(false);
   const [itemKitchens, setItemKitchens] = useState<Record<string, string>>({});
@@ -119,16 +141,23 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
             </div>
 
             {/* Status chip */}
-            <span className={
-              "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] sm:text-[11px] font-bold self-start " +
-              (isInProduction
-                ? "bg-amber-100 text-amber-700"
-                : "bg-emerald-100 text-emerald-700")
-            }>
-              {isInProduction
-                ? <><ChefHat className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> Masak</>
-                : <><Clock className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> Antri</>}
-            </span>
+            <div className="flex flex-col items-end gap-1 shrink-0">
+              <span className={
+                "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] sm:text-[11px] font-bold self-start " +
+                (isInProduction
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-emerald-100 text-emerald-700")
+              }>
+                {isInProduction
+                  ? <><ChefHat className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> Masak</>
+                  : <><Clock className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> Antri</>}
+              </span>
+              {isPast && (
+                <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-extrabold bg-red-100 text-red-700 animate-pulse border border-red-300">
+                  <AlertCircle className="h-2.5 w-2.5 text-red-600" /> TERLEWAT
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Delivery time */}
@@ -147,11 +176,24 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
           {/* Recipient & Destination Info */}
           {(order.recipientName || order.deliveryAddress) && (
             <div className="space-y-1.5 mb-3 bg-[#F9FAFB] rounded-lg p-2.5 border border-[#E5E7EB] font-['Hanken_Grotesk'] text-xs text-[#4B5563]">
-              {order.recipientName && (
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-[#374151] text-[10px] uppercase tracking-wide">Penerima:</span>
-                  <span className="font-semibold text-[#111827] truncate">{order.recipientName}</span>
-                </div>
+              {order.customerName ? (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-[#374151] text-[10px] uppercase tracking-wide">Pemesan:</span>
+                    <span className="font-semibold text-[#111827] truncate">{order.customerName}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-[#374151] text-[10px] uppercase tracking-wide">Penerima:</span>
+                    <span className="font-semibold text-[#111827] truncate">{order.recipientName}</span>
+                  </div>
+                </>
+              ) : (
+                order.recipientName && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-[#374151] text-[10px] uppercase tracking-wide">Pemesan:</span>
+                    <span className="font-semibold text-[#111827] truncate">{order.recipientName}</span>
+                  </div>
+                )
               )}
               {order.deliveryAddress && (
                 <div className="flex items-start gap-1">
@@ -418,6 +460,20 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
   );
 }
 
+const getOrderDeadline = (order: Order): number => {
+  if (!order.eventDate) return Infinity;
+  const datePart = order.eventDate.slice(0, 10);
+  let time = "12:00";
+  if (order.deliveryTime) {
+    const match = order.deliveryTime.match(/(\d{2})[:.](\d{2})/);
+    if (match) {
+      time = `${match[1]}:${match[2]}`;
+    }
+  }
+  const ts = Date.parse(`${datePart}T${time}`);
+  return isNaN(ts) ? Infinity : ts;
+};
+
 export function ProductionPage() {
   const { lang } = useLanguage();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -426,12 +482,22 @@ export function ProductionPage() {
 
   useEffect(() => subscribeOrders(setOrders, console.error), []);
 
-  const confirmed = orders.filter((o) => o.status === "PENDING").sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-  );
-  const inProduction = orders.filter((o) => o.status === "IN_PRODUCTION").sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-  );
+  const confirmed = orders.filter((o) => o.status === "PENDING").sort((a, b) => {
+    const deadlineA = getOrderDeadline(a);
+    const deadlineB = getOrderDeadline(b);
+    if (deadlineA !== deadlineB) {
+      return deadlineA - deadlineB;
+    }
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+  const inProduction = orders.filter((o) => o.status === "IN_PRODUCTION").sort((a, b) => {
+    const deadlineA = getOrderDeadline(a);
+    const deadlineB = getOrderDeadline(b);
+    if (deadlineA !== deadlineB) {
+      return deadlineA - deadlineB;
+    }
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredQueue = useMemo(() => {
@@ -513,7 +579,7 @@ export function ProductionPage() {
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Cari antrean produksi berdasarkan nama instansi, penerima, atau produk..."
+          placeholder="Cari antrean produksi berdasarkan nama instansi, pemesan, atau produk..."
           className="w-full rounded-full border border-[#E5E7EB] bg-white pl-9 pr-10 py-2 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition font-['Hanken_Grotesk']"
         />
         {searchQuery && (
@@ -551,7 +617,7 @@ export function ProductionPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-4">
           <AnimatePresence>
             {filteredQueue.map((o) => (
               <OrderCard

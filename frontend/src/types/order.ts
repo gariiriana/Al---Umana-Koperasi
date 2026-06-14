@@ -28,6 +28,10 @@ export interface OrderLineItem {
   quantity: number;
   imageUrl?: string;
   ingredients?: string;
+  notes?: string;
+  deliveryAddress?: string;
+  deliveryTime?: string;
+  recipientName?: string;
 }
 
 export interface ManualValidation {
@@ -70,6 +74,8 @@ export interface Order {
   customerName?: string;
   rejectionReason?: string;
   outOfStockItems?: string[];
+  stockWarnings?: string[];
+  courierSickReported?: boolean;
   assignedCourierId?: string;
   productionStartedBy?: string;
   productionStartedAt?: string;

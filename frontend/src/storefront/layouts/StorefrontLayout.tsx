@@ -354,21 +354,22 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
 
     const unsubscribe = subscribeUnreadCount(
       user.uid,
+      profile?.role,
       (count) => setUnreadCount(count),
       (err) => console.error("Failed to subscribe to unread count:", err)
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, profile?.role]);
 
   // Auto-mark all as read when visiting /notifications
   useEffect(() => {
     if (location.pathname === "/notifications" && user) {
-      markAllNotificationsAsRead(user.uid).catch((err) =>
+      markAllNotificationsAsRead(user.uid, profile?.role).catch((err) =>
         console.error("Failed to auto-mark notifications as read:", err)
       );
     }
-  }, [location.pathname, user]);
+  }, [location.pathname, user, profile?.role]);
 
   const t = DICTIONARY[lang];
 

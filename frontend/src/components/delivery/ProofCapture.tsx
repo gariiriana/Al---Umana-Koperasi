@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, RotateCcw, Upload as UploadIcon, Trash2, Plus } from "lucide-react";
+import { Camera, RotateCcw, Upload as UploadIcon, Trash2, Plus, AlertCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -18,6 +18,7 @@ import { LiveCamera } from "@/components/LiveCamera";
 export interface ProofCaptureProps {
   orderId: string;
   customerName: string;
+  recipientName?: string;
   onComplete?: () => void;
 }
 
@@ -114,6 +115,7 @@ const compressImage = (file: File, maxDimension = 1280, quality = 0.8): Promise<
 export function ProofCapture({
   orderId,
   customerName,
+  recipientName,
   onComplete,
 }: ProofCaptureProps) {
   const [photoItems, setPhotoItems] = useState<ProofPhotoItem[]>([]);
@@ -330,8 +332,14 @@ export function ProofCapture({
         Bukti Pengantaran (Proof of Delivery)
       </h3>
       <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#6B7280] mb-4">
-        Ambil foto bukti dokumentasi dan tanda tangan penerima (PIC) untuk{" "}
-        <span className="font-semibold text-[#111827]">{customerName}</span>.
+        Ambil foto bukti dokumentasi dan tanda tangan penerima (PIC) untuk Pemesan (PIC):{" "}
+        <span className="font-semibold text-[#111827]">{customerName}</span>
+        {recipientName && recipientName.trim() && recipientName !== customerName && (
+          <>
+            {" "}dan Penerima: <span className="font-semibold text-[#111827]">{recipientName}</span>
+          </>
+        )}
+        .
       </p>
 
       <div className="space-y-5">
@@ -340,6 +348,15 @@ export function ProofCapture({
           <label className="block text-xs font-bold text-[#374151] font-['Hanken_Grotesk',system-ui,sans-serif]">
             Foto Bukti Pengiriman (Bisa lebih dari satu)
           </label>
+
+          {/* Courier photo reminder */}
+          <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 font-['Hanken_Grotesk'] leading-relaxed shadow-xs animate-pulse">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="font-extrabold text-amber-900 block mb-0.5">PENTING: Wajib Foto Bersama Penerima!</strong>
+              Pastikan Anda mengambil foto bukti pengiriman yang menampilkan **penerima paket (PIC)** bersama makanan/paketnya. Jangan hanya memfoto paketnya saja!
+            </div>
+          </div>
           
           {/* Grid of uploaded photos */}
           {photoItems.length > 0 && (

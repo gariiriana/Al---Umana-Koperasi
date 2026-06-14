@@ -17,6 +17,7 @@ import {
   ShoppingCart,
   Truck,
   History,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -75,6 +76,8 @@ export interface SidebarProps {
   searchValue?: string;
   onSearchChange?: (value: string) => void;
   searchPlaceholder?: string;
+  isMobileOpen?: boolean;
+  onClose?: () => void;
 }
 
 
@@ -104,6 +107,8 @@ export function Sidebar({
   searchValue,
   onSearchChange,
   searchPlaceholder = "Cari pesanan, kurir...",
+  isMobileOpen,
+  onClose,
 }: SidebarProps) {
   const { lang } = useLanguage();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -118,20 +123,43 @@ export function Sidebar({
   const initial = (userName ?? userEmail ?? "?").charAt(0).toUpperCase();
 
   return (
-    <aside
-      aria-label="Primary navigation"
-      className="hidden md:flex md:w-60 md:flex-col md:shrink-0 bg-white border-r border-[#E5E7EB] h-screen sticky top-0"
-    >
-      {/* Logo */}
-      <div className="px-6 py-4 border-b border-[#E5E7EB]">
-        <Link to={userRole ? (ROLE_DEFAULT_REDIRECT[userRole] ?? "/") : "/"}>
-          <img
-            src="/logo.png"
-            alt="Pondok Pesantren Modern Al Umanaa"
-            className="h-14 object-contain cursor-pointer hover:opacity-90 transition-opacity"
-          />
-        </Link>
-      </div>
+    <>
+      {/* Mobile Backdrop */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-30 md:hidden animate-in fade-in duration-200"
+          onClick={onClose}
+        />
+      )}
+
+      <aside
+        aria-label="Primary navigation"
+        className={`
+          fixed inset-y-0 left-0 z-40 w-60 bg-white border-r border-[#E5E7EB] h-screen flex flex-col shrink-0
+          transition-transform duration-300 ease-in-out
+          md:sticky md:translate-x-0
+          ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
+        `}
+      >
+        {/* Logo */}
+        <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between">
+          <Link to={userRole ? (ROLE_DEFAULT_REDIRECT[userRole] ?? "/") : "/"} onClick={() => onClose?.()}>
+            <img
+              src="/logo.png"
+              alt="Pondok Pesantren Modern Al Umanaa"
+              className="h-14 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+            />
+          </Link>
+          <button
+            type="button"
+            onClick={onClose}
+            className="md:hidden p-1.5 rounded-full text-[#6B7280] hover:bg-gray-100 hover:text-gray-900 cursor-pointer"
+            title="Close Menu"
+            aria-label="Close Menu"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
       {/* Search Input (Desktop) */}
       {onSearchChange && (
@@ -162,6 +190,7 @@ export function Sidebar({
               <li key={to}>
                 <NavLink
                   to={to}
+                  onClick={() => onClose?.()}
                   className={({ isActive }) =>
                     `${ITEM_BASE} ${isActive ? ITEM_ACTIVE : ITEM_INACTIVE}`
                   }
@@ -245,9 +274,10 @@ export function Sidebar({
               </div>
             </>
           )}
-        </div>
-      )}
-    </aside>
+          </div>
+        )}
+      </aside>
+    </>
   );
 }
 

@@ -6,13 +6,14 @@ import {
   History, Eye, ChevronUp
 } from "lucide-react";
 import { ApiError } from "@/services/apiClient";
-import { transitionOrder, dispatchOrder } from "@/services/orderService";
+import { transitionOrder, assignCourier } from "@/services/orderService";
 import { subscribeOrders } from "@/services/realtimeService";
 import type { Order, KitchenSignature } from "@/types/order";
 
 import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import { ProofModal } from "@/components/delivery/ProofModal";
+import { ProductImage } from "@/components/ProductImage";
 
 const renderFormattedAddress = (address: string) => {
   if (!address) return null;
@@ -81,6 +82,20 @@ const renderFormattedAddress = (address: string) => {
   );
 };
 
+const getOrderDeadline = (order: Order): number => {
+  if (!order.eventDate) return Infinity;
+  const datePart = order.eventDate.slice(0, 10);
+  let time = "12:00";
+  if (order.deliveryTime) {
+    const match = order.deliveryTime.match(/(\d{2})[:.](\d{2})/);
+    if (match) {
+      time = `${match[1]}:${match[2]}`;
+    }
+  }
+  const ts = Date.parse(`${datePart}T${time}`);
+  return isNaN(ts) ? Infinity : ts;
+};
+
 export function HandoverPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -90,7 +105,7 @@ export function HandoverPage() {
   const watcherRef = useRef<number | null>(null);
   const gpsThrottleRef = useRef<number>(0);
 
-  const [activeTab, setActiveTab] = useState<"ready" | "preparation" | "enroute" | "completed">("ready");
+  const [activeTab, setActiveTab] = useState<"ready" | "preparation" | "enroute" | "completed">("preparation");
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [isProofModalOpen, setIsProofModalOpen] = useState(false);
   const [selectedProofFiles, setSelectedProofFiles] = useState<string[]>([]);
@@ -130,15 +145,39 @@ export function HandoverPage() {
 
   // Group by tab status
   const preparation = useMemo(() => {
-    return assignedOrders.filter((o) => o.status === "PENDING" || o.status === "IN_PRODUCTION");
+    return assignedOrders.filter((o) => o.status === "PENDING" || o.status === "IN_PRODUCTION")
+      .sort((a, b) => {
+        const deadlineA = getOrderDeadline(a);
+        const deadlineB = getOrderDeadline(b);
+        if (deadlineA !== deadlineB) {
+          return deadlineA - deadlineB;
+        }
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      });
   }, [assignedOrders]);
 
   const ready = useMemo(() => {
-    return assignedOrders.filter((o) => o.status === "READY_TO_DELIVER" || o.status === "READY");
+    return assignedOrders.filter((o) => o.status === "READY_TO_DELIVER" || o.status === "READY")
+      .sort((a, b) => {
+        const deadlineA = getOrderDeadline(a);
+        const deadlineB = getOrderDeadline(b);
+        if (deadlineA !== deadlineB) {
+          return deadlineA - deadlineB;
+        }
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      });
   }, [assignedOrders]);
 
   const enRoute = useMemo(() => {
-    return assignedOrders.filter((o) => o.status === "OUT_FOR_DELIVERY");
+    return assignedOrders.filter((o) => o.status === "OUT_FOR_DELIVERY")
+      .sort((a, b) => {
+        const deadlineA = getOrderDeadline(a);
+        const deadlineB = getOrderDeadline(b);
+        if (deadlineA !== deadlineB) {
+          return deadlineA - deadlineB;
+        }
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      });
   }, [assignedOrders]);
 
   const completed = useMemo(() => {
@@ -216,24 +255,6 @@ export function HandoverPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enRoute.length]);
 
-  // Handover action: transitions status to OUT_FOR_DELIVERY
-  const onHandover = async (orderId: string) => {
-    setBusyId(orderId);
-    setError(null);
-    try {
-      const now = new Date();
-      await dispatchOrder(orderId);
-      await updateDoc(doc(db, "orders", orderId), {
-        deliveryStartedAt: now.toISOString(),
-      });
-    } catch (err) {
-      console.error(err);
-      setError(err instanceof ApiError ? err.message : "Gagal menyerahkan paket.");
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   const onReschedule = async (o: Order) => {
     setBusyId(o.id);
     setError(null);
@@ -241,6 +262,24 @@ export function HandoverPage() {
       await transitionOrder(o.id, { action: "reschedule" });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleReassignCourier = async (orderId: string, newCourierId: string) => {
+    if (!newCourierId) return;
+    setBusyId(orderId);
+    setError(null);
+    try {
+      await assignCourier(orderId, newCourierId);
+      await updateDoc(doc(db, "orders", orderId), {
+        courierSickReported: false,
+        updatedAt: new Date()
+      });
+    } catch (err) {
+      console.error(err);
+      setError("Gagal menugaskan kurir baru");
     } finally {
       setBusyId(null);
     }
@@ -261,7 +300,7 @@ export function HandoverPage() {
         <div className="flex items-center gap-2">
           <div className="flex flex-col items-center bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
             <span className="text-lg font-extrabold text-blue-700 font-['Manrope',system-ui,sans-serif]">{ready.length}</span>
-            <span className="text-[9px] font-bold text-blue-600 uppercase tracking-wide">Siap Kirim</span>
+            <span className="text-[9px] font-bold text-blue-600 uppercase tracking-wide">Siap Diambil</span>
           </div>
           <div className="flex flex-col items-center bg-orange-50 border border-orange-200 rounded-xl px-3 py-2">
             <span className="text-lg font-extrabold text-orange-700 font-['Manrope',system-ui,sans-serif]">{enRoute.length}</span>
@@ -280,20 +319,10 @@ export function HandoverPage() {
       )}
 
       {/* Tab selectors */}
-      <div className="flex border-b border-[#E5E7EB] bg-white rounded-t-2xl px-2">
-        <button
-          onClick={() => setActiveTab("ready")}
-          className={`flex-1 py-3 text-center text-xs font-bold font-['Hanken_Grotesk'] transition-all border-b-2 ${
-            activeTab === "ready"
-              ? "border-[#FBBF24] text-[#111827] font-black"
-              : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
-          }`}
-        >
-          Siap Diserahkan ({ready.length})
-        </button>
+      <div className="flex border-b border-[#E5E7EB] bg-white rounded-t-2xl px-2 overflow-x-auto scrollbar-none whitespace-nowrap">
         <button
           onClick={() => setActiveTab("preparation")}
-          className={`flex-1 py-3 text-center text-xs font-bold font-['Hanken_Grotesk'] transition-all border-b-2 ${
+          className={`flex-1 min-w-[120px] py-3 text-center text-[11px] sm:text-xs font-bold font-['Hanken_Grotesk'] transition-all border-b-2 ${
             activeTab === "preparation"
               ? "border-[#FBBF24] text-[#111827] font-black"
               : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
@@ -302,8 +331,18 @@ export function HandoverPage() {
           Dalam Persiapan ({preparation.length})
         </button>
         <button
+          onClick={() => setActiveTab("ready")}
+          className={`flex-1 min-w-[120px] py-3 text-center text-[11px] sm:text-xs font-bold font-['Hanken_Grotesk'] transition-all border-b-2 ${
+            activeTab === "ready"
+              ? "border-[#FBBF24] text-[#111827] font-black"
+              : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
+          }`}
+        >
+          Siap Diambil ({ready.length})
+        </button>
+        <button
           onClick={() => setActiveTab("enroute")}
-          className={`flex-1 py-3 text-center text-xs font-bold font-['Hanken_Grotesk'] transition-all border-b-2 ${
+          className={`flex-1 min-w-[120px] py-3 text-center text-[11px] sm:text-xs font-bold font-['Hanken_Grotesk'] transition-all border-b-2 ${
             activeTab === "enroute"
               ? "border-[#FBBF24] text-[#111827] font-black"
               : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
@@ -313,7 +352,7 @@ export function HandoverPage() {
         </button>
         <button
           onClick={() => setActiveTab("completed")}
-          className={`flex-1 py-3 text-center text-xs font-bold font-['Hanken_Grotesk'] transition-all border-b-2 ${
+          className={`flex-1 min-w-[120px] py-3 text-center text-[11px] sm:text-xs font-bold font-['Hanken_Grotesk'] transition-all border-b-2 ${
             activeTab === "completed"
               ? "border-[#FBBF24] text-[#111827] font-black"
               : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
@@ -329,7 +368,6 @@ export function HandoverPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <AnimatePresence>
               {ready.map((o) => {
-                const isBusy = busyId === o.id;
                 const courierName = availableCouriers.find((c) => c.uid === o.assignedCourierId)?.displayName || o.assignedCourierId || "Kurir";
 
                 return (
@@ -343,17 +381,58 @@ export function HandoverPage() {
                   >
                     <div className="h-1.5 bg-gradient-to-r from-blue-500 to-cyan-400" />
                     <div className="p-5 space-y-4">
+                      {o.courierSickReported && (
+                        <div className="space-y-2">
+                          <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 animate-pulse">
+                            <span>⚠️ Kurir Sakit / Batal Tugas</span>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wide mb-1">Tugaskan Kurir Baru</label>
+                            <select
+                              title="Pilih Kurir Pengganti"
+                              value=""
+                              onChange={(e) => handleReassignCourier(o.id, e.target.value)}
+                              className="w-full text-xs rounded-xl border border-neutral-200 bg-white p-2 focus:outline-none focus:ring-1 focus:ring-[#FBBF24] cursor-pointer font-bold text-neutral-700"
+                            >
+                              <option value="">-- Pilih Kurir Pengganti --</option>
+                              {availableCouriers.map((c) => (
+                                <option key={c.uid} value={c.uid}>
+                                  {c.displayName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
                       <div className="flex justify-between items-start gap-2">
                         <div>
                           <h4 className="font-['Manrope'] font-black text-base text-[#111827] leading-snug">
                             {o.institutionName}
                           </h4>
-                          <p className="text-xs text-[#4B5563] font-bold mt-0.5">Penerima: {o.recipientName}</p>
+                          {o.customerName ? (
+                            <>
+                              <p className="text-xs text-[#4B5563] font-bold mt-0.5">Pemesan: {o.customerName}</p>
+                              <p className="text-xs text-[#4B5563] font-bold mt-0.5">Penerima: {o.recipientName}</p>
+                            </>
+                          ) : (
+                            <p className="text-xs text-[#4B5563] font-bold mt-0.5">Pemesan: {o.recipientName}</p>
+                          )}
                           <span className="font-mono text-[9px] text-[#9CA3AF]">#{o.id.slice(-6).toUpperCase()}</span>
                         </div>
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-50 border border-blue-200 text-blue-700 uppercase tracking-wide shrink-0">
-                          Selesai Masak
-                        </span>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-50 border border-blue-200 text-blue-700 uppercase tracking-wide">
+                            Selesai Masak
+                          </span>
+                          {(() => {
+                            const deadline = getOrderDeadline(o);
+                            const isPast = deadline !== Infinity && Date.now() > deadline;
+                            return isPast ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-red-100 text-red-700 animate-pulse border border-red-300">
+                                <AlertCircle className="h-2.5 w-2.5 text-red-600" /> TERLEWAT
+                              </span>
+                            ) : null;
+                          })()}
+                        </div>
                       </div>
 
                       <div className="space-y-2 text-xs text-[#4B5563]">
@@ -371,16 +450,47 @@ export function HandoverPage() {
                         </div>
                       </div>
 
-                      <div className="flex gap-2.5 pt-2">
-                        <button
-                          onClick={() => onHandover(o.id)}
-                          disabled={isBusy}
-                          className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#D97706] hover:bg-[#B45309] text-white font-extrabold rounded-xl transition shadow-md shadow-amber-700/15 cursor-pointer text-xs"
-                        >
-                          {isBusy ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : <Truck className="h-4 w-4" />}
-                          <span>Serahkan ke Kurir</span>
-                        </button>
-                      </div>
+                      {/* Detail Pesanan */}
+                      {o.items && o.items.length > 0 && (
+                        <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-3 space-y-2">
+                          <span className="font-extrabold text-[#111827] block text-[10px] uppercase tracking-wider">
+                            Detail Pesanan
+                          </span>
+                          <div className="flex flex-wrap gap-2">
+                            {o.items.map((it) => (
+                              <div key={it.itemId} className="flex flex-col gap-1 bg-white border border-[#E5E7EB] rounded-xl p-1.5 w-full sm:w-auto sm:max-w-[200px]">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-6 h-6 bg-neutral-50 rounded-md overflow-hidden border border-neutral-200 shrink-0 flex items-center justify-center">
+                                    <ProductImage
+                                      imageUrl={it.imageUrl || ""}
+                                      alt={it.itemName}
+                                      className="h-full w-full object-cover"
+                                      fallbackClassName="h-2.5 w-2.5 text-neutral-400"
+                                    />
+                                  </div>
+                                  <span className="text-[10px] font-bold text-neutral-700 truncate max-w-[100px]">{it.itemName}</span>
+                                  <span className="text-[10px] font-black text-neutral-800 shrink-0 px-0.5">x{it.quantity}</span>
+                                </div>
+                                {(it.deliveryAddress || it.deliveryTime || it.recipientName) && (
+                                  <div className="text-[9px] text-[#4B5563] border-t border-[#E5E7EB] pt-1 mt-0.5 space-y-0.5 font-medium leading-tight">
+                                    {it.recipientName && (
+                                      <p className="truncate"><strong className="text-neutral-500">Penerima:</strong> {it.recipientName}</p>
+                                    )}
+                                    {it.deliveryTime && (
+                                      <p className="truncate"><strong className="text-neutral-500">Jadwal:</strong> {it.deliveryTime.replace("T", " ")}</p>
+                                    )}
+                                    {it.deliveryAddress && (
+                                      <p className="break-words line-clamp-2" title={it.deliveryAddress}>
+                                        <strong className="text-neutral-500">Alamat:</strong> {it.deliveryAddress.split(" | ")[0]}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 );
@@ -388,7 +498,7 @@ export function HandoverPage() {
               {ready.length === 0 && (
                 <div className="col-span-full bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center space-y-2">
                   <Package className="h-10 w-10 mx-auto text-[#D1D5DB]" />
-                  <p className="text-sm text-[#9CA3AF] font-['Hanken_Grotesk'] font-medium">Belum ada paket yang siap diserahkan.</p>
+                  <p className="text-sm text-[#9CA3AF] font-['Hanken_Grotesk'] font-medium">Belum ada paket yang siap diambil.</p>
                 </div>
               )}
             </AnimatePresence>
@@ -412,21 +522,62 @@ export function HandoverPage() {
                   >
                     <div className="h-1.5 bg-[#FCD34D]" />
                     <div className="p-5 space-y-4">
+                      {o.courierSickReported && (
+                        <div className="space-y-2">
+                          <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 animate-pulse">
+                            <span>⚠️ Kurir Sakit / Batal Tugas</span>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wide mb-1">Tugaskan Kurir Baru</label>
+                            <select
+                              title="Pilih Kurir Pengganti"
+                              value=""
+                              onChange={(e) => handleReassignCourier(o.id, e.target.value)}
+                              className="w-full text-xs rounded-xl border border-neutral-200 bg-white p-2 focus:outline-none focus:ring-1 focus:ring-[#FBBF24] cursor-pointer font-bold text-neutral-700"
+                            >
+                              <option value="">-- Pilih Kurir Pengganti --</option>
+                              {availableCouriers.map((c) => (
+                                <option key={c.uid} value={c.uid}>
+                                  {c.displayName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
                       <div className="flex justify-between items-start gap-2">
                         <div>
                           <h4 className="font-['Manrope'] font-black text-base text-[#111827] leading-snug">
                             {o.institutionName}
                           </h4>
-                          <p className="text-xs text-[#4B5563] font-bold mt-0.5">Penerima: {o.recipientName}</p>
+                          {o.customerName ? (
+                            <>
+                              <p className="text-xs text-[#4B5563] font-bold mt-0.5">Pemesan: {o.customerName}</p>
+                              <p className="text-xs text-[#4B5563] font-bold mt-0.5">Penerima: {o.recipientName}</p>
+                            </>
+                          ) : (
+                            <p className="text-xs text-[#4B5563] font-bold mt-0.5">Pemesan: {o.recipientName}</p>
+                          )}
                           <span className="font-mono text-[9px] text-[#9CA3AF]">#{o.id.slice(-6).toUpperCase()}</span>
                         </div>
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide shrink-0 ${
-                          o.status === "IN_PRODUCTION" 
-                            ? "bg-amber-50 border border-amber-200 text-amber-700" 
-                            : "bg-blue-50 border border-blue-200 text-blue-700"
-                        }`}>
-                          {o.status === "IN_PRODUCTION" ? "Sedang Dimasak" : "Menunggu Antrean"}
-                        </span>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide ${
+                            o.status === "IN_PRODUCTION" 
+                              ? "bg-amber-50 border border-amber-200 text-amber-700" 
+                              : "bg-blue-50 border border-blue-200 text-blue-700"
+                          }`}>
+                            {o.status === "IN_PRODUCTION" ? "Sedang Dimasak" : "Menunggu Antrean"}
+                          </span>
+                          {(() => {
+                            const deadline = getOrderDeadline(o);
+                            const isPast = deadline !== Infinity && Date.now() > deadline;
+                            return isPast ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-red-100 text-red-700 animate-pulse border border-red-300">
+                                <AlertCircle className="h-2.5 w-2.5 text-red-600" /> TERLEWAT
+                              </span>
+                            ) : null;
+                          })()}
+                        </div>
                       </div>
 
                       <div className="space-y-2 text-xs text-[#4B5563]">
@@ -443,6 +594,48 @@ export function HandoverPage() {
                           <div className="min-w-0 flex-1">{renderFormattedAddress(o.deliveryAddress)}</div>
                         </div>
                       </div>
+
+                      {/* Detail Pesanan */}
+                      {o.items && o.items.length > 0 && (
+                        <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-3 space-y-2">
+                          <span className="font-extrabold text-[#111827] block text-[10px] uppercase tracking-wider">
+                            Detail Pesanan
+                          </span>
+                          <div className="flex flex-wrap gap-2">
+                            {o.items.map((it) => (
+                              <div key={it.itemId} className="flex flex-col gap-1 bg-white border border-[#E5E7EB] rounded-xl p-1.5 w-full sm:w-auto sm:max-w-[200px]">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-6 h-6 bg-neutral-50 rounded-md overflow-hidden border border-neutral-200 shrink-0 flex items-center justify-center">
+                                    <ProductImage
+                                      imageUrl={it.imageUrl || ""}
+                                      alt={it.itemName}
+                                      className="h-full w-full object-cover"
+                                      fallbackClassName="h-2.5 w-2.5 text-neutral-400"
+                                    />
+                                  </div>
+                                  <span className="text-[10px] font-bold text-neutral-700 truncate max-w-[100px]">{it.itemName}</span>
+                                  <span className="text-[10px] font-black text-neutral-800 shrink-0 px-0.5">x{it.quantity}</span>
+                                </div>
+                                {(it.deliveryAddress || it.deliveryTime || it.recipientName) && (
+                                  <div className="text-[9px] text-[#4B5563] border-t border-[#E5E7EB] pt-1 mt-0.5 space-y-0.5 font-medium leading-tight">
+                                    {it.recipientName && (
+                                      <p className="truncate"><strong className="text-neutral-500">Penerima:</strong> {it.recipientName}</p>
+                                    )}
+                                    {it.deliveryTime && (
+                                      <p className="truncate"><strong className="text-neutral-500">Jadwal:</strong> {it.deliveryTime.replace("T", " ")}</p>
+                                    )}
+                                    {it.deliveryAddress && (
+                                      <p className="break-words line-clamp-2" title={it.deliveryAddress}>
+                                        <strong className="text-neutral-500">Alamat:</strong> {it.deliveryAddress.split(" | ")[0]}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       
                       <div className="pt-2 text-[10px] text-[#6B7280] italic text-center bg-amber-50/30 border border-amber-100 rounded-xl p-2">
                         Menunggu tim produksi menyelesaikan masakan sebelum paket dapat diserahkan ke kurir.
@@ -518,12 +711,30 @@ export function HandoverPage() {
                             <h4 className="font-['Manrope'] font-black text-base text-[#111827] leading-snug">
                               {o.institutionName}
                             </h4>
-                            <p className="text-xs text-[#4B5563] font-bold mt-0.5">Penerima: {o.recipientName}</p>
+                            {o.customerName ? (
+                              <>
+                                <p className="text-xs text-[#4B5563] font-bold mt-0.5">Pemesan: {o.customerName}</p>
+                                <p className="text-xs text-[#4B5563] font-bold mt-0.5">Penerima: {o.recipientName}</p>
+                              </>
+                            ) : (
+                              <p className="text-xs text-[#4B5563] font-bold mt-0.5">Pemesan: {o.recipientName}</p>
+                            )}
                             <span className="font-mono text-[9px] text-[#9CA3AF]">#{o.id.slice(-6).toUpperCase()}</span>
                           </div>
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-orange-100 border border-orange-200 text-orange-700 uppercase tracking-wide shrink-0">
-                            Sedang Jalan
-                          </span>
+                          <div className="flex flex-col items-end gap-1 shrink-0">
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-orange-100 border border-orange-200 text-orange-700 uppercase tracking-wide">
+                              Sedang Jalan
+                            </span>
+                            {(() => {
+                              const deadline = getOrderDeadline(o);
+                              const isPast = deadline !== Infinity && Date.now() > deadline;
+                              return isPast ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-red-100 text-red-700 animate-pulse border border-red-300">
+                                  <AlertCircle className="h-2.5 w-2.5 text-red-600" /> TERLEWAT
+                                </span>
+                              ) : null;
+                            })()}
+                          </div>
                         </div>
 
                         <div className="space-y-2 text-xs text-[#4B5563]">
@@ -540,6 +751,48 @@ export function HandoverPage() {
                             <div className="min-w-0 flex-1">{renderFormattedAddress(o.deliveryAddress)}</div>
                           </div>
                         </div>
+
+                        {/* Detail Pesanan */}
+                        {o.items && o.items.length > 0 && (
+                          <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-3 space-y-2">
+                            <span className="font-extrabold text-[#111827] block text-[10px] uppercase tracking-wider">
+                              Detail Pesanan
+                            </span>
+                            <div className="flex flex-wrap gap-2">
+                              {o.items.map((it) => (
+                                <div key={it.itemId} className="flex flex-col gap-1 bg-white border border-[#E5E7EB] rounded-xl p-1.5 shrink-0 max-w-[200px]">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="w-6 h-6 bg-neutral-50 rounded-md overflow-hidden border border-neutral-200 shrink-0 flex items-center justify-center">
+                                      <ProductImage
+                                        imageUrl={it.imageUrl || ""}
+                                        alt={it.itemName}
+                                        className="h-full w-full object-cover"
+                                        fallbackClassName="h-2.5 w-2.5 text-neutral-400"
+                                      />
+                                    </div>
+                                    <span className="text-[10px] font-bold text-neutral-700 truncate max-w-[100px]">{it.itemName}</span>
+                                    <span className="text-[10px] font-black text-neutral-800 shrink-0 px-0.5">x{it.quantity}</span>
+                                  </div>
+                                  {(it.deliveryAddress || it.deliveryTime || it.recipientName) && (
+                                    <div className="text-[9px] text-[#4B5563] border-t border-[#E5E7EB] pt-1 mt-0.5 space-y-0.5 font-medium leading-tight">
+                                      {it.recipientName && (
+                                        <p className="truncate"><strong className="text-neutral-500">Penerima:</strong> {it.recipientName}</p>
+                                      )}
+                                      {it.deliveryTime && (
+                                        <p className="truncate"><strong className="text-neutral-500">Jadwal:</strong> {it.deliveryTime.replace("T", " ")}</p>
+                                      )}
+                                      {it.deliveryAddress && (
+                                        <p className="break-words line-clamp-2" title={it.deliveryAddress}>
+                                          <strong className="text-neutral-500">Alamat:</strong> {it.deliveryAddress.split(" | ")[0]}
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
                         <div className="flex gap-2 pt-2 justify-between items-center">
                           {o.deliveryLat && o.deliveryLng ? (
@@ -617,7 +870,14 @@ export function HandoverPage() {
                                 <h4 className="font-['Manrope'] font-black text-base text-[#111827] truncate">
                                   {o.institutionName}
                                 </h4>
-                                <p className="text-xs text-[#4B5563] font-bold mt-0.5">Penerima: {o.recipientName || "—"}</p>
+                                {o.customerName ? (
+                                  <>
+                                    <p className="text-xs text-[#4B5563] font-bold mt-0.5">Pemesan: {o.customerName}</p>
+                                    <p className="text-xs text-[#4B5563] font-bold mt-0.5">Penerima: {o.recipientName}</p>
+                                  </>
+                                ) : (
+                                  <p className="text-xs text-[#4B5563] font-bold mt-0.5">Pemesan: {o.recipientName || "—"}</p>
+                                )}
                                 <span className="font-mono text-[9px] text-[#9CA3AF]">#{o.id.slice(-6).toUpperCase()}</span>
                               </div>
                               <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-700 uppercase tracking-wide shrink-0">
@@ -641,6 +901,48 @@ export function HandoverPage() {
                                 <div className="min-w-0 flex-1">{renderFormattedAddress(o.deliveryAddress)}</div>
                               </div>
                             </div>
+
+                            {/* Detail Pesanan */}
+                            {o.items && o.items.length > 0 && (
+                              <div className="mt-3 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-3 space-y-2">
+                                <span className="font-extrabold text-[#111827] block text-[10px] uppercase tracking-wider">
+                                  Detail Pesanan
+                                </span>
+                                <div className="flex flex-wrap gap-2">
+                                  {o.items.map((it) => (
+                                    <div key={it.itemId} className="flex flex-col gap-1 bg-white border border-[#E5E7EB] rounded-xl p-1.5 shrink-0 max-w-[200px]">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="w-6 h-6 bg-neutral-50 rounded-md overflow-hidden border border-neutral-200 shrink-0 flex items-center justify-center">
+                                          <ProductImage
+                                            imageUrl={it.imageUrl || ""}
+                                            alt={it.itemName}
+                                            className="h-full w-full object-cover"
+                                            fallbackClassName="h-2.5 w-2.5 text-neutral-400"
+                                          />
+                                        </div>
+                                        <span className="text-[10px] font-bold text-neutral-700 truncate max-w-[100px]">{it.itemName}</span>
+                                        <span className="text-[10px] font-black text-neutral-800 shrink-0 px-0.5">x{it.quantity}</span>
+                                      </div>
+                                      {(it.deliveryAddress || it.deliveryTime || it.recipientName) && (
+                                        <div className="text-[9px] text-[#4B5563] border-t border-[#E5E7EB] pt-1 mt-0.5 space-y-0.5 font-medium leading-tight">
+                                          {it.recipientName && (
+                                            <p className="truncate"><strong className="text-neutral-500">Penerima:</strong> {it.recipientName}</p>
+                                          )}
+                                          {it.deliveryTime && (
+                                            <p className="truncate"><strong className="text-neutral-500">Jadwal:</strong> {it.deliveryTime.replace("T", " ")}</p>
+                                          )}
+                                          {it.deliveryAddress && (
+                                            <p className="break-words line-clamp-2" title={it.deliveryAddress}>
+                                              <strong className="text-neutral-500">Alamat:</strong> {it.deliveryAddress.split(" | ")[0]}
+                                            </p>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
 

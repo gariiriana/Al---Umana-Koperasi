@@ -131,6 +131,7 @@ export function NotificationsPage() {
 
     const unsubscribe = subscribeNotifications(
       user.uid,
+      profile?.role,
       (notifications) => {
         setFirestoreNotifs(notifications);
         setLoading(false);
@@ -142,7 +143,7 @@ export function NotificationsPage() {
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, profile?.role]);
 
   // Load promo products from catalog dynamically
   useEffect(() => {
@@ -191,7 +192,7 @@ export function NotificationsPage() {
     if (!user || markingRead) return;
     setMarkingRead(true);
     try {
-      await markAllNotificationsAsRead(user.uid);
+      await markAllNotificationsAsRead(user.uid, profile?.role);
     } catch (err) {
       console.error("Failed to mark all as read:", err);
     } finally {

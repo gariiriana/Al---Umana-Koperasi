@@ -73,54 +73,120 @@ function firestoreDocToNotification(
 }
 
 /**
- * Subscribe to real-time Firestore notifications for a specific user.
+ * Subscribe to real-time Firestore notifications for a specific user and optional role.
  * Returns an unsubscribe function.
  */
 export function subscribeNotifications(
   userId: string,
+  role: string | undefined,
   callback: (notifications: FirestoreNotification[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
-  const q = query(
+  let listUser: FirestoreNotification[] = [];
+  let listRole: FirestoreNotification[] = [];
+
+  const emit = () => {
+    const combined = [...listUser, ...listRole];
+    const unique = Array.from(new Map(combined.map((n) => [n.id, n])).values());
+    unique.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    callback(unique);
+  };
+
+  const qUser = query(
     collection(db, "notifications"),
     where("recipientId", "==", userId),
     orderBy("createdAt", "desc")
   );
 
-  return onSnapshot(
-    q,
+  const unsubUser = onSnapshot(
+    qUser,
     (snap) => {
-      const list: FirestoreNotification[] = snap.docs.map((d) =>
-        firestoreDocToNotification(d.id, d.data())
-      );
-      callback(list);
+      listUser = snap.docs.map((d) => firestoreDocToNotification(d.id, d.data()));
+      emit();
     },
     onError
   );
+
+  if (role && role !== "pelanggan") {
+    const qRole = query(
+      collection(db, "notifications"),
+      where("recipientId", "==", role),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubRole = onSnapshot(
+      qRole,
+      (snap) => {
+        listRole = snap.docs.map((d) => firestoreDocToNotification(d.id, d.data()));
+        emit();
+      },
+      onError
+    );
+
+    return () => {
+      unsubUser();
+      unsubRole();
+    };
+  }
+
+  return unsubUser;
 }
 
 /**
- * Subscribe only to unread notification count for a user.
+ * Subscribe only to unread notification count for a user and optional role.
  * More efficient than subscribing to full notifications list.
  */
 export function subscribeUnreadCount(
   userId: string,
+  role: string | undefined,
   callback: (count: number) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
-  const q = query(
+  let countUser = 0;
+  let countRole = 0;
+
+  const emit = () => {
+    callback(countUser + countRole);
+  };
+
+  const qUser = query(
     collection(db, "notifications"),
     where("recipientId", "==", userId),
     where("read", "==", false)
   );
 
-  return onSnapshot(
-    q,
+  const unsubUser = onSnapshot(
+    qUser,
     (snap) => {
-      callback(snap.size);
+      countUser = snap.size;
+      emit();
     },
     onError
   );
+
+  if (role && role !== "pelanggan") {
+    const qRole = query(
+      collection(db, "notifications"),
+      where("recipientId", "==", role),
+      where("read", "==", false)
+    );
+
+    const unsubRole = onSnapshot(
+      qRole,
+      (snap) => {
+        countRole = snap.size;
+        emit();
+      },
+      onError
+    );
+
+    return () => {
+      unsubUser();
+      unsubRole();
+    };
+  }
+
+  return unsubUser;
 }
 
 /** Mark a single notification as read. */
@@ -131,20 +197,33 @@ export async function markNotificationAsRead(
   await updateDoc(docRef, { read: true });
 }
 
-/** Mark all notifications as read for a user. */
+/** Mark all notifications as read for a user and optional role. */
 export async function markAllNotificationsAsRead(
-  userId: string
+  userId: string,
+  role?: string
 ): Promise<void> {
-  const q = query(
+  const qUser = query(
     collection(db, "notifications"),
     where("recipientId", "==", userId),
     where("read", "==", false)
   );
-  const snap = await getDocs(q);
-  if (snap.empty) return;
+  const snapUser = await getDocs(qUser);
+  let docsToUpdate = [...snapUser.docs];
+
+  if (role && role !== "pelanggan") {
+    const qRole = query(
+      collection(db, "notifications"),
+      where("recipientId", "==", role),
+      where("read", "==", false)
+    );
+    const snapRole = await getDocs(qRole);
+    docsToUpdate = [...docsToUpdate, ...snapRole.docs];
+  }
+
+  if (docsToUpdate.length === 0) return;
 
   const batch = writeBatch(db);
-  snap.docs.forEach((d) => {
+  docsToUpdate.forEach((d) => {
     batch.update(d.ref, { read: true });
   });
   await batch.commit();

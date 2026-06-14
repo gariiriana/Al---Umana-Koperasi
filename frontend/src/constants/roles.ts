@@ -37,7 +37,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   distribusi: [
     "/distribusi/handover",
     "/distribusi/scheduler",
-    "/distribusi/schedules",
   ],
 
   kurir: [

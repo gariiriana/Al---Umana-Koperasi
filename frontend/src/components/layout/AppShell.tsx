@@ -1,10 +1,9 @@
-import { LogOut, Settings, Bell, Globe, HelpCircle, Tag } from "lucide-react";
+import { LogOut, Settings, Bell, Globe, HelpCircle, Tag, Menu } from "lucide-react";
 import { useState, useEffect, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUnreadCount } from "@/services/notificationService";
-import { MobileNav } from "./MobileNav";
 import { Sidebar } from "./Sidebar";
 import { Footer } from "./Footer";
 import { ROLE_DEFAULT_REDIRECT } from "@/constants/roles";
@@ -39,6 +38,7 @@ export function AppShell({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -47,11 +47,12 @@ export function AppShell({
     }
     const unsubscribe = subscribeUnreadCount(
       user.uid,
+      userRole,
       (count) => setUnreadCount(count),
       (err) => console.error("Failed to subscribe to unread count:", err)
     );
     return () => unsubscribe();
-  }, [user]);
+  }, [user, userRole]);
 
   const handleLangChange = (newLang: "id" | "en") => {
     setLang(newLang);
@@ -80,6 +81,8 @@ export function AppShell({
         searchValue={searchValue}
         onSearchChange={onSearchChange}
         searchPlaceholder={searchPlaceholder}
+        isMobileOpen={isMobileSidebarOpen}
+        onClose={() => setIsMobileSidebarOpen(false)}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -87,6 +90,15 @@ export function AppShell({
         <header className="sticky top-0 z-30 bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-white shadow-md px-2.5 py-2 md:px-4 md:py-3 flex items-center justify-between gap-1.5 md:gap-4 font-['Hanken_Grotesk',system-ui,sans-serif] inset-x-0">
           {/* Left: Logo & Cooperative Name */}
           <div className="flex items-center gap-1 md:gap-2 shrink-0 min-w-0">
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="md:hidden p-1.5 hover:bg-white/10 rounded-lg text-white transition-colors cursor-pointer mr-1"
+              title="Open Sidebar"
+              aria-label="Open Sidebar"
+            >
+              <Menu className="h-6 w-6" />
+            </button>
             <Link to={userRole ? (ROLE_DEFAULT_REDIRECT[userRole] ?? "/") : "/"} className="flex items-center gap-1 md:gap-2 min-w-0">
               <img
                 src="/logo.png"
@@ -258,13 +270,11 @@ export function AppShell({
         </header>
 
         {/* ── Main content ───────────────────────────────────────── */}
-        <main className="flex-1 overflow-y-auto bg-[#F3F4F6] pb-24 md:pb-0 flex flex-col justify-between min-w-0 w-full">
+        <main className="flex-1 overflow-y-auto bg-[#F3F4F6] flex flex-col justify-between min-w-0 w-full">
           <div className="px-4 md:px-6 py-5 w-full min-w-0">{children}</div>
           <Footer />
         </main>
       </div>
-
-      <MobileNav userRole={userRole} />
     </div>
   );
 }
