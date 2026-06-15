@@ -13,7 +13,7 @@ import { formatIDR } from "@/lib/format";
 import { ProductImage } from "@/components/ProductImage";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import html2canvas from "html2canvas";
+import html2canvas from "html2canvas-pro";
 
 const formatSimpleAddress = (address: string) => {
   if (!address) return "";

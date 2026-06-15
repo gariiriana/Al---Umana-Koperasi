@@ -17,7 +17,7 @@ import { uploadFileInChunks } from "@/services/chunkUploadService";
 import { ManualValidationModal } from "@/admin/pages/ManualValidationModal";
 import { formatIDR } from "@/lib/format";
 import { ProductImage } from "@/components/ProductImage";
-import html2canvas from "html2canvas";
+import html2canvas from "html2canvas-pro";
 import { aggregateIngredients } from "@/lib/ingredientsParser";
 import { getProduct } from "@/services/catalogService";
 
