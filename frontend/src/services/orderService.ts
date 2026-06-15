@@ -321,7 +321,7 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
       }
     }
 
-    tx.set(orderDocRef, orderData);
+    tx.set(orderDocRef, cleanUndefined(orderData));
   });
 
   const order = localDataToOrder(orderDocRef.id, orderData);
@@ -1152,7 +1152,7 @@ async function updateDocAndReturn(
 ): Promise<void> {
   // Use runTransaction or setDoc with merge to ensure updates are written
   await runTransaction(db, async (tx) => {
-    tx.set(docRef, updates, { merge: true });
+    tx.set(docRef, cleanUndefined(updates), { merge: true });
   });
 }
 
@@ -1341,7 +1341,7 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
       }
     }
 
-    tx.set(orderDocRef, orderData);
+    tx.set(orderDocRef, cleanUndefined(orderData));
   });
 
   const order = localDataToOrder(orderDocRef.id, orderData);
@@ -1551,5 +1551,23 @@ export async function updateAdminNotes(
 export async function deleteOrder(orderId: string): Promise<void> {
   const docRef = doc(db, "orders", orderId);
   await deleteDoc(docRef);
+}
+
+function cleanUndefined<T>(obj: T): T {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanUndefined) as unknown as T;
+  }
+  if (typeof obj === "object") {
+    const newObj: Record<string, unknown> = {};
+    for (const key of Object.keys(obj)) {
+      const val = (obj as Record<string, unknown>)[key];
+      if (val !== undefined) {
+        newObj[key] = cleanUndefined(val);
+      }
+    }
+    return newObj as unknown as T;
+  }
+  return obj;
 }
 

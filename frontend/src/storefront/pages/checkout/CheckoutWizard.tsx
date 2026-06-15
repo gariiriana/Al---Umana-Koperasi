@@ -9,7 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { subscribeToCart, computeCartTotal, CartLineItem, removeLineItem, setLineNotes, setLineQuantity } from "@/services/cartService";
 import { createOrder, createAdminOrder, PaymentMethod } from "@/services/orderService";
-import type { OrderType } from "@/types/order";
+import type { OrderType, OrderLineItem } from "@/types/order";
 import { formatIDR } from "@/lib/format";
 import type { ReverseGeoResult } from "@/components/MapLocationPicker";
 import { ProductImage } from "@/components/ProductImage";
@@ -662,15 +662,24 @@ export function CheckoutWizard() {
     setSubmittingOrder(true);
     setSubmitError(null);
 
-    const itemsPayload = checkoutItems.map((item) => ({
-      itemId: item.itemId,
-      itemName: item.itemName,
-      quantity: item.quantity,
-      notes: item.notes || "",
-      deliveryAddress: item.deliveryAddress ? item.deliveryAddress.trim() : undefined,
-      deliveryTime: item.deliveryTime || undefined,
-      recipientName: item.recipientName || undefined,
-    }));
+    const itemsPayload: OrderLineItem[] = checkoutItems.map((item) => {
+      const payloadItem: OrderLineItem = {
+        itemId: item.itemId,
+        itemName: item.itemName,
+        quantity: item.quantity,
+        notes: item.notes || "",
+      };
+      if (item.deliveryAddress && item.deliveryAddress.trim()) {
+        payloadItem.deliveryAddress = item.deliveryAddress.trim();
+      }
+      if (item.deliveryTime) {
+        payloadItem.deliveryTime = item.deliveryTime;
+      }
+      if (item.recipientName && item.recipientName.trim()) {
+        payloadItem.recipientName = item.recipientName.trim();
+      }
+      return payloadItem;
+    });
 
     try {
       const order = await createAdminOrder({
