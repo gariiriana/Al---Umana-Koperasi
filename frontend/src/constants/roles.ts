@@ -28,7 +28,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/admin/products/new",
     "/admin/categories",
     "/admin/food-schedule",
-    "/distribusi/schedules",
   ],
 
   /**
@@ -41,7 +40,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
 
   kurir: [
     "/distribusi/delivery",
-    "/distribusi/schedules",
   ],
 
   monitoring: [

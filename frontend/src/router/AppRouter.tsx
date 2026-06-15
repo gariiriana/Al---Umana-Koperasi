@@ -504,7 +504,7 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Jadwal Distribusi"
-              allowedRoles={["admin", "monitoring", "tim_produksi", "kurir"]}
+              allowedRoles={["admin", "monitoring"]}
             >
               <SchedulesPage />
             </ShelledRoute>

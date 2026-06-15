@@ -392,11 +392,16 @@ export function DeliveryPage() {
 
   const [reportingSick, setReportingSick] = useState(false);
   const [showSickConfirm, setShowSickConfirm] = useState(false);
+  const [sickRemark, setSickRemark] = useState("");
 
   const handleSickReport = async () => {
     if (!activeId) return;
     const currentActiveOrder = orders.find((o) => o.id === activeId);
     if (!currentActiveOrder) return;
+    if (!sickRemark.trim()) {
+      showToast({ message: "Alasan pembatalan wajib diisi", variant: "error" });
+      return;
+    }
     
     setReportingSick(true);
     try {
@@ -404,6 +409,7 @@ export function DeliveryPage() {
       const updates: Record<string, string | boolean | Date> = {
         assignedCourierId: "",
         courierSickReported: true,
+        courierSickRemark: sickRemark.trim(),
         updatedAt: new Date(),
       };
 
@@ -421,8 +427,8 @@ export function DeliveryPage() {
         type: "delivery",
         title: `⚠️ Kurir Sakit / Batal Tugas #${sid}`,
         titleEn: `⚠️ Courier Sick / Cancel Task #${sid}`,
-        message: `Kurir membatalkan pengantaran pesanan #${sid} karena sakit/berhalangan. Segera tugaskan kurir baru.`,
-        messageEn: `Courier canceled delivery for order #${sid} due to sickness. Please assign a new courier immediately.`,
+        message: `Kurir membatalkan pengantaran pesanan #${sid} karena sakit/berhalangan. Alasan: ${sickRemark.trim()}. Segera tugaskan kurir baru.`,
+        messageEn: `Courier canceled delivery for order #${sid} due to sickness. Reason: ${sickRemark.trim()}. Please assign a new courier immediately.`,
         orderId: activeId,
         orderShortId: sid,
         actorRole: "kurir",
@@ -434,8 +440,8 @@ export function DeliveryPage() {
         type: "delivery",
         title: `⚠️ Kurir Sakit / Batal Tugas #${sid}`,
         titleEn: `⚠️ Courier Sick / Cancel Task #${sid}`,
-        message: `Kurir membatalkan pengantaran pesanan #${sid} karena sakit/berhalangan. Segera tugaskan kurir baru.`,
-        messageEn: `Courier canceled delivery for order #${sid} due to sickness. Please assign a new courier immediately.`,
+        message: `Kurir membatalkan pengantaran pesanan #${sid} karena sakit/berhalangan. Alasan: ${sickRemark.trim()}. Segera tugaskan kurir baru.`,
+        messageEn: `Courier canceled delivery for order #${sid} due to sickness. Reason: ${sickRemark.trim()}. Please assign a new courier immediately.`,
         orderId: activeId,
         orderShortId: sid,
         actorRole: "kurir",
@@ -564,6 +570,7 @@ export function DeliveryPage() {
   const reset = () => {
     setActiveId(null);
     setStep("list");
+    setSickRemark("");
   };
 
   const open = (o: Order) => {
@@ -976,19 +983,35 @@ export function DeliveryPage() {
             <p className="text-xs text-neutral-600 leading-relaxed">
               Apakah Anda yakin ingin melaporkan sakit dan membatalkan pengantaran ini? Tugas ini akan dikembalikan ke status antrean dan dialihkan ke kurir lain.
             </p>
+            <div className="space-y-1.5">
+              <label htmlFor="sick-remark-input" className="block text-[10px] font-bold text-neutral-500 uppercase">
+                Alasan Pembatalan / Keterangan Sakit <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                id="sick-remark-input"
+                rows={3}
+                value={sickRemark}
+                onChange={(e) => setSickRemark(e.target.value)}
+                placeholder="Tuliskan alasan/keterangan pembatalan di sini secara detail..."
+                className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 focus:ring-2 focus:ring-red-500 focus:border-transparent focus:outline-none font-semibold text-xs text-neutral-800 transition resize-none"
+              />
+            </div>
             <div className="flex gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={handleSickReport}
-                disabled={reportingSick}
-                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+                disabled={reportingSick || !sickRemark.trim()}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {reportingSick && <Loader2 className="h-3 w-3 animate-spin text-white" />}
                 Ya, Laporkan Sakit
               </button>
               <button
                 type="button"
-                onClick={() => setShowSickConfirm(false)}
+                onClick={() => {
+                  setShowSickConfirm(false);
+                  setSickRemark("");
+                }}
                 disabled={reportingSick}
                 className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 font-bold text-xs rounded-xl transition cursor-pointer"
               >
@@ -1110,16 +1133,18 @@ function CustomerInfoCard({
       </div>
 
       {/* Sick Report Option */}
-      <div className="pt-2.5 border-t border-[#F3F4F6] flex justify-between items-center">
-        <span className="text-[10px] text-neutral-400 font-medium">Kurir berhalangan / sakit?</span>
-        <button
-          type="button"
-          onClick={onSickReport}
-          className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-extrabold text-[10px] rounded-lg transition border border-red-200 cursor-pointer"
-        >
-          Laporkan Sakit & Batal
-        </button>
-      </div>
+      {order.status === "READY_TO_DELIVER" && (
+        <div className="pt-2.5 border-t border-[#F3F4F6] flex justify-between items-center">
+          <span className="text-[10px] text-neutral-400 font-medium">Kurir berhalangan / sakit?</span>
+          <button
+            type="button"
+            onClick={onSickReport}
+            className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-extrabold text-[10px] rounded-lg transition border border-red-200 cursor-pointer"
+          >
+            Laporkan Sakit & Batal
+          </button>
+        </div>
+      )}
     </div>
   );
 }

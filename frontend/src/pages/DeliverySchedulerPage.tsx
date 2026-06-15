@@ -573,6 +573,11 @@ export function DeliverySchedulerPage() {
                                 ? "Masak" 
                                 : "Antri"}
                           </span>
+                          {o.courierSickReported && (
+                            <span className="px-1.5 py-0.5 rounded text-[8px] xs:text-[10px] font-extrabold bg-red-100 text-red-700 border border-red-300">
+                              Batal/Sakit
+                            </span>
+                          )}
                           {(() => {
                             const deadline = getOrderDeadline(o);
                             const isPast = deadline !== Infinity && Date.now() > deadline;
@@ -651,6 +656,16 @@ export function DeliverySchedulerPage() {
                                 )}
                               </div>
                             ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Courier Sick Remark */}
+                      {o.courierSickReported && o.courierSickRemark && (
+                        <div className="sm:col-span-2 pt-2 border-t border-[#F3F4F6]">
+                          <div className="bg-red-50 border border-red-200 rounded-xl px-2.5 py-1.5 text-[10px] xs:text-xs text-red-800 leading-relaxed font-semibold">
+                            <span className="font-black block uppercase text-[9px] tracking-wide text-red-700 mb-0.5">Alasan Kurir Batal Tugas:</span>
+                            {o.courierSickRemark}
                           </div>
                         </div>
                       )}

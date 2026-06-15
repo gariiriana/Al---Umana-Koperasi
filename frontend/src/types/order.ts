@@ -76,6 +76,7 @@ export interface Order {
   outOfStockItems?: string[];
   stockWarnings?: string[];
   courierSickReported?: boolean;
+  courierSickRemark?: string;
   assignedCourierId?: string;
   productionStartedBy?: string;
   productionStartedAt?: string;

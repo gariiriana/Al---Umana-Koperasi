@@ -135,6 +135,8 @@ export function OrdersPage() {
     return "ALL";
   });
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | "ALL">("ALL");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
   
   // Modal states
   const [validationTargetId, setValidationTargetId] = useState<string | null>(null);
@@ -584,7 +586,11 @@ export function OrdersPage() {
     const matchStatus = statusFilter === "ALL" ? true : o.status === statusFilter;
     const matchPayment = paymentFilter === "ALL" ? true : o.paymentStatus === paymentFilter;
 
-    return matchSearch && matchStatus && matchPayment;
+    const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
+    const matchStartDate = startDate ? oDate >= startDate : true;
+    const matchEndDate = endDate ? oDate <= endDate : true;
+
+    return matchSearch && matchStatus && matchPayment && matchStartDate && matchEndDate;
   });
 
   const exportSingleOrderToPDF = async (order: Order) => {
@@ -1112,7 +1118,8 @@ export function OrdersPage() {
         });
         const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
         const link = document.createElement("a");
-        link.download = `AlUmana_Invoice_${order.id.slice(-6).toUpperCase()}_${order.eventDate}.jpg`;
+        const safeEventDate = order.eventDate ? order.eventDate.replace(/:/g, "-") : "no_date";
+        link.download = `AlUmana_Invoice_${order.id.slice(-6).toUpperCase()}_${safeEventDate}.jpg`;
         link.href = dataUrl;
         link.click();
         showToast({ message: "JPG Invoice berhasil diunduh!", variant: "success" });
@@ -1201,6 +1208,11 @@ export function OrdersPage() {
     if (statusFilter !== "ALL") filterDesc.push(`Status: ${statusFilter}`);
     if (paymentFilter !== "ALL") filterDesc.push(`Pembayaran: ${paymentFilter}`);
     if (search) filterDesc.push(`Cari: "${search}"`);
+    if (startDate || endDate) {
+      const startStr = startDate ? new Date(startDate).toLocaleDateString("id-ID") : "Awal";
+      const endStr = endDate ? new Date(endDate).toLocaleDateString("id-ID") : "Akhir";
+      filterDesc.push(`Periode: ${startStr} - ${endStr}`);
+    }
     
     if (filterDesc.length > 0) {
       doc.text(`Filter: ${filterDesc.join(" | ")}`, pageW - 14, metaY, { align: "right" });
@@ -1422,52 +1434,86 @@ export function OrdersPage() {
         </div>
       </div>
 
-      {/* Filters & Search */}
       <Card className="p-4 bg-white border border-[#E5E7EB] rounded-2xl shadow-xs">
-        <div className="flex flex-col md:flex-row gap-4 items-center">
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-[#9CA3AF]" />
-            <input
-              type="text"
-              placeholder="Cari berdasarkan instansi, pemesan, nomor telepon, atau ID..."
-              className="pl-10 w-full rounded-xl border border-[#D1D5DB] bg-white px-4 py-2 text-sm text-[#111827] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col md:flex-row gap-4 items-center">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-[#9CA3AF]" />
+              <input
+                type="text"
+                placeholder="Cari berdasarkan instansi, pemesan, nomor telepon, atau ID..."
+                className="pl-10 w-full rounded-xl border border-[#D1D5DB] bg-white px-4 py-2 text-sm text-[#111827] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 sm:flex sm:flex-row gap-2 sm:gap-3 w-full md:w-auto">
+              <div className="w-full sm:w-48">
+                <select
+                  className="w-full rounded-xl border border-[#D1D5DB] bg-white px-2 py-2 sm:px-3 sm:py-2 text-[11px] sm:text-xs font-semibold text-[#374151] focus:border-[#FBBF24] focus:outline-none"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as OrderStatus | "ALL")}
+                  aria-label="Filter Status Operasional"
+                >
+                  <option value="ALL">Semua Status</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="IN_PRODUCTION">Dalam Produksi</option>
+                  <option value="QC">QC</option>
+                  <option value="READY_TO_DELIVER">Siap Dikirim</option>
+                  <option value="OUT_FOR_DELIVERY">Dalam Pengiriman</option>
+                  <option value="COMPLETED">Selesai</option>
+                  <option value="DELIVERY_FAILED">Gagal Kirim</option>
+                </select>
+              </div>
+
+              <div className="w-full sm:w-48">
+                <select
+                  className="w-full rounded-xl border border-[#D1D5DB] bg-white px-2 py-2 sm:px-3 sm:py-2 text-[11px] sm:text-xs font-semibold text-[#374151] focus:border-[#FBBF24] focus:outline-none"
+                  value={paymentFilter}
+                  onChange={(e) => setPaymentFilter(e.target.value as PaymentStatus | "ALL")}
+                  aria-label="Filter Status Pembayaran"
+                >
+                  <option value="ALL">Semua Bayar</option>
+                  <option value="BELUM_DIBAYAR">Belum Dibayar</option>
+                  <option value="SUDAH_DIBAYAR">Sudah Dibayar</option>
+                  <option value="JATUH_TEMPO">Jatuh Tempo</option>
+                </select>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:flex sm:flex-row gap-2 sm:gap-3 w-full md:w-auto">
-            <div className="w-full sm:w-48">
-              <select
-                className="w-full rounded-xl border border-[#D1D5DB] bg-white px-2 py-2 sm:px-3 sm:py-2 text-[11px] sm:text-xs font-semibold text-[#374151] focus:border-[#FBBF24] focus:outline-none"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as OrderStatus | "ALL")}
-                aria-label="Filter Status Operasional"
-              >
-                <option value="ALL">Semua Status</option>
-                <option value="PENDING">Pending</option>
-                <option value="IN_PRODUCTION">Dalam Produksi</option>
-                <option value="QC">QC</option>
-                <option value="READY_TO_DELIVER">Siap Dikirim</option>
-                <option value="OUT_FOR_DELIVERY">Dalam Pengiriman</option>
-                <option value="COMPLETED">Selesai</option>
-                <option value="DELIVERY_FAILED">Gagal Kirim</option>
-              </select>
+          <div className="flex flex-col sm:flex-row gap-3 items-center border-t border-[#F3F4F6] pt-3">
+            <span className="text-xs font-bold text-[#4B5563] self-start sm:self-center shrink-0">Filter Tanggal Acara:</span>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <input
+                type="date"
+                className="rounded-xl border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#374151] focus:border-[#FBBF24] focus:outline-none w-full sm:w-40 font-semibold"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                aria-label="Tanggal Mulai"
+              />
+              <span className="text-xs text-neutral-400">s/d</span>
+              <input
+                type="date"
+                className="rounded-xl border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#374151] focus:border-[#FBBF24] focus:outline-none w-full sm:w-40 font-semibold"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                aria-label="Tanggal Akhir"
+              />
             </div>
-
-            <div className="w-full sm:w-48">
-              <select
-                className="w-full rounded-xl border border-[#D1D5DB] bg-white px-2 py-2 sm:px-3 sm:py-2 text-[11px] sm:text-xs font-semibold text-[#374151] focus:border-[#FBBF24] focus:outline-none"
-                value={paymentFilter}
-                onChange={(e) => setPaymentFilter(e.target.value as PaymentStatus | "ALL")}
-                aria-label="Filter Status Pembayaran"
+            {(startDate || endDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStartDate("");
+                  setEndDate("");
+                }}
+                className="text-xs font-bold text-red-500 hover:text-red-700 cursor-pointer ml-auto sm:ml-0"
               >
-                <option value="ALL">Semua Bayar</option>
-                <option value="BELUM_DIBAYAR">Belum Dibayar</option>
-                <option value="SUDAH_DIBAYAR">Sudah Dibayar</option>
-                <option value="JATUH_TEMPO">Jatuh Tempo</option>
-              </select>
-            </div>
+                Reset Tanggal
+              </button>
+            )}
           </div>
         </div>
       </Card>

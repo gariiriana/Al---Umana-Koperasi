@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, CheckCheck, Clock, ChefHat, Package, AlertCircle, Loader2, Search, X, MapPin } from "lucide-react";
+import { Play, CheckCheck, Clock, ChefHat, Package, AlertCircle, Loader2, Search, X, MapPin, FileDown } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 import { ApiError } from "@/services/apiClient";
@@ -12,6 +12,10 @@ import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import { ProductImage } from "@/components/ProductImage";
 import { parseIngredients } from "@/lib/ingredientsParser";
+import { getProduct } from "@/services/catalogService";
+import { useToast } from "@/contexts/ToastContext";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const formatSimpleAddress = (address: string) => {
   if (!address) return "";
@@ -43,6 +47,46 @@ const isOrderPastDeadline = (order: Order): boolean => {
   if (!activeStatuses.includes(order.status)) return false;
   
   return Date.now() > ts;
+};
+
+const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch image: ${res.statusText}`);
+    const blob = await res.blob();
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const maxDim = 256;
+        let width = img.naturalWidth;
+        let height = img.naturalHeight;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = () => resolve(null);
+      img.src = URL.createObjectURL(blob);
+    });
+  } catch (err) {
+    console.error("Error converting URL to Base64:", err);
+    return null;
+  }
 };
 
 function OrderCard({ order, busyId, onStart, onComplete }: {
@@ -476,9 +520,13 @@ const getOrderDeadline = (order: Order): number => {
 
 export function ProductionPage() {
   const { lang } = useLanguage();
+  const { showToast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => subscribeOrders(setOrders, console.error), []);
 
@@ -501,7 +549,21 @@ export function ProductionPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredQueue = useMemo(() => {
-    const rawQueue = [...inProduction, ...confirmed];
+    let rawQueue = [...inProduction, ...confirmed];
+
+    if (startDate) {
+      rawQueue = rawQueue.filter((o) => {
+        const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
+        return oDate >= startDate;
+      });
+    }
+    if (endDate) {
+      rawQueue = rawQueue.filter((o) => {
+        const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
+        return oDate <= endDate;
+      });
+    }
+
     if (!searchQuery.trim()) return rawQueue;
     const q = searchQuery.toLowerCase().trim();
     return rawQueue.filter(
@@ -512,7 +574,7 @@ export function ProductionPage() {
         o.id.toLowerCase().includes(q) ||
         o.items.some((item) => item.itemName.toLowerCase().includes(q))
     );
-  }, [inProduction, confirmed, searchQuery]);
+  }, [inProduction, confirmed, searchQuery, startDate, endDate]);
 
   const start = async (
     o: Order,
@@ -546,53 +608,306 @@ export function ProductionPage() {
     }
   };
 
+  const exportOrdersToPDF = async () => {
+    if (filteredQueue.length === 0) {
+      showToast({
+        message: lang === "id" ? "Tidak ada pesanan aktif untuk diekspor." : "No active orders to export.",
+        variant: "info",
+      });
+      return;
+    }
+
+    setExporting(true);
+    try {
+      showToast({
+        message: lang === "id" ? "Sedang memproses data dan foto produk..." : "Processing data and product photos...",
+        variant: "info",
+      });
+
+      // 1. Fetch product data and convert images to Base64 in parallel
+      const allItemIds = Array.from(new Set(filteredQueue.flatMap(o => o.items.map(it => it.itemId))));
+      const productMap: Record<string, string | null> = {};
+      await Promise.all(
+        allItemIds.map(async (id) => {
+          try {
+            const product = await getProduct(id);
+            if (product && product.imageUrl) {
+              const base64 = await getBase64ImageFromUrl(product.imageUrl);
+              productMap[id] = base64;
+            } else {
+              productMap[id] = null;
+            }
+          } catch (e) {
+            console.error("Failed to fetch product image for bulk export:", e);
+            productMap[id] = null;
+          }
+        })
+      );
+
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      
+      const brandGold: [number, number, number] = [217, 119, 6];       // #D97706
+      const brandAmberDark: [number, number, number] = [180, 83, 9];    // #B45309
+      const brandYellowCream: [number, number, number] = [255, 253, 245]; // #FFFDF5
+      const brandYellowBorder: [number, number, number] = [253, 230, 138]; // #FDE68A
+      const slateDark: [number, number, number] = [30, 41, 59];        // #1E293B
+      const slateLight: [number, number, number] = [107, 114, 128];     // #6B7280
+      const white: [number, number, number] = [255, 255, 255];
+
+      // Draw PDF Header
+      const logoBase64 = await getBase64ImageFromUrl("/logo.png");
+      if (logoBase64) {
+        doc.addImage(logoBase64, "PNG", 14, 10, 16, 16);
+      }
+      const titleX = logoBase64 ? 33 : 14;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(...brandAmberDark);
+      doc.text("AL-UMANA KOPERASI - ANTRIAN PRODUKSI", titleX, 15);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(...slateDark);
+      doc.text(lang === "id" ? "DAFTAR ANTRIAN PRODUKSI DAPUR" : "KITCHEN PRODUCTION QUEUE LIST", titleX, 20);
+
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7.5);
+      doc.setTextColor(...slateLight);
+      doc.text("Sistem Informasi Manajemen Order & Logistik", titleX, 24);
+
+      // Header Metadata (Right-Aligned)
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(...slateLight);
+      const now = new Date();
+      const timestampStr = `${now.toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })} • ${now.toLocaleTimeString("id-ID")}`;
+      doc.text(`Dicetak: ${timestampStr}`, pageW - 14, 14, { align: "right" });
+
+      let metaY = 18;
+      const filterDesc: string[] = [];
+      if (searchQuery) filterDesc.push(`Cari: "${searchQuery}"`);
+      if (startDate || endDate) {
+        const startStr = startDate ? new Date(startDate).toLocaleDateString("id-ID") : "Awal";
+        const endStr = endDate ? new Date(endDate).toLocaleDateString("id-ID") : "Akhir";
+        filterDesc.push(`Periode: ${startStr} - ${endStr}`);
+      }
+
+      if (filterDesc.length > 0) {
+        doc.text(`Filter: ${filterDesc.join(" | ")}`, pageW - 14, metaY, { align: "right" });
+        metaY += 4;
+      }
+      doc.text(`Menampilkan ${filteredQueue.length} dari ${orders.length} pesanan`, pageW - 14, metaY, { align: "right" });
+
+      doc.setDrawColor(...brandGold);
+      doc.setLineWidth(0.5);
+      doc.line(14, 28, pageW - 14, 28);
+
+      const statusLabels: Record<string, string> = {
+        PENDING: "Antre Masak",
+        IN_PRODUCTION: "Sedang Dimasak",
+      };
+
+      const tableBody = filteredQueue.map((o, idx) => {
+        const itemsText = o.items.map(it => {
+          return `${it.itemName}${o.isPreOrder ? " (Pra-pesanan)" : ` (x${it.quantity})`}`;
+        }).join("\n");
+
+        const kitchenText = o.itemKitchens 
+          ? Object.entries(o.itemKitchens).map(([itemId, kName]) => {
+              const itemName = o.items.find(it => it.itemId === itemId)?.itemName || "Item";
+              return `${itemName}: ${kName}`;
+            }).join("\n")
+          : o.kitchen || "-";
+
+        return [
+          String(idx + 1),
+          `#${o.id.slice(-6).toUpperCase()}`,
+          o.institutionName || o.customerName || "-",
+          o.deliveryTime || "—",
+          "", // photo column
+          itemsText,
+          kitchenText,
+          statusLabels[o.status] || o.status
+        ];
+      });
+
+      autoTable(doc, {
+        startY: 34,
+        head: [["No", "ID", "Instansi / Pemesan", "Target Pengiriman", "Foto", "Detail Item", "Dapur Produksi", "Status"]],
+        body: tableBody,
+        theme: "striped",
+        styles: { lineColor: brandYellowBorder, lineWidth: 0.15 },
+        headStyles: { fillColor: brandGold, textColor: white, fontStyle: "bold", fontSize: 8.5, halign: "center", cellPadding: 3 },
+        bodyStyles: { fontSize: 8, textColor: slateDark, cellPadding: 3, minCellHeight: 14, valign: "middle" },
+        columnStyles: {
+          0: { cellWidth: 10, halign: "center" },
+          1: { cellWidth: 20, halign: "center", fontStyle: "bold" },
+          2: { cellWidth: 45 },
+          3: { cellWidth: 35, halign: "center" },
+          4: { cellWidth: 16 }, // Foto
+          5: { cellWidth: 70 }, // Detail Item
+          6: { cellWidth: 50 }, // Dapur
+          7: { cellWidth: 24, halign: "center", fontStyle: "bold" }
+        },
+        alternateRowStyles: { fillColor: brandYellowCream },
+        margin: { left: 14, right: 14 },
+        didDrawCell: (data) => {
+          if (data.section === "body" && data.column.index === 4) {
+            const orderObj = filteredQueue[data.row.index];
+            if (orderObj && orderObj.items && orderObj.items.length > 0) {
+              const cell = data.cell;
+              const imgSize = 8;
+              const firstItem = orderObj.items[0];
+              const imgBase64 = productMap[firstItem.itemId];
+              if (imgBase64) {
+                const imgX = cell.x + (cell.width - imgSize) / 2;
+                const imgY = cell.y + (cell.height - imgSize) / 2;
+                try {
+                  doc.addImage(imgBase64, "PNG", imgX, imgY, imgSize, imgSize);
+                } catch (e) {
+                  console.error("Failed to add image to production PDF:", e);
+                }
+              }
+            }
+          }
+        }
+      });
+
+      const totalPages = doc.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7.5);
+        doc.setTextColor(148, 163, 184); // slate-400
+        doc.text(
+          `Koperasi Al-Umana • Daftar Antrian Dapur Produksi • Halaman ${p} dari ${totalPages}`,
+          pageW / 2, pageH - 8,
+          { align: "center" }
+        );
+        doc.setFillColor(...brandGold);
+        doc.rect(0, 0, pageW, 2, "F");
+        doc.setDrawColor(...brandYellowBorder);
+        doc.setLineWidth(0.25);
+        doc.line(14, pageH - 12, pageW - 14, pageH - 12);
+      }
+
+      doc.save(`AlUmana_Antrian_Dapur_${now.toISOString().slice(0, 10)}.pdf`);
+      showToast({
+        message: lang === "id" ? "Daftar antrian dapur berhasil diunduh sebagai PDF!" : "Kitchen queue downloaded successfully as PDF!",
+        variant: "success",
+      });
+    } catch (err) {
+      console.error(err);
+      showToast({
+        message: lang === "id" ? "Gagal memproses ekspor PDF" : "Failed to process PDF export",
+        variant: "error",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-[#E5E7EB] shadow-xs">
         <div>
-          <h1 className="font-['Manrope',system-ui,sans-serif] text-xl sm:text-2xl font-extrabold text-[#111827]">
+          <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]">
             {lang === "id" ? "Dapur Produksi" : "Production"}
           </h1>
-          <p className="text-xs sm:text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] mt-0.5">
+          <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk'] mt-1">
             {lang === "id" ? "Kelola pesanan yang sedang dan menunggu dimasak" : "Manage orders currently cooking and waiting to be cooked"}
           </p>
         </div>
-        <div className="flex items-center gap-2 self-start sm:self-center">
-          <div className="flex flex-col items-center bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 sm:py-2">
-            <span className="text-base sm:text-lg font-extrabold text-amber-700 font-['Manrope',system-ui,sans-serif]">{inProduction.length}</span>
-            <span className="text-[9px] font-bold text-amber-600 uppercase tracking-wide">{lang === "id" ? "Masak" : "Cooking"}</span>
-          </div>
-          <div className="flex flex-col items-center bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg px-3 py-1.5 sm:py-2">
-            <span className="text-base sm:text-lg font-extrabold text-[#374151] font-['Manrope',system-ui,sans-serif]">{confirmed.length}</span>
-            <span className="text-[9px] font-bold text-[#6B7280] uppercase tracking-wide">{lang === "id" ? "Antri" : "Queue"}</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={exportOrdersToPDF}
+            disabled={exporting}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#1E293B] hover:bg-[#0F172A] disabled:opacity-50 text-white text-sm font-bold shadow-xs transition-colors cursor-pointer whitespace-nowrap"
+            title="Download antrian produksi sebagai PDF"
+          >
+            {exporting ? (
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+            ) : (
+              <FileDown className="w-4 h-4 shrink-0" />
+            )}
+            <span>Export PDF</span>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <div className="flex flex-col items-center bg-amber-50 border border-amber-200 rounded-xl px-3 py-1.5">
+              <span className="text-base font-extrabold text-amber-700 font-['Manrope',system-ui,sans-serif]">{inProduction.length}</span>
+              <span className="text-[9px] font-bold text-amber-600 uppercase tracking-wide">{lang === "id" ? "Masak" : "Cooking"}</span>
+            </div>
+            <div className="flex flex-col items-center bg-[#F3F4F6] border border-[#E5E7EB] rounded-xl px-3 py-1.5">
+              <span className="text-base font-extrabold text-[#374151] font-['Manrope',system-ui,sans-serif]">{confirmed.length}</span>
+              <span className="text-[9px] font-bold text-[#6B7280] uppercase tracking-wide">{lang === "id" ? "Antri" : "Queue"}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative">
-        <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Search className="h-4 w-4 text-[#9CA3AF]" />
-        </span>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Cari antrean produksi berdasarkan nama instansi, pemesan, atau produk..."
-          className="w-full rounded-full border border-[#E5E7EB] bg-white pl-9 pr-10 py-2 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition font-['Hanken_Grotesk']"
-        />
-        {searchQuery && (
-          <button
-            type="button"
-            onClick={() => setSearchQuery("")}
-            title="Bersihkan pencarian"
-            aria-label="Bersihkan pencarian"
-            className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#9CA3AF] hover:text-[#4B5563] cursor-pointer"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
+      {/* Search & Date Filters */}
+      <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-xs space-y-4">
+        <div className="relative">
+          <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-4 w-4 text-[#9CA3AF]" />
+          </span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cari antrean produksi berdasarkan nama instansi, pemesan, atau produk..."
+            className="w-full rounded-xl border border-[#D1D5DB] bg-white pl-9 pr-10 py-2 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40 transition font-['Hanken_Grotesk']"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              title="Bersihkan pencarian"
+              aria-label="Bersihkan pencarian"
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#9CA3AF] hover:text-[#4B5563] cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 items-center border-t border-[#F3F4F6] pt-3 font-['Hanken_Grotesk']">
+          <span className="text-xs font-bold text-[#4B5563] self-start sm:self-center shrink-0">Filter Tanggal Acara:</span>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <input
+              type="date"
+              className="rounded-xl border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#374151] focus:border-[#FBBF24] focus:outline-none w-full sm:w-40 font-semibold"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              aria-label="Tanggal Mulai"
+            />
+            <span className="text-xs text-neutral-400">s/d</span>
+            <input
+              type="date"
+              className="rounded-xl border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#374151] focus:border-[#FBBF24] focus:outline-none w-full sm:w-40 font-semibold"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              aria-label="Tanggal Akhir"
+            />
+          </div>
+          {(startDate || endDate) && (
+            <button
+              type="button"
+              onClick={() => {
+                setStartDate("");
+                setEndDate("");
+              }}
+              className="text-xs font-bold text-red-500 hover:text-red-700 cursor-pointer ml-auto sm:ml-0"
+            >
+              Reset Tanggal
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Error banner */}
