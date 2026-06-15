@@ -334,9 +334,25 @@ export function CartPage() {
                       >
                         <Minus className="h-4 w-4" />
                       </button>
-                      <span className="min-w-[2rem] text-center font-['Manrope',system-ui,sans-serif] text-sm font-bold tabular-nums text-[#111827]">
-                        {item.quantity}
-                      </span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const clean = e.target.value.replace(/\D/g, "");
+                          const val = parseInt(clean, 10);
+                          if (!isNaN(val) && val >= 1) {
+                            const nextQty = Math.min(99, val);
+                            if (nextQty !== item.quantity) {
+                              setLineQuantity(user.uid, item.itemId, nextQty).catch(() => {
+                                showToast({ message: t.updateError, variant: "error" });
+                              });
+                            }
+                          }
+                        }}
+                        className="w-10 text-center font-['Manrope',system-ui,sans-serif] text-sm font-bold tabular-nums text-[#111827] bg-transparent focus:outline-none"
+                      />
                       <button
                         onClick={() => handleQtyChange(item.itemId, item.quantity, 1)}
                         className="h-8 w-8 flex items-center justify-center bg-white rounded-full shadow-sm text-[#111827] hover:bg-[#E5E7EB] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"

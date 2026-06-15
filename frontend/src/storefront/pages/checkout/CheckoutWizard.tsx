@@ -1438,9 +1438,20 @@ export function CheckoutWizard() {
                                   >
                                     -
                                   </button>
-                                  <span className="text-xs font-extrabold text-[#111827] w-6 text-center select-none">
-                                    {item.quantity}
-                                  </span>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    value={item.quantity}
+                                    onChange={(e) => {
+                                      const clean = e.target.value.replace(/\D/g, "");
+                                      const val = parseInt(clean, 10);
+                                      if (!isNaN(val) && val >= 1) {
+                                        handleUpdateItemQty(item.itemId, Math.min(99, val));
+                                      }
+                                    }}
+                                    className="text-xs font-extrabold text-[#111827] w-8 text-center bg-transparent focus:outline-none"
+                                  />
                                   <button
                                     type="button"
                                     onClick={() => handleUpdateItemQty(item.itemId, item.quantity + 1)}
