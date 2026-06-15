@@ -1383,6 +1383,32 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
     actorRole: "admin",
   }).catch((e) => console.error("[createAdminOrder Admin Push Notif Error]", e));
 
+  // Push in-app notification to Tim Produksi
+  pushNotification({
+    recipientId: "tim_produksi",
+    type: "production",
+    title: `Pesanan Siap Dimasak #${shortId}`,
+    titleEn: `Order Ready to Cook #${shortId}`,
+    message: `Pesanan baru #${shortId} telah dibuat oleh Admin. Silakan mulai proses produksi.`,
+    messageEn: `New order #${shortId} has been created by Admin. Please start the production process.`,
+    orderId: order.id,
+    orderShortId: shortId,
+    actorRole: "admin",
+  }).catch((e) => console.error("[createAdminOrder Produksi Push Notif Error]", e));
+
+  // Push in-app notification to Distribusi
+  pushNotification({
+    recipientId: "distribusi",
+    type: "delivery",
+    title: `Pesanan Siap Diproduksi #${shortId}`,
+    titleEn: `Order Ready for Production #${shortId}`,
+    message: `Pesanan baru #${shortId} telah dibuat oleh Admin dan mengantre untuk diproduksi.`,
+    messageEn: `New order #${shortId} has been created by Admin and is queued for production.`,
+    orderId: order.id,
+    orderShortId: shortId,
+    actorRole: "admin",
+  }).catch((e) => console.error("[createAdminOrder Distribusi Push Notif Error]", e));
+
   return order;
 }
 
