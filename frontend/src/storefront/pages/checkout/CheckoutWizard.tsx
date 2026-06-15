@@ -1442,6 +1442,8 @@ export function CheckoutWizard() {
                                     type="text"
                                     inputMode="numeric"
                                     pattern="[0-9]*"
+                                    title="Kuantitas"
+                                    placeholder="Qty"
                                     value={item.quantity}
                                     onChange={(e) => {
                                       const clean = e.target.value.replace(/\D/g, "");
