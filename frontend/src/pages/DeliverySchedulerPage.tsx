@@ -345,9 +345,9 @@ export function DeliverySchedulerPage() {
           0: { cellWidth: 10, halign: "center" },
           1: { cellWidth: 16, halign: "center" }, // Foto
           2: { cellWidth: 40 },
-          3: { cellWidth: 55 },
+          3: { cellWidth: 50 },
           4: { cellWidth: 30 },
-          5: { cellWidth: 50 },
+          5: { cellWidth: 63 },
           6: { cellWidth: 35 },
           7: { cellWidth: 25, halign: "center", fontStyle: "bold" }
         },
@@ -868,26 +868,29 @@ export function DeliverySchedulerPage() {
             }
             .th-no {
               text-align: center;
-              width: 35px;
+              width: 30px;
             }
             .th-foto {
-              width: 60px;
+              width: 50px;
               text-align: center;
             }
             .th-pesanan {
-              width: 200px;
+              width: 160px;
             }
             .th-alamat {
-              width: 260px;
+              width: 190px;
             }
             .th-jadwal {
-              width: 130px;
+              width: 100px;
+            }
+            .th-detail {
+              width: 200px;
             }
             .th-kurir {
-              width: 130px;
+              width: 110px;
             }
             .th-status {
-              width: 90px;
+              width: 80px;
               text-align: center;
             }
             .td-no {
@@ -984,7 +987,7 @@ export function DeliverySchedulerPage() {
                 <th className="th-pesanan">Pesanan & Instansi</th>
                 <th className="th-alamat">Penerima & Alamat</th>
                 <th className="th-jadwal">Jadwal Waktu</th>
-                <th>Detail Item</th>
+                <th className="th-detail">Detail Item</th>
                 <th className="th-kurir">Kurir Pengantar</th>
                 <th className="th-status">Status</th>
               </tr>

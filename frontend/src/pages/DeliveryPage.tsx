@@ -103,7 +103,7 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
   const [qcQuantityCheck, setQcQuantityCheck] = useState<Record<string, boolean>>({});
 
   // Kitchen signatures (now photos) and staff names states
-  const [signatures, setSignatures] = useState<Record<string, string | null>>({});
+  const [signatures, setSignatures] = useState<Record<string, string[]>>({});
   const [staffNames, setStaffNames] = useState<Record<string, string>>({});
   const [activeKitchenCamera, setActiveKitchenCamera] = useState<string | null>(null);
 
@@ -111,7 +111,10 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;
-      setSignatures((prev) => ({ ...prev, [kitchen]: dataUrl }));
+      setSignatures((prev) => {
+        const existing = prev[kitchen] || [];
+        return { ...prev, [kitchen]: [...existing, dataUrl] };
+      });
     };
     reader.readAsDataURL(file);
   };
@@ -134,27 +137,42 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
     (item) => qcProductCheck[item.itemId] && qcQuantityCheck[item.itemId]
   );
 
-  const isSignaturesComplete = uniqueKitchens.every(
-    (k) => signatures[k] && staffNames[k]?.trim().length > 0
-  );
+  const isSignaturesComplete = useMemo(() => {
+    const completedKitchens = uniqueKitchens.filter(
+      (k) => (signatures[k] || []).length >= 2 && staffNames[k]?.trim().length > 0
+    );
+    if (completedKitchens.length === 0) return false;
+
+    const isAnyPartial = uniqueKitchens.some((k) => {
+      const photoCount = (signatures[k] || []).length;
+      const hasStaff = (staffNames[k] || "").trim().length > 0;
+      const hasStarted = photoCount > 0 || hasStaff;
+      const isComplete = photoCount >= 2 && hasStaff;
+      return hasStarted && !isComplete;
+    });
+
+    return !isAnyPartial;
+  }, [uniqueKitchens, signatures, staffNames]);
 
   const isFormValid = isQcComplete && isSignaturesComplete;
 
   const handleSubmit = async () => {
     if (!isFormValid) {
-      setError("Semua checklist QC dan foto serah terima dapur wajib diisi.");
+      setError("Semua checklist QC wajib diisi dan minimal satu serah terima dapur (dengan minimal 2 foto) harus lengkap.");
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
       const now = new Date().toISOString();
-      const kitchenSignaturesList: KitchenSignature[] = uniqueKitchens.map((k) => ({
-        kitchenName: k,
-        signatureDataUrl: signatures[k]!,
-        staffName: staffNames[k].trim(),
-        signedAt: now,
-      }));
+      const kitchenSignaturesList: KitchenSignature[] = uniqueKitchens
+        .filter((k) => (signatures[k] || []).length >= 2 && staffNames[k]?.trim().length > 0)
+        .map((k) => ({
+          kitchenName: k,
+          signatureDataUrl: JSON.stringify(signatures[k] || []),
+          staffName: staffNames[k].trim(),
+          signedAt: now,
+        }));
       await onStart(kitchenSignaturesList);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -274,10 +292,12 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
             <div key={kitchen} className="bg-white border border-[#E5E7EB] rounded-xl p-4 space-y-3 shadow-2xs">
               <div className="flex justify-between items-center bg-[#FDF2E9] border border-orange-100 rounded-lg px-2.5 py-1">
                 <span className="font-black text-[#B45309] text-xs uppercase tracking-wider">{kitchen}</span>
-                {signatures[kitchen] ? (
-                  <span className="text-[10px] font-bold text-emerald-600">✓ Foto Berhasil</span>
+                {(signatures[kitchen] || []).length >= 2 ? (
+                  <span className="text-[10px] font-bold text-emerald-600">✓ {(signatures[kitchen] || []).length} Foto Berhasil</span>
+                ) : (signatures[kitchen] || []).length === 1 ? (
+                  <span className="text-[10px] font-bold text-amber-500">* Wajib Min. 2 Foto (Kurang 1)</span>
                 ) : (
-                  <span className="text-[10px] font-bold text-red-500">* Wajib Foto Live</span>
+                  <span className="text-[10px] font-bold text-red-500">* Wajib Min. 2 Foto Live</span>
                 )}
               </div>
 
@@ -296,28 +316,37 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
               <div className="space-y-2">
                 <label className="block text-[10px] font-bold text-neutral-500 uppercase">Dokumentasi Live Camera</label>
                 
-                {signatures[kitchen] ? (
-                  <div className="relative border border-[#E5E7EB] rounded-lg overflow-hidden max-w-[200px] mx-auto">
-                    <img src={signatures[kitchen]!} alt={`Handover ${kitchen}`} className="w-full h-auto object-cover max-h-32" />
-                    <button
-                      type="button"
-                      onClick={() => setSignatures(prev => ({ ...prev, [kitchen]: null }))}
-                      className="absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-700 text-white rounded-full transition shadow-md cursor-pointer"
-                      title="Hapus foto"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                {/* Captured photos list */}
+                {(signatures[kitchen] || []).length > 0 && (
+                  <div className="flex flex-wrap gap-2 justify-center py-1 bg-neutral-50 rounded-lg border border-neutral-100 p-2">
+                    {(signatures[kitchen] || []).map((imgUrl, imgIdx) => (
+                      <div key={imgIdx} className="relative border border-[#E5E7EB] rounded-lg overflow-hidden w-20 h-20 bg-white shadow-3xs">
+                        <img src={imgUrl} alt={`Handover ${kitchen} #${imgIdx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setSignatures(prev => {
+                            const existing = prev[kitchen] || [];
+                            const updated = existing.filter((_, idx) => idx !== imgIdx);
+                            return { ...prev, [kitchen]: updated };
+                          })}
+                          className="absolute top-0.5 right-0.5 p-0.5 bg-red-600 hover:bg-red-700 text-white rounded-full transition shadow-md cursor-pointer"
+                          title="Hapus foto"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setActiveKitchenCamera(kitchen)}
-                    className="w-full flex items-center justify-center gap-1.5 py-3 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl transition cursor-pointer"
-                  >
-                    <Camera className="h-4 w-4 text-amber-600 animate-pulse" />
-                    <span>Ambil Foto Live</span>
-                  </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => setActiveKitchenCamera(kitchen)}
+                  className="w-full flex items-center justify-center gap-1.5 py-3 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl transition cursor-pointer"
+                >
+                  <Camera className="h-4 w-4 text-amber-600 animate-pulse" />
+                  <span>{(signatures[kitchen] || []).length > 0 ? "Tambah Foto Live" : "Ambil Foto Live"}</span>
+                </button>
               </div>
             </div>
           ))}

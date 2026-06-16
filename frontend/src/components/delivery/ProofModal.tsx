@@ -154,24 +154,26 @@ export function ProofModal({ isOpen, onClose, proofFileIds, deliveryStartPhotoId
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className={`grid grid-cols-1 ${deliveryStartPhotoId ? "md:grid-cols-3" : "md:grid-cols-2"} gap-6`}>
             {/* Left Column: Start OTW Photo */}
-            <div className="space-y-4">
-              <span className="block text-xs font-bold text-[#374151] uppercase tracking-wide">
-                Foto Keberangkatan (OTW)
-              </span>
-              {startPhotoSrc ? (
-                <div className="border border-[#E5E7EB] rounded-2xl overflow-hidden bg-neutral-50 p-2.5">
-                  <div className="aspect-video w-full flex items-center justify-center rounded-xl overflow-hidden bg-black/5">
-                    <img src={startPhotoSrc} alt="Foto Keberangkatan" className="max-h-full max-w-full object-contain" />
+            {deliveryStartPhotoId && (
+              <div className="space-y-4">
+                <span className="block text-xs font-bold text-[#374151] uppercase tracking-wide">
+                  Foto Keberangkatan (OTW)
+                </span>
+                {startPhotoSrc ? (
+                  <div className="border border-[#E5E7EB] rounded-2xl overflow-hidden bg-neutral-50 p-2.5">
+                    <div className="aspect-video w-full flex items-center justify-center rounded-xl overflow-hidden bg-black/5">
+                      <img src={startPhotoSrc} alt="Foto Keberangkatan" className="max-h-full max-w-full object-contain" />
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="border border-dashed border-[#D1D5DB] rounded-2xl p-6 text-center text-xs text-[#9CA3AF] min-h-[120px] flex items-center justify-center">
-                  Belum berangkat / tidak ada foto
-                </div>
-              )}
-            </div>
+                ) : (
+                  <div className="border border-dashed border-[#D1D5DB] rounded-2xl p-6 text-center text-xs text-[#9CA3AF] min-h-[120px] flex items-center justify-center">
+                    Belum berangkat / tidak ada foto
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Middle Column: Photos list */}
             <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
@@ -225,23 +227,40 @@ export function ProofModal({ isOpen, onClose, proofFileIds, deliveryStartPhotoId
                 Tanda Tangan Serah Terima Dapur Produksi ({kitchenSignatures.length})
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {kitchenSignatures.map((ks, idx) => (
-                  <div key={idx} className="border border-[#E5E7EB] rounded-2xl p-4 bg-neutral-50 flex flex-col justify-between space-y-3 shadow-2xs font-['Hanken_Grotesk']">
-                    <div className="flex justify-between items-center bg-[#FDF2E9] border border-orange-100 rounded-lg px-2.5 py-1">
-                      <span className="text-xs font-black text-[#B45309]">{ks.kitchenName}</span>
-                      <span className="text-[10px] text-[#6B7280]">
-                        {new Date(ks.signedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB
-                      </span>
+                {kitchenSignatures.map((ks, idx) => {
+                  let photos: string[] = [];
+                  try {
+                    if (ks.signatureDataUrl.startsWith("[") && ks.signatureDataUrl.endsWith("]")) {
+                      photos = JSON.parse(ks.signatureDataUrl);
+                    } else {
+                      photos = ks.signatureDataUrl ? [ks.signatureDataUrl] : [];
+                    }
+                  } catch {
+                    photos = ks.signatureDataUrl ? [ks.signatureDataUrl] : [];
+                  }
+
+                  return (
+                    <div key={idx} className="border border-[#E5E7EB] rounded-2xl p-4 bg-neutral-50 flex flex-col justify-between space-y-3 shadow-2xs font-['Hanken_Grotesk']">
+                      <div className="flex justify-between items-center bg-[#FDF2E9] border border-orange-100 rounded-lg px-2.5 py-1">
+                        <span className="text-xs font-black text-[#B45309]">{ks.kitchenName}</span>
+                        <span className="text-[10px] text-[#6B7280]">
+                          {new Date(ks.signedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2 justify-center w-full">
+                        {photos.map((url, pIdx) => (
+                          <div key={pIdx} className="aspect-video w-full flex items-center justify-center bg-white rounded-lg border border-[#E5E7EB] p-2 max-h-32 overflow-hidden">
+                            <img src={url} alt={`TTD ${ks.kitchenName} #${pIdx + 1}`} className="max-h-full object-contain" />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-center text-xs">
+                        <span className="text-neutral-400 font-medium">Staf Dapur: </span>
+                        <span className="font-extrabold text-[#374151]">{ks.staffName}</span>
+                      </div>
                     </div>
-                    <div className="aspect-video w-full flex items-center justify-center bg-white rounded-lg border border-[#E5E7EB] p-2">
-                      <img src={ks.signatureDataUrl} alt={`TTD ${ks.kitchenName}`} className="max-h-20 object-contain" />
-                    </div>
-                    <div className="text-center text-xs">
-                      <span className="text-neutral-400 font-medium">Staf Dapur: </span>
-                      <span className="font-extrabold text-[#374151]">{ks.staffName}</span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

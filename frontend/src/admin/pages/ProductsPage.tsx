@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Loader2, Plus, Edit, Trash2, ImageOff, Check, X, ArrowUpDown, ChevronLeft, ChevronRight, Filter, ArrowLeft, Upload, AlertCircle, RefreshCw } from "lucide-react";
+import { Loader2, Plus, Edit, Trash2, ImageOff, Check, X, ArrowUpDown, ChevronLeft, ChevronRight, Filter, ArrowLeft, Upload, AlertCircle, RefreshCw, Search } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/contexts/ToastContext";
 import { translateCategory } from "@/constants/categories";
@@ -53,6 +53,7 @@ const DICTIONARY = {
     btnLoadDemo: "Muat Data Dummy",
     loadingText: "Memuat…",
     btnAddProduct: "Tambah Produk",
+    searchPlaceholder: "Cari nama produk...",
     filterAll: "Semua Kategori",
     showText: "Tampilkan",
     rowsText: "baris",
@@ -153,6 +154,7 @@ const DICTIONARY = {
     btnLoadDemo: "Load Dummy Data",
     loadingText: "Loading…",
     btnAddProduct: "Add Product",
+    searchPlaceholder: "Search product name...",
     filterAll: "All Categories",
     showText: "Show",
     rowsText: "rows",
@@ -255,6 +257,7 @@ export function ProductsPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -521,8 +524,17 @@ export function ProductsPage() {
     }
   };
 
+  const filteredItems = items.filter((item) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase().trim();
+    return (
+      item.itemName.toLowerCase().includes(query) ||
+      item.category.toLowerCase().includes(query)
+    );
+  });
+
   // Perform sort and pagination locally
-  const sortedItems = [...items].sort((a, b) => {
+  const sortedItems = [...filteredItems].sort((a, b) => {
     let valA = a[sortField];
     let valB = b[sortField];
 
@@ -957,30 +969,63 @@ export function ProductsPage() {
       </div>
 
       {/* Filter and Pagesize Toolbar */}
-      <div className="bg-white rounded-lg p-2.5 shadow-xs flex flex-row items-center justify-between gap-3 border border-[#E5E7EB]">
-        {/* Category Filter */}
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <Filter className="h-3.5 w-3.5 text-[#6B7280] shrink-0" />
-          <select
-            title="Pilih Kategori"
-            className="bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg px-2 py-1 text-[11px] font-semibold text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] w-full max-w-[160px] sm:max-w-[200px]"
-            value={selectedCategory}
-            onChange={(e) => {
-              setSelectedCategory(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="">{t.filterAll}</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {translateCategory(cat, lang)}
-              </option>
-            ))}
-          </select>
+      <div className="bg-white rounded-lg p-2.5 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border border-[#E5E7EB]">
+        {/* Left: Search & Category Filter */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 w-full">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-xs">
+            <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+              <Search className="h-3.5 w-3.5 text-[#9CA3AF]" />
+            </span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder={t.searchPlaceholder}
+              className="w-full rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] pl-8 pr-7 py-1 text-[11px] font-semibold text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setCurrentPage(1);
+                }}
+                className="absolute inset-y-0 right-0 pr-2 flex items-center text-[#9CA3AF] hover:text-[#4B5563] cursor-pointer"
+                title="Clear"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Category Filter */}
+          <div className="flex items-center gap-1.5">
+            <Filter className="h-3.5 w-3.5 text-[#6B7280] shrink-0" />
+            <select
+              title="Pilih Kategori"
+              className="bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg px-2 py-1 text-[11px] font-semibold text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] w-full max-w-[160px] sm:max-w-[200px]"
+              value={selectedCategory}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+                setCurrentPage(1);
+              }}
+            >
+              <option value="">{t.filterAll}</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {translateCategory(cat, lang)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Page Size selector */}
-        <div className="flex items-center gap-1 text-[11px] text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] shrink-0">
+        <div className="flex items-center gap-1 text-[11px] text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] shrink-0 self-end sm:self-center">
           <span className="hidden sm:inline">{t.showText}</span>
           <select
             title="Jumlah Baris"
@@ -1025,6 +1070,31 @@ export function ProductsPage() {
           >
             {t.btnAddNewProduct}
           </button>
+        </div>
+      ) : filteredItems.length === 0 ? (
+        <div className="bg-white rounded-lg p-12 text-center space-y-4 shadow-sm border border-[#E5E7EB]">
+          <ImageOff className="h-16 w-16 mx-auto text-[#9CA3AF]" />
+          <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
+            {lang === "id" ? "Produk Tidak Ditemukan" : "No Matching Products"}
+          </h2>
+          <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-sm mx-auto">
+            {lang === "id" 
+              ? "Tidak ada produk yang cocok dengan pencarian atau filter kategori Anda." 
+              : "No products match your search query or category filter."}
+          </p>
+          {(searchQuery || selectedCategory) && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                setSelectedCategory("");
+                setCurrentPage(1);
+              }}
+              className="inline-flex min-h-10 px-5 bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] rounded-lg items-center font-bold cursor-pointer transition"
+            >
+              {lang === "id" ? "Reset Pencarian & Filter" : "Reset Search & Filters"}
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
@@ -1329,7 +1399,7 @@ export function ProductsPage() {
           {/* Table Pagination Footer */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between text-xs text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] px-2 pt-2">
-              <span>{t.showingText} {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, items.length)} {t.fromText} {items.length} {t.itemsText}</span>
+              <span>{t.showingText} {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, filteredItems.length)} {t.fromText} {filteredItems.length} {t.itemsText}</span>
               <div className="flex items-center gap-1">
                 <button
                   title="Halaman Sebelumnya"
