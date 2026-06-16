@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type { User } from "firebase/auth";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { getRedirectResult } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 
@@ -25,7 +25,7 @@ export interface UserProfile {
   uid?: string;
   email: string;
   displayName: string;
-  role: "admin" | "tim_produksi" | "distribusi" | "monitoring" | "kurir";
+  role: "admin" | "tim_produksi" | "distribusi" | "monitoring" | "kurir" | "pelanggan";
   createdAt?: unknown;
   /** Optional delivery address saved during checkout for auto-fill. */
   savedDeliveryAddress?: string;
@@ -109,10 +109,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
               setProfile(docSnap.data() as UserProfile);
               setLoading(false);
             } else {
-              // Internal accounts only: deny access if no Firestore user profile is found
-              console.warn(`No user profile found for UID: ${nextUser.uid}`);
-              setProfile(null);
-              setLoading(false);
+              console.warn(`No user profile found for UID: ${nextUser.uid}. Auto-provisioning default profile...`);
+              const defaultProfile: UserProfile = {
+                email: nextUser.email || "",
+                displayName: nextUser.displayName || nextUser.email?.split("@")[0] || "Pelanggan Baru",
+                role: "pelanggan",
+                createdAt: new Date(),
+              };
+              try {
+                await setDoc(userDocRef, defaultProfile);
+              } catch (err) {
+                console.error("Failed to auto-provision user profile in Firestore:", err);
+                setProfile(null);
+                setLoading(false);
+              }
             }
           },
           (error) => {

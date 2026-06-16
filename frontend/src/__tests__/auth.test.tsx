@@ -53,7 +53,7 @@ vi.mock("@/contexts/ToastContext", () => ({
 
 vi.mock("firebase/firestore", () => ({
   getFirestore: vi.fn(() => ({})),
-  doc: vi.fn(),
+  doc: vi.fn(() => ({})),
   setDoc: vi.fn(),
   collection: vi.fn(() => ({})),
   query: vi.fn(() => ({})),
@@ -437,8 +437,8 @@ describe("Authentication UI Features", () => {
       mockDocSnapshotExists = true;
     });
 
-    it("should deny access and not auto-provision new users when Firestore profile is missing", async () => {
-      const { setDoc } = await import("firebase/firestore");
+    it("should automatically create a default Firestore profile for new users when the profile is missing", async () => {
+      const { setDoc, doc } = await import("firebase/firestore");
 
       render(
         <BrowserRouter>
@@ -448,8 +448,19 @@ describe("Authentication UI Features", () => {
         </BrowserRouter>
       );
 
-      await new Promise(resolve => setTimeout(resolve, 100)); // wait a bit
-      expect(setDoc).not.toHaveBeenCalled();
+      await waitFor(() => {
+        expect(setDoc).toHaveBeenCalled();
+      });
+
+      expect(doc).toHaveBeenCalledWith(expect.any(Object), "users", "test-uid-admin");
+      expect(setDoc).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          email: "admin@alumana.id",
+          displayName: "Admin User",
+          role: "pelanggan",
+        })
+      );
     });
   });
 });
