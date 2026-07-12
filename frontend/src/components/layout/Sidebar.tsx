@@ -6,6 +6,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Calendar,
   ChevronUp,
+  ClipboardCheck,
   Factory,
   FileText,
   LayoutDashboard,
@@ -14,9 +15,12 @@ import {
   Package2,
   Search,
   Settings,
+  ShoppingBag,
   ShoppingCart,
   Truck,
   History,
+  UtensilsCrossed,
+  Warehouse,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -28,6 +32,7 @@ interface NavItem {
 }
 
 export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
+  // --- Catering ---
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
   { to: "/admin/invoices", label: "Catatan", icon: FileText },
@@ -38,6 +43,18 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/distribusi/handover", label: "Handover", icon: Truck },
   { to: "/distribusi/delivery", label: "Delivery", icon: Package },
   { to: "/admin/products", label: "Daftar Produk", icon: Package2 },
+  // --- MBG (Makan Bergizi Gratis) ---
+  { to: "/mbg/orders", label: "Pesanan MBG", icon: ShoppingCart },
+  { to: "/mbg/admin", label: "Admin MBG", icon: ClipboardCheck },
+  { to: "/mbg/archive", label: "Arsip PM", icon: History },
+  { to: "/mbg/reports", label: "Laporan MBG", icon: FileText },
+  { to: "/mbg/production", label: "Produksi MBG", icon: UtensilsCrossed },
+  { to: "/mbg/cooking", label: "Masak MBG", icon: Factory },
+  { to: "/mbg/purchasing", label: "Purchasing MBG", icon: ShoppingBag },
+  { to: "/mbg/purchasing/recap", label: "Laporan Belanja", icon: FileText },
+  { to: "/mbg/suppliers", label: "Supplier MBG", icon: Warehouse },
+  { to: "/mbg/distribution", label: "Distribusi MBG", icon: ClipboardCheck },
+  { to: "/mbg/delivery", label: "Kurir MBG", icon: Truck },
 ] as const;
 
 const LABELS_DICT = {
@@ -52,6 +69,18 @@ const LABELS_DICT = {
     "/distribusi/handover": "Handover",
     "/distribusi/delivery": "Pengantaran",
     "/admin/products": "Daftar Produk",
+    // MBG
+    "/mbg/orders": "Pesanan MBG",
+    "/mbg/admin": "Admin MBG",
+    "/mbg/archive": "Arsip PM",
+    "/mbg/reports": "Laporan MBG",
+    "/mbg/production": "Produksi MBG",
+    "/mbg/cooking": "Masak MBG",
+    "/mbg/purchasing": "Purchasing MBG",
+    "/mbg/purchasing/recap": "Laporan Belanja",
+    "/mbg/suppliers": "Supplier MBG",
+    "/mbg/distribution": "Distribusi MBG",
+    "/mbg/delivery": "Kurir MBG",
   },
   en: {
     "/admin/dashboard": "Dashboard",
@@ -64,6 +93,18 @@ const LABELS_DICT = {
     "/distribusi/handover": "Handover",
     "/distribusi/delivery": "Delivery",
     "/admin/products": "Product List",
+    // MBG
+    "/mbg/orders": "MBG Orders",
+    "/mbg/admin": "MBG Admin",
+    "/mbg/archive": "PM Archive",
+    "/mbg/reports": "MBG Reports",
+    "/mbg/production": "MBG Production",
+    "/mbg/cooking": "MBG Cooking",
+    "/mbg/purchasing": "MBG Purchasing",
+    "/mbg/purchasing/recap": "Shopping Recap",
+    "/mbg/suppliers": "MBG Suppliers",
+    "/mbg/distribution": "MBG Distribution",
+    "/mbg/delivery": "MBG Delivery",
   }
 } as const;
 
@@ -96,6 +137,12 @@ const roleBadge: Record<string, string> = {
   distribusi: "Distribusi",
   monitoring: "Monitoring",
   kurir: "Kurir",
+  // MBG roles
+  admin_mbg: "Admin MBG",
+  produksi_mbg: "Produksi MBG",
+  purchasing_mbg: "Purchasing MBG",
+  distribusi_mbg: "Distribusi MBG",
+  kurir_mbg: "Kurir MBG",
 };
 
 export function Sidebar({
@@ -137,12 +184,12 @@ export function Sidebar({
         className={`
           fixed inset-y-0 left-0 z-40 w-60 bg-white border-r border-[#E5E7EB] h-screen flex flex-col shrink-0
           transition-transform duration-300 ease-in-out
-          md:sticky md:translate-x-0
+          md:sticky md:top-0 md:translate-x-0
           ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >
         {/* Logo */}
-        <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-center relative">
           <Link to={userRole ? (ROLE_DEFAULT_REDIRECT[userRole] ?? "/") : "/"} onClick={() => onClose?.()}>
             <img
               src="/logo.png"
@@ -153,7 +200,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={onClose}
-            className="md:hidden p-1.5 rounded-full text-[#6B7280] hover:bg-gray-100 hover:text-gray-900 cursor-pointer"
+            className="md:hidden absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-[#6B7280] hover:bg-gray-100 hover:text-gray-900 cursor-pointer"
             title="Close Menu"
             aria-label="Close Menu"
           >
@@ -190,6 +237,7 @@ export function Sidebar({
               <li key={to}>
                 <NavLink
                   to={to}
+                  end={to === "/mbg/purchasing"}
                   onClick={() => onClose?.()}
                   className={({ isActive }) =>
                     `${ITEM_BASE} ${isActive ? ITEM_ACTIVE : ITEM_INACTIVE}`
@@ -212,8 +260,8 @@ export function Sidebar({
         </ul>
       </nav>
 
-      {/* Profile Section at the Bottom */}
-      {(userName || userEmail) && (
+      {/* Profile Section at the Bottom (Hidden for MBG roles since they have top header profile dropdown) */}
+      {(userName || userEmail) && !(userRole && userRole.includes("mbg")) && (
         <div className="relative p-4 border-t border-[#E5E7EB] bg-white">
           <button
             type="button"

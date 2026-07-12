@@ -1,0 +1,658 @@
+[
+  {
+    "kode": 1111,
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "namaMenu": "Nasi Putih (Beras Premium)",
+    "bahanUtama": "Nasi Premium",
+    "porsiKecil": 100,
+    "porsiBesar": 180
+  },
+  {
+    "kode": 1112,
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "namaMenu": "Nasi Putih (Beras)",
+    "bahanUtama": "Nasi",
+    "porsiKecil": 100,
+    "porsiBesar": 180
+  },
+  {
+    "kode": 1113,
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "namaMenu": "Nasi Daun Jeruk (Beras Premium)",
+    "bahanUtama": "Nasi Premium",
+    "porsiKecil": 100,
+    "porsiBesar": 180
+  },
+  {
+    "kode": 1114,
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "namaMenu": "Nasi Daun Jeruk (Beras)",
+    "bahanUtama": "Nasi",
+    "porsiKecil": 100,
+    "porsiBesar": 180
+  },
+  {
+    "kode": 1115,
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "namaMenu": "Nasi Liwet (Beras Premium)",
+    "bahanUtama": "Nasi Premium",
+    "porsiKecil": 100,
+    "porsiBesar": 180
+  },
+  {
+    "kode": 1116,
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "namaMenu": "Nasi Liwet (Beras)",
+    "bahanUtama": "Nasi",
+    "porsiKecil": 100,
+    "porsiBesar": 180
+  },
+  {
+    "kode": 1117,
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "namaMenu": "Nasi Kuning (Beras Premium)",
+    "bahanUtama": "Nasi Premium",
+    "porsiKecil": 100,
+    "porsiBesar": 180
+  },
+  {
+    "kode": 1118,
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "namaMenu": "Nasi Kuning (Beras)",
+    "bahanUtama": "Nasi",
+    "porsiKecil": 100,
+    "porsiBesar": 180
+  },
+  {
+    "kode": 1119,
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "namaMenu": "Nasi Uduk (Beras Premium)",
+    "bahanUtama": "Nasi Premium",
+    "porsiKecil": 100,
+    "porsiBesar": 180
+  },
+  {
+    "kode": 1120,
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "namaMenu": "Nasi Uduk (Beras)",
+    "bahanUtama": "Nasi",
+    "porsiKecil": 100,
+    "porsiBesar": 180
+  },
+  {
+    "kode": 2111,
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "namaMenu": "Ayam Kremes",
+    "bahanUtama": "Ayam Potong",
+    "porsiKecil": 48.3,
+    "porsiBesar": 58
+  },
+  {
+    "kode": 2112,
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "namaMenu": "Ayam Kecap",
+    "bahanUtama": "Ayam Potong",
+    "porsiKecil": 48.3,
+    "porsiBesar": 58
+  },
+  {
+    "kode": 2113,
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "namaMenu": "Ayam Woku Kuning",
+    "bahanUtama": "Ayam Potong",
+    "porsiKecil": 48.3,
+    "porsiBesar": 58
+  },
+  {
+    "kode": 2114,
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "namaMenu": "Kari Ayam Kental",
+    "bahanUtama": "Ayam Potong",
+    "porsiKecil": 48.3,
+    "porsiBesar": 58
+  },
+  {
+    "kode": 2115,
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "namaMenu": "Ayam Serundeng",
+    "bahanUtama": "Ayam Potong",
+    "porsiKecil": 48.3,
+    "porsiBesar": 58
+  },
+  {
+    "kode": 2116,
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "namaMenu": "Ayam Kentucky",
+    "bahanUtama": "Ayam Potong",
+    "porsiKecil": 48.3,
+    "porsiBesar": 48.3
+  },
+  {
+    "kode": 2121,
+    "jenisMenu": "Lauk Hewani (Ayam Fillet)",
+    "namaMenu": "Ayam Fillet Saus Mentega",
+    "bahanUtama": "Ayam Fillet",
+    "porsiKecil": 50,
+    "porsiBesar": 65
+  },
+  {
+    "kode": 2122,
+    "jenisMenu": "Lauk Hewani (Ayam Fillet)",
+    "namaMenu": "Ayam Fillet Saus Teriyaki",
+    "bahanUtama": "Ayam Fillet",
+    "porsiKecil": 50,
+    "porsiBesar": 65
+  },
+  {
+    "kode": 2123,
+    "jenisMenu": "Lauk Hewani (Ayam Fillet)",
+    "namaMenu": "Ayam Fillet Saus Barbeque",
+    "bahanUtama": "Ayam Fillet",
+    "porsiKecil": 50,
+    "porsiBesar": 65
+  },
+  {
+    "kode": 2124,
+    "jenisMenu": "Lauk Hewani (Ayam Fillet)",
+    "namaMenu": "Ayam Suwir Kecap",
+    "bahanUtama": "Ayam Fillet",
+    "porsiKecil": 50,
+    "porsiBesar": 65
+  },
+  {
+    "kode": 2125,
+    "jenisMenu": "Lauk Hewani (Ayam Fillet)",
+    "namaMenu": "Ayam Suwir Kemangi Bumbu Kuning",
+    "bahanUtama": "Ayam Fillet",
+    "porsiKecil": 50,
+    "porsiBesar": 65
+  },
+  {
+    "kode": 2126,
+    "jenisMenu": "Lauk Hewani (Ayam Fillet)",
+    "namaMenu": "Ayam Suwir Kemangi Bumbu Rica",
+    "bahanUtama": "Ayam Fillet",
+    "porsiKecil": 50,
+    "porsiBesar": 65
+  },
+  {
+    "kode": 2211,
+    "jenisMenu": "Lauk Hewani (Telur Ayam)",
+    "namaMenu": "Telur Ceplok",
+    "bahanUtama": "Telur Ayam",
+    "porsiKecil": 63.6,
+    "porsiBesar": 63.6
+  },
+  {
+    "kode": 2212,
+    "jenisMenu": "Lauk Hewani (Telur Ayam)",
+    "namaMenu": "Telur Dadar",
+    "bahanUtama": "Telur Ayam",
+    "porsiKecil": 63.6,
+    "porsiBesar": 63.6
+  },
+  {
+    "kode": 2213,
+    "jenisMenu": "Lauk Hewani (Telur Ayam)",
+    "namaMenu": "Telur Dadar Padang",
+    "bahanUtama": "Telur Ayam",
+    "porsiKecil": 63.6,
+    "porsiBesar": 63.6
+  },
+  {
+    "kode": 2214,
+    "jenisMenu": "Lauk Hewani (Telur Ayam)",
+    "namaMenu": "Semur Telur",
+    "bahanUtama": "Telur Ayam",
+    "porsiKecil": 63.6,
+    "porsiBesar": 63.6
+  },
+  {
+    "kode": 2215,
+    "jenisMenu": "Lauk Hewani (Telur Ayam)",
+    "namaMenu": "Balado Telur",
+    "bahanUtama": "Telur Ayam",
+    "porsiKecil": 63.6,
+    "porsiBesar": 63.6
+  },
+  {
+    "kode": 2311,
+    "jenisMenu": "Lauk Hewani (Daging Sapi)",
+    "namaMenu": "Beef Slice Barbeque",
+    "bahanUtama": "Daging Sapi",
+    "porsiKecil": 45,
+    "porsiBesar": 55
+  },
+  {
+    "kode": 2312,
+    "jenisMenu": "Lauk Hewani (Daging Sapi)",
+    "namaMenu": "Krecek Daging",
+    "bahanUtama": "Daging Sapi",
+    "porsiKecil": 44.4,
+    "porsiBesar": 44.4
+  },
+  {
+    "kode": 2313,
+    "jenisMenu": "Lauk Hewani (Daging Sapi)",
+    "namaMenu": "Rendang Daging",
+    "bahanUtama": "Daging Sapi",
+    "porsiKecil": 43.5,
+    "porsiBesar": 43.5
+  },
+  {
+    "kode": 2314,
+    "jenisMenu": "Lauk Hewani (Daging Sapi)",
+    "namaMenu": "Semur Daging",
+    "bahanUtama": "Daging Sapi",
+    "porsiKecil": 43.5,
+    "porsiBesar": 43.5
+  },
+  {
+    "kode": 2411,
+    "jenisMenu": "Lauk Hewani (Ikan)",
+    "namaMenu": "Pesmol Nila",
+    "bahanUtama": "Ikan Nila",
+    "porsiKecil": 88.9,
+    "porsiBesar": 88.9
+  },
+  {
+    "kode": 2412,
+    "jenisMenu": "Lauk Hewani (Ikan)",
+    "namaMenu": "Tuna Suwir Bumbu Kuning",
+    "bahanUtama": "Ikan Tuna",
+    "porsiKecil": 50,
+    "porsiBesar": 60
+  },
+  {
+    "kode": 2413,
+    "jenisMenu": "Lauk Hewani (Ikan)",
+    "namaMenu": "Tuna Suwir Bumbu Rica",
+    "bahanUtama": "Ikan Tuna",
+    "porsiKecil": 50,
+    "porsiBesar": 60
+  },
+  {
+    "kode": 2414,
+    "jenisMenu": "Lauk Hewani (Ikan)",
+    "namaMenu": "Lele Fillet Crispy",
+    "bahanUtama": "Ikan Lele Fillet",
+    "porsiKecil": 40,
+    "porsiBesar": 50
+  },
+  {
+    "kode": 3111,
+    "jenisMenu": "Lauk Nabati (Tahu)",
+    "namaMenu": "Tahu Goreng",
+    "bahanUtama": "Tahu",
+    "porsiKecil": 35,
+    "porsiBesar": 50
+  },
+  {
+    "kode": 3112,
+    "jenisMenu": "Lauk Nabati (Tahu)",
+    "namaMenu": "Tahu Saus Asam Manis",
+    "bahanUtama": "Tahu",
+    "porsiKecil": 35,
+    "porsiBesar": 52.5
+  },
+  {
+    "kode": 3113,
+    "jenisMenu": "Lauk Nabati (Tahu)",
+    "namaMenu": "Tahu Fantasy",
+    "bahanUtama": "Tahu",
+    "porsiKecil": 35,
+    "porsiBesar": 50
+  },
+  {
+    "kode": 3211,
+    "jenisMenu": "Lauk Nabati (Tempe)",
+    "namaMenu": "Tempe Goreng",
+    "bahanUtama": "Tempe",
+    "porsiKecil": 27.5,
+    "porsiBesar": 33
+  },
+  {
+    "kode": 3212,
+    "jenisMenu": "Lauk Nabati (Tempe)",
+    "namaMenu": "Tempe Goreng Tepung",
+    "bahanUtama": "Tempe",
+    "porsiKecil": 27.5,
+    "porsiBesar": 33
+  },
+  {
+    "kode": 3213,
+    "jenisMenu": "Lauk Nabati (Tempe)",
+    "namaMenu": "Kering Tempe",
+    "bahanUtama": "Tempe",
+    "porsiKecil": 32,
+    "porsiBesar": 47
+  },
+  {
+    "kode": 3311,
+    "jenisMenu": "Lauk Nabati (Lainnya)",
+    "namaMenu": "Edamame",
+    "bahanUtama": "Edamame",
+    "porsiKecil": 12.5,
+    "porsiBesar": 15
+  },
+  {
+    "kode": 3312,
+    "jenisMenu": "Lauk Nabati (Lainnya)",
+    "namaMenu": "Susu UHT Ultra Full Cream 125 ml",
+    "bahanUtama": "Susu UHT Ultra Full Cream 125 ml",
+    "porsiKecil": 1,
+    "porsiBesar": 1
+  },
+  {
+    "kode": 3313,
+    "jenisMenu": "Lauk Nabati (Lainnya)",
+    "namaMenu": "Susu UHT Cimory Full Cream 125 ml",
+    "bahanUtama": "Susu UHT Cimory Full Cream 125 ml",
+    "porsiKecil": 1,
+    "porsiBesar": 1
+  },
+  {
+    "kode": 4111,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Labu Siam Wortel",
+    "bahanUtama": "Labu Siam",
+    "porsiKecil": 20,
+    "porsiBesar": 30
+  },
+  {
+    "kode": 4111,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Labu Siam Wortel",
+    "bahanUtama": "Wortel",
+    "porsiKecil": 20,
+    "porsiBesar": 30
+  },
+  {
+    "kode": 4112,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Kangkung",
+    "bahanUtama": "Kangkung",
+    "porsiKecil": 40,
+    "porsiBesar": 60
+  },
+  {
+    "kode": 4113,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Buncis Wortel",
+    "bahanUtama": "Buncis",
+    "porsiKecil": 20,
+    "porsiBesar": 60
+  },
+  {
+    "kode": 4113,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Buncis Wortel",
+    "bahanUtama": "Wortel",
+    "porsiKecil": 20,
+    "porsiBesar": 60
+  },
+  {
+    "kode": 4114,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Lalap Selada Mentimun",
+    "bahanUtama": "Selada",
+    "porsiKecil": 11,
+    "porsiBesar": 11
+  },
+  {
+    "kode": 4114,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Lalap Selada Mentimun",
+    "bahanUtama": "Mentimun",
+    "porsiKecil": 26,
+    "porsiBesar": 26
+  },
+  {
+    "kode": 4115,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Lalap Mentimun",
+    "bahanUtama": "Mentimun",
+    "porsiKecil": 39,
+    "porsiBesar": 39
+  },
+  {
+    "kode": 4116,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Sawi Putih Wortel",
+    "bahanUtama": "Sawi Putih",
+    "porsiKecil": 20,
+    "porsiBesar": 30
+  },
+  {
+    "kode": 4116,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Sawi Putih Wortel",
+    "bahanUtama": "Wortel",
+    "porsiKecil": 20,
+    "porsiBesar": 30
+  },
+  {
+    "kode": 4117,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Bayam Jagung Pipil",
+    "bahanUtama": "Bayam",
+    "porsiKecil": 30,
+    "porsiBesar": 45
+  },
+  {
+    "kode": 4117,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Bayam Jagung Pipil",
+    "bahanUtama": "Jagung Manis Kupas",
+    "porsiKecil": 10,
+    "porsiBesar": 15
+  },
+  {
+    "kode": 4118,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Kacang Panjang",
+    "bahanUtama": "Kacang Panjang",
+    "porsiKecil": 40,
+    "porsiBesar": 60
+  },
+  {
+    "kode": 4119,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Gulai Daun Singkong Nangka Muda",
+    "bahanUtama": "Daun Singkong",
+    "porsiKecil": 20,
+    "porsiBesar": 30
+  },
+  {
+    "kode": 4119,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Gulai Daun Singkong Nangka Muda",
+    "bahanUtama": "Nangka Muda",
+    "porsiKecil": 20,
+    "porsiBesar": 30
+  },
+  {
+    "kode": 4120,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Kol Wortel",
+    "bahanUtama": "Kol",
+    "porsiKecil": 20,
+    "porsiBesar": 30
+  },
+  {
+    "kode": 4120,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Kol Wortel",
+    "bahanUtama": "Wortel",
+    "porsiKecil": 20,
+    "porsiBesar": 30
+  },
+  {
+    "kode": 4121,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Wortel Jagung Pipil",
+    "bahanUtama": "Wortel",
+    "porsiKecil": 30,
+    "porsiBesar": 45
+  },
+  {
+    "kode": 4121,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Tumis Wortel Jagung Pipil",
+    "bahanUtama": "Jagung Pipil",
+    "porsiKecil": 10,
+    "porsiBesar": 15
+  },
+  {
+    "kode": 4122,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Capcay",
+    "bahanUtama": "Wortel",
+    "porsiKecil": 16,
+    "porsiBesar": 24
+  },
+  {
+    "kode": 4122,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Capcay",
+    "bahanUtama": "Sawi Putih",
+    "porsiKecil": 12,
+    "porsiBesar": 18
+  },
+  {
+    "kode": 4122,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Capcay",
+    "bahanUtama": "Caisim",
+    "porsiKecil": 12,
+    "porsiBesar": 18
+  },
+  {
+    "kode": 4122,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Capcay",
+    "bahanUtama": "Jamur Kuping",
+    "porsiKecil": 3,
+    "porsiBesar": 4.5
+  },
+  {
+    "kode": 4123,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Acar Kuning Buncis",
+    "bahanUtama": "Buncis",
+    "porsiKecil": 50,
+    "porsiBesar": 50
+  },
+  {
+    "kode": 4124,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Acar Bening Mentimun Wortel",
+    "bahanUtama": "Mentimun (Acar)",
+    "porsiKecil": 20,
+    "porsiBesar": 20
+  },
+  {
+    "kode": 4124,
+    "jenisMenu": "Sayur",
+    "namaMenu": "Acar Bening Mentimun Wortel",
+    "bahanUtama": "Wortel",
+    "porsiKecil": 20,
+    "porsiBesar": 20
+  },
+  {
+    "kode": 5111,
+    "jenisMenu": "Buah",
+    "namaMenu": "Pisang Ambon",
+    "bahanUtama": "",
+    "porsiKecil": 0,
+    "porsiBesar": 0
+  },
+  {
+    "kode": 5112,
+    "jenisMenu": "Buah",
+    "namaMenu": "Jeruk Medan Polos",
+    "bahanUtama": "",
+    "porsiKecil": 0,
+    "porsiBesar": 0
+  },
+  {
+    "kode": 5113,
+    "jenisMenu": "Buah",
+    "namaMenu": "Jeruk Medan Brastagi",
+    "bahanUtama": "",
+    "porsiKecil": 0,
+    "porsiBesar": 0
+  },
+  {
+    "kode": 5114,
+    "jenisMenu": "Buah",
+    "namaMenu": "Jeruk Pontianak",
+    "bahanUtama": "",
+    "porsiKecil": 0,
+    "porsiBesar": 0
+  },
+  {
+    "kode": 5115,
+    "jenisMenu": "Buah",
+    "namaMenu": "Kurma Sukari",
+    "bahanUtama": "",
+    "porsiKecil": 0,
+    "porsiBesar": 0
+  },
+  {
+    "kode": 5116,
+    "jenisMenu": "Buah",
+    "namaMenu": "Anggur Merah Australia",
+    "bahanUtama": "",
+    "porsiKecil": 0,
+    "porsiBesar": 0
+  },
+  {
+    "kode": 5117,
+    "jenisMenu": "Buah",
+    "namaMenu": "Kelengkeng Stiker Merah",
+    "bahanUtama": "",
+    "porsiKecil": 0,
+    "porsiBesar": 0
+  },
+  {
+    "kode": 5118,
+    "jenisMenu": "Buah",
+    "namaMenu": "Kelengkeng Stiker Biru",
+    "bahanUtama": "",
+    "porsiKecil": 0,
+    "porsiBesar": 0
+  },
+  {
+    "kode": 5119,
+    "jenisMenu": "Buah",
+    "namaMenu": "Apel Fuji (Uk 125)",
+    "bahanUtama": "",
+    "porsiKecil": 0,
+    "porsiBesar": 0
+  },
+  {
+    "kode": 5120,
+    "jenisMenu": "Buah",
+    "namaMenu": "Apel Fuji (Uk 138)",
+    "bahanUtama": "",
+    "porsiKecil": 0,
+    "porsiBesar": 0
+  },
+  {
+    "kode": 5121,
+    "jenisMenu": "Buah",
+    "namaMenu": "Pear Century",
+    "bahanUtama": "",
+    "porsiKecil": 0,
+    "porsiBesar": 0
+  },
+  {
+    "kode": 5122,
+    "jenisMenu": "Buah",
+    "namaMenu": "Jeruk Sunkist Neval",
+    "bahanUtama": "",
+    "porsiKecil": 0,
+    "porsiBesar": 0
+  }
+]

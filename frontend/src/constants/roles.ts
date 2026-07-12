@@ -47,6 +47,59 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/admin/orders",
     "/distribusi/schedules",
   ],
+
+  // ==========================================================================
+  // MBG (Makan Bergizi Gratis) Roles
+  // ==========================================================================
+
+  /**
+   * Administrasi MBG: input data PM, kelola institusi, assign petugas.
+   */
+  admin_mbg: [
+    "/mbg/admin",
+    "/mbg/admin/batch/new",
+    "/mbg/archive",
+    "/mbg/reports",
+    "/mbg/orders",
+    "/mbg/purchasing/recap",
+  ],
+
+  /**
+   * Tim Produksi MBG: kelola menu MBG, hitung kadar gizi, proses masak,
+   * dokumentasi foto, export PDF.
+   */
+  produksi_mbg: [
+    "/mbg/production",
+    "/mbg/cooking",
+    "/mbg/reports",
+    "/mbg/orders",
+  ],
+
+  /**
+   * Purchasing MBG: belanja bahan, kelola supplier, grouping pesanan.
+   */
+  purchasing_mbg: [
+    "/mbg/purchasing",
+    "/mbg/purchasing/recap",
+    "/mbg/suppliers",
+    "/mbg/orders",
+  ],
+
+  /**
+   * Distribusi MBG: QC barang masuk, assign tugas kurir.
+   */
+  distribusi_mbg: [
+    "/mbg/distribution",
+    "/mbg/orders",
+  ],
+
+  /**
+   * Kurir MBG: serah terima, antar makanan, bukti foto, export PDF.
+   */
+  kurir_mbg: [
+    "/mbg/delivery",
+    "/mbg/orders",
+  ],
 };
 
 /** Roles that land on the admin AppShell when authenticated. */
@@ -54,6 +107,11 @@ export const ADMIN_SHELL_ROLES = [
   "tim_produksi",
   "distribusi",
   "kurir",
+  "admin_mbg",
+  "produksi_mbg",
+  "purchasing_mbg",
+  "distribusi_mbg",
+  "kurir_mbg",
 ] as const;
 
 /**
@@ -66,5 +124,9 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   tim_produksi: "/admin/production",
   distribusi: "/distribusi/handover",
   kurir: "/distribusi/delivery",
+  admin_mbg: "/mbg/admin",
+  produksi_mbg: "/mbg/production",
+  purchasing_mbg: "/mbg/purchasing",
+  distribusi_mbg: "/mbg/distribution",
+  kurir_mbg: "/mbg/delivery",
 };
-

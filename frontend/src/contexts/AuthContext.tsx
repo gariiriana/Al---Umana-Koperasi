@@ -25,7 +25,8 @@ export interface UserProfile {
   uid?: string;
   email: string;
   displayName: string;
-  role: "admin" | "tim_produksi" | "distribusi" | "monitoring" | "kurir" | "pelanggan";
+  role: "admin" | "tim_produksi" | "distribusi" | "monitoring" | "kurir" | "pelanggan"
+    | "admin_mbg" | "produksi_mbg" | "purchasing_mbg" | "distribusi_mbg" | "kurir_mbg";
   createdAt?: unknown;
   /** Optional delivery address saved during checkout for auto-fill. */
   savedDeliveryAddress?: string;
@@ -102,7 +103,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         
         // Subscribe to Firestore user profile document
         const userDocRef = doc(db, "users", nextUser.uid);
-        unsubscribeSnapshot = onSnapshot(
+        const realUnsubscribe = onSnapshot(
           userDocRef,
           async (docSnap) => {
             if (docSnap.exists()) {
@@ -110,10 +111,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
               setLoading(false);
             } else {
               console.warn(`No user profile found for UID: ${nextUser.uid}. Auto-provisioning default profile...`);
+              const email = nextUser.email || "";
+              
+              let defaultRole: UserProfile["role"] = "pelanggan";
+              if (email.startsWith("admin_mbg") || email.startsWith("adminmbg")) {
+                defaultRole = "admin_mbg";
+              } else if (email.startsWith("produksi_mbg") || email.startsWith("produksimbg")) {
+                defaultRole = "produksi_mbg";
+              } else if (email.startsWith("purchasing_mbg") || email.startsWith("purchasingmbg")) {
+                defaultRole = "purchasing_mbg";
+              } else if (email.startsWith("distribusi_mbg") || email.startsWith("distribusimbg")) {
+                defaultRole = "distribusi_mbg";
+              } else if (email.startsWith("kurir_mbg") || email.startsWith("kurirmbg")) {
+                defaultRole = "kurir_mbg";
+              }
+
               const defaultProfile: UserProfile = {
-                email: nextUser.email || "",
-                displayName: nextUser.displayName || nextUser.email?.split("@")[0] || "Pelanggan Baru",
-                role: "pelanggan",
+                email,
+                displayName: nextUser.displayName || email.split("@")[0] || "Pelanggan Baru",
+                role: defaultRole,
                 createdAt: new Date(),
               };
               try {
@@ -131,6 +147,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
             setLoading(false);
           }
         );
+        unsubscribeSnapshot = () => {
+          setTimeout(() => {
+            realUnsubscribe();
+          }, 100);
+        };
       } else {
         setUser(null);
         setProfile(null);

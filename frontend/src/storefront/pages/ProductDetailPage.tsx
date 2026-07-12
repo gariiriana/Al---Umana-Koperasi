@@ -104,7 +104,7 @@ export function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { lang } = useLanguage();
   const { showToast } = useToast();
   const t = DICTIONARY[lang];
@@ -458,68 +458,89 @@ export function ProductDetailPage() {
 
       {/* ── STICKY BOTTOM ACTION BAR ─────────────────────────────────── */}
       <div className="fixed bottom-14 lg:bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] shadow-[0_-4px_16px_rgba(0,0,0,0.08)] z-20 px-4 py-3 max-w-[480px] lg:max-w-7xl mx-auto">
-        {inStock ? (
-          <div className="flex gap-3">
-            {/* Button 1: Masukkan Keranjang */}
-            <button
-              ref={addBtnRef}
-              type="button"
-              id="add-to-cart-btn"
-              onClick={handleAddToCart}
-              disabled={adding || buying}
-              className={
-                "flex-1 flex items-center justify-center gap-2 min-h-12 rounded-2xl text-sm font-extrabold border-2 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 " +
-                (success
-                  ? "bg-emerald-50 border-emerald-500 text-emerald-700 focus:ring-emerald-500"
-                  : "border-[#FBBF24] hover:bg-[#FBBF24]/10 text-[#B45309] focus:ring-[#FBBF24]")
-              }
-            >
-              {success ? (
-                <>
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                  {t.addedSuccess}
-                </>
-              ) : adding ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  {t.adding}
-                </>
-              ) : (
-                <>
-                  <ShoppingCart className="h-5 w-5" />
-                  {t.addToCart}
-                </>
-              )}
-            </button>
+        {(() => {
+          const isMbgItem = product?.category?.toLowerCase() === "mbg";
+          const canOrderMbg = profile?.role === "admin_mbg" || profile?.role === "admin";
+          const mbgOrderBlocked = isMbgItem && !canOrderMbg;
 
-            {/* Button 2: Beli Sekarang */}
+          if (mbgOrderBlocked) {
+            return (
+              <button
+                disabled
+                className="w-full flex items-center justify-center gap-2 min-h-12 rounded-2xl bg-gray-100 border border-gray-200 text-sm font-extrabold text-gray-400 cursor-not-allowed select-none"
+              >
+                {lang === "en" ? "View Only (MBG Menu)" : "Hanya Lihat (Menu MBG)"}
+              </button>
+            );
+          }
+
+          if (inStock) {
+            return (
+              <div className="flex gap-3">
+                {/* Button 1: Masukkan Keranjang */}
+                <button
+                  ref={addBtnRef}
+                  type="button"
+                  id="add-to-cart-btn"
+                  onClick={handleAddToCart}
+                  disabled={adding || buying}
+                  className={
+                    "flex-1 flex items-center justify-center gap-2 min-h-12 rounded-2xl text-sm font-extrabold border-2 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 " +
+                    (success
+                      ? "bg-emerald-50 border-emerald-500 text-emerald-700 focus:ring-emerald-500"
+                      : "border-[#FBBF24] hover:bg-[#FBBF24]/10 text-[#B45309] focus:ring-[#FBBF24]")
+                  }
+                >
+                  {success ? (
+                    <>
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                      {t.addedSuccess}
+                    </>
+                  ) : adding ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      {t.adding}
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="h-5 w-5" />
+                      {t.addToCart}
+                    </>
+                  )}
+                </button>
+
+                {/* Button 2: Beli Sekarang */}
+                <button
+                  type="button"
+                  id="buy-now-btn"
+                  onClick={handleBuyNow}
+                  disabled={adding || buying}
+                  className="flex-[1.5] flex items-center justify-center gap-2 min-h-12 rounded-2xl text-sm font-extrabold bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] shadow-sm transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FBBF24] disabled:opacity-50"
+                >
+                  {buying ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      {lang === "id" ? "Memproses…" : "Processing…"}
+                    </>
+                  ) : (
+                    <>
+                      {t.buyNow}
+                    </>
+                  )}
+                </button>
+              </div>
+            );
+          }
+
+          return (
             <button
-              type="button"
-              id="buy-now-btn"
-              onClick={handleBuyNow}
-              disabled={adding || buying}
-              className="flex-[1.5] flex items-center justify-center gap-2 min-h-12 rounded-2xl text-sm font-extrabold bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] shadow-sm transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FBBF24] disabled:opacity-50"
+              disabled
+              className="w-full flex items-center justify-center gap-2 min-h-12 rounded-2xl bg-[#E5E7EB] text-sm font-bold text-[#9CA3AF] cursor-not-allowed"
             >
-              {buying ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  {lang === "id" ? "Memproses…" : "Processing…"}
-                </>
-              ) : (
-                <>
-                  {t.buyNow}
-                </>
-              )}
+              {t.outOfStock}
             </button>
-          </div>
-        ) : (
-          <button
-            disabled
-            className="w-full flex items-center justify-center gap-2 min-h-12 rounded-2xl bg-[#E5E7EB] text-sm font-bold text-[#9CA3AF] cursor-not-allowed"
-          >
-            {t.outOfStock}
-          </button>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

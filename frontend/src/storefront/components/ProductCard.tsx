@@ -42,7 +42,7 @@ export interface ProductCardProps {
 
 export function ProductCard({ item, className }: ProductCardProps) {
   const { lang } = useLanguage();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const { triggerFlyAnimation } = useCartAnimation();
@@ -227,31 +227,46 @@ export function ProductCard({ item, className }: ProductCardProps) {
         </div>
 
         {/* Action Buttons (Full-width row) */}
-        {inStock && (
-          <div className="flex items-center gap-1.5 pt-1">
-            {/* Cart Icon Button */}
-            <button
-              ref={cartBtnRef}
-              type="button"
-              disabled={addingToCart || buyingNow}
-              onClick={handleAddToCart}
-              className="flex-1 flex items-center justify-center bg-amber-50 border border-amber-200 hover:bg-amber-100/70 text-[#EE4D2D] h-7.5 rounded-lg transition-all duration-150 shadow-2xs cursor-pointer focus:outline-none shrink-0"
-              title={lang === "id" ? "Tambah ke Keranjang" : "Add to Cart"}
-            >
-              <ShoppingCart className="h-3.5 w-3.5" />
-            </button>
-            
-            {/* Beli (Buy Now) Button */}
-            <button
-              type="button"
-              disabled={buyingNow || addingToCart}
-              onClick={handleBuyNow}
-              className="flex-[2] bg-[#EE4D2D] hover:bg-[#D33E20] text-white text-[10px] font-bold h-7.5 rounded-lg transition-all duration-150 shadow-xs cursor-pointer focus:outline-none flex items-center justify-center shrink-0"
-            >
-              {lang === "en" ? "Buy" : "Beli"}
-            </button>
-          </div>
-        )}
+        {inStock && (() => {
+          const isMbgItem = item.category?.toLowerCase() === "mbg";
+          const canOrderMbg = profile?.role === "admin_mbg" || profile?.role === "admin";
+          const mbgOrderBlocked = isMbgItem && !canOrderMbg;
+          
+          if (mbgOrderBlocked) {
+            return (
+              <div className="pt-1">
+                <span className="w-full inline-flex items-center justify-center bg-gray-100 text-gray-400 text-[10px] font-bold h-7.5 rounded-lg border border-gray-200 select-none">
+                  {lang === "en" ? "View Only" : "Hanya Lihat"}
+                </span>
+              </div>
+            );
+          }
+          return (
+            <div className="flex items-center gap-1.5 pt-1">
+              {/* Cart Icon Button */}
+              <button
+                ref={cartBtnRef}
+                type="button"
+                disabled={addingToCart || buyingNow}
+                onClick={handleAddToCart}
+                className="flex-1 flex items-center justify-center bg-amber-50 border border-amber-200 hover:bg-amber-100/70 text-[#EE4D2D] h-7.5 rounded-lg transition-all duration-150 shadow-2xs cursor-pointer focus:outline-none shrink-0"
+                title={lang === "id" ? "Tambah ke Keranjang" : "Add to Cart"}
+              >
+                <ShoppingCart className="h-3.5 w-3.5" />
+              </button>
+              
+              {/* Beli (Buy Now) Button */}
+              <button
+                type="button"
+                disabled={buyingNow || addingToCart}
+                onClick={handleBuyNow}
+                className="flex-[2] bg-[#EE4D2D] hover:bg-[#D33E20] text-white text-[10px] font-bold h-7.5 rounded-lg transition-all duration-150 shadow-xs cursor-pointer focus:outline-none flex items-center justify-center shrink-0"
+              >
+                {lang === "en" ? "Buy" : "Beli"}
+              </button>
+            </div>
+          );
+        })()}
 
         {/* Stock status or sales progress bar */}
         <div className="pt-2 border-t border-neutral-100">

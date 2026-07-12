@@ -60,6 +60,43 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------
+    // MBG Role Helpers
+    // -------------------------------------------------------------------
+    function isAdminMbg() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin_mbg';
+    }
+
+    function isProduksiMbg() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_mbg';
+    }
+
+    function isPurchasingMbg() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'purchasing_mbg';
+    }
+
+    function isDistribusiMbg() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi_mbg';
+    }
+
+    function isKurirMbg() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kurir_mbg';
+    }
+
+    function isAnyMbg() {
+      return isAdminMbg() || isProduksiMbg() || isPurchasingMbg() || isDistribusiMbg() || isKurirMbg();
+    }
+
+    // -------------------------------------------------------------------
     // Default deny. Any path not matched explicitly is forbidden.
     // -------------------------------------------------------------------
     match /{document=**} {
@@ -270,6 +307,105 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if request.auth != null;
       allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------
+    // MBG PM Batches (batch pengiriman per tanggal)
+    // -------------------------------------------------------------------
+    match /mbg_pm_batches/{batchId} {
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg());
+      allow create, update: if isAdmin() || isAdminMbg() || isProduksiMbg() || isDistribusiMbg() || isPurchasingMbg();
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------
+    // MBG PM Entries (data per institusi dalam batch)
+    // -------------------------------------------------------------------
+    match /mbg_pm_entries/{entryId} {
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg());
+      allow create, update: if isAdmin() || isAdminMbg();
+      allow delete: if isAdmin() || isAdminMbg();
+    }
+
+    // -------------------------------------------------------------------
+    // MBG Nutrition (kadar gizi per menu item)
+    // -------------------------------------------------------------------
+    match /mbg_nutrition/{nutritionId} {
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg());
+      allow create, update: if isAdmin() || isProduksiMbg();
+      allow delete: if isAdmin() || isProduksiMbg();
+    }
+
+    // -------------------------------------------------------------------
+    // MBG Custom TKPI (custom ingredients added by production)
+    // -------------------------------------------------------------------
+    match /mbg_custom_tkpi/{itemId} {
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg());
+      allow create, update: if isAdmin() || isProduksiMbg();
+      allow delete: if isAdmin() || isProduksiMbg();
+    }
+
+    // -------------------------------------------------------------------
+    // MBG Suppliers (master data supplier)
+    // -------------------------------------------------------------------
+    match /mbg_suppliers/{supplierId} {
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg());
+      allow create, update: if isAdmin() || isPurchasingMbg();
+      allow delete: if isAdmin() || isPurchasingMbg();
+    }
+
+    // -------------------------------------------------------------------
+    // MBG Purchase Orders (belanja per supplier)
+    // -------------------------------------------------------------------
+    match /mbg_purchase_orders/{orderId} {
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg());
+      allow create, update: if isAdmin() || isPurchasingMbg();
+      allow delete: if isAdmin() || isPurchasingMbg();
+    }
+
+    // -------------------------------------------------------------------
+    // MBG QC Checks (quality control barang masuk)
+    // -------------------------------------------------------------------
+    match /mbg_qc_checks/{checkId} {
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg());
+      allow create, update: if isAdmin() || isDistribusiMbg();
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------
+    // MBG Cooking Sessions (dokumentasi proses masak)
+    // -------------------------------------------------------------------
+    match /mbg_cooking_sessions/{sessionId} {
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg());
+      allow create, update: if isAdmin() || isProduksiMbg();
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------
+    // MBG Delivery Tasks (tugas kurir per petugas)
+    // -------------------------------------------------------------------
+    match /mbg_delivery_tasks/{taskId} {
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg());
+      allow create: if isAdmin() || isDistribusiMbg();
+      allow update: if isAdmin() || isDistribusiMbg() || isKurirMbg();
+      allow delete: if isAdmin();
+    }
+    // -------------------------------------------------------------------
+    // MBG Custom Recipes (resep kustom buatan tim produksi)
+    // -------------------------------------------------------------------
+    match /mbg_custom_recipes/{recipeId} {
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg());
+      allow create, update: if isAdmin() || isProduksiMbg();
+      allow delete: if isAdmin() || isProduksiMbg();
+    }
+
+    // -------------------------------------------------------------------
+    // MBG Recipe Adjustments (koreksi takaran bahan baku per batch)
+    // -------------------------------------------------------------------
+    match /mbg_recipe_adjustments/{adjustmentId} {
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg());
+      allow create, update: if isAdmin() || isProduksiMbg();
+      allow delete: if isAdmin() || isProduksiMbg();
     }
   }
 }

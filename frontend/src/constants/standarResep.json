@@ -1,0 +1,3206 @@
+[
+  {
+    "namaMenu": "Nasi Daun Jeruk (Beras Premium)",
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "mainBahan": "Nasi Premium",
+    "baseQty": 50000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Nasi Premium",
+        "kebutuhan": 50000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Jeruk",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Nasi Daun Jeruk (Beras)",
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "mainBahan": "Nasi",
+    "baseQty": 50000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Nasi",
+        "kebutuhan": 50000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Jeruk",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Nasi Kuning (Beras Premium)",
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "mainBahan": "Nasi Premium",
+    "baseQty": 50000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Nasi Premium",
+        "kebutuhan": 50000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Santan Kelapa Sun Kara @1liter",
+        "kebutuhan": 6000,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bumbu Dasar Kuning",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kunyit Giling",
+        "kebutuhan": 250,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Ketumbar Bubuk",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Nasi Kuning (Beras)",
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "mainBahan": "Nasi",
+    "baseQty": 50000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Nasi",
+        "kebutuhan": 50000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Santan Kelapa Sun Kara @1liter",
+        "kebutuhan": 6000,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bumbu Dasar Kuning",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kunyit Giling",
+        "kebutuhan": 250,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Ketumbar Bubuk",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Nasi Liwet (Beras Premium)",
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "mainBahan": "Nasi Premium",
+    "baseQty": 50000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Nasi Premium",
+        "kebutuhan": 50000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Merah Iris",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Nasi Liwet (Beras)",
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "mainBahan": "Nasi",
+    "baseQty": 50000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Nasi",
+        "kebutuhan": 50000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Merah Iris",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Nasi Putih (Beras Premium)",
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "mainBahan": "Nasi Premium",
+    "baseQty": 50000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Nasi Premium",
+        "kebutuhan": 50000,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Nasi Putih (Beras)",
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "mainBahan": "Nasi",
+    "baseQty": 50000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Nasi",
+        "kebutuhan": 50000,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Nasi Uduk (Beras Premium)",
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "mainBahan": "Nasi Premium",
+    "baseQty": 50000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Nasi Premium",
+        "kebutuhan": 50000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Santan Kelapa Sun Kara @1liter",
+        "kebutuhan": 6000,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bumbu Dasar Putih",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kencur",
+        "kebutuhan": 250,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Nasi Uduk (Beras)",
+    "jenisMenu": "Karbohidrat (Nasi)",
+    "mainBahan": "Nasi",
+    "baseQty": 50000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Nasi",
+        "kebutuhan": 50000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Santan Kelapa Sun Kara @1liter",
+        "kebutuhan": 6000,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bumbu Dasar Putih",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kencur",
+        "kebutuhan": 250,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Ayam Kecap",
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "mainBahan": "Ayam Potong",
+    "baseQty": 29000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ayam Potong",
+        "kebutuhan": 29000,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": "Ayam Potong Kotor (Kg)"
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Jahe Bonggol",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lengkuas Bonggol",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Bombay",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Cabai Merah Besar",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bumbu Dasar Putih",
+        "kebutuhan": 1500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kecap Manis ABC @825g",
+        "kebutuhan": 3000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Ayam Kentucky",
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "mainBahan": "Ayam Potong",
+    "baseQty": 29000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ayam Potong",
+        "kebutuhan": 29000,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Telur Ayam",
+        "kebutuhan": 205,
+        "satuan": "g",
+        "resepPer": "Ayam Potong (Kg)"
+      },
+      {
+        "bahan": "Tepung Terigu Cakra Kembar @1kg",
+        "kebutuhan": 11000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Tepung Bumbu Kentucky Sasa @850g",
+        "kebutuhan": 2250,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Maizena",
+        "kebutuhan": 1750,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Putih Giling",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Jahe Giling",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Ayam Kremes",
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "mainBahan": "Ayam Potong",
+    "baseQty": 29000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ayam Potong",
+        "kebutuhan": 29000,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Bumbu Dasar Kuning",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": "Ayam Potong (Kg)"
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Telur Ayam",
+        "kebutuhan": 1250,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Tepung Beras Rose Brand @500g",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Maizena",
+        "kebutuhan": 4000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Baking Powder Koepoe-Koepoe @45g",
+        "kebutuhan": 240,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Ayam Serundeng",
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "mainBahan": "Ayam Potong",
+    "baseQty": 29000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ayam Potong",
+        "kebutuhan": 29000,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Bumbu Dasar Kuning",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": "Ayam Potong (Kg)"
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kelapa Parut",
+        "kebutuhan": 6800,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lengkuas Bonggol",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Jahe Bonggol",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Ketumbar Bubuk",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Ayam Woku Kuning",
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "mainBahan": "Ayam Potong",
+    "baseQty": 29000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ayam Potong",
+        "kebutuhan": 29000,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Bumbu Dasar Kuning",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": "Ayam Potong (Kg)"
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Kunyit",
+        "kebutuhan": 0.25,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Kemangi",
+        "kebutuhan": 2400,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bumbu Dasar Kuning (Kunyit Sedikit)",
+        "kebutuhan": 1800,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Cabai Merah Besar",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Bawang",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Tomat Merah",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 200,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Kari Ayam Kental",
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "mainBahan": "Ayam Potong",
+    "baseQty": 29000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ayam Potong",
+        "kebutuhan": 29000,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": "Ayam Potong (Kg)"
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Jahe Bonggol",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lengkuas Bonggol",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Kari",
+        "kebutuhan": 0.15,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bumbu Dasar Kari Ayam Kuning",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kapulaga",
+        "kebutuhan": 15,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kayu Manis",
+        "kebutuhan": 15,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bunga Lawang",
+        "kebutuhan": 15,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Santan Kelapa Sun Kara @1liter",
+        "kebutuhan": 6000,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Ayam Fillet Saus Barbeque",
+    "jenisMenu": "Lauk Hewani (Ayam Fillet)",
+    "mainBahan": "Ayam Fillet",
+    "baseQty": 20000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ayam Fillet",
+        "kebutuhan": 20000,
+        "satuan": "g",
+        "resepPer": 20
+      },
+      {
+        "bahan": "Saus Barbeque Delmonte @1kg",
+        "kebutuhan": 1200,
+        "satuan": "g",
+        "resepPer": "Ayam Fillet (Kg)"
+      },
+      {
+        "bahan": "Kecap Manis ABC @825g",
+        "kebutuhan": 620,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Saus Bulgogi Saori @133ml",
+        "kebutuhan": 310,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 310,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Minyak Wijen @600ml",
+        "kebutuhan": 220,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Saus Sambal Delmonte Extra Hot @1kg",
+        "kebutuhan": 350,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 370,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Bombay",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 50,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Ayam Fillet Saus Mentega",
+    "jenisMenu": "Lauk Hewani (Ayam Fillet)",
+    "mainBahan": "Ayam Fillet",
+    "baseQty": 7500,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ayam Fillet",
+        "kebutuhan": 7500,
+        "satuan": "g",
+        "resepPer": 7500
+      },
+      {
+        "bahan": "Bumbu Dasar Kuning",
+        "kebutuhan": 180,
+        "satuan": "g",
+        "resepPer": "Ayam Fillet (g)"
+      },
+      {
+        "bahan": "Bawang Bombay",
+        "kebutuhan": 290,
+        "satuan": "g",
+        "resepPer": 5000
+      },
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 145,
+        "satuan": "g",
+        "resepPer": "Ayam Ungkep (g)"
+      },
+      {
+        "bahan": "Cabai Merah Besar",
+        "kebutuhan": 145,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Bawang",
+        "kebutuhan": 145,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kecap Manis ABC @825g",
+        "kebutuhan": 120,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Saus Tomat Delmonte @1kg",
+        "kebutuhan": 405,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Blue Band Margarin",
+        "kebutuhan": 210,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kecap Inggris ABC @195ml",
+        "kebutuhan": 50,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 15,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Ayam Fillet Saus Teriyaki",
+    "jenisMenu": "Lauk Hewani (Ayam Fillet)",
+    "mainBahan": "Ayam Fillet",
+    "baseQty": 20000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ayam Fillet",
+        "kebutuhan": 20000,
+        "satuan": "g",
+        "resepPer": 20
+      },
+      {
+        "bahan": "Saus Teriyaki Saori @1liter",
+        "kebutuhan": 2000,
+        "satuan": "ml",
+        "resepPer": "Ayam Fillet (Kg)"
+      },
+      {
+        "bahan": "Kecap Manis ABC @825g",
+        "kebutuhan": 1200,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Saus Tiram Saori @1liter",
+        "kebutuhan": 1440,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kecap Asin ABC @620ml",
+        "kebutuhan": 200,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Minyak Wijen @600ml",
+        "kebutuhan": 640,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Jahe Bonggol",
+        "kebutuhan": 50,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Bombay",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Cabai Merah Besar",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Cabai Hijau Besar",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 40,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Ayam Suwir Kecap",
+    "jenisMenu": "Lauk Hewani (Ayam Fillet)",
+    "mainBahan": "Ayam Fillet",
+    "baseQty": 20000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ayam Fillet",
+        "kebutuhan": 20000,
+        "satuan": "g",
+        "resepPer": 20
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": "Ayam Fillet (Kg)"
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Jahe Bonggol",
+        "kebutuhan": 200,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lengkuas Bonggol",
+        "kebutuhan": 200,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bumbu Dasar Putih",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kecap Manis ABC @825g",
+        "kebutuhan": 1600,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Saus Tiram Saori @1liter",
+        "kebutuhan": 400,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Bawang",
+        "kebutuhan": 300,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 40,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Ayam Suwir Kemangi Bumbu Kuning",
+    "jenisMenu": "Lauk Hewani (Ayam Fillet)",
+    "mainBahan": "Ayam Fillet",
+    "baseQty": 20000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ayam Fillet",
+        "kebutuhan": 20000,
+        "satuan": "g",
+        "resepPer": 20
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": "Ayam Fillet (Kg)"
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Jahe Bonggol",
+        "kebutuhan": 200,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lengkuas Bonggol",
+        "kebutuhan": 200,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bumbu Dasar Kuning",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Kemangi",
+        "kebutuhan": 1600,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 40,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Ayam Suwir Kemangi Bumbu Rica",
+    "jenisMenu": "Lauk Hewani (Ayam Fillet)",
+    "mainBahan": "Ayam Fillet",
+    "baseQty": 20000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ayam Fillet",
+        "kebutuhan": 20000,
+        "satuan": "g",
+        "resepPer": 20
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": "Ayam Fillet (Kg)"
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Jahe Bonggol",
+        "kebutuhan": 200,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lengkuas Bonggol",
+        "kebutuhan": 200,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bumbu Dasar Rica",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Kemangi",
+        "kebutuhan": 1600,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 40,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Balado Telur",
+    "jenisMenu": "Lauk Hewani (Telur Ayam)",
+    "mainBahan": "Telur Ayam",
+    "baseQty": 38000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Telur Ayam",
+        "kebutuhan": 38000,
+        "satuan": "g",
+        "resepPer": 43
+      },
+      {
+        "bahan": "Bumbu Dasar Balado",
+        "kebutuhan": 2800,
+        "satuan": "g",
+        "resepPer": "Telur Ayam Kotor (Kg)"
+      },
+      {
+        "bahan": "Tomat Merah",
+        "kebutuhan": 2200,
+        "satuan": "g",
+        "resepPer": 38
+      },
+      {
+        "bahan": "Gula Aren",
+        "kebutuhan": 200,
+        "satuan": "g",
+        "resepPer": "Telur Ayam Bersih (Kg)"
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lengkuas Bonggol",
+        "kebutuhan": 300,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Semur Telur",
+    "jenisMenu": "Lauk Hewani (Telur Ayam)",
+    "mainBahan": "Telur Ayam",
+    "baseQty": 38000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Telur Ayam",
+        "kebutuhan": 38000,
+        "satuan": "g",
+        "resepPer": 43
+      },
+      {
+        "bahan": "Bumbu Dasar Putih",
+        "kebutuhan": 2700,
+        "satuan": "g",
+        "resepPer": "Telur Ayam Kotor (Kg)"
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": 38
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": "Telur Ayam Bersih (Kg)"
+      },
+      {
+        "bahan": "Kecap Manis ABC @825g",
+        "kebutuhan": 3000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Telur Ceplok",
+    "jenisMenu": "Lauk Hewani (Telur Ayam)",
+    "mainBahan": "Telur Ayam",
+    "baseQty": 38000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Telur Ayam",
+        "kebutuhan": 38000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Telur Dadar",
+    "jenisMenu": "Lauk Hewani (Telur Ayam)",
+    "mainBahan": "Telur Ayam",
+    "baseQty": 38000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Telur Ayam",
+        "kebutuhan": 38000,
+        "satuan": "g",
+        "resepPer": 43
+      },
+      {
+        "bahan": "Bawang Merah Iris",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": "Telur Ayam Kotor (Kg)"
+      },
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": 38
+      },
+      {
+        "bahan": "Daun Bawang",
+        "kebutuhan": 1500,
+        "satuan": "g",
+        "resepPer": "Telur Ayam Bersih (Kg)"
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Telur Dadar Padang",
+    "jenisMenu": "Lauk Hewani (Telur Ayam)",
+    "mainBahan": "Telur Ayam",
+    "baseQty": 38000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Telur Ayam",
+        "kebutuhan": 38000,
+        "satuan": "g",
+        "resepPer": 43
+      },
+      {
+        "bahan": "Kol",
+        "kebutuhan": 5000,
+        "satuan": "g",
+        "resepPer": "Telur Ayam Kotor (Kg)"
+      },
+      {
+        "bahan": "Kelapa Parut",
+        "kebutuhan": 1250,
+        "satuan": "g",
+        "resepPer": 38
+      },
+      {
+        "bahan": "Cabai Merah Besar",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": "Telur Ayam Bersih (Kg)"
+      },
+      {
+        "bahan": "Daun Bawang",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Beef Slice Barbeque",
+    "jenisMenu": "Lauk Hewani (Daging Sapi)",
+    "mainBahan": "Daging Sapi",
+    "baseQty": 20000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Daging Sapi",
+        "kebutuhan": 20000,
+        "satuan": "g",
+        "resepPer": 20
+      },
+      {
+        "bahan": "Saus Barbeque Delmonte @1kg",
+        "kebutuhan": 1200,
+        "satuan": "g",
+        "resepPer": "Daging Sapi (Kg)"
+      },
+      {
+        "bahan": "Kecap Manis ABC @825g",
+        "kebutuhan": 620,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Saus Bulgogi Saori @133ml",
+        "kebutuhan": 310,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 310,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Minyak Wijen @600ml",
+        "kebutuhan": 220,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Saus Sambal Delmonte Extra Hot @1kg",
+        "kebutuhan": 350,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 370,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Bombay",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 50,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Krecek Daging",
+    "jenisMenu": "Lauk Hewani (Daging Sapi)",
+    "mainBahan": "Daging Sapi",
+    "baseQty": 45000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Daging Sapi",
+        "kebutuhan": 45000,
+        "satuan": "g",
+        "resepPer": 45
+      },
+      {
+        "bahan": "Daun Bawang",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": "Daging Sapi (Kg)"
+      },
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 3000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Merah Kupas",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Cabai Merah Besar",
+        "kebutuhan": 1500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Jahe Bonggol",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lengkuas Bonggol",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 3,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 3,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kecap Manis ABC @825g",
+        "kebutuhan": 1500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 125,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Rendang Daging",
+    "jenisMenu": "Lauk Hewani (Daging Sapi)",
+    "mainBahan": "Daging Sapi",
+    "baseQty": 30000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Daging Sapi",
+        "kebutuhan": 30000,
+        "satuan": "g",
+        "resepPer": 30
+      },
+      {
+        "bahan": "Bumbu Dasar Rendang",
+        "kebutuhan": 7000,
+        "satuan": "g",
+        "resepPer": "Daging Sapi (Kg)"
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Kunyit",
+        "kebutuhan": 0.25,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Jeruk",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Ketumbar Bubuk",
+        "kebutuhan": 70,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Santan Kelapa Murni",
+        "kebutuhan": 12000,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kelapa Parut",
+        "kebutuhan": 700,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 50,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Semur Daging",
+    "jenisMenu": "Lauk Hewani (Daging Sapi)",
+    "mainBahan": "Daging Sapi",
+    "baseQty": 30000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Daging Sapi",
+        "kebutuhan": 30000,
+        "satuan": "g",
+        "resepPer": 30
+      },
+      {
+        "bahan": "Bumbu Dasar Putih",
+        "kebutuhan": 2250,
+        "satuan": "g",
+        "resepPer": "Daging Sapi (Kg)"
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 1,
+        "satuan": "ikat",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kecap Manis ABC @825g",
+        "kebutuhan": 3000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 75,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Lele Fillet Crispy",
+    "jenisMenu": "Lauk Hewani (Ikan)",
+    "mainBahan": "Ikan Lele Fillet",
+    "baseQty": 20000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ikan Lele Fillet",
+        "kebutuhan": 20000,
+        "satuan": "g",
+        "resepPer": 20
+      },
+      {
+        "bahan": "Telur Ayam",
+        "kebutuhan": 82,
+        "satuan": "g",
+        "resepPer": "Lele Fillet (Kg)"
+      },
+      {
+        "bahan": "Tepung Terigu Cakra Kembar @1kg",
+        "kebutuhan": 4400,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Tepung Bumbu Kentucky Sasa @850g",
+        "kebutuhan": 900,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Maizena",
+        "kebutuhan": 800,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Putih Giling",
+        "kebutuhan": 800,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Jahe Giling",
+        "kebutuhan": 400,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 40,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Pesmol Nila",
+    "jenisMenu": "Lauk Hewani (Ikan)",
+    "mainBahan": "Ikan Nila",
+    "baseQty": 56000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ikan Nila",
+        "kebutuhan": 56000,
+        "satuan": "g",
+        "resepPer": 70
+      },
+      {
+        "bahan": "Bumbu Dasar Kuning",
+        "kebutuhan": 2000,
+        "satuan": "g",
+        "resepPer": "Ikan Nila Kotor (Kg)"
+      },
+      {
+        "bahan": "Bumbu Dasar Pesmol (Kunyit Sedikit)",
+        "kebutuhan": 2500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Tomat Merah",
+        "kebutuhan": 1500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Bawang",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Cabai Merah Besar",
+        "kebutuhan": 1000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tuna Suwir Bumbu Kuning",
+    "jenisMenu": "Lauk Hewani (Ikan)",
+    "mainBahan": "Ikan Tuna",
+    "baseQty": 36000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ikan Tuna",
+        "kebutuhan": 36000,
+        "satuan": "g",
+        "resepPer": 45
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 2,
+        "satuan": "ikat",
+        "resepPer": "Ikan Tuna Utuh (Kg)"
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 2,
+        "satuan": "ikat",
+        "resepPer": 30
+      },
+      {
+        "bahan": "Jahe Bonggol",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": "Ikan Tuna Kukus Bersih (Kg)"
+      },
+      {
+        "bahan": "Bumbu Dasar Kuning",
+        "kebutuhan": 5000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 70,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tuna Suwir Bumbu Rica",
+    "jenisMenu": "Lauk Hewani (Ikan)",
+    "mainBahan": "Ikan Tuna",
+    "baseQty": 36000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Ikan Tuna",
+        "kebutuhan": 36000,
+        "satuan": "g",
+        "resepPer": 45
+      },
+      {
+        "bahan": "Daun Salam",
+        "kebutuhan": 2,
+        "satuan": "ikat",
+        "resepPer": "Ikan Tuna Utuh (Kg)"
+      },
+      {
+        "bahan": "Sereh",
+        "kebutuhan": 2,
+        "satuan": "ikat",
+        "resepPer": 30
+      },
+      {
+        "bahan": "Jahe Bonggol",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": "Ikan Tuna Kukus Bersih (Kg)"
+      },
+      {
+        "bahan": "Bumbu Dasar Kuning",
+        "kebutuhan": 5000,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 70,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tahu Fantasy",
+    "jenisMenu": "Lauk Nabati (Tahu)",
+    "mainBahan": "Tahu Kuning",
+    "baseQty": 7750,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Tahu Kuning",
+        "kebutuhan": 7750,
+        "satuan": "g",
+        "resepPer": 7750
+      },
+      {
+        "bahan": "Wortel",
+        "kebutuhan": 525,
+        "satuan": "g",
+        "resepPer": "Tahu Kuning (g)"
+      },
+      {
+        "bahan": "Daun Bawang",
+        "kebutuhan": 250,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Seledri",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 100,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Telur Ayam",
+        "kebutuhan": 2225,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bihun Jagung Padamu @300g",
+        "kebutuhan": 1400,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Tepung Bumbu Serbaguna Sasa @900g",
+        "kebutuhan": 250,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 50,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tahu Goreng",
+    "jenisMenu": "Lauk Nabati (Tahu)",
+    "mainBahan": "Tahu Kuning",
+    "baseQty": 50,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Tahu Kuning",
+        "kebutuhan": 50,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tahu Saus Asam Manis",
+    "jenisMenu": "Lauk Nabati (Tahu)",
+    "mainBahan": "Tahu Kuning",
+    "baseQty": 31500,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Tahu Kuning",
+        "kebutuhan": 31500,
+        "satuan": "g",
+        "resepPer": 31500
+      },
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 470,
+        "satuan": "g",
+        "resepPer": "Tahu Kuning (g)"
+      },
+      {
+        "bahan": "Bawang Bombay",
+        "kebutuhan": 3150,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Cabai Merah Besar",
+        "kebutuhan": 700,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Tomat Merah",
+        "kebutuhan": 4725,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 790,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Saus Tiram Saori @1liter",
+        "kebutuhan": 945,
+        "satuan": "ml",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kecap Manis ABC @825g",
+        "kebutuhan": 1890,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Saus Sambal Delmonte Extra Hot @1kg",
+        "kebutuhan": 945,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Saus Tomat Delmonte @1kg",
+        "kebutuhan": 1890,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 400,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 200,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Kering Tempe",
+    "jenisMenu": "Lauk Nabati (Tempe)",
+    "mainBahan": "Tempe",
+    "baseQty": 500,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Tempe",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": 500
+      },
+      {
+        "bahan": "Cabai Merah Besar",
+        "kebutuhan": 6,
+        "satuan": "g",
+        "resepPer": "Tempe (g)"
+      },
+      {
+        "bahan": "Bawang Merah Iris",
+        "kebutuhan": 18,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 9,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lengkuas Bonggol",
+        "kebutuhan": 18,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Jahe Bonggol",
+        "kebutuhan": 6,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Daun Jeruk",
+        "kebutuhan": 4,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Cabai Merah Besar Giling",
+        "kebutuhan": 15,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Asam Jawa",
+        "kebutuhan": 10,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Kecap Manis ABC @825g",
+        "kebutuhan": 30,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Aren",
+        "kebutuhan": 30,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 2.5,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tempe Goreng",
+    "jenisMenu": "Lauk Nabati (Tempe)",
+    "mainBahan": "Tempe",
+    "baseQty": 66000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Tempe",
+        "kebutuhan": 66000,
+        "satuan": "g",
+        "resepPer": 66
+      },
+      {
+        "bahan": "Ketumbar Bubuk",
+        "kebutuhan": 400,
+        "satuan": "g",
+        "resepPer": "Tempe (Kg)"
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 500,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 300,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tempe Goreng Tepung",
+    "jenisMenu": "Lauk Nabati (Tempe)",
+    "mainBahan": "Tempe",
+    "baseQty": 66000,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Tempe",
+        "kebutuhan": 66000,
+        "satuan": "g",
+        "resepPer": 66
+      },
+      {
+        "bahan": "Tepung Terigu Lencana Merah @1kg",
+        "kebutuhan": 17600,
+        "satuan": "g",
+        "resepPer": "Tempe (Kg)"
+      },
+      {
+        "bahan": "Bumbu Dasar Kuning",
+        "kebutuhan": 700,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Edamame",
+    "jenisMenu": "Lauk Nabati (Lainnya)",
+    "mainBahan": "Edamame",
+    "baseQty": 0,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Edamame",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Susu UHT Cimory Full Cream 125 ml",
+    "jenisMenu": "Lauk Nabati (Lainnya)",
+    "mainBahan": "Susu UHT Cimory Full Cream 125 ml",
+    "baseQty": 125,
+    "satuanMainBahan": "ml",
+    "ingredients": [
+      {
+        "bahan": "Susu UHT Cimory Full Cream 125 ml",
+        "kebutuhan": 125,
+        "satuan": "ml",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Susu UHT Ultra Full Cream 125 ml",
+    "jenisMenu": "Lauk Nabati (Lainnya)",
+    "mainBahan": "Susu UHT Ultra Full Cream 125 ml",
+    "baseQty": 125,
+    "satuanMainBahan": "ml",
+    "ingredients": [
+      {
+        "bahan": "Susu UHT Ultra Full Cream 125 ml",
+        "kebutuhan": 125,
+        "satuan": "ml",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Acar Bening Mentimun Wortel",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Cuka Makan Dixi @650ml",
+    "baseQty": 400,
+    "satuanMainBahan": "ml",
+    "ingredients": [
+      {
+        "bahan": "Cuka Makan Dixi @650ml",
+        "kebutuhan": 400,
+        "satuan": "ml",
+        "resepPer": 39
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": "Sayur (Kg)"
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 2400,
+        "satuan": "g",
+        "resepPer": "Timun Kotor (24) Wortel Kotor (15)"
+      }
+    ]
+  },
+  {
+    "namaMenu": "Acar Kuning Buncis",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Bumbu Dasar Acar Kuning",
+    "baseQty": 2,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Bumbu Dasar Acar Kuning",
+        "kebutuhan": 2,
+        "satuan": "g",
+        "resepPer": 33
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": "Buncis Kotor (Kg)"
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": 30
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": "Buncis Bersih (Kg)"
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Capcay",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Bawang Putih Kupas",
+    "baseQty": 1700,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1700,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": "Sayur Bersih (Kg)"
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Gulai Daun Singkong Nangka Muda",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Bumbu Dasar Gulai Kuning",
+    "baseQty": 3385,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Bumbu Dasar Gulai Kuning",
+        "kebutuhan": 3385,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Santan Kelapa Sun Kara @1liter",
+        "kebutuhan": 3375,
+        "satuan": "ml",
+        "resepPer": "Sayur Bersih (Kg)"
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tumis Bayam Jagung Pipil",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Bawang Putih Kupas",
+    "baseQty": 1700,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1700,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": "Sayur Bersih (Kg)"
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tumis Buncis Wortel",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Bawang Putih Kupas",
+    "baseQty": 1700,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1700,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": "Sayur Bersih (Kg)"
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tumis Kacang Panjang",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Bawang Putih Kupas",
+    "baseQty": 1700,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1700,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": "Sayur Bersih (Kg)"
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tumis Kangkung",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Bawang Putih Kupas",
+    "baseQty": 1700,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1700,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": "Sayur Bersih (Kg)"
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tumis Kol Wortel",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Bawang Putih Kupas",
+    "baseQty": 1700,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1700,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": "Sayur Bersih (Kg)"
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tumis Labu Siam Wortel",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Bawang Putih Kupas",
+    "baseQty": 1700,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1700,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": "Sayur Bersih (Kg)"
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tumis Sawi Putih Wortel",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Bawang Putih Kupas",
+    "baseQty": 1700,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1700,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": "Sayur Bersih (Kg)"
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tumis Wortel Jagung Pipil",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Bawang Putih Kupas",
+    "baseQty": 1700,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Bawang Putih Kupas",
+        "kebutuhan": 1700,
+        "satuan": "g",
+        "resepPer": 50
+      },
+      {
+        "bahan": "Lada Putih Bubuk",
+        "kebutuhan": 150,
+        "satuan": "g",
+        "resepPer": "Sayur Bersih (Kg)"
+      },
+      {
+        "bahan": "Garam Refina @500g",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Gula Pasir",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      },
+      {
+        "bahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+        "kebutuhan": 0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  }
+]

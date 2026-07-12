@@ -59,10 +59,24 @@ export async function signUp(
   
   // Write to users collection
   const userRef = doc(db, "users", user.uid);
+  
+  let defaultRole = "pelanggan";
+  if (email.startsWith("admin_mbg") || email.startsWith("adminmbg")) {
+    defaultRole = "admin_mbg";
+  } else if (email.startsWith("produksi_mbg") || email.startsWith("produksimbg")) {
+    defaultRole = "produksi_mbg";
+  } else if (email.startsWith("purchasing_mbg") || email.startsWith("purchasingmbg")) {
+    defaultRole = "purchasing_mbg";
+  } else if (email.startsWith("distribusi_mbg") || email.startsWith("distribusimbg")) {
+    defaultRole = "distribusi_mbg";
+  } else if (email.startsWith("kurir_mbg") || email.startsWith("kurirmbg")) {
+    defaultRole = "kurir_mbg";
+  }
+
   await setDoc(userRef, {
     email,
     displayName,
-    role: "pelanggan",
+    role: defaultRole,
     createdAt: new Date(),
   });
   

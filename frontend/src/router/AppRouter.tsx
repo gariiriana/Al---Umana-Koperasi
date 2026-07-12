@@ -51,6 +51,19 @@ const NotFoundPage = lazy(() => import("@/pages/NotFoundPage").then(module => ({
 const PromosPage = lazy(() => import("@/admin/pages/PromosPage").then(module => ({ default: module.PromosPage })));
 const SchedulesPage = lazy(() => import("@/pages/SchedulesPage").then(module => ({ default: module.SchedulesPage })));
 
+// --- MBG (Makan Bergizi Gratis) Pages ---
+const MbgAdminPage = lazy(() => import("@/pages/mbg/MbgAdminPage").then(module => ({ default: module.MbgAdminPage })));
+const MbgProductionPage = lazy(() => import("@/pages/mbg/MbgProductionPage").then(module => ({ default: module.MbgProductionPage })));
+const MbgCookingPage = lazy(() => import("@/pages/mbg/MbgCookingPage").then(module => ({ default: module.MbgCookingPage })));
+const MbgPurchasingPage = lazy(() => import("@/pages/mbg/MbgPurchasingPage").then(module => ({ default: module.MbgPurchasingPage })));
+const MbgPurchasingRecapPage = lazy(() => import("@/pages/mbg/MbgPurchasingRecapPage").then(module => ({ default: module.MbgPurchasingRecapPage })));
+const MbgSupplierPage = lazy(() => import("@/pages/mbg/MbgSupplierPage").then(module => ({ default: module.MbgSupplierPage })));
+const MbgDistributionPage = lazy(() => import("@/pages/mbg/MbgDistributionPage").then(module => ({ default: module.MbgDistributionPage })));
+const MbgDeliveryPage = lazy(() => import("@/pages/mbg/MbgDeliveryPage").then(module => ({ default: module.MbgDeliveryPage })));
+const MbgArchivePage = lazy(() => import("@/pages/mbg/MbgArchivePage").then(module => ({ default: module.MbgArchivePage })));
+const MbgReportPage = lazy(() => import("@/pages/mbg/MbgReportPage").then(module => ({ default: module.MbgReportPage })));
+const MbgOrdersPage = lazy(() => import("@/pages/mbg/MbgOrdersPage").then(module => ({ default: module.MbgOrdersPage })));
+
 import {
   CategoryIndexStub,
   PaymentProofUploadPageStub,
@@ -562,7 +575,7 @@ function RoutesTree() {
         path="/admin/products"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Daftar Produk" allowedRoles={["tim_produksi"]}>
+            <ShelledRoute pageTitle="Daftar Produk" allowedRoles={["tim_produksi", "produksi_mbg", "admin_mbg"]}>
               <ProductsPage />
             </ShelledRoute>
           </Protected>
@@ -572,7 +585,7 @@ function RoutesTree() {
         path="/admin/products/new"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Tambah Produk" allowedRoles={["tim_produksi"]}>
+            <ShelledRoute pageTitle="Tambah Produk" allowedRoles={["tim_produksi", "produksi_mbg"]}>
               <ProductFormPage />
             </ShelledRoute>
           </Protected>
@@ -582,7 +595,7 @@ function RoutesTree() {
         path="/admin/products/:id/edit"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Ubah Produk" allowedRoles={["tim_produksi"]}>
+            <ShelledRoute pageTitle="Ubah Produk" allowedRoles={["tim_produksi", "produksi_mbg"]}>
               <ProductFormPage />
             </ShelledRoute>
           </Protected>
@@ -592,8 +605,122 @@ function RoutesTree() {
         path="/admin/categories"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Kategori" allowedRoles={["tim_produksi"]}>
+            <ShelledRoute pageTitle="Kategori" allowedRoles={["tim_produksi", "produksi_mbg"]}>
               <CategoriesPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+
+      {/* ================================================================ */}
+      {/* MBG (Makan Bergizi Gratis) Routes                               */}
+      {/* ================================================================ */}
+      <Route
+        path="/mbg/orders"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Pesanan MBG" allowedRoles={["admin_mbg", "produksi_mbg", "purchasing_mbg", "distribusi_mbg", "kurir_mbg"]}>
+              <MbgOrdersPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/mbg/admin"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Admin MBG" allowedRoles={["admin_mbg"]}>
+              <MbgAdminPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/mbg/archive"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Arsip PM" allowedRoles={["admin_mbg"]}>
+              <MbgArchivePage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/mbg/reports"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Laporan MBG" allowedRoles={["admin_mbg", "produksi_mbg"]}>
+              <MbgReportPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/mbg/production"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Produksi MBG" allowedRoles={["produksi_mbg"]}>
+              <MbgProductionPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/mbg/cooking"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Masak MBG" allowedRoles={["produksi_mbg"]}>
+              <MbgCookingPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/mbg/purchasing"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Purchasing MBG" allowedRoles={["purchasing_mbg"]}>
+              <MbgPurchasingPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/mbg/purchasing/recap"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Laporan Belanja" allowedRoles={["purchasing_mbg", "admin_mbg"]}>
+              <MbgPurchasingRecapPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/mbg/suppliers"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Supplier MBG" allowedRoles={["purchasing_mbg"]}>
+              <MbgSupplierPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/mbg/distribution"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Distribusi MBG" allowedRoles={["distribusi_mbg"]}>
+              <MbgDistributionPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/mbg/delivery"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Kurir MBG" allowedRoles={["kurir_mbg"]}>
+              <MbgDeliveryPage />
             </ShelledRoute>
           </Protected>
         }

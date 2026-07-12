@@ -471,7 +471,19 @@ export function DashboardPage() {
             Real-time view of every order in the pipeline.
             {profile?.role && (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 animate-in fade-in duration-300">
-                {{ admin: "Admin", tim_produksi: "Tim Produksi", distribusi: "Distribusi", kurir: "Kurir", monitoring: "Monitoring", pelanggan: "Pelanggan" }[profile.role] || profile.role}
+                {{
+                  admin: "Admin",
+                  tim_produksi: "Tim Produksi",
+                  distribusi: "Distribusi",
+                  kurir: "Kurir",
+                  monitoring: "Monitoring",
+                  pelanggan: "Pelanggan",
+                  admin_mbg: "Admin MBG",
+                  produksi_mbg: "Produksi MBG",
+                  purchasing_mbg: "Purchasing MBG",
+                  distribusi_mbg: "Distribusi MBG",
+                  kurir_mbg: "Kurir MBG",
+                }[profile.role] || profile.role}
               </span>
             )}
           </span>
