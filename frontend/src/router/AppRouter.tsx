@@ -423,6 +423,16 @@ function RoutesTree() {
         }
       />
       <Route
+        path="/admin/orders/:id/edit"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Edit Pesanan" allowedRoles={["admin"]}>
+              <OrderInputPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
         path="/admin/invoices"
         element={
           <Protected>

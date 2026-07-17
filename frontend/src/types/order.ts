@@ -32,6 +32,8 @@ export interface OrderLineItem {
   deliveryAddress?: string;
   deliveryTime?: string;
   recipientName?: string;
+  price?: number;
+  unit?: string;
 }
 
 export interface ManualValidation {

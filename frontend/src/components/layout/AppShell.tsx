@@ -71,7 +71,7 @@ export function AppShell({
   };
 
   return (
-    <div className="min-h-screen flex bg-[#F3F4F6]">
+    <div className="min-h-screen w-full flex bg-[#F3F4F6] overflow-x-hidden">
       <Sidebar
         userName={userName}
         userEmail={userEmail}
@@ -270,7 +270,7 @@ export function AppShell({
         </header>
 
         {/* ── Main content ───────────────────────────────────────── */}
-        <main className="flex-1 overflow-y-auto bg-[#F3F4F6] flex flex-col justify-between min-w-0 w-full">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F3F4F6] flex flex-col justify-between min-w-0 w-full">
           <div className="px-4 md:px-6 py-5 w-full min-w-0">{children}</div>
           <Footer />
         </main>

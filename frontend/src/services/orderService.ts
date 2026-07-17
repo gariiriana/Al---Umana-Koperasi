@@ -1574,6 +1574,211 @@ export async function updateAdminNotes(
   return getOrder(orderId);
 }
 
+export async function updateAdminOrder(orderId: string, payload: CreateAdminOrderPayload): Promise<Order> {
+  const user = currentUser();
+  if (!user) {
+    throw new Error("Unauthorized to update order");
+  }
+
+  const orderDocRef = doc(db, "orders", orderId);
+  const now = new Date();
+
+  const orderUpdates: Record<string, unknown> = {
+    orderType: payload.orderType,
+    institutionName: payload.institutionName,
+    recipientName: payload.recipientName,
+    recipientPhone: payload.recipientPhone,
+    recipientNotes: payload.recipientNotes || "",
+    customerName: payload.customerName || "",
+    eventDate: payload.eventDate,
+    deliveryAddress: payload.deliveryAddress,
+    deliveryTime: payload.deliveryTime,
+    foodDetails: payload.foodDetails,
+    drinkDetails: payload.drinkDetails,
+    totalPrice: payload.totalPrice,
+    additionalFee: payload.additionalFee || 0,
+    additionalNotes: payload.additionalNotes || "",
+    isPreOrder: !!payload.isPreOrder,
+    promoCode: payload.promoCode || "",
+    discountAmount: payload.discountAmount || 0,
+    updatedAt: now,
+  };
+
+  await runTransaction(db, async (tx) => {
+    const oldSnap = await tx.get(orderDocRef);
+    if (!oldSnap.exists()) {
+      throw new Error("Order not found");
+    }
+    const oldData = oldSnap.data();
+    const oldItems = (oldData.items as OrderLineItem[]) || [];
+    const oldIsPreOrder = !!oldData.isPreOrder;
+
+    // Collect all inventory item IDs involved (old and new)
+    const inventoryItemIds = new Set<string>();
+    for (const item of oldItems) {
+      if (item.itemId && !item.itemId.startsWith("manual_")) {
+        inventoryItemIds.add(item.itemId);
+      }
+    }
+    for (const item of payload.items) {
+      if (item.itemId && !item.itemId.startsWith("manual_")) {
+        inventoryItemIds.add(item.itemId);
+      }
+    }
+
+    // Fetch stock for all involved items
+    const uniqueIds = Array.from(inventoryItemIds);
+    const itemRefs = uniqueIds.map(id => doc(db, "inventory", id));
+    const itemSnaps = await Promise.all(itemRefs.map(ref => tx.get(ref)));
+
+    const inventoryDataMap = new Map<string, { quantity: number; available?: boolean; imageUrl?: string; ingredients?: string }>();
+    for (let i = 0; i < uniqueIds.length; i++) {
+      const id = uniqueIds[i];
+      const snap = itemSnaps[i];
+      if (snap.exists()) {
+        const data = snap.data();
+        inventoryDataMap.set(id, {
+          quantity: (data.quantity as number) ?? 0,
+          available: data.available as boolean | undefined,
+          imageUrl: data.imageUrl as string | undefined,
+          ingredients: data.ingredients as string | undefined,
+        });
+      }
+    }
+
+    // Enrich new items
+    const enrichedItems: OrderLineItem[] = [];
+    const outOfStockItems: string[] = [];
+
+    for (const item of payload.items) {
+      if (!item.itemId || item.itemId.startsWith("manual_")) {
+        enrichedItems.push({
+          ...item,
+          imageUrl: "",
+          ingredients: "",
+        });
+        continue;
+      }
+
+      const invData = inventoryDataMap.get(item.itemId);
+      if (!invData) {
+        if (!payload.isPreOrder) {
+          outOfStockItems.push(item.itemId);
+        }
+        continue;
+      }
+
+      // Calculate adjusted stock: currentQty + (oldQty if not oldPreOrder) - (newQty if not newPreOrder)
+      const oldItem = oldItems.find(o => o.itemId === item.itemId);
+      const oldQty = oldItem ? oldItem.quantity : 0;
+      
+      let adjustedQty = invData.quantity;
+      if (!oldIsPreOrder) {
+        adjustedQty += oldQty;
+      }
+      
+      if (!payload.isPreOrder && adjustedQty < item.quantity) {
+        outOfStockItems.push(item.itemId);
+      }
+
+      enrichedItems.push({
+        ...item,
+        imageUrl: invData.imageUrl || "",
+        ingredients: invData.ingredients || "",
+      });
+    }
+
+    if (outOfStockItems.length > 0) {
+      orderUpdates.stockWarnings = outOfStockItems;
+    } else {
+      orderUpdates.stockWarnings = [];
+    }
+
+    orderUpdates.items = enrichedItems;
+
+    // Apply stock adjustments in writes phase
+    for (const id of uniqueIds) {
+      const invData = inventoryDataMap.get(id);
+      if (!invData) continue;
+
+      const oldItem = oldItems.find(o => o.itemId === id);
+      const newItem = payload.items.find(n => n.itemId === id);
+
+      const oldQty = oldItem ? oldItem.quantity : 0;
+      const newQty = newItem ? newItem.quantity : 0;
+
+      let netChange = 0;
+      if (!oldIsPreOrder) netChange += oldQty;
+      if (!payload.isPreOrder) netChange -= newQty;
+
+      if (netChange !== 0) {
+        const itemRef = doc(db, "inventory", id);
+        const nextQty = invData.quantity + netChange;
+        tx.update(itemRef, {
+          quantity: nextQty,
+          available: nextQty > 0 ? (invData.available ?? true) : false,
+          updatedAt: now.toISOString(),
+        });
+      }
+    }
+
+    tx.set(orderDocRef, cleanUndefined(orderUpdates), { merge: true });
+  });
+
+  const order = await getOrder(orderId);
+
+  // Send WhatsApp notification / Push notifications
+  const shortId = order.id.length > 6 ? order.id.slice(-6).toUpperCase() : order.id.toUpperCase();
+  const invoiceUrl = `${window.location.origin}/invoice/${order.invoiceToken}`;
+  const msg = `Halo ${order.recipientName},\n\nPesanan Anda #${shortId} dari ${order.institutionName} telah diperbarui oleh Admin!\nTotal Tagihan Baru: Rp ${order.totalPrice.toLocaleString()}\nJatuh Tempo: ${new Date(order.paymentDueDate).toLocaleDateString()}\n\nSilakan tinjau kembali rincian pesanan Anda melalui tautan invoice berikut:\n${invoiceUrl}`;
+  
+  sendWhatsAppNotificationDirect(order.recipientPhone, shortId, msg)
+    .catch((e) => console.error("[updateAdminOrder WA Notif Error]", e));
+
+  const rid = order.customerId || "";
+  if (rid) {
+    pushNotification({
+      recipientId: rid,
+      type: "order",
+      title: `Pesanan Diperbarui oleh Admin #${shortId}`,
+      titleEn: `Admin Order Updated #${shortId}`,
+      message: `Pesanan #${shortId} dari ${order.institutionName} telah diperbarui oleh Admin. Total Baru: Rp ${order.totalPrice.toLocaleString()}.`,
+      messageEn: `Order #${shortId} from ${order.institutionName} has been updated by Admin. New Total: Rp ${order.totalPrice.toLocaleString()}.`,
+      orderId: order.id,
+      orderShortId: shortId,
+      actorRole: "admin",
+    }).catch((e) => console.error("[updateAdminOrder Push Notif Error]", e));
+  }
+
+  // Push notifications to admin & production
+  pushNotification({
+    recipientId: "admin",
+    type: "order",
+    title: `Pesanan Diperbarui #${shortId}`,
+    titleEn: `Order Updated #${shortId}`,
+    message: `Pesanan #${shortId} telah berhasil diperbarui oleh Admin.`,
+    messageEn: `Order #${shortId} has been successfully updated by Admin.`,
+    orderId: order.id,
+    orderShortId: shortId,
+    actorRole: "admin",
+  }).catch((e) => console.error("[updateAdminOrder Admin Push Notif Error]", e));
+
+  pushNotification({
+    recipientId: "tim_produksi",
+    type: "production",
+    title: `Pesanan Diperbarui #${shortId}`,
+    titleEn: `Order Updated #${shortId}`,
+    message: `Rincian pesanan #${shortId} telah diperbarui oleh Admin. Silakan periksa kembali.`,
+    messageEn: `Order details for #${shortId} have been updated by Admin. Please review.`,
+    orderId: order.id,
+    orderShortId: shortId,
+    actorRole: "admin",
+  }).catch((e) => console.error("[updateAdminOrder Produksi Push Notif Error]", e));
+
+  return order;
+}
+
+
 export async function deleteOrder(orderId: string): Promise<void> {
   const docRef = doc(db, "orders", orderId);
   await deleteDoc(docRef);

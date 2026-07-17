@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Trash2, Copy, ExternalLink, Check, ShoppingBag, ArrowLeft, Loader2 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { useToast } from "@/contexts/ToastContext";
 import { listAllItems } from "@/services/stockAdminService";
-import { createAdminOrder } from "@/services/orderService";
+import { createAdminOrder, updateAdminOrder, getOrder } from "@/services/orderService";
 import type { InventoryItem } from "@/types/inventory";
 import type { OrderLineItem, OrderType } from "@/types/order";
 import { Button } from "@/components/ui/Button";
@@ -49,6 +49,10 @@ interface OrderTemplate {
 
 export function OrderInputPage() {
   const { showToast } = useToast();
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const isEditMode = !!id;
+  const [loadingOrder, setLoadingOrder] = useState(false);
 
   // Template States
   const [templates, setTemplates] = useState<OrderTemplate[]>([]);
@@ -264,6 +268,84 @@ export function OrderInputPage() {
     loadMenu();
   }, [showToast]);
 
+  useEffect(() => {
+    if (!isEditMode || loadingMenu) return;
+    
+    async function loadOrder() {
+      setLoadingOrder(true);
+      try {
+        const orderData = await getOrder(id!);
+        
+        setOrderType(orderData.orderType);
+        setIsPreOrder(!!orderData.isPreOrder);
+        setInstitutionName(orderData.institutionName || "");
+        setCustomerName(orderData.customerName || orderData.recipientName || "");
+        
+        if (orderData.customerName) {
+          setRecipientNames((orderData.recipientName || "").split(", ").filter(Boolean));
+        } else {
+          setRecipientNames([]);
+        }
+        
+        setRecipientPhone(orderData.recipientPhone || "");
+        setRecipientNotes(orderData.recipientNotes || "");
+        setDeliveryAddress(orderData.deliveryAddress || "");
+        
+        if (orderData.eventDate && orderData.eventDate.includes("T")) {
+          const parts = orderData.eventDate.split("T");
+          setEventDateOnly(parts[0]);
+          setEventTimeOnly(parts[1]);
+        } else {
+          setEventDateOnly(orderData.eventDate || "");
+          setEventTimeOnly("08:00");
+        }
+
+        if (orderData.deliveryTime && orderData.deliveryTime.includes("T")) {
+          const parts = orderData.deliveryTime.split("T");
+          setDeliveryDateOnly(parts[0]);
+          setDeliveryTimeOnly(parts[1]);
+        } else {
+          setDeliveryDateOnly("");
+          setDeliveryTimeOnly(orderData.deliveryTime || "12:00");
+        }
+
+        setFoodDetails(orderData.foodDetails || "");
+        setDrinkDetails(orderData.drinkDetails || "");
+        setAdditionalNotes(orderData.additionalNotes || "");
+        setAdditionalFee(orderData.additionalFee || 0);
+
+        const mappedItems: SelectedItem[] = orderData.items.map((it) => {
+          const match = menuItems.find(m => m.id === it.itemId);
+          const price = it.price !== undefined ? it.price : (match ? Math.round(match.price * (1 - (match.discountPercent || 0) / 100)) : 0);
+          const unit = it.unit !== undefined ? it.unit : (match ? match.unit : "Porsi");
+          return {
+            ...it,
+            price,
+            unit,
+          };
+        });
+
+        setSelectedItems(mappedItems);
+
+        const calculatedSum = orderData.isPreOrder ? 0 : mappedItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+        const netTotal = orderData.totalPrice - (orderData.additionalFee || 0);
+        if (calculatedSum !== netTotal && !orderData.isPreOrder) {
+          setTotalPriceOverride(netTotal);
+        } else {
+          setTotalPriceOverride(null);
+        }
+
+      } catch (err) {
+        console.error("Failed to load order details for editing", err);
+        showToast({ message: "Gagal memuat detail pesanan untuk diedit", variant: "error" });
+      } finally {
+        setLoadingOrder(false);
+      }
+    }
+
+    loadOrder();
+  }, [id, isEditMode, loadingMenu, menuItems, showToast]);
+
   // Calculate prices
   const autoCalculatedTotal = isPreOrder ? 0 : selectedItems.reduce((acc, item) => {
     return acc + item.price * item.quantity;
@@ -334,7 +416,7 @@ export function OrderInputPage() {
     setSubmitting(true);
 
     try {
-      const order = await createAdminOrder({
+      const orderPayload = {
         orderType,
         isPreOrder,
         institutionName: institutionName.trim(),
@@ -350,17 +432,23 @@ export function OrderInputPage() {
           itemId: s.itemId,
           itemName: s.itemName,
           quantity: s.quantity,
+          price: s.price,
+          unit: s.unit,
         })),
         totalPrice: displayTotal,
         additionalFee,
         additionalNotes: additionalNotes.trim(),
         customerName: customerName.trim(),
-      });
+      };
+
+      const order = isEditMode
+        ? await updateAdminOrder(id!, orderPayload)
+        : await createAdminOrder(orderPayload);
 
       if (order.stockWarnings && order.stockWarnings.length > 0) {
-        showToast({ message: "Pesanan berhasil dibuat, namun beberapa item melebihi stok!", variant: "info" });
+        showToast({ message: isEditMode ? "Pesanan berhasil diperbarui, namun beberapa item melebihi stok!" : "Pesanan berhasil dibuat, namun beberapa item melebihi stok!", variant: "info" });
       } else {
-        showToast({ message: "Pesanan berhasil dibuat!", variant: "success" });
+        showToast({ message: isEditMode ? "Pesanan berhasil diperbarui!" : "Pesanan berhasil dibuat!", variant: "success" });
       }
 
       setCreatedOrder({
@@ -372,7 +460,7 @@ export function OrderInputPage() {
     } catch (err) {
       console.error(err);
       showToast({
-        message: err instanceof Error ? err.message : "Gagal membuat pesanan",
+        message: err instanceof Error ? err.message : (isEditMode ? "Gagal memperbarui pesanan" : "Gagal membuat pesanan"),
         variant: "error",
       });
     } finally {
@@ -410,6 +498,17 @@ export function OrderInputPage() {
     item.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  if (loadingOrder) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F3F4F6]">
+        <div className="text-center space-y-3">
+          <Loader2 className="w-8 h-8 animate-spin text-[#D97706] mx-auto" />
+          <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk']">Memuat Data Pesanan...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (createdOrder) {
     const invoiceUrl = `/invoice/${createdOrder.token}`;
     return (
@@ -420,7 +519,7 @@ export function OrderInputPage() {
           </div>
           <div className="space-y-2">
             <h2 className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]">
-              Pesanan Berhasil Dibuat
+              {isEditMode ? "Pesanan Berhasil Diperbarui" : "Pesanan Berhasil Dibuat"}
             </h2>
             <p className="text-sm text-[#6B7280]">
               ID Pesanan: <span className="font-mono font-bold text-[#111827]">{createdOrder.id.slice(-6).toUpperCase()}</span>
@@ -461,35 +560,45 @@ export function OrderInputPage() {
           </div>
 
           <div className="pt-4 border-t border-[#E5E7EB]">
-            <Button
-              onClick={() => {
-                setCreatedOrder(null);
-                setIsPreOrder(false);
-                setInstitutionName("");
-                setCustomerName("");
-                setRecipientNames([]);
-                setNewRecipientName("");
-                setRecipientPhone("");
-                setRecipientNotes("");
-                setEventDate("");
-                setEventDateOnly("");
-                setEventTimeOnly("08:00");
-                setDeliveryAddress("");
-                setDeliveryTime("");
-                setDeliveryDateOnly("");
-                setDeliveryTimeOnly("12:00");
-                setFoodDetails("");
-                setDrinkDetails("");
-                setAdditionalNotes("");
-                setSelectedItems([]);
-                setTotalPriceOverride(null);
-                setAdditionalFee(0);
-              }}
-              variant="outlined"
-              className="text-xs"
-            >
-              Buat Pesanan Lain
-            </Button>
+            {isEditMode ? (
+              <Button
+                onClick={() => navigate("/admin/orders")}
+                variant="primary"
+                className="text-xs"
+              >
+                Kembali ke Daftar Pesanan
+              </Button>
+            ) : (
+              <Button
+                onClick={() => {
+                  setCreatedOrder(null);
+                  setIsPreOrder(false);
+                  setInstitutionName("");
+                  setCustomerName("");
+                  setRecipientNames([]);
+                  setNewRecipientName("");
+                  setRecipientPhone("");
+                  setRecipientNotes("");
+                  setEventDate("");
+                  setEventDateOnly("");
+                  setEventTimeOnly("08:00");
+                  setDeliveryAddress("");
+                  setDeliveryTime("");
+                  setDeliveryDateOnly("");
+                  setDeliveryTimeOnly("12:00");
+                  setFoodDetails("");
+                  setDrinkDetails("");
+                  setAdditionalNotes("");
+                  setSelectedItems([]);
+                  setTotalPriceOverride(null);
+                  setAdditionalFee(0);
+                }}
+                variant="outlined"
+                className="text-xs"
+              >
+                Buat Pesanan Lain
+              </Button>
+            )}
           </div>
         </Card>
       </div>
@@ -504,66 +613,68 @@ export function OrderInputPage() {
         </Link>
         <div>
           <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]">
-            Input Pesanan Baru
+            {isEditMode ? "Edit Rincian Pesanan" : "Input Pesanan Baru"}
           </h1>
           <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk']">
-            Admin mendaftarkan pesanan baru secara manual untuk instansi/pelanggan.
+            {isEditMode ? "Admin memperbarui data pesanan instansi/pelanggan." : "Admin mendaftarkan pesanan baru secara manual untuk instansi/pelanggan."}
           </p>
         </div>
       </div>
 
       {/* Template Manager */}
-      <Card className="p-4 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
-        <div className="space-y-1">
-          <h4 className="font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-[#111827]">
-            Template Pesanan Admin
-          </h4>
-          <p className="text-[11px] text-[#6B7280]">
-            Pilih template untuk mengisi form otomatis, atau simpan inputan saat ini sebagai template.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-          <select
-            value={activeTemplateId}
-            onChange={(e) => handleApplyTemplate(e.target.value)}
-            title="Pilih Template Pesanan"
-            aria-label="Pilih Template Pesanan"
-            className="flex-1 md:flex-initial rounded-lg border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#111827] focus:border-[#FBBF24] focus:outline-none cursor-pointer"
-          >
-            <option value="">-- Pilih Template --</option>
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>{t.templateName}</option>
-            ))}
-          </select>
-          {activeTemplateId && (
-            <Button
-              type="button"
-              variant="outlined"
-              onClick={handleDeleteTemplate}
-              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300 text-xs px-3 py-1.5"
-            >
-              Hapus
-            </Button>
-          )}
-          <div className="flex items-center gap-1.5 w-full md:w-auto mt-2 md:mt-0">
-            <input
-              type="text"
-              placeholder="Nama template baru..."
-              value={newTemplateName}
-              onChange={(e) => setNewTemplateName(e.target.value)}
-              className="flex-1 md:w-48 rounded-lg border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#111827] focus:border-[#FBBF24] focus:outline-none"
-            />
-            <Button
-              type="button"
-              variant="outlined"
-              onClick={handleSaveAsTemplate}
-              className="text-xs px-3 py-1.5 border-amber-300 text-[#B45309] hover:bg-amber-50"
-            >
-              Simpan Template
-            </Button>
+      {!isEditMode && (
+        <Card className="p-4 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div className="space-y-1">
+            <h4 className="font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-[#111827]">
+              Template Pesanan Admin
+            </h4>
+            <p className="text-[11px] text-[#6B7280]">
+              Pilih template untuk mengisi form otomatis, atau simpan inputan saat ini sebagai template.
+            </p>
           </div>
-        </div>
-      </Card>
+          <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+            <select
+              value={activeTemplateId}
+              onChange={(e) => handleApplyTemplate(e.target.value)}
+              title="Pilih Template Pesanan"
+              aria-label="Pilih Template Pesanan"
+              className="flex-1 md:flex-initial rounded-lg border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#111827] focus:border-[#FBBF24] focus:outline-none cursor-pointer"
+            >
+              <option value="">-- Pilih Template --</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.templateName}</option>
+              ))}
+            </select>
+            {activeTemplateId && (
+              <Button
+                type="button"
+                variant="outlined"
+                onClick={handleDeleteTemplate}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300 text-xs px-3 py-1.5"
+              >
+                Hapus
+              </Button>
+            )}
+            <div className="flex items-center gap-1.5 w-full md:w-auto mt-2 md:mt-0">
+              <input
+                type="text"
+                placeholder="Nama template baru..."
+                value={newTemplateName}
+                onChange={(e) => setNewTemplateName(e.target.value)}
+                className="flex-1 md:w-48 rounded-lg border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#111827] focus:border-[#FBBF24] focus:outline-none"
+              />
+              <Button
+                type="button"
+                variant="outlined"
+                onClick={handleSaveAsTemplate}
+                className="text-xs px-3 py-1.5 border-amber-300 text-[#B45309] hover:bg-amber-50"
+              >
+                Simpan Template
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Form Inputs (Left & Middle Columns) */}
@@ -1067,7 +1178,7 @@ export function OrderInputPage() {
               className="w-full py-2.5 bg-[#D97706] hover:bg-[#B45309] text-white border-none rounded-xl font-bold shadow-md shadow-amber-700/10 flex items-center justify-center gap-2"
               loading={submitting}
             >
-              {submitting ? "Membuat..." : "Buat Pesanan & Invoice"}
+              {submitting ? (isEditMode ? "Memperbarui..." : "Membuat...") : (isEditMode ? "Simpan Perubahan" : "Buat Pesanan & Invoice")}
             </Button>
           </Card>
         </div>

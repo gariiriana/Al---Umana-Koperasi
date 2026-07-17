@@ -58,6 +58,8 @@ export interface CartLineItem {
   notes?: string;
   /** Optional product image URL snapshot. */
   imageUrl?: string;
+  /** Server timestamp of the first write (insertion order). Set once, never updated. */
+  createdAt?: unknown;
   /** Server timestamp of the last write. Populated by Firestore. */
   // Using `unknown` keeps the call sites SDK-agnostic; consumers that need
   // the underlying `Timestamp` can cast.
@@ -93,6 +95,7 @@ function snapshotToLine(snap: QueryDocumentSnapshot<DocumentData>): CartLineItem
     itemName: (data.itemName as string) ?? "",
     unitPrice: typeof data.unitPrice === "number" ? data.unitPrice : 0,
     quantity: typeof data.quantity === "number" ? data.quantity : 0,
+    createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   };
   if (typeof data.notes === "string") {
@@ -176,8 +179,27 @@ export function subscribeToCart(
     q,
     (snap) => {
       const items: CartLineItem[] = snap.docs.map(snapshotToLine);
-      // Sort alphabetically by product name to keep cart card order perfectly stable on quantity updates
-      items.sort((a, b) => a.itemName.localeCompare(b.itemName));
+      // Sort by insertion order (createdAt ascending) — items added first stay at top, new items go to bottom (like Shopee).
+      // Falls back to alphabetical for legacy items without createdAt.
+      items.sort((a, b) => {
+        const aTime = a.createdAt;
+        const bTime = b.createdAt;
+        // Both have createdAt → compare timestamps
+        if (aTime && bTime) {
+          const aMs = typeof (aTime as { toMillis?: () => number }).toMillis === "function"
+            ? (aTime as { toMillis: () => number }).toMillis()
+            : new Date(aTime as string).getTime();
+          const bMs = typeof (bTime as { toMillis?: () => number }).toMillis === "function"
+            ? (bTime as { toMillis: () => number }).toMillis()
+            : new Date(bTime as string).getTime();
+          return aMs - bMs;
+        }
+        // Items with createdAt come before those without (legacy items go to bottom)
+        if (aTime && !bTime) return -1;
+        if (!aTime && bTime) return 1;
+        // Both missing createdAt → fall back to alphabetical
+        return a.itemName.localeCompare(b.itemName);
+      });
       onChange(items);
     },
     onError
@@ -227,6 +249,11 @@ export async function addToCart(
       quantity: nextQty,
       updatedAt: serverTimestamp(),
     };
+    // Only set createdAt on first insertion — never overwrite on subsequent adds.
+    // This preserves insertion order for cart sorting (like Shopee).
+    if (!existing.exists()) {
+      data.createdAt = serverTimestamp();
+    }
     if (item.imageUrl !== undefined) {
       data.imageUrl = item.imageUrl;
     }

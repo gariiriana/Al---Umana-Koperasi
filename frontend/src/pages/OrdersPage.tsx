@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Plus, Search, Calendar, Copy, ExternalLink, AlertTriangle, ShieldCheck, CheckCircle2, User, Phone, FileDown, X, Loader2, Upload, Eye, Image as ImageIcon, Trash2 } from "lucide-react";
+import { Plus, Search, Calendar, Copy, ExternalLink, AlertTriangle, ShieldCheck, CheckCircle2, User, Phone, FileDown, X, Loader2, Upload, Eye, Image as ImageIcon, Trash2, SquarePen } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { doc, getDoc } from "firebase/firestore";
@@ -1708,7 +1708,7 @@ export function OrdersPage() {
                       </td>
 
                       {/* Aksi */}
-                      <td className="py-4 px-4 text-center whitespace-nowrap">
+                      <td className="py-4 px-4 text-center">
                         <div className="flex flex-col gap-1.5 items-center justify-center">
                           {/* Status Transition buttons */}
                           {!isMonitoring && o.status === "PENDING" && (
@@ -1752,7 +1752,7 @@ export function OrdersPage() {
                           )}
 
                           {/* Invoice & Validation actions */}
-                          <div className="flex gap-1.5 items-center">
+                          <div className="flex flex-wrap gap-1 items-center justify-center max-w-[180px]">
                             <button
                               onClick={() => handleCopyLink(o)}
                               className="text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 border border-[#D1D5DB] rounded-lg p-1.5 transition-all text-xs font-semibold flex items-center gap-1"
@@ -1810,13 +1810,22 @@ export function OrdersPage() {
                             </button>
 
                             {!isMonitoring && (
-                              <button
-                                onClick={() => handleDeleteOrder(o.id)}
-                                className="text-red-600 hover:text-white hover:bg-red-600 border border-red-200 hover:border-red-600 rounded-lg p-1.5 transition-all flex items-center justify-center cursor-pointer"
-                                title="Hapus Pesanan"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <>
+                                <Link
+                                  to={`/admin/orders/${o.id}/edit`}
+                                  className="text-amber-600 hover:text-white hover:bg-amber-600 border border-amber-200 hover:border-amber-600 rounded-lg p-1.5 transition-all flex items-center justify-center cursor-pointer"
+                                  title="Edit Pesanan"
+                                >
+                                  <SquarePen className="w-3.5 h-3.5" />
+                                </Link>
+                                <button
+                                  onClick={() => handleDeleteOrder(o.id)}
+                                  className="text-red-600 hover:text-white hover:bg-red-600 border border-red-200 hover:border-red-600 rounded-lg p-1.5 transition-all flex items-center justify-center cursor-pointer"
+                                  title="Hapus Pesanan"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
                             )}
                           </div>
                         </div>
@@ -3185,18 +3194,28 @@ export function OrdersPage() {
                 )}
               </Button>
               {!isMonitoring && (
-                <Button
-                  onClick={async () => {
-                    if (previewInvoiceOrder) {
-                      await handleDeleteOrder(previewInvoiceOrder.id);
-                      setPreviewInvoiceOrder(null);
-                    }
-                  }}
-                  className="bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs py-2 px-4 h-9 cursor-pointer font-bold flex items-center gap-1.5"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Hapus Pesanan</span>
-                </Button>
+                <>
+                  <Link to={`/admin/orders/${previewInvoiceOrder.id}/edit`}>
+                    <Button
+                      className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs py-2 px-4 h-9 cursor-pointer font-bold flex items-center gap-1.5"
+                    >
+                      <SquarePen className="w-3.5 h-3.5" />
+                      <span>Edit Pesanan</span>
+                    </Button>
+                  </Link>
+                  <Button
+                    onClick={async () => {
+                      if (previewInvoiceOrder) {
+                        await handleDeleteOrder(previewInvoiceOrder.id);
+                        setPreviewInvoiceOrder(null);
+                      }
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs py-2 px-4 h-9 cursor-pointer font-bold flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus Pesanan</span>
+                  </Button>
+                </>
               )}
               <Button
                 onClick={() => setPreviewInvoiceOrder(null)}
