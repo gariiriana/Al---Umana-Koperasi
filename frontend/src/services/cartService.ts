@@ -70,7 +70,7 @@ export interface CartLineItem {
 }
 
 /** Hard cap on a single line's quantity (Requirements 3.4, 3.5). */
-export const MAX_LINE_QUANTITY = 99;
+export const MAX_LINE_QUANTITY = 99999;
 /** Hard cap on the `notes` field length (Requirement 3.14). */
 export const MAX_NOTES_LENGTH = 200;
 

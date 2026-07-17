@@ -269,7 +269,7 @@ export function OrderInputPage() {
     return acc + item.price * item.quantity;
   }, 0);
 
-  const displayTotal = totalPriceOverride !== null ? totalPriceOverride : (autoCalculatedTotal + additionalFee);
+  const displayTotal = (totalPriceOverride !== null ? totalPriceOverride : autoCalculatedTotal) + additionalFee;
 
   const handleAddItem = (item: InventoryItem) => {
     const existing = selectedItems.find((s) => s.itemId === item.id);

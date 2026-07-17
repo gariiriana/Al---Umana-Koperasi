@@ -13,6 +13,7 @@ import {
   removeLineItem,
   CartLineItem,
   formatIDR,
+  MAX_LINE_QUANTITY,
 } from "@/services/cartService";
 
 
@@ -85,6 +86,7 @@ export function CartPage() {
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [hasInitializedSelection, setHasInitializedSelection] = useState(false);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
+  const [localQuantities, setLocalQuantities] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (items.length > 0 && !hasInitializedSelection) {
@@ -119,6 +121,11 @@ export function CartPage() {
 
   const handleQtyChange = async (itemId: string, currentQty: number, delta: number) => {
     if (!user) return;
+    setLocalQuantities((prev) => {
+      const copy = { ...prev };
+      delete copy[itemId];
+      return copy;
+    });
     const nextQty = currentQty + delta;
     try {
       await setLineQuantity(user.uid, itemId, nextQty);
@@ -340,25 +347,47 @@ export function CartPage() {
                         pattern="[0-9]*"
                         title="Kuantitas"
                         placeholder="Qty"
-                        value={item.quantity}
+                        value={
+                          localQuantities[item.itemId] !== undefined
+                            ? localQuantities[item.itemId]
+                            : item.quantity
+                        }
                         onChange={(e) => {
                           const clean = e.target.value.replace(/\D/g, "");
-                          const val = parseInt(clean, 10);
-                          if (!isNaN(val) && val >= 1) {
-                            const nextQty = Math.min(99, val);
-                            if (nextQty !== item.quantity) {
-                              setLineQuantity(user.uid, item.itemId, nextQty).catch(() => {
-                                showToast({ message: t.updateError, variant: "error" });
-                              });
+                          setLocalQuantities((prev) => ({ ...prev, [item.itemId]: clean }));
+                          
+                          if (clean !== "") {
+                            const val = parseInt(clean, 10);
+                            if (!isNaN(val) && val >= 1) {
+                              const nextQty = Math.min(MAX_LINE_QUANTITY, val);
+                              if (nextQty !== item.quantity) {
+                                setLineQuantity(user.uid, item.itemId, nextQty).catch(() => {
+                                  showToast({ message: t.updateError, variant: "error" });
+                                });
+                              }
                             }
                           }
+                        }}
+                        onBlur={() => {
+                          const currentVal = localQuantities[item.itemId];
+                          if (currentVal === undefined) return;
+                          if (currentVal === "") {
+                            setLineQuantity(user.uid, item.itemId, 1).catch(() => {
+                              showToast({ message: t.updateError, variant: "error" });
+                            });
+                          }
+                          setLocalQuantities((prev) => {
+                            const copy = { ...prev };
+                            delete copy[item.itemId];
+                            return copy;
+                          });
                         }}
                         className="w-10 text-center font-['Manrope',system-ui,sans-serif] text-sm font-bold tabular-nums text-[#111827] bg-transparent focus:outline-none"
                       />
                       <button
                         onClick={() => handleQtyChange(item.itemId, item.quantity, 1)}
                         className="h-8 w-8 flex items-center justify-center bg-white rounded-full shadow-sm text-[#111827] hover:bg-[#E5E7EB] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        disabled={item.quantity >= 99}
+                        disabled={item.quantity >= MAX_LINE_QUANTITY}
                         aria-label={t.increaseQty}
                       >
                         <Plus className="h-4 w-4" />

@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { subscribeToCart, computeCartTotal, CartLineItem, removeLineItem, setLineNotes, setLineQuantity } from "@/services/cartService";
+import { subscribeToCart, computeCartTotal, CartLineItem, removeLineItem, setLineNotes, setLineQuantity, MAX_LINE_QUANTITY } from "@/services/cartService";
 import { createOrder, createAdminOrder, PaymentMethod } from "@/services/orderService";
 import type { OrderType, OrderLineItem } from "@/types/order";
 import { formatIDR } from "@/lib/format";
@@ -180,6 +180,7 @@ export function CheckoutWizard() {
 
   const [checkoutItems, setCheckoutItems] = useState<CartLineItem[]>([]);
   const [loadingCart, setLoadingCart] = useState(true);
+  const [localQuantities, setLocalQuantities] = useState<Record<string, string>>({});
   const step = location.pathname.endsWith("/payment") ? "payment" : "address";
 
   const selectedItemIds = (location.state as { selectedItemIds?: string[] } | null)?.selectedItemIds;
@@ -312,6 +313,11 @@ export function CheckoutWizard() {
 
   const handleUpdateItemQty = async (itemId: string, newQty: number) => {
     if (newQty < 1) return;
+    setLocalQuantities((prev) => {
+      const copy = { ...prev };
+      delete copy[itemId];
+      return copy;
+    });
     setCheckoutItems((prev) =>
       prev.map((it) =>
         it.itemId === itemId ? { ...it, quantity: newQty } : it
@@ -1444,20 +1450,40 @@ export function CheckoutWizard() {
                                     pattern="[0-9]*"
                                     title="Kuantitas"
                                     placeholder="Qty"
-                                    value={item.quantity}
+                                    value={
+                                      localQuantities[item.itemId] !== undefined
+                                        ? localQuantities[item.itemId]
+                                        : item.quantity
+                                    }
                                     onChange={(e) => {
                                       const clean = e.target.value.replace(/\D/g, "");
-                                      const val = parseInt(clean, 10);
-                                      if (!isNaN(val) && val >= 1) {
-                                        handleUpdateItemQty(item.itemId, Math.min(99, val));
+                                      setLocalQuantities((prev) => ({ ...prev, [item.itemId]: clean }));
+                                      
+                                      if (clean !== "") {
+                                        const val = parseInt(clean, 10);
+                                        if (!isNaN(val) && val >= 1) {
+                                          handleUpdateItemQty(item.itemId, Math.min(MAX_LINE_QUANTITY, val));
+                                        }
                                       }
+                                    }}
+                                    onBlur={() => {
+                                      const currentVal = localQuantities[item.itemId];
+                                      if (currentVal === undefined) return;
+                                      if (currentVal === "") {
+                                        handleUpdateItemQty(item.itemId, 1);
+                                      }
+                                      setLocalQuantities((prev) => {
+                                        const copy = { ...prev };
+                                        delete copy[item.itemId];
+                                        return copy;
+                                      });
                                     }}
                                     className="text-xs font-extrabold text-[#111827] w-8 text-center bg-transparent focus:outline-none"
                                   />
                                   <button
                                     type="button"
                                     onClick={() => handleUpdateItemQty(item.itemId, item.quantity + 1)}
-                                    disabled={item.quantity >= 99}
+                                    disabled={item.quantity >= MAX_LINE_QUANTITY}
                                     className="h-5 w-5 rounded hover:bg-neutral-100 disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center text-[#374151] font-extrabold text-xs transition cursor-pointer"
                                   >
                                     +
