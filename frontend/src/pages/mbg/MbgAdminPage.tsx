@@ -31,6 +31,8 @@ import {
   copyFromBatch,
   deleteBatch,
 } from '@/services/mbgAdminService';
+import { subscribeCustomRecipes } from '@/services/mbgProductionService';
+import resepStandardData from '@/constants/standarResep.json';
 import { MBG_BATCH_STATUS_CONFIG } from '@/constants/mbgConstants';
 
 // ---- Helper: Auto-calculate portion suggestions based on levels and inputs ----
@@ -737,8 +739,8 @@ export function MbgAdminPage() {
           jadwalPengantaran: '06.30 - 08.00',
           assignedPetugasId: 'kurir-budiman',
           assignedPetugasName: 'Budiman',
-          menuItems: ['Nasi Putih', 'Ayam Goreng Tepung', 'Tumis Buncis', 'Susu UHT'],
-          menuKeringanItems: ['Kentang Goreng', 'Ayam Goreng Tepung', 'Tumis Buncis', 'Susu UHT'],
+          menuItems: ['Nasi Putih (Beras Premium)', 'Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
+          menuKeringanItems: ['Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
           isSekolahLibur: false,
           notes: 'Kelas 1-3 porsi kecil, kelas 4-6 porsi kecil juga',
           sortOrder: 0,
@@ -751,8 +753,8 @@ export function MbgAdminPage() {
               portionType: 'kecil',
               qtPorsiKecil: 40,
               jumlah: 40,
-              menuItems: ['Nasi Putih', 'Ayam Goreng Tepung', 'Tumis Buncis', 'Susu UHT'],
-              menuKeringanItems: ['Kentang Goreng', 'Ayam Goreng Tepung', 'Tumis Buncis', 'Susu UHT'],
+              menuItems: ['Nasi Putih (Beras Premium)', 'Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
+              menuKeringanItems: ['Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
               jadwalPengantaran: '06.30 - 07.00',
             },
             {
@@ -763,8 +765,8 @@ export function MbgAdminPage() {
               portionType: 'kecil',
               qtPorsiKecil: 40,
               jumlah: 40,
-              menuItems: ['Nasi Putih', 'Ayam Goreng Tepung', 'Tumis Buncis', 'Susu UHT'],
-              menuKeringanItems: ['Kentang Goreng', 'Ayam Goreng Tepung', 'Tumis Buncis', 'Susu UHT'],
+              menuItems: ['Nasi Putih (Beras Premium)', 'Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
+              menuKeringanItems: ['Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
               jadwalPengantaran: '07.00 - 07.30',
             },
             {
@@ -775,8 +777,8 @@ export function MbgAdminPage() {
               portionType: 'kecil',
               qtPorsiKecil: 40,
               jumlah: 40,
-              menuItems: ['Nasi Putih', 'Ayam Goreng Tepung', 'Tumis Buncis', 'Susu UHT'],
-              menuKeringanItems: ['Kentang Goreng', 'Ayam Goreng Tepung', 'Tumis Buncis', 'Susu UHT'],
+              menuItems: ['Nasi Putih (Beras Premium)', 'Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
+              menuKeringanItems: ['Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
               jadwalPengantaran: '07.30 - 08.00',
             }
           ],
@@ -801,8 +803,8 @@ export function MbgAdminPage() {
           jadwalPengantaran: '07.00 - 08.30',
           assignedPetugasId: 'kurir-ahmad',
           assignedPetugasName: 'Ahmad',
-          menuItems: ['Nasi Putih', 'Empal Daging', 'Sup Sayur', 'Susu UHT'],
-          menuKeringanItems: ['Kentang Rebus', 'Empal Daging', 'Sup Sayur', 'Susu UHT'],
+          menuItems: ['Nasi Putih (Beras Premium)', 'Semur Daging', 'Capcay', 'Susu UHT Ultra Full Cream 125 ml'],
+          menuKeringanItems: ['Semur Daging', 'Capcay', 'Susu UHT Ultra Full Cream 125 ml'],
           isSekolahLibur: false,
           notes: 'Porsi besar semua',
           sortOrder: 1,
@@ -815,8 +817,8 @@ export function MbgAdminPage() {
               portionType: 'besar',
               qtPorsiBesar: 100,
               jumlah: 100,
-              menuItems: ['Nasi Putih', 'Empal Daging', 'Sup Sayur', 'Susu UHT'],
-              menuKeringanItems: ['Kentang Rebus', 'Empal Daging', 'Sup Sayur', 'Susu UHT'],
+              menuItems: ['Nasi Putih (Beras Premium)', 'Semur Daging', 'Capcay', 'Susu UHT Ultra Full Cream 125 ml'],
+              menuKeringanItems: ['Semur Daging', 'Capcay', 'Susu UHT Ultra Full Cream 125 ml'],
               jadwalPengantaran: '07.00 - 07.30',
             },
             {
@@ -827,8 +829,8 @@ export function MbgAdminPage() {
               portionType: 'besar',
               qtPorsiBesar: 150,
               jumlah: 150,
-              menuItems: ['Nasi Putih', 'Empal Daging', 'Sup Sayur', 'Susu UHT'],
-              menuKeringanItems: ['Kentang Rebus', 'Empal Daging', 'Sup Sayur', 'Susu UHT'],
+              menuItems: ['Nasi Putih (Beras Premium)', 'Semur Daging', 'Capcay', 'Susu UHT Ultra Full Cream 125 ml'],
+              menuKeringanItems: ['Semur Daging', 'Capcay', 'Susu UHT Ultra Full Cream 125 ml'],
               jadwalPengantaran: '07.30 - 08.30',
             }
           ],
@@ -852,10 +854,10 @@ export function MbgAdminPage() {
           jadwalPengantaran: '08.00 - 09.30',
           assignedPetugasId: 'kurir-sobur',
           assignedPetugasName: 'Sobur',
-          menuItems: ['Nasi Tim Ayam', 'Sop Wortel Kentang', 'Buah Pisang'],
+          menuItems: ['Nasi Kuning (Beras Premium)', 'Ayam Kecap', 'Tumis Bayam Jagung Pipil'],
           menuKeringanItems: [],
           isSekolahLibur: false,
-          notes: 'Balita: bubur tim, Ibu: porsi hamil/menyusui',
+          notes: 'Balita: Nasi Kuning & Ayam Kecap, Ibu: porsi hamil/menyusui',
           sortOrder: 2,
           createdBy: user.uid,
           createdAt: new Date().toISOString(),
@@ -1264,6 +1266,40 @@ export function ManageMenuModal({
   const [newKerItem, setNewKerItem] = useState('');
   const [saving, setSaving] = useState(false);
   const [classes, setClasses] = useState<MbgClassBreakdown[]>([]);
+  const [isRegManual, setIsRegManual] = useState(false);
+  const [isKerManual, setIsKerManual] = useState(false);
+  
+  const [customRecipes, setCustomRecipes] = useState<{ namaMenu: string; jenisMenu: string }[]>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const unsub = subscribeCustomRecipes((recipes) => {
+      setCustomRecipes(recipes as unknown as { namaMenu: string; jenisMenu: string }[]);
+    });
+    return unsub;
+  }, [isOpen]);
+
+  const combinedRecipes = useMemo(() => {
+    const map = new Map<string, { namaMenu: string; jenisMenu: string }>();
+    const standard = resepStandardData as unknown as { namaMenu: string; jenisMenu: string }[];
+    standard.forEach((item) => {
+      map.set(item.namaMenu.toLowerCase().trim(), item);
+    });
+    customRecipes.forEach((item) => {
+      map.set(item.namaMenu.toLowerCase().trim(), item);
+    });
+    return Array.from(map.values()).sort((a, b) => a.namaMenu.localeCompare(b.namaMenu));
+  }, [customRecipes]);
+
+  const groupedRecipes = useMemo(() => {
+    const groups: Record<string, { namaMenu: string; jenisMenu: string }[]> = {};
+    combinedRecipes.forEach((recipe) => {
+      const cat = recipe.jenisMenu || 'Lain-lain';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(recipe);
+    });
+    return groups;
+  }, [combinedRecipes]);
 
   useEffect(() => {
     if (entry) {
@@ -1308,6 +1344,7 @@ export function ManageMenuModal({
     if (menuItems.includes(newRegItem.trim())) return;
     setMenuItems([...menuItems, newRegItem.trim()]);
     setNewRegItem('');
+    setIsRegManual(false);
   };
 
   const handleAddKer = () => {
@@ -1315,6 +1352,7 @@ export function ManageMenuModal({
     if (menuKeringanItems.includes(newKerItem.trim())) return;
     setMenuKeringanItems([...menuKeringanItems, newKerItem.trim()]);
     setNewKerItem('');
+    setIsKerManual(false);
   };
 
   const handleRemoveReg = (item: string) => {
@@ -1496,28 +1534,69 @@ export function ManageMenuModal({
             <div className="space-y-4">
               {/* Menu Reguler */}
               <div>
-                <label htmlFor="reg-menu-input" className="block text-xs font-bold text-[#374151] mb-1.5">
-                  Menu Makanan & Minuman Reguler
-                </label>
-                <div className="flex gap-2 mb-2">
-                  <input
-                    id="reg-menu-input"
-                    type="text"
-                    placeholder="Contoh: Nasi Putih, Ayam Goreng, Susu UHT"
-                    value={newRegItem}
-                    onChange={(e) => setNewRegItem(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddReg();
-                      }
+                <div className="flex justify-between items-center mb-1.5">
+                  <label htmlFor="reg-menu-input" className="block text-xs font-bold text-[#374151]">
+                    Menu Makanan & Minuman Reguler
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRegManual(!isRegManual);
+                      setNewRegItem('');
                     }}
-                    className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-                  />
+                    className="text-[10px] font-extrabold text-amber-700 hover:text-amber-950 hover:underline cursor-pointer"
+                  >
+                    {isRegManual ? '← Pilih dari List' : '➕ Ketik Manual...'}
+                  </button>
+                </div>
+                <div className="flex gap-2 mb-2">
+                  {isRegManual ? (
+                    <input
+                      id="reg-menu-input"
+                      type="text"
+                      placeholder="Ketik nama menu kustom..."
+                      value={newRegItem}
+                      onChange={(e) => setNewRegItem(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddReg();
+                        }
+                      }}
+                      className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                    />
+                  ) : (
+                    <select
+                      id="reg-menu-input"
+                      value={newRegItem}
+                      onChange={(e) => {
+                        if (e.target.value === '__manual__') {
+                          setIsRegManual(true);
+                          setNewRegItem('');
+                        } else {
+                          setNewRegItem(e.target.value);
+                        }
+                      }}
+                      className="flex-1 rounded-xl border border-[#E5E7EB] px-3 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] bg-white font-semibold"
+                    >
+                      <option value="">-- Pilih Menu Reguler --</option>
+                      <option value="__manual__">➕ Ketik Manual...</option>
+                      {Object.entries(groupedRecipes).map(([cat, list]) => (
+                        <optgroup key={cat} label={cat} className="font-bold text-gray-700">
+                          {list.map((r) => (
+                            <option key={r.namaMenu} value={r.namaMenu} className="font-semibold text-gray-900">
+                              {r.namaMenu}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  )}
                   <button
                     type="button"
                     onClick={handleAddReg}
-                    className="px-4 py-2 rounded-xl bg-[#111827] text-white text-xs font-bold hover:bg-black transition-colors cursor-pointer"
+                    disabled={!newRegItem.trim()}
+                    className="px-4 py-2 rounded-xl bg-[#111827] text-white text-xs font-bold hover:bg-black disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   >
                     Tambah
                   </button>
@@ -1550,35 +1629,76 @@ export function ManageMenuModal({
             {/* Right side: Menu Keringan */}
             <div className="space-y-4">
               <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label htmlFor="ker-menu-input" className="block text-xs font-bold text-[#374151]">
-                    Menu Keringan / Alternatif Non-Nasi (Pobia Nasi)
-                  </label>
-                  {entry.qtPobiaNasi > 0 && (
-                    <span className="text-[9px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
-                      ⚠️ {entry.qtPobiaNasi} penerima butuh menu keringan
-                    </span>
-                  )}
+                <div className="flex justify-between items-center mb-1.5 flex-wrap gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="ker-menu-input" className="block text-xs font-bold text-[#374151]">
+                      Menu Keringan / Alternatif Non-Nasi (Pobia Nasi)
+                    </label>
+                    {entry.qtPobiaNasi > 0 && (
+                      <span className="text-[9px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                        ⚠️ {entry.qtPobiaNasi} penerima butuh menu keringan
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsKerManual(!isKerManual);
+                      setNewKerItem('');
+                    }}
+                    className="text-[10px] font-extrabold text-amber-700 hover:text-amber-950 hover:underline cursor-pointer"
+                  >
+                    {isKerManual ? '← Pilih dari List' : '➕ Ketik Manual...'}
+                  </button>
                 </div>
                 <div className="flex gap-2 mb-2">
-                  <input
-                    id="ker-menu-input"
-                    type="text"
-                    placeholder="Contoh: Kentang Kukus, Ayam Panggang, Buah Melon"
-                    value={newKerItem}
-                    onChange={(e) => setNewKerItem(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddKer();
-                      }
-                    }}
-                    className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-                  />
+                  {isKerManual ? (
+                    <input
+                      id="ker-menu-input"
+                      type="text"
+                      placeholder="Ketik nama menu alternatif..."
+                      value={newKerItem}
+                      onChange={(e) => setNewKerItem(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddKer();
+                        }
+                      }}
+                      className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                    />
+                  ) : (
+                    <select
+                      id="ker-menu-input"
+                      value={newKerItem}
+                      onChange={(e) => {
+                        if (e.target.value === '__manual__') {
+                          setIsKerManual(true);
+                          setNewKerItem('');
+                        } else {
+                          setNewKerItem(e.target.value);
+                        }
+                      }}
+                      className="flex-1 rounded-xl border border-[#E5E7EB] px-3 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] bg-white font-semibold"
+                    >
+                      <option value="">-- Pilih Menu Alternatif --</option>
+                      <option value="__manual__">➕ Ketik Manual...</option>
+                      {Object.entries(groupedRecipes).map(([cat, list]) => (
+                        <optgroup key={cat} label={cat} className="font-bold text-gray-700">
+                          {list.map((r) => (
+                            <option key={r.namaMenu} value={r.namaMenu} className="font-semibold text-gray-900">
+                              {r.namaMenu}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  )}
                   <button
                     type="button"
                     onClick={handleAddKer}
-                    className="px-4 py-2 rounded-xl bg-[#111827] text-white text-xs font-bold hover:bg-black transition-colors cursor-pointer"
+                    disabled={!newKerItem.trim()}
+                    className="px-4 py-2 rounded-xl bg-[#111827] text-white text-xs font-bold hover:bg-black disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   >
                     Tambah
                   </button>

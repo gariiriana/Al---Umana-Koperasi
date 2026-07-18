@@ -1,6 +1,6 @@
 // Package router wires the order fulfillment service's HTTP endpoints to
 // their handlers and composes the cross-cutting middleware chain (CORS,
-// request logging, panic recovery, auth guard) around them.
+// rate limiting, request logging, panic recovery, auth guard) around them.
 //
 // Route registration uses Go 1.22+ net/http ServeMux method+path patterns,
 // e.g. "POST /api/orders" and "GET /api/orders/{id}", which gives us
@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"al-umana/order-fulfillment/internal/auth"
 	"al-umana/order-fulfillment/internal/catalog"
@@ -46,6 +47,9 @@ type Dependencies struct {
 	// CORSConfig drives the CORS middleware. Read at the composition root so
 	// the policy is visible there rather than buried in package init.
 	CORSConfig middleware.CORSConfig
+	// ResponseCache provides in-memory caching for read-heavy endpoints.
+	// When nil, caching is disabled (no-op pass-through).
+	ResponseCache *middleware.ResponseCache
 	// Domain handlers. These are concrete types so that tasks adding new
 	// methods do not need to change interface declarations here as well.
 	OrderHandler *order.Handler
@@ -91,11 +95,20 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerAdmin(mux, deps)
 
 	corsMW := middleware.CORSWithConfig(deps.CORSConfig)
+	rateLimitMW := middleware.RateLimit(middleware.DefaultRateLimitConfig())
 	authMW := authMiddleware(deps.AuthGuard)
 
+	// Middleware chain, outermost first:
+	//   cors → rateLimit → logger → recover → authGuard → handler
+	//
+	// Rate limiting sits after CORS (so preflight responses bypass the
+	// limiter) but before the logger so rejected requests are still
+	// logged. The auth guard sits just above the handlers so its 401
+	// responses are observable to logging and CORS.
 	return middleware.Chain(
 		mux,
 		corsMW,
+		rateLimitMW,
 		middleware.Logger,
 		middleware.Recover,
 		authMW,
@@ -111,9 +124,22 @@ func registerPublic(mux *http.ServeMux, deps Dependencies) {
 		return
 	}
 	ch := deps.CatalogHandler
-	mux.HandleFunc("GET /api/catalog/items", ch.ListItems)
+	rc := deps.ResponseCache
+
+	if rc != nil {
+		// Catalog items change infrequently; a 30-second cache drastically
+		// reduces Firestore reads under high concurrency.
+		mux.HandleFunc("GET /api/catalog/items",
+			middleware.CacheHandler(rc, middleware.CacheConfig{TTL: 30 * time.Second}, ch.ListItems))
+		// Categories change even less — 5 minute cache.
+		mux.HandleFunc("GET /api/catalog/categories",
+			middleware.CacheHandler(rc, middleware.CacheConfig{TTL: 5 * time.Minute}, ch.ListCategories))
+	} else {
+		mux.HandleFunc("GET /api/catalog/items", ch.ListItems)
+		mux.HandleFunc("GET /api/catalog/categories", ch.ListCategories)
+	}
+	// Single-item lookups are not cached — they are cheap individual reads.
 	mux.HandleFunc("GET /api/catalog/items/{id}", ch.GetItem)
-	mux.HandleFunc("GET /api/catalog/categories", ch.ListCategories)
 }
 
 // registerProtected mounts every API endpoint that lives behind the auth
@@ -149,9 +175,16 @@ func registerProtected(mux *http.ServeMux, deps Dependencies) {
 		mux.HandleFunc("GET /api/files/{collection}/{id}/download", fh.DownloadFromCollection)
 	}
 
-	// Dashboard
+	// Dashboard — stats are cached for 10 seconds to reduce the
+	// aggregation query load from concurrent admin sessions.
 	if dh != nil {
-		mux.HandleFunc("GET /api/dashboard/stats", dh.GetStats)
+		rc := deps.ResponseCache
+		if rc != nil {
+			mux.HandleFunc("GET /api/dashboard/stats",
+				middleware.CacheHandler(rc, middleware.CacheConfig{TTL: 10 * time.Second}, dh.GetStats))
+		} else {
+			mux.HandleFunc("GET /api/dashboard/stats", dh.GetStats)
+		}
 		mux.HandleFunc("GET /api/couriers/locations", dh.GetCourierLocations)
 	}
 }

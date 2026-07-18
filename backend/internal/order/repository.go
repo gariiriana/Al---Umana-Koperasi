@@ -200,38 +200,82 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerUID string, cur
 // orders currently in that status. Statuses with zero matching orders are
 // present in the result with value 0, so dashboards can render every column
 // without conditional logic.
+//
+// Scalability: Uses Firestore COUNT aggregation queries instead of
+// scanning the entire collection. This reduces cost from O(N) document
+// reads to O(1) per status (1 read per 1000 counted documents, billed as
+// a single aggregation). At scale with millions of orders, this is the
+// difference between a multi-second timeout and a sub-100ms response.
 func (r *Repository) CountByStatus(ctx context.Context) (map[OrderStatus]int, error) {
-	counts := map[OrderStatus]int{
-		StatusPlacing:        0,
-		StatusConfirmed:      0,
-		StatusInProduction:   0,
-		StatusReady:          0,
-		StatusReadyToDeliver: 0,
-		StatusOutForDelivery: 0,
-		StatusDelivered:      0,
-		StatusFailed:         0,
+	statuses := []OrderStatus{
+		StatusPlacing,
+		StatusConfirmed,
+		StatusInProduction,
+		StatusReady,
+		StatusReadyToDeliver,
+		StatusOutForDelivery,
+		StatusDelivered,
+		StatusFailed,
 	}
 
-	iter := r.client.Collection(ordersCollection).Select("status").Documents(ctx)
-	defer iter.Stop()
+	// Initialise result map with zeros.
+	counts := make(map[OrderStatus]int, len(statuses))
+	for _, s := range statuses {
+		counts[s] = 0
+	}
 
-	for {
-		snap, err := iter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
+	// Fire all COUNT aggregation queries concurrently. Each query counts
+	// documents with a specific status server-side, avoiding the need to
+	// transfer document data over the wire.
+	type result struct {
+		status OrderStatus
+		count  int
+		err    error
+	}
+	ch := make(chan result, len(statuses))
+
+	for _, s := range statuses {
+		go func(status OrderStatus) {
+			q := r.client.Collection(ordersCollection).
+				Where("status", "==", string(status))
+			agg := q.NewAggregationQuery().WithCount("count")
+			res, err := agg.Get(ctx)
+			if err != nil {
+				ch <- result{status: status, err: fmt.Errorf("count %s: %w", status, err)}
+				return
+			}
+			countVal, ok := res["count"]
+			if !ok || countVal == nil {
+				ch <- result{status: status, count: 0}
+				return
+			}
+			
+			// Safely extract the count value using a type switch.
+			// Production Firestore returns int64; emulator returns a protobuf Value.
+			var count int
+			switch v := countVal.(type) {
+			case int64:
+				count = int(v)
+			case int:
+				count = v
+			default:
+				if getter, ok := v.(interface{ GetIntegerValue() int64 }); ok {
+					count = int(getter.GetIntegerValue())
+				} else {
+					ch <- result{status: status, err: fmt.Errorf("unexpected count type %T for status %s", v, status)}
+					return
+				}
+			}
+			ch <- result{status: status, count: count}
+		}(s)
+	}
+
+	for range statuses {
+		r := <-ch
+		if r.err != nil {
+			return nil, fmt.Errorf("order repository: count by status: %w", r.err)
 		}
-		if err != nil {
-			return nil, fmt.Errorf("order repository: count by status: %w", err)
-		}
-		raw, err := snap.DataAt("status")
-		if err != nil {
-			continue
-		}
-		s, ok := raw.(string)
-		if !ok || s == "" {
-			continue
-		}
-		counts[OrderStatus(s)]++
+		counts[r.status] = r.count
 	}
 	return counts, nil
 }

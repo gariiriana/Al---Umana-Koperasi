@@ -14,8 +14,8 @@ import type { MbgPmBatch, MbgPmEntry, MbgNutritionEntry } from '@/types/mbg';
 import { subscribeBatches, subscribeEntries, subscribeAllEntries } from '@/services/mbgAdminService';
 import {
   subscribeNutrition, addNutritionEntry, updateNutritionEntry, deleteNutritionEntry,
-  subscribeCustomTkpiEntries, addCustomTkpiEntry,
-  subscribeCustomRecipes, addCustomRecipe,
+  subscribeCustomTkpiEntries, addCustomTkpiEntry, updateCustomTkpiEntry, deleteCustomTkpiEntry,
+  subscribeCustomRecipes, addCustomRecipe, updateCustomRecipe, deleteCustomRecipe,
   subscribeRecipeAdjustments, saveRecipeAdjustment, deleteRecipeAdjustment,
 } from '@/services/mbgProductionService';
 import { updateBatchStatus } from '@/services/mbgAdminService';
@@ -146,6 +146,7 @@ export function MbgProductionPage() {
   const [recipeSearchQuery, setRecipeSearchQuery] = useState('');
   const [showRecipeBook, setShowRecipeBook] = useState(false);
   const [recipeBookQuery, setRecipeBookQuery] = useState('');
+  const [expandedBahan, setExpandedBahan] = useState<string | null>(null);
   const [selectedRecipeItem, setSelectedRecipeItem] = useState<StandarResep | null>(null);
   const [customRecipes, setCustomRecipes] = useState<StandarResep[]>([]);
   const [isAddingRecipe, setIsAddingRecipe] = useState(false);
@@ -215,6 +216,8 @@ export function MbgProductionPage() {
     vit_c: 0,
   });
   const [isSavingDbItem, setIsSavingDbItem] = useState(false);
+  const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null);
+  const [editingDbItemId, setEditingDbItemId] = useState<string | null>(null);
 
   // Subscribe custom TKPI entries
   useEffect(() => {
@@ -235,7 +238,14 @@ export function MbgProductionPage() {
   }, []);
 
   const combinedTkpiDatabase = useMemo(() => {
-    return [...customTkpiEntries, ...tkpiDatabase];
+    const map = new Map<string, typeof tkpiDatabase[number]>();
+    tkpiDatabase.forEach((item) => {
+      map.set(item.nama.toLowerCase().trim(), item);
+    });
+    customTkpiEntries.forEach((item) => {
+      map.set(item.nama.toLowerCase().trim(), item);
+    });
+    return Array.from(map.values());
   }, [customTkpiEntries]);
 
   // Subscribe batches
@@ -436,7 +446,14 @@ export function MbgProductionPage() {
   }, [entries]);
 
   const combinedRecipes = useMemo(() => {
-    return [...standarResep, ...customRecipes];
+    const map = new Map<string, StandarResep>();
+    standarResep.forEach((item) => {
+      map.set(item.namaMenu.toLowerCase().trim(), item);
+    });
+    customRecipes.forEach((item) => {
+      map.set(item.namaMenu.toLowerCase().trim(), item);
+    });
+    return Array.from(map.values());
   }, [customRecipes]);
 
   const combinedPorsi = useMemo(() => {
@@ -488,7 +505,16 @@ export function MbgProductionPage() {
     });
 
     // 2. Scale ingredients for each menu based on standard recipes
-    const rawIngredients: Record<string, { name: string; amount: number; satuan: string; sourceMenus: string[] }> = {};
+    const rawIngredients: Record<
+      string,
+      {
+        name: string;
+        amount: number;
+        satuan: string;
+        sourceMenus: string[];
+        menuBreakdown: { menuName: string; amount: number; satuan: string }[];
+      }
+    > = {};
 
     Object.entries(menuMainTotals).forEach(([menuName, totals]) => {
       // Find standard recipe
@@ -503,11 +529,30 @@ export function MbgProductionPage() {
         recipe.ingredients.forEach((ing) => {
           const key = ing.bahan.toLowerCase().trim();
           if (!rawIngredients[key]) {
-            rawIngredients[key] = { name: ing.bahan, amount: 0, satuan: ing.satuan, sourceMenus: [] };
+            rawIngredients[key] = {
+              name: ing.bahan,
+              amount: 0,
+              satuan: ing.satuan,
+              sourceMenus: [],
+              menuBreakdown: [],
+            };
           }
-          rawIngredients[key].amount += ing.kebutuhan * ratio;
+          const ingAmount = ing.kebutuhan * ratio;
+          rawIngredients[key].amount += ingAmount;
           if (!rawIngredients[key].sourceMenus.includes(menuName)) {
             rawIngredients[key].sourceMenus.push(menuName);
+          }
+
+          // Track breakdown
+          const existingBreakdown = rawIngredients[key].menuBreakdown.find((b) => b.menuName === menuName);
+          if (existingBreakdown) {
+            existingBreakdown.amount += ingAmount;
+          } else {
+            rawIngredients[key].menuBreakdown.push({
+              menuName,
+              amount: ingAmount,
+              satuan: ing.satuan,
+            });
           }
         });
       } else {
@@ -518,19 +563,33 @@ export function MbgProductionPage() {
         const name = porsiCfg ? porsiCfg.bahanUtama : menuName;
         const key = name.toLowerCase().trim();
         const totalPortions = totals.countKecil + totals.countBesar;
+        const fallbackSatuan = porsiCfg && porsiCfg.porsiKecil === 1 ? 'pcs' : 'g';
 
         if (!rawIngredients[key]) {
-          const isUnitItem = porsiCfg && porsiCfg.porsiKecil === 1;
           rawIngredients[key] = { 
             name, 
             amount: 0, 
-            satuan: isUnitItem ? 'pcs' : 'g',
-            sourceMenus: []
+            satuan: fallbackSatuan,
+            sourceMenus: [],
+            menuBreakdown: [],
           };
         }
-        rawIngredients[key].amount += totals.totalQty || totalPortions;
+        const fallbackAmount = totals.totalQty || totalPortions;
+        rawIngredients[key].amount += fallbackAmount;
         if (!rawIngredients[key].sourceMenus.includes(menuName)) {
           rawIngredients[key].sourceMenus.push(menuName);
+        }
+
+        // Track breakdown
+        const existingBreakdown = rawIngredients[key].menuBreakdown.find((b) => b.menuName === menuName);
+        if (existingBreakdown) {
+          existingBreakdown.amount += fallbackAmount;
+        } else {
+          rawIngredients[key].menuBreakdown.push({
+            menuName,
+            amount: fallbackAmount,
+            satuan: fallbackSatuan,
+          });
         }
       }
     });
@@ -556,6 +615,7 @@ export function MbgProductionPage() {
           amount: adj.amount,
           satuan: adj.satuan,
           sourceMenus: ['Ditambahkan Manual'],
+          menuBreakdown: [{ menuName: 'Ditambahkan Manual', amount: adj.amount, satuan: adj.satuan }],
           adjustmentId: adj.id ?? null,
           isCustom: true,
           originalAmount: 0
@@ -641,6 +701,22 @@ export function MbgProductionPage() {
       showToast({ message: 'Gagal menambahkan bahan baku baru', variant: 'error' });
     } finally {
       setIsSavingAdjustment(false);
+    }
+  };
+
+  const handleOpenRecipeDetail = (menuName: string) => {
+    const recipe = combinedRecipes.find(
+      (r) => r.namaMenu.toLowerCase().trim() === menuName.toLowerCase().trim()
+    );
+    if (recipe) {
+      setSelectedRecipeItem(recipe);
+      setRecipeBookQuery('');
+      setShowRecipeBook(true);
+    } else {
+      showToast({ 
+        message: `Resep "${menuName}" tidak ditemukan di Buku Resep. Silakan buat resep kustom di Buku Resep.`, 
+        variant: 'info' 
+      });
     }
   };
 
@@ -788,12 +864,14 @@ export function MbgProductionPage() {
       return;
     }
     
-    // Check if name already exists in combined database
-    const lowercaseName = newDbItem.nama.trim().toLowerCase();
-    const isDuplicate = combinedTkpiDatabase.some((item) => item.nama.toLowerCase() === lowercaseName);
-    if (isDuplicate) {
-      showToast({ message: `Bahan makanan dengan nama "${newDbItem.nama}" sudah ada di database!`, variant: 'error' });
-      return;
+    // Check duplicate only if adding new
+    if (!editingDbItemId) {
+      const lowercaseName = newDbItem.nama.trim().toLowerCase();
+      const isDuplicate = combinedTkpiDatabase.some((item) => item.nama.toLowerCase() === lowercaseName);
+      if (isDuplicate) {
+        showToast({ message: `Bahan makanan dengan nama "${newDbItem.nama}" sudah ada di database!`, variant: 'error' });
+        return;
+      }
     }
 
     setIsSavingDbItem(true);
@@ -805,8 +883,13 @@ export function MbgProductionPage() {
         kode: generatedKode,
       };
 
-      await addCustomTkpiEntry(itemToSave);
-      showToast({ message: `Bahan "${newDbItem.nama}" berhasil ditambahkan ke database!`, variant: 'success' });
+      if (editingDbItemId) {
+        await updateCustomTkpiEntry(editingDbItemId, itemToSave);
+        showToast({ message: `Bahan "${newDbItem.nama}" berhasil diperbarui!`, variant: 'success' });
+      } else {
+        await addCustomTkpiEntry(itemToSave);
+        showToast({ message: `Bahan "${newDbItem.nama}" berhasil ditambahkan ke database!`, variant: 'success' });
+      }
       
       // Reset form and close form view
       setNewDbItem({
@@ -837,9 +920,10 @@ export function MbgProductionPage() {
         vit_c: 0,
       });
       setIsAddingDbItem(false);
+      setEditingDbItemId(null);
     } catch (err) {
       console.error(err);
-      showToast({ message: 'Gagal menambahkan bahan ke database', variant: 'error' });
+      showToast({ message: 'Gagal menyimpan bahan ke database', variant: 'error' });
     } finally {
       setIsSavingDbItem(false);
     }
@@ -1851,17 +1935,53 @@ export function MbgProductionPage() {
                                     <tr key={r.name} className="hover:bg-gray-50/50 transition-colors">
                                       <td className="px-4 py-3 text-gray-400 font-bold">{idx + 1}</td>
                                       <td className="px-4 py-3 font-bold text-gray-800">
-                                        {r.name}
-                                        {r.isCustom && (
-                                          <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-wider">
-                                            Manual
-                                          </span>
-                                        )}
-                                        {r.adjustmentId && !r.isCustom && (
-                                          <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 uppercase tracking-wider">
-                                            Disesuaikan
-                                          </span>
-                                        )}
+                                        <div className="flex flex-col">
+                                          <button
+                                            type="button"
+                                            onClick={() => setExpandedBahan(expandedBahan === r.name ? null : r.name)}
+                                            className="text-left font-bold text-gray-800 hover:text-amber-700 hover:underline flex items-center gap-1.5 cursor-pointer focus:outline-none"
+                                            title="Klik untuk melihat breakdown per resep/menu"
+                                          >
+                                            <span>{r.name}</span>
+                                            <span className="text-[9px] text-[#A1A1AA] font-normal transition-transform duration-200">
+                                              {expandedBahan === r.name ? '▲' : '▼'}
+                                            </span>
+                                            {r.isCustom && (
+                                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-wider">
+                                                Manual
+                                              </span>
+                                            )}
+                                            {r.adjustmentId && !r.isCustom && (
+                                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 uppercase tracking-wider">
+                                                Disesuaikan
+                                              </span>
+                                            )}
+                                          </button>
+                                          
+                                          {expandedBahan === r.name && (
+                                            <div className="mt-2 p-3 rounded-xl bg-amber-50/40 border border-amber-100/60 text-[10px] font-medium space-y-1.5 text-gray-500 animate-fadeIn shadow-inner max-w-sm">
+                                              <div className="font-extrabold text-[#92400E] border-b border-amber-100 pb-1 mb-1.5 uppercase tracking-wider text-[8px]">
+                                                Kebutuhan Per Menu
+                                              </div>
+                                              {(r as { menuBreakdown?: { menuName: string; amount: number; satuan: string }[] }).menuBreakdown?.map((b: { menuName: string; amount: number; satuan: string }, bIdx: number) => {
+                                                let breakdownWeight = '';
+                                                if (b.satuan === 'g' && b.amount >= 1000) {
+                                                  breakdownWeight = `${(b.amount / 1000).toFixed(2)} kg`;
+                                                } else if (b.satuan === 'ml' && b.amount >= 1000) {
+                                                  breakdownWeight = `${(b.amount / 1000).toFixed(2)} Liter`;
+                                                } else {
+                                                  breakdownWeight = `${b.amount.toFixed(1)} ${b.satuan}`;
+                                                }
+                                                return (
+                                                  <div key={bIdx} className="flex justify-between items-center py-0.5">
+                                                    <span className="font-bold text-[#1E293B]">{b.menuName}</span>
+                                                    <span className="font-extrabold text-[#B45309] bg-white px-2 py-0.5 rounded border border-amber-100/50 shadow-sm">{breakdownWeight}</span>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
                                       </td>
                                       <td className="px-4 py-3 text-center">
                                         {isEditing ? (
@@ -1899,11 +2019,26 @@ export function MbgProductionPage() {
                                         )}
                                       </td>
                                       <td className="px-4 py-3 flex flex-wrap gap-1 items-center">
-                                        {r.sourceMenus.map((m) => (
-                                          <span key={m} className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 text-[10px] font-semibold">
-                                            {m}
-                                          </span>
-                                        ))}
+                                        {r.sourceMenus.map((m) => {
+                                          const hasRecipe = combinedRecipes.some(
+                                            (rec) => rec.namaMenu.toLowerCase().trim() === m.toLowerCase().trim()
+                                          );
+                                          return (
+                                            <button
+                                              key={m}
+                                              type="button"
+                                              onClick={() => handleOpenRecipeDetail(m)}
+                                              title={hasRecipe ? `Klik untuk detail resep ${m}` : `Resep kustom belum terdaftar`}
+                                              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                                                hasRecipe 
+                                                  ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:text-amber-900 cursor-pointer shadow-sm' 
+                                                  : 'bg-gray-100 text-gray-500 border border-gray-200 cursor-not-allowed'
+                                              }`}
+                                            >
+                                              {m}
+                                            </button>
+                                          );
+                                        })}
                                       </td>
                                       <td className="px-4 py-3 text-center">
                                         {isEditing ? (
@@ -2203,18 +2338,83 @@ export function MbgProductionPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="flex gap-3 justify-end border-t border-[#F1F5F9] pt-4">
+                  <div className="flex gap-3 justify-end border-t border-[#F1F5F9] pt-4 flex-wrap">
                     <button
                       onClick={() => setSelectedDbItem(null)}
                       className="px-4 py-2 border border-[#E2E8F0] hover:bg-[#F8FAFC] text-xs font-bold text-[#334155] rounded-xl cursor-pointer transition-colors"
                     >
                       Kembali ke Daftar
                     </button>
+                    
+                    <button
+                      onClick={() => {
+                        const item = selectedDbItem;
+                        const customItem = item as { id?: string };
+                        setEditingDbItemId(customItem.id || null);
+                        setNewDbItem({
+                          nama: item.nama || '',
+                          kode: item.kode || '',
+                          sumber: item.sumber || 'Input Manual',
+                          berat: Number(item.berat) || 100,
+                          air: Number(item.air) || 0,
+                          energi: Number(item.energi) || 0,
+                          protein: Number(item.protein) || 0,
+                          lemak: Number(item.lemak) || 0,
+                          kh: Number(item.kh) || 0,
+                          serat: Number(item.serat) || 0,
+                          abu: Number(item.abu) || 0,
+                          kalsium: Number(item.kalsium) || 0,
+                          fosfor: Number(item.fosfor) || 0,
+                          besi: Number(item.besi) || 0,
+                          natrium: Number(item.natrium) || 0,
+                          kalium: Number(item.kalium) || 0,
+                          tembaga: Number(item.tembaga) || 0,
+                          seng: Number(item.seng) || 0,
+                          retinol: Number(item.retinol) || 0,
+                          bkar: Number(item.bkar) || 0,
+                          kartotal: Number(item.kartotal) || 0,
+                          thiamin: Number(item.thiamin) || 0,
+                          riboflavin: Number(item.riboflavin) || 0,
+                          niasin: Number(item.niasin) || 0,
+                          vit_c: Number(item.vit_c) || 0,
+                        });
+                        setIsAddingDbItem(true);
+                        setSelectedDbItem(null);
+                      }}
+                      className="px-4 py-2 bg-[#F59E0B] hover:bg-[#D97706] text-white text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                    >
+                      Edit Bahan Gizi
+                    </button>
+
+                    {/* Only custom TKPI entries can be deleted */}
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    {(selectedDbItem as any).id && (
+                      <button
+                        onClick={async () => {
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          const customItem = selectedDbItem as any;
+                          if (window.confirm(`Apakah Anda yakin ingin menghapus bahan gizi custom "${selectedDbItem.nama}"?`)) {
+                            try {
+                              await deleteCustomTkpiEntry(customItem.id);
+                              showToast({ message: 'Bahan gizi custom berhasil dihapus!', variant: 'success' });
+                              setSelectedDbItem(null);
+                            } catch (err) {
+                              console.error(err);
+                              showToast({ message: 'Gagal menghapus bahan gizi', variant: 'error' });
+                            }
+                          }
+                        }}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                      >
+                        Hapus
+                      </button>
+                    )}
+
                     <button
                       onClick={() => {
                         handleCopyName(selectedDbItem.nama);
                       }}
-                      className="px-4 py-2 bg-[#F59E0B] hover:bg-[#D97706] text-white text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                      className="px-4 py-2 bg-[#059669] hover:bg-[#047857] text-white text-xs font-bold rounded-xl cursor-pointer transition-colors"
                     >
                       Salin Nama Bahan
                     </button>
@@ -2431,16 +2631,74 @@ export function MbgProductionPage() {
                               <td className="px-3 py-3 text-center">{item.lemak} g</td>
                               <td className="px-3 py-3 text-center">{item.kh} g</td>
                               <td className="px-3 py-3 text-center">{item.serat} g</td>
-                              <td className="px-4 py-3 text-center flex items-center justify-center gap-2">
+                              <td className="px-4 py-3 text-center flex items-center justify-center gap-1.5 flex-wrap">
                                 <button
                                   onClick={() => setSelectedDbItem(item)}
-                                  className="px-2.5 py-1 text-[10px] font-bold text-[#2563EB] hover:bg-[#DBEAFE] rounded-md transition-colors cursor-pointer"
+                                  className="px-2 py-1 text-[10px] font-bold text-[#2563EB] hover:bg-[#DBEAFE] rounded-md transition-colors cursor-pointer"
                                 >
                                   Detail
                                 </button>
                                 <button
+                                  onClick={() => {
+                                    const customItem = item as { id?: string };
+                                    setEditingDbItemId(customItem.id || null);
+                                    setNewDbItem({
+                                      nama: item.nama || '',
+                                      kode: item.kode || '',
+                                      sumber: item.sumber || 'Input Manual',
+                                      berat: Number(item.berat) || 100,
+                                      air: Number(item.air) || 0,
+                                      energi: Number(item.energi) || 0,
+                                      protein: Number(item.protein) || 0,
+                                      lemak: Number(item.lemak) || 0,
+                                      kh: Number(item.kh) || 0,
+                                      serat: Number(item.serat) || 0,
+                                      abu: Number(item.abu) || 0,
+                                      kalsium: Number(item.kalsium) || 0,
+                                      fosfor: Number(item.fosfor) || 0,
+                                      besi: Number(item.besi) || 0,
+                                      natrium: Number(item.natrium) || 0,
+                                      kalium: Number(item.kalium) || 0,
+                                      tembaga: Number(item.tembaga) || 0,
+                                      seng: Number(item.seng) || 0,
+                                      retinol: Number(item.retinol) || 0,
+                                      bkar: Number(item.bkar) || 0,
+                                      kartotal: Number(item.kartotal) || 0,
+                                      thiamin: Number(item.thiamin) || 0,
+                                      riboflavin: Number(item.riboflavin) || 0,
+                                      niasin: Number(item.niasin) || 0,
+                                      vit_c: Number(item.vit_c) || 0,
+                                    });
+                                    setIsAddingDbItem(true);
+                                  }}
+                                  className="px-2 py-1 text-[10px] font-bold text-[#F59E0B] hover:bg-amber-100 rounded-md transition-colors cursor-pointer"
+                                >
+                                  Edit
+                                </button>
+                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                {(item as any).id && (
+                                  <button
+                                    onClick={async () => {
+                                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                      const customItem = item as any;
+                                      if (window.confirm(`Apakah Anda yakin ingin menghapus bahan gizi custom "${item.nama}"?`)) {
+                                        try {
+                                          await deleteCustomTkpiEntry(customItem.id);
+                                          showToast({ message: 'Bahan gizi custom berhasil dihapus!', variant: 'success' });
+                                        } catch (err) {
+                                          console.error(err);
+                                          showToast({ message: 'Gagal menghapus bahan gizi', variant: 'error' });
+                                        }
+                                      }
+                                    }}
+                                    className="px-2 py-1 text-[10px] font-bold text-red-600 hover:bg-red-50 rounded-md transition-colors cursor-pointer"
+                                  >
+                                    Hapus
+                                  </button>
+                                )}
+                                <button
                                   onClick={() => handleCopyName(item.nama)}
-                                  className="px-2.5 py-1 text-[10px] font-bold text-[#059669] hover:bg-[#D1FAE5] rounded-md transition-colors cursor-pointer"
+                                  className="px-2 py-1 text-[10px] font-bold text-[#059669] hover:bg-[#D1FAE5] rounded-md transition-colors cursor-pointer"
                                 >
                                   Salin
                                 </button>
@@ -2525,7 +2783,7 @@ export function MbgProductionPage() {
             {/* Modal Body */}
             <div className="p-6 flex-1 overflow-y-auto font-['Hanken_Grotesk']">
               {isAddingRecipe ? (
-                /* Add Recipe Form View */
+                /* Add/Edit Recipe Form View */
                 <form 
                   onSubmit={async (e) => {
                     e.preventDefault();
@@ -2546,7 +2804,7 @@ export function MbgProductionPage() {
                         ...filteredIngs
                       ];
 
-                      await addCustomRecipe({
+                      const recipeData = {
                         namaMenu: newRecipeName.trim(),
                         jenisMenu: newRecipeCategory,
                         mainBahan: newRecipeMainBahan.trim(),
@@ -2555,13 +2813,21 @@ export function MbgProductionPage() {
                         porsiKecil: newRecipePorsiKecil,
                         porsiBesar: newRecipePorsiBesar,
                         ingredients: finalIngredients
-                      });
+                      };
 
-                      showToast({ message: 'Resep baru berhasil disimpan!', variant: 'success' });
+                      if (editingRecipeId) {
+                        await updateCustomRecipe(editingRecipeId, recipeData);
+                        showToast({ message: 'Resep berhasil di-update!', variant: 'success' });
+                      } else {
+                        await addCustomRecipe(recipeData);
+                        showToast({ message: 'Resep baru berhasil disimpan!', variant: 'success' });
+                      }
+                      
                       setIsAddingRecipe(false);
+                      setEditingRecipeId(null);
                     } catch (err) {
                       console.error('Error saving custom recipe:', err);
-                      showToast({ message: 'Gagal menyimpan resep baru', variant: 'error' });
+                      showToast({ message: 'Gagal menyimpan resep', variant: 'error' });
                     } finally {
                       setIsSavingRecipe(false);
                     }
@@ -2824,13 +3090,79 @@ export function MbgProductionPage() {
                     </table>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRecipeItem(null)}
-                    className="mt-6 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-xs font-bold text-gray-700 rounded-xl cursor-pointer transition-colors"
-                  >
-                    ← Kembali ke Daftar Resep
-                  </button>
+                  <div className="mt-6 flex flex-wrap gap-3 items-center justify-between border-t border-gray-100 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRecipeItem(null)}
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-xs font-bold text-gray-700 rounded-xl cursor-pointer transition-colors"
+                    >
+                      ← Kembali ke Daftar Resep
+                    </button>
+                    
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const recipe = selectedRecipeItem;
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          const customRecipe = recipe as any;
+                          setEditingRecipeId(customRecipe.id || null);
+                          setNewRecipeName(recipe.namaMenu);
+                          setNewRecipeCategory(recipe.jenisMenu);
+                          setNewRecipeMainBahan(recipe.mainBahan);
+                          setNewRecipeBaseQty(recipe.baseQty);
+                          setNewRecipeSatuanMainBahan(recipe.satuanMainBahan);
+                          
+                          // Look up portion standard
+                          const porsiCfg = combinedPorsi.find(
+                            (p) => p.namaMenu.toLowerCase().trim() === recipe.namaMenu.toLowerCase().trim()
+                          );
+                          setNewRecipePorsiKecil(porsiCfg?.porsiKecil || recipe.porsiKecil || 50);
+                          setNewRecipePorsiBesar(porsiCfg?.porsiBesar || recipe.porsiBesar || 60);
+
+                          // Support/bumbum is slice(1)
+                          const supportIngs = recipe.ingredients.slice(1).map((ing) => ({
+                            bahan: ing.bahan,
+                            kebutuhan: ing.kebutuhan,
+                            satuan: ing.satuan,
+                            resepPer: String(ing.resepPer || '')
+                          }));
+                          setNewRecipeIngredients(supportIngs.length > 0 ? supportIngs : [{ bahan: '', kebutuhan: 0, satuan: 'g', resepPer: '' }]);
+                          
+                          setIsAddingRecipe(true);
+                          setSelectedRecipeItem(null);
+                        }}
+                        className="px-4 py-2 bg-[#F59E0B] hover:bg-[#D97706] text-white text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                      >
+                        Edit Resep
+                      </button>
+
+                      {/* Only custom recipes can be deleted */}
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {(selectedRecipeItem as any).id && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            const customRecipe = selectedRecipeItem as any;
+                            if (window.confirm(`Apakah Anda yakin ingin menghapus resep custom "${selectedRecipeItem.namaMenu}"?`)) {
+                              try {
+                                await deleteCustomRecipe(customRecipe.id);
+                                showToast({ message: 'Resep custom berhasil dihapus!', variant: 'success' });
+                                setSelectedRecipeItem(null);
+                              } catch (err) {
+                                console.error('Error deleting recipe:', err);
+                                showToast({ message: 'Gagal menghapus resep', variant: 'error' });
+                              }
+                            }
+                          }}
+                          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                        >
+                          Hapus Resep Custom
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 /* List & Search Recipe View */

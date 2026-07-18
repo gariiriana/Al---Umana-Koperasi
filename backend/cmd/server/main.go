@@ -161,6 +161,10 @@ func main() {
 		fileHandler = file.NewHandler(nil, nil)
 	}
 
+	// Response cache for read-heavy endpoints (catalog, dashboard stats).
+	// Dramatically reduces Firestore reads under high concurrency.
+	responseCache := middleware.NewResponseCache()
+
 	deps := router.Dependencies{
 		AuthGuard:  guard,
 		AdminGuard: adminGuard,
@@ -168,6 +172,7 @@ func main() {
 			AllowedOrigins: corsOrigins,
 			Env:            appEnv,
 		},
+		ResponseCache:    responseCache,
 		OrderHandler:     order.NewHandler(orderSvc, orderRepo),
 		FileHandler:      fileHandler,
 		DashboardHandler: dashboard.NewHandler(orderRepo, gpsRepo),
@@ -177,12 +182,14 @@ func main() {
 	handler := router.NewRouter(deps)
 
 	srv := &http.Server{
-		Addr:         ":" + port,
-		Handler:      handler,
-		ReadTimeout:  readTimeout,
-		WriteTimeout: writeTimeout,
-		IdleTimeout:  idleTimeout,
-		BaseContext:  func(_ net.Listener) context.Context { return ctx },
+		Addr:              ":" + port,
+		Handler:           handler,
+		ReadTimeout:       readTimeout,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+		MaxHeaderBytes:    1 << 20, // 1 MB
+		BaseContext:       func(_ net.Listener) context.Context { return ctx },
 	}
 
 	serverErr := make(chan error, 1)
@@ -209,6 +216,7 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("graceful shutdown failed: %v", err)
 	}
+	responseCache.Stop()
 	if fsConn != nil {
 		_ = fsConn.Close()
 	}

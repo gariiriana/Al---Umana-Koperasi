@@ -107,6 +107,14 @@ export async function addCustomTkpiEntry(entry: Record<string, unknown>): Promis
   return ref.id;
 }
 
+export async function updateCustomTkpiEntry(id: string, updates: Record<string, unknown>): Promise<void> {
+  await updateDoc(doc(db, CUSTOM_TKPI_COLLECTION, id), updates);
+}
+
+export async function deleteCustomTkpiEntry(id: string): Promise<void> {
+  await deleteDoc(doc(db, CUSTOM_TKPI_COLLECTION, id));
+}
+
 export function subscribeCustomTkpiEntries(
   callback: (entries: Record<string, unknown>[]) => void,
   onError?: (error: Error) => void
@@ -124,6 +132,14 @@ const CUSTOM_RECIPES_COLLECTION = 'mbg_custom_recipes';
 export async function addCustomRecipe(recipe: Record<string, unknown>): Promise<string> {
   const ref = await addDoc(collection(db, CUSTOM_RECIPES_COLLECTION), recipe);
   return ref.id;
+}
+
+export async function updateCustomRecipe(id: string, updates: Record<string, unknown>): Promise<void> {
+  await updateDoc(doc(db, CUSTOM_RECIPES_COLLECTION, id), updates);
+}
+
+export async function deleteCustomRecipe(id: string): Promise<void> {
+  await deleteDoc(doc(db, CUSTOM_RECIPES_COLLECTION, id));
 }
 
 export function subscribeCustomRecipes(

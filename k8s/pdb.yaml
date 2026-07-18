@@ -1,0 +1,52 @@
+# PodDisruptionBudgets for Al-Umana services.
+#
+# PDBs guarantee that voluntary disruptions (node drains, rolling
+# updates, cluster maintenance) never take ALL pods offline. This
+# ensures zero-downtime deployments and cluster upgrades.
+#
+# With these PDBs in place:
+#   - Backend: at least 2 pods always running (out of 3+ replicas)
+#   - Frontend: at least 2 pods always running (out of 3+ replicas)
+#   - WA Gateway: at least 1 pod always running (out of 2+ replicas)
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-pdb
+  namespace: al-umana
+  labels:
+    app: backend
+    app.kubernetes.io/part-of: al-umana
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: backend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-pdb
+  namespace: al-umana
+  labels:
+    app: frontend
+    app.kubernetes.io/part-of: al-umana
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: frontend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: wa-gateway-pdb
+  namespace: al-umana
+  labels:
+    app: wa-gateway
+    app.kubernetes.io/part-of: al-umana
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: wa-gateway

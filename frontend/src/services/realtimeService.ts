@@ -3,6 +3,22 @@
  * components can subscribe to typed streams of domain entities without
  * importing Firestore primitives directly.
  *
+ * ## Scalability optimizations (v2)
+ *
+ * 1. **Subscription deduplication**: All collection-level subscriptions
+ *    now route through the central `subscriptionManager` so that N
+ *    components subscribing to the same query share ONE Firestore
+ *    listener instead of opening N redundant connections.
+ *
+ * 2. **Pagination**: `subscribeOrders()` is limited to the most recent
+ *    100 orders by default (configurable via `limit`). This prevents a
+ *    full-collection listener that would fan out every write to every
+ *    connected client — the #1 scalability bottleneck identified in the
+ *    architecture audit.
+ *
+ * 3. **Backoff reconnect**: Error handling with exponential backoff is
+ *    now managed by the `subscriptionManager` rather than each caller.
+ *
  * Each helper returns the unsubscribe function from Firestore so callers
  * can clean up in a useEffect cleanup.
  */
@@ -10,6 +26,7 @@
 import {
   collection,
   doc,
+  limit as firestoreLimit,
   onSnapshot,
   orderBy,
   query,
@@ -25,6 +42,22 @@ import { db } from "@/lib/firebase";
 import type { Order, OrderStatus } from "@/types/order";
 import type { CourierGPS } from "@/types/courier-gps";
 import type { FileMetadata } from "@/types/file";
+import { subscriptionManager } from "@/services/subscriptionManager";
+
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Default cap on the number of orders returned by `subscribeOrders()`.
+ * Prevents a full-collection listener that would fan out every single
+ * write across the `orders` collection to every connected client.
+ *
+ * At 100 orders, even with millions of concurrent users, each listener
+ * only receives updates for the 100 most recent orders — not the
+ * entire collection.
+ */
+const DEFAULT_ORDERS_LIMIT = 100;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -133,23 +166,45 @@ function snapshotToCourierGPS(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Subscriptions                                                      */
+/*  Subscriptions (deduplicated via subscriptionManager)               */
 /* ------------------------------------------------------------------ */
 
-/** Subscribe to all orders, ordered by creation time descending. */
+/**
+ * Subscribe to the most recent orders, ordered by creation time descending.
+ *
+ * **Scalability**: Uses a `limit()` clause (default 100) so the listener
+ * only tracks a bounded window of recent orders rather than the entire
+ * collection. Combined with the subscription manager's deduplication,
+ * multiple components calling this with the same limit share a single
+ * Firestore listener.
+ *
+ * @param listener Callback receiving the decoded orders.
+ * @param onError  Optional error callback.
+ * @param limit    Maximum number of orders to listen to (default 100).
+ */
 export function subscribeOrders(
   listener: (orders: Order[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  limit: number = DEFAULT_ORDERS_LIMIT
 ): Unsubscribe {
-  const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
-  return onSnapshot(
+  const q = query(
+    collection(db, "orders"),
+    orderBy("createdAt", "desc"),
+    firestoreLimit(limit)
+  );
+  return subscriptionManager.subscribe(
     q,
     (snap) => listener(snapshotToOrders(snap)),
     onError
   );
 }
 
-/** Subscribe to orders filtered by a single status. */
+/**
+ * Subscribe to orders filtered by a single status.
+ *
+ * **Scalability**: Deduplicated — if 10 components subscribe to
+ * "CONFIRMED" orders, only 1 Firestore listener is created.
+ */
 export function subscribeOrdersByStatus(
   status: OrderStatus,
   listener: (orders: Order[]) => void,
@@ -160,14 +215,20 @@ export function subscribeOrdersByStatus(
     where("status", "==", status),
     orderBy("createdAt", "asc")
   );
-  return onSnapshot(
+  return subscriptionManager.subscribe(
     q,
     (snap) => listener(snapshotToOrders(snap)),
     onError
   );
 }
 
-/** Subscribe to a single order document. */
+/**
+ * Subscribe to a single order document.
+ *
+ * Single-document listeners are lightweight so they bypass the
+ * subscription manager and use `onSnapshot` directly. The fan-out
+ * cost for a single-doc listener is O(1).
+ */
 export function subscribeOrder(
   id: string,
   listener: (order: Order | null) => void,
@@ -180,13 +241,20 @@ export function subscribeOrder(
   );
 }
 
-/** Subscribe to all courier GPS locations. */
+/**
+ * Subscribe to all courier GPS locations.
+ *
+ * **Scalability**: Deduplicated — the admin dashboard's map view may
+ * mount multiple components that all need courier locations; only one
+ * Firestore listener is opened.
+ */
 export function subscribeCourierLocations(
   listener: (locations: CourierGPS[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
-  return onSnapshot(
-    collection(db, "courier_locations"),
+  const q = query(collection(db, "courier_locations"));
+  return subscriptionManager.subscribe(
+    q,
     (snap) => {
       const locations: CourierGPS[] = [];
       snap.forEach((d) => {
@@ -223,7 +291,7 @@ export function subscribeOrderFiles(
     collection(db, "delivery_files"),
     where("orderId", "==", orderId)
   );
-  return onSnapshot(
+  return subscriptionManager.subscribe(
     q,
     (snap) => {
       const files: FileMetadata[] = snap.docs.map((d) => {

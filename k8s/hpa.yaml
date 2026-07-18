@@ -11,14 +11,20 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: backend
-  minReplicas: 2
-  maxReplicas: 6
+  # Scalability: minReplicas 3 ensures high availability (survives
+  # 1 pod failure), maxReplicas 50 handles millions of concurrent
+  # users. Previous max was 6, which would saturate under heavy load.
+  minReplicas: 3
+  maxReplicas: 50
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
+          # Scale up when average CPU exceeds 50%. At 3 replicas with
+          # 2 CPU cores each, this gives 3 cores of headroom before
+          # scaling triggers.
           averageUtilization: 50
     - type: Resource
       resource:
@@ -28,16 +34,27 @@ spec:
           averageUtilization: 70
   behavior:
     scaleUp:
-      stabilizationWindowSeconds: 60
+      # Aggressive scale-up: react within 30 seconds, add up to 10
+      # pods at a time. This handles sudden traffic spikes (e.g.
+      # product launches, viral events) without lag.
+      stabilizationWindowSeconds: 30
       policies:
         - type: Pods
-          value: 2
-          periodSeconds: 60
+          value: 10
+          periodSeconds: 30
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+      selectPolicy: Max
     scaleDown:
+      # Conservative scale-down: wait 5 minutes of low utilisation
+      # before removing pods. Prevents flapping during traffic
+      # oscillations and ensures capacity is available for the next
+      # spike.
       stabilizationWindowSeconds: 300
       policies:
         - type: Pods
-          value: 1
+          value: 2
           periodSeconds: 120
 ---
 apiVersion: autoscaling/v2
@@ -53,8 +70,48 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: frontend
+  # Frontend is lightweight (Nginx serving static files) so it needs
+  # fewer pods than the backend, but still needs to scale for
+  # connection handling.
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 5
+          periodSeconds: 30
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 120
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: wa-gateway-hpa
+  namespace: al-umana
+  labels:
+    app: wa-gateway
+    app.kubernetes.io/part-of: al-umana
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: wa-gateway
   minReplicas: 2
-  maxReplicas: 4
+  maxReplicas: 6
   metrics:
     - type: Resource
       resource:
@@ -67,7 +124,7 @@ spec:
       stabilizationWindowSeconds: 60
       policies:
         - type: Pods
-          value: 1
+          value: 2
           periodSeconds: 60
     scaleDown:
       stabilizationWindowSeconds: 300

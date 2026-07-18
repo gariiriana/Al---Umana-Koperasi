@@ -12,6 +12,17 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # Scalability: keepalive connections to backend pods reduce
+    # connection setup overhead under high concurrency.
+    nginx.ingress.kubernetes.io/upstream-keepalive-connections: "64"
+    nginx.ingress.kubernetes.io/upstream-keepalive-timeout: "60"
+    # Scalability: larger proxy buffers for responses with many orders.
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+    # Scalability: connection and rate limits at the ingress level.
+    nginx.ingress.kubernetes.io/limit-connections: "100"
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
 spec:
   ingressClassName: nginx
   rules:

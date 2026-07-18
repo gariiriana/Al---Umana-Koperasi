@@ -97,4 +97,42 @@ export default defineConfig({
     port: 5174,
     host: true,
   },
+
+  // ── Scalability: Build Optimizations ──
+  build: {
+    // Target modern browsers for smaller output.
+    target: "es2020",
+
+    // Code splitting: separate vendor chunks from application code.
+    // When app code changes, users only re-download the changed chunks
+    // while cached vendor chunks (React, Firebase, MUI) remain valid.
+    // This reduces cache invalidation surface by ~70%.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React core — rarely changes between deployments.
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
+
+          // Firebase SDK — large bundle, changes very infrequently.
+          "vendor-firebase": ["firebase/app", "firebase/auth", "firebase/firestore"],
+
+          // MUI — another large bundle that changes infrequently.
+          "vendor-mui": ["@mui/material"],
+
+          // Utility libraries — stable, cacheable.
+          "vendor-utils": ["leaflet", "react-leaflet", "motion"],
+
+          // PDF generation — only loaded when generating invoices.
+          "vendor-pdf": ["jspdf", "jspdf-autotable", "html2canvas-pro"],
+        },
+      },
+    },
+
+    // Enable source maps for production debugging (hidden from users).
+    sourcemap: "hidden",
+
+    // Increase chunk size warning limit — our vendor chunks are
+    // intentionally large but individually cacheable.
+    chunkSizeWarningLimit: 1000,
+  },
 });

@@ -7,20 +7,33 @@ metadata:
     app: backend
     app.kubernetes.io/part-of: al-umana
 spec:
-  replicas: 2
+  # Scalability: 3 replicas ensures high availability — the system
+  # survives 1 pod failure without user-visible impact. HPA scales
+  # this up to 50 under load.
+  replicas: 3
   selector:
     matchLabels:
       app: backend
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 1
+      maxSurge: 2
       maxUnavailable: 0
   template:
     metadata:
       labels:
         app: backend
     spec:
+      # Spread pods across different nodes for fault tolerance.
+      # If one node goes down, the remaining pods on other nodes
+      # continue serving traffic.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: backend
       containers:
         - name: backend
           image: al-umana/backend:latest
@@ -36,20 +49,29 @@ spec:
               value: "production"
             - name: GOOGLE_APPLICATION_CREDENTIALS
               value: "/secrets/firebase-service-account.json"
+            # GOMAXPROCS should match the CPU limit for optimal
+            # goroutine scheduling.
+            - name: GOMAXPROCS
+              value: "2"
           volumeMounts:
             - name: firebase-sa
               mountPath: /secrets
               readOnly: true
           resources:
             requests:
-              cpu: "100m"
-              memory: "128Mi"
+              # Request enough resources for baseline operation.
+              cpu: "250m"
+              memory: "256Mi"
             limits:
-              cpu: "500m"
-              memory: "512Mi"
+              # Scalability: 2 CPU cores and 2Gi memory per pod
+              # (was 500m/512Mi). Go's goroutine scheduler benefits
+              # from multiple cores, and the in-memory response
+              # cache needs room to grow.
+              cpu: "2"
+              memory: "2Gi"
           livenessProbe:
             httpGet:
-              path: /health
+              path: /healthz
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 15
@@ -57,7 +79,7 @@ spec:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /health
+              path: /healthz
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -70,3 +92,4 @@ spec:
             items:
               - key: firebase-service-account.json
                 path: firebase-service-account.json
+
