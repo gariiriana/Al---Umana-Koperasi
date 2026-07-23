@@ -12,9 +12,9 @@ import {
   CheckCircle2,
   Loader2,
   X,
-  Utensils,
-  ChefHat,
   AlertTriangle,
+  Sparkles,
+  ChefHat,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -30,10 +30,11 @@ import {
   recalculateBatchTotals,
   copyFromBatch,
   deleteBatch,
+  bulkAddEntriesFromMaster,
 } from '@/services/mbgAdminService';
 import { subscribeCustomRecipes } from '@/services/mbgProductionService';
 import resepStandardData from '@/constants/standarResep.json';
-import { MBG_BATCH_STATUS_CONFIG } from '@/constants/mbgConstants';
+import { MBG_BATCH_STATUS_CONFIG, MBG_MASTER_INSTITUTIONS } from '@/constants/mbgConstants';
 
 // ---- Helper: Auto-calculate portion suggestions based on levels and inputs ----
 function getAutoPortions(entry: Partial<MbgPmEntry>) {
@@ -172,15 +173,14 @@ function PmEntryRow({
   onUpdate,
   onDelete,
   isLibur,
-  onManageMenu,
   onManageClasses,
   onConfirmAction,
+  viewMode,
 }: {
   entry: MbgPmEntry;
   onUpdate: (id: string, updates: Partial<MbgPmEntry>) => void;
   onDelete: (id: string) => void;
   isLibur: boolean;
-  onManageMenu: () => void;
   onManageClasses: () => void;
   onConfirmAction: (config: {
     title: string;
@@ -188,9 +188,49 @@ function PmEntryRow({
     onConfirm: () => void;
     variant?: 'danger' | 'warning' | 'info';
   }) => void;
+  viewMode: 'ringkas' | 'rinci';
 }) {
   const isPosyandu = entry.institutionType === 'posyandu';
   const hasClasses = entry.classesBreakdown && entry.classesBreakdown.length > 0;
+
+  const handleSelectMaster = (name: string) => {
+    const master = MBG_MASTER_INSTITUTIONS.find((m) => m.institutionName === name);
+    if (master) {
+      const jumlah = (master.qtSiswaBalita || 0) + (master.qtBumilBusui || 0) + (master.qtGuruKader || 0);
+      const qtAlergi = master.qtAlergi || 0;
+      const qtTidakAlergi = master.qtTidakAlergi ?? Math.max(0, jumlah - qtAlergi);
+      onUpdate(entry.id, {
+        institutionName: master.institutionName,
+        institutionType: master.institutionType,
+        schoolLevel: master.schoolLevel,
+        qtSiswaBalita: master.qtSiswaBalita,
+        qtBumilBusui: master.qtBumilBusui,
+        qtBumil: master.qtBumil || 0,
+        qtBusui: master.qtBusui || 0,
+        qtGuruKader: master.qtGuruKader,
+        qtPobiaNasi: master.qtPobiaNasi || 0,
+        qtAlergi,
+        qtTidakAlergi,
+        keteranganAlergi: master.keteranganAlergi || '',
+        qtPorsiBalita: master.qtPorsiBalita || 0,
+        qtPorsiKecil: master.qtPorsiKecil || 0,
+        qtPorsiBesar: master.qtPorsiBesar || 0,
+        qtPorsiBumilBusui: master.qtPorsiBumilBusui || 0,
+        qtPorsiKecilL: master.qtPorsiKecilL || 0,
+        qtPorsiKecilP: master.qtPorsiKecilP || 0,
+        qtPorsiBesarL: master.qtPorsiBesarL || 0,
+        qtPorsiBesarP: master.qtPorsiBesarP || 0,
+        qtGuruL: master.qtGuruL || 0,
+        qtGuruP: master.qtGuruP || 0,
+        qtTendikL: master.qtTendikL || 0,
+        qtTendikP: master.qtTendikP || 0,
+        jumlah,
+        jadwalPengantaran: master.jadwalPengantaran || '06.00-08.30',
+      });
+    } else {
+      handleFieldChange('institutionName', name);
+    }
+  };
 
   const handleFieldChange = (field: keyof MbgPmEntry, value: string | number | boolean) => {
     const updates: Partial<MbgPmEntry> = { [field]: value };
@@ -200,8 +240,53 @@ function PmEntryRow({
     if (field === 'qtBumil' || field === 'qtBusui') {
       const b = field === 'qtBumil' ? (value as number) : (entry.qtBumil || 0);
       const s = field === 'qtBusui' ? (value as number) : (entry.qtBusui || 0);
+      updates.qtBumil = field === 'qtBumil' ? (value as number) : (entry.qtBumil || 0);
+      updates.qtBusui = field === 'qtBusui' ? (value as number) : (entry.qtBusui || 0);
       updates.qtBumilBusui = b + s;
+      updates.qtPorsiBumilBusui = b + s;
+      tempEntry.qtBumil = updates.qtBumil;
+      tempEntry.qtBusui = updates.qtBusui;
       tempEntry.qtBumilBusui = b + s;
+      tempEntry.qtPorsiBumilBusui = b + s;
+    }
+
+    // Auto-update qtSiswaBalita if directly edited (e.g. for Posyandu Porsi Balita)
+    if (field === 'qtSiswaBalita') {
+      const val = value as number;
+      updates.qtSiswaBalita = val;
+      updates.qtPorsiBalita = val;
+      updates.qtPorsiKecil = val;
+      tempEntry.qtSiswaBalita = val;
+      tempEntry.qtPorsiBalita = val;
+      tempEntry.qtPorsiKecil = val;
+    }
+
+    // Auto-update qtSiswaBalita if we changed any Porsi L/P
+    if (['qtPorsiKecilL', 'qtPorsiKecilP', 'qtPorsiBesarL', 'qtPorsiBesarP'].includes(field)) {
+      const pkl = field === 'qtPorsiKecilL' ? (value as number) : (entry.qtPorsiKecilL || 0);
+      const pkp = field === 'qtPorsiKecilP' ? (value as number) : (entry.qtPorsiKecilP || 0);
+      const pbl = field === 'qtPorsiBesarL' ? (value as number) : (entry.qtPorsiBesarL || 0);
+      const pbp = field === 'qtPorsiBesarP' ? (value as number) : (entry.qtPorsiBesarP || 0);
+
+      const newSiswa = pkl + pkp + pbl + pbp;
+      updates.qtSiswaBalita = newSiswa;
+      updates.qtPorsiKecil = pkl + pkp;
+      updates.qtPorsiBesar = pbl + pbp;
+      tempEntry.qtSiswaBalita = newSiswa;
+      tempEntry.qtPorsiKecil = pkl + pkp;
+      tempEntry.qtPorsiBesar = pbl + pbp;
+    }
+
+    // Auto-update qtGuruKader if we changed any Guru/Tendik L/P
+    if (['qtGuruL', 'qtGuruP', 'qtTendikL', 'qtTendikP'].includes(field)) {
+      const gl = field === 'qtGuruL' ? (value as number) : (entry.qtGuruL || 0);
+      const gp = field === 'qtGuruP' ? (value as number) : (entry.qtGuruP || 0);
+      const tl = field === 'qtTendikL' ? (value as number) : (entry.qtTendikL || 0);
+      const tp = field === 'qtTendikP' ? (value as number) : (entry.qtTendikP || 0);
+
+      const newGuruKader = gl + gp + tl + tp;
+      updates.qtGuruKader = newGuruKader;
+      tempEntry.qtGuruKader = newGuruKader;
     }
 
     // Reset bumil/busui and set default schoolLevel when switching to sekolah
@@ -234,9 +319,17 @@ function PmEntryRow({
       }
     }
 
-    updates.jumlah = calcJumlah(tempEntry);
+    const newJumlah = calcJumlah(tempEntry);
+    updates.jumlah = newJumlah;
+
+    // Recalculate qtTidakAlergi
+    const alergi = (field === 'qtAlergi' ? (value as number) : entry.qtAlergi) || 0;
+    updates.qtTidakAlergi = Math.max(0, newJumlah - alergi);
+
     onUpdate(entry.id, updates);
   };
+
+  const isMasterSelected = MBG_MASTER_INSTITUTIONS.some((m) => m.institutionName === entry.institutionName);
 
   return (
     <tr
@@ -244,17 +337,45 @@ function PmEntryRow({
         border-b border-[#F3F4F6] transition-colors text-xs
         ${isLibur ? 'bg-red-50 opacity-60' : 'hover:bg-[#FAFAFA]'}
         ${entry.qtPobiaNasi > 0 ? 'bg-amber-50/50' : ''}
+        ${(entry.qtAlergi || 0) > 0 ? 'bg-red-50/30' : ''}
       `}
     >
       {/* Institusi */}
       <td className="px-3 py-2.5">
-        <input
-          type="text"
-          value={entry.institutionName}
-          onChange={(e) => handleFieldChange('institutionName', e.target.value)}
-          placeholder="Nama Institusi"
-          className="w-full min-w-[110px] rounded-lg border border-[#E5E7EB] px-2 py-1.5 text-xs font-semibold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent"
-        />
+        <div className="flex flex-col gap-1 min-w-[140px]">
+          <select
+            value={isMasterSelected ? entry.institutionName : entry.institutionName ? '_custom_' : ''}
+            onChange={(e) => {
+              if (e.target.value === '_custom_') {
+                if (!entry.institutionName) {
+                  handleFieldChange('institutionName', 'Institusi Baru');
+                }
+              } else {
+                handleSelectMaster(e.target.value);
+              }
+            }}
+            title="Pilih Institusi Master"
+            className="w-full rounded-lg border border-[#E5E7EB] px-2 py-1.5 text-xs font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent bg-white cursor-pointer shadow-sm"
+          >
+            <option value="">— Pilih Master Institusi —</option>
+            {MBG_MASTER_INSTITUTIONS.map((inst) => (
+              <option key={inst.institutionName} value={inst.institutionName}>
+                {inst.institutionName}
+              </option>
+            ))}
+            <option value="_custom_">✍️ Input Manual Custom...</option>
+          </select>
+
+          {(!isMasterSelected || entry.institutionName === '') && (
+            <input
+              type="text"
+              value={entry.institutionName}
+              onChange={(e) => handleFieldChange('institutionName', e.target.value)}
+              placeholder="Nama Institusi Custom"
+              className="w-full rounded-lg border border-[#E5E7EB] px-2 py-1 text-xs font-semibold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+            />
+          )}
+        </div>
       </td>
 
       {/* Tipe */}
@@ -299,127 +420,300 @@ function PmEntryRow({
         </div>
       </td>
 
-      {/* Petugas / Kurir */}
-      <td className="px-3 py-2.5">
-        <input
-          type="text"
-          value={entry.assignedPetugasName || ''}
-          onChange={(e) => handleFieldChange('assignedPetugasName', e.target.value)}
-          placeholder="Nama Petugas"
-          className="w-full min-w-[100px] rounded-lg border border-[#E5E7EB] px-2 py-1.5 text-xs font-semibold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent"
-        />
-      </td>
+      {viewMode === 'rinci' ? (
+        <>
+          {/* Porsi Posyandu (Balita, Bumil, Busui) ATAU Sekolah (Porsi Kecil & Porsi Besar L/P) */}
+          {isPosyandu ? (
+            <>
+              {/* Porsi Balita */}
+              <td colSpan={2} className="px-2 py-2 text-center bg-amber-50/40 border-r border-[#E5E7EB]">
+                <div className="flex flex-col items-center">
+                  <span className="text-[9px] font-extrabold text-amber-800 mb-0.5 uppercase tracking-tight">Porsi Balita</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={entry.qtSiswaBalita || ''}
+                    onChange={(e) => handleFieldChange('qtSiswaBalita', parseInt(e.target.value) || 0)}
+                    placeholder="0"
+                    className="w-14 rounded-lg border border-amber-300 bg-white px-1 py-1 text-xs text-center font-extrabold text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+              </td>
 
-      {/* QT Siswa/Balita */}
-      <td className="px-3 py-2.5">
-        <div className="flex justify-center">
-          <input
-            type="number"
-            min={0}
-            disabled={hasClasses}
-            value={entry.qtSiswaBalita || ''}
-            onChange={(e) => handleFieldChange('qtSiswaBalita', parseInt(e.target.value) || 0)}
-            placeholder={isPosyandu ? 'Balita' : 'Siswa'}
-            className={`w-14 rounded-lg border px-1.5 py-1 text-xs text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#FBBF24] ${
-              hasClasses
-                ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'
-                : 'border-[#E5E7EB] text-[#111827]'
-            }`}
-          />
-        </div>
-      </td>
+              {/* Porsi Bumil */}
+              <td className="px-1.5 py-2 text-center bg-orange-50/40">
+                <div className="flex flex-col items-center">
+                  <span className="text-[9px] font-extrabold text-orange-800 mb-0.5 uppercase tracking-tight">Porsi Bumil</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={entry.qtBumil || ''}
+                    onChange={(e) => handleFieldChange('qtBumil', parseInt(e.target.value) || 0)}
+                    placeholder="0"
+                    className="w-12 rounded-lg border border-orange-300 bg-white px-1 py-1 text-xs text-center font-extrabold text-orange-900 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  />
+                </div>
+              </td>
 
-      {/* QT Bumil/Busui (Split for Posyandu) */}
-      <td className="px-3 py-2.5">
-        {isPosyandu ? (
-          <div className="flex flex-col gap-1 items-center min-w-[95px]">
-            <div className="flex items-center gap-1">
-              <span className="text-[11px] font-bold text-[#D97706] w-9 text-right">Bml:</span>
-              <input
-                type="number"
-                min={0}
-                value={entry.qtBumil ?? 0}
-                onChange={(e) => handleFieldChange('qtBumil', parseInt(e.target.value) || 0)}
-                placeholder="0"
-                className="w-11 rounded-lg border border-[#E5E7EB] px-1.5 py-0.5 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-              />
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-[11px] font-bold text-[#D97706] w-9 text-right">Bsi:</span>
-              <input
-                type="number"
-                min={0}
-                value={entry.qtBusui ?? 0}
-                onChange={(e) => handleFieldChange('qtBusui', parseInt(e.target.value) || 0)}
-                placeholder="0"
-                className="w-11 rounded-lg border border-[#E5E7EB] px-1.5 py-0.5 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="flex justify-center">
+              {/* Porsi Busui */}
+              <td className="px-1.5 py-2 text-center bg-purple-50/40 border-r border-[#E5E7EB]">
+                <div className="flex flex-col items-center">
+                  <span className="text-[9px] font-extrabold text-purple-800 mb-0.5 uppercase tracking-tight">Porsi Busui</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={entry.qtBusui || ''}
+                    onChange={(e) => handleFieldChange('qtBusui', parseInt(e.target.value) || 0)}
+                    placeholder="0"
+                    className="w-12 rounded-lg border border-purple-300 bg-white px-1 py-1 text-xs text-center font-bold text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  />
+                </div>
+              </td>
+            </>
+          ) : (
+            <>
+              {/* Porsi Kecil L & P */}
+              <td className="px-1.5 py-2.5 text-center bg-amber-50/20">
+                <input
+                  type="number"
+                  min={0}
+                  value={entry.qtPorsiKecilL || ''}
+                  onChange={(e) => handleFieldChange('qtPorsiKecilL', parseInt(e.target.value) || 0)}
+                  placeholder="0"
+                  className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </td>
+              <td className="px-1.5 py-2.5 text-center bg-amber-50/20 border-r border-[#E5E7EB]">
+                <input
+                  type="number"
+                  min={0}
+                  value={entry.qtPorsiKecilP || ''}
+                  onChange={(e) => handleFieldChange('qtPorsiKecilP', parseInt(e.target.value) || 0)}
+                  placeholder="0"
+                  className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </td>
+
+              {/* Porsi Besar L & P */}
+              <td className="px-1.5 py-2.5 text-center bg-blue-50/20">
+                <input
+                  type="number"
+                  min={0}
+                  value={entry.qtPorsiBesarL || ''}
+                  onChange={(e) => handleFieldChange('qtPorsiBesarL', parseInt(e.target.value) || 0)}
+                  placeholder="0"
+                  className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </td>
+              <td className="px-1.5 py-2.5 text-center bg-blue-50/20 border-r border-[#E5E7EB]">
+                <input
+                  type="number"
+                  min={0}
+                  value={entry.qtPorsiBesarP || ''}
+                  onChange={(e) => handleFieldChange('qtPorsiBesarP', parseInt(e.target.value) || 0)}
+                  placeholder="0"
+                  className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </td>
+            </>
+          )}
+
+          {/* Total Siswa / Balita / Ibu */}
+          <td className="px-2 py-2.5 text-center bg-indigo-50/30 border-r border-[#E5E7EB]">
+            <span className="inline-block min-w-[36px] rounded-lg bg-indigo-50 border border-indigo-200 px-2 py-1 text-xs font-black text-indigo-700">
+              {(entry.qtSiswaBalita || 0) + (isPosyandu ? (entry.qtBumilBusui || 0) : 0)}
+            </span>
+          </td>
+
+          {/* Guru L & P */}
+          <td className="px-1.5 py-2.5 text-center bg-emerald-50/20">
             <input
               type="number"
-              disabled
-              placeholder="—"
-              className="w-14 rounded-lg border border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed px-1.5 py-1 text-xs text-center font-bold"
+              min={0}
+              value={entry.qtGuruL || ''}
+              onChange={(e) => handleFieldChange('qtGuruL', parseInt(e.target.value) || 0)}
+              placeholder="0"
+              className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-emerald-400"
             />
-          </div>
-        )}
-      </td>
+          </td>
+          <td className="px-1.5 py-2.5 text-center bg-emerald-50/20 border-r border-[#E5E7EB]">
+            <input
+              type="number"
+              min={0}
+              value={entry.qtGuruP || ''}
+              onChange={(e) => handleFieldChange('qtGuruP', parseInt(e.target.value) || 0)}
+              placeholder="0"
+              className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          </td>
 
-      {/* QT Guru/Kader */}
-      <td className="px-3 py-2.5">
-        <div className="flex justify-center">
+          {/* Tendik L & P */}
+          <td className="px-1.5 py-2.5 text-center bg-teal-50/20">
+            <input
+              type="number"
+              min={0}
+              value={entry.qtTendikL || ''}
+              onChange={(e) => handleFieldChange('qtTendikL', parseInt(e.target.value) || 0)}
+              placeholder="0"
+              className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-teal-400"
+            />
+          </td>
+          <td className="px-1.5 py-2.5 text-center bg-teal-50/20 border-r border-[#E5E7EB]">
+            <input
+              type="number"
+              min={0}
+              value={entry.qtTendikP || ''}
+              onChange={(e) => handleFieldChange('qtTendikP', parseInt(e.target.value) || 0)}
+              placeholder="0"
+              className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-teal-400"
+            />
+          </td>
+
+          {/* Total Guru & Tendik */}
+          <td className="px-2 py-2.5 text-center bg-emerald-100/30 border-r border-[#E5E7EB]">
+            <span className="inline-block min-w-[36px] rounded-lg bg-emerald-100 border border-emerald-300 px-2 py-1 text-xs font-black text-emerald-800">
+              {entry.qtGuruKader || 0}
+            </span>
+          </td>
+        </>
+      ) : (
+        <>
+          {/* QT Siswa/Balita */}
+          <td className="px-3 py-2.5">
+            <div className="flex justify-center">
+              <input
+                type="number"
+                min={0}
+                disabled={hasClasses}
+                value={entry.qtSiswaBalita || ''}
+                onChange={(e) => handleFieldChange('qtSiswaBalita', parseInt(e.target.value) || 0)}
+                placeholder={isPosyandu ? 'Balita' : 'Siswa'}
+                className={`w-14 rounded-lg border px-1.5 py-1 text-xs text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#FBBF24] ${
+                  hasClasses
+                    ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'
+                    : 'border-[#E5E7EB] text-[#111827]'
+                }`}
+              />
+            </div>
+          </td>
+
+          {/* QT Bumil/Busui (Split for Posyandu) */}
+          <td className="px-3 py-2.5">
+            {isPosyandu ? (
+              <div className="flex flex-col gap-1 items-center min-w-[95px]">
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] font-bold text-[#D97706] w-9 text-right">Bml:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={entry.qtBumil ?? 0}
+                    onChange={(e) => handleFieldChange('qtBumil', parseInt(e.target.value) || 0)}
+                    placeholder="0"
+                    className="w-11 rounded-lg border border-[#E5E7EB] px-1.5 py-0.5 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                  />
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] font-bold text-[#D97706] w-9 text-right">Bsi:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={entry.qtBusui ?? 0}
+                    onChange={(e) => handleFieldChange('qtBusui', parseInt(e.target.value) || 0)}
+                    placeholder="0"
+                    className="w-11 rounded-lg border border-[#E5E7EB] px-1.5 py-0.5 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-center">
+                <input
+                  type="number"
+                  disabled
+                  placeholder="—"
+                  className="w-14 rounded-lg border border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed px-1.5 py-1 text-xs text-center font-bold"
+                />
+              </div>
+            )}
+          </td>
+
+          {/* QT Guru/Kader */}
+          <td className="px-3 py-2.5">
+            <div className="flex justify-center">
+              <input
+                type="number"
+                min={0}
+                value={entry.qtGuruKader || ''}
+                onChange={(e) => handleFieldChange('qtGuruKader', parseInt(e.target.value) || 0)}
+                placeholder={isPosyandu ? 'Kader' : 'Guru'}
+                className="w-14 rounded-lg border border-[#E5E7EB] px-1.5 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+              />
+            </div>
+          </td>
+
+          {/* Pobia Nasi */}
+          <td className="px-3 py-2.5">
+            <div className="flex justify-center">
+              <input
+                type="number"
+                min={0}
+                disabled={hasClasses}
+                value={entry.qtPobiaNasi || ''}
+                onChange={(e) => handleFieldChange('qtPobiaNasi', parseInt(e.target.value) || 0)}
+                placeholder="0"
+                className={`w-12 rounded-lg border px-1.5 py-1 text-xs text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#FBBF24] ${
+                  hasClasses
+                    ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'
+                    : 'border-[#E5E7EB] text-[#111827]'
+                }`}
+              />
+            </div>
+          </td>
+        </>
+      )}
+
+      {/* Alergi */}
+      <td className="px-2 py-2.5">
+        <div className="flex flex-col gap-1 items-center min-w-[70px]">
           <input
             type="number"
             min={0}
-            value={entry.qtGuruKader || ''}
-            onChange={(e) => handleFieldChange('qtGuruKader', parseInt(e.target.value) || 0)}
-            placeholder={isPosyandu ? 'Kader' : 'Guru'}
-            className="w-14 rounded-lg border border-[#E5E7EB] px-1.5 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-          />
-        </div>
-      </td>
-
-      {/* Pobia Nasi */}
-      <td className="px-3 py-2.5">
-        <div className="flex justify-center">
-          <input
-            type="number"
-            min={0}
-            disabled={hasClasses}
-            value={entry.qtPobiaNasi || ''}
-            onChange={(e) => handleFieldChange('qtPobiaNasi', parseInt(e.target.value) || 0)}
+            value={entry.qtAlergi ?? 0}
+            onChange={(e) => {
+              const alergiVal = parseInt(e.target.value) || 0;
+              const totalVal = entry.jumlah || 0;
+              onUpdate(entry.id, {
+                qtAlergi: alergiVal,
+                qtTidakAlergi: Math.max(0, totalVal - alergiVal),
+              });
+            }}
             placeholder="0"
-            className={`w-12 rounded-lg border px-1.5 py-1 text-xs text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#FBBF24] ${
-              hasClasses
-                ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'
-                : 'border-[#E5E7EB] text-[#111827]'
-            }`}
+            className="w-12 rounded-lg border border-red-200 bg-red-50/50 px-1.5 py-1 text-xs text-center font-bold text-red-600 focus:outline-none focus:ring-2 focus:ring-red-400"
           />
+          {(entry.qtAlergi || 0) > 0 && (
+            <input
+              type="text"
+              value={entry.keteranganAlergi || ''}
+              onChange={(e) => onUpdate(entry.id, { keteranganAlergi: e.target.value })}
+              placeholder="Rincian alergi"
+              title="Ket. Alergi (mis. 2 Telur, 1 Udang)"
+              className="w-full text-[10px] border border-red-200 rounded px-1 py-0.5 text-red-700 bg-red-50 focus:outline-none"
+            />
+          )}
         </div>
       </td>
 
-
+      {/* Tidak Alergi */}
+      <td className="px-2 py-2.5 text-center">
+        <span className="inline-block min-w-[36px] rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-1 text-xs font-bold text-emerald-700">
+          {entry.qtTidakAlergi ?? Math.max(0, (entry.jumlah || 0) - (entry.qtAlergi || 0))}
+        </span>
+      </td>
 
       {/* Jumlah (auto) */}
       <td className="px-3 py-2.5 text-center">
         <span className="inline-block min-w-[40px] rounded-full bg-[#FBBF24]/20 px-3 py-1 text-xs font-extrabold text-[#92400E]">
           {entry.jumlah}
         </span>
-      </td>
-
-      {/* Menu & Porsi */}
-      <td className="px-2 py-2 text-center min-w-[90px]">
-        <button
-          onClick={onManageMenu}
-          className="inline-flex items-center gap-1 px-1.5 py-1 bg-white hover:bg-amber-50 text-[#92400E] border border-amber-200 hover:border-amber-300 rounded-lg text-[10px] font-bold transition-colors cursor-pointer shadow-sm w-full justify-center min-w-[80px]"
-          title="Atur Menu & Porsi"
-        >
-          <Utensils className="h-3 w-3" />
-          <span>Atur Menu</span>
-        </button>
       </td>
 
       {/* Jadwal Pengantaran */}
@@ -496,6 +790,7 @@ export function MbgAdminPage() {
   const [selectedEntryForMenu, setSelectedEntryForMenu] = useState<MbgPmEntry | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
+  const [viewMode, setViewMode] = useState<'ringkas' | 'rinci'>('rinci');
   const [confirmState, setConfirmState] = useState<{
     title: string;
     message: string;
@@ -586,11 +881,40 @@ export function MbgAdminPage() {
       bumil: active.reduce((s, e) => s + (e.qtBumilBusui || 0), 0),
       guru: active.reduce((s, e) => s + (e.qtGuruKader || 0), 0),
       pobia: active.reduce((s, e) => s + (e.qtPobiaNasi || 0), 0),
+      alergi: active.reduce((s, e) => s + (e.qtAlergi || 0), 0),
+      tidakAlergi: active.reduce((s, e) => s + (e.qtTidakAlergi ?? Math.max(0, (e.jumlah || 0) - (e.qtAlergi || 0))), 0),
       jumlah: active.reduce((s, e) => s + (e.jumlah || 0), 0),
+      
+      // Detailed L/P breakdown
+      porsiKecilL: active.reduce((s, e) => s + (e.qtPorsiKecilL || 0), 0),
+      porsiKecilP: active.reduce((s, e) => s + (e.qtPorsiKecilP || 0), 0),
+      porsiBesarL: active.reduce((s, e) => s + (e.qtPorsiBesarL || 0), 0),
+      porsiBesarP: active.reduce((s, e) => s + (e.qtPorsiBesarP || 0), 0),
+      guruL: active.reduce((s, e) => s + (e.qtGuruL || 0), 0),
+      guruP: active.reduce((s, e) => s + (e.qtGuruP || 0), 0),
+      tendikL: active.reduce((s, e) => s + (e.qtTendikL || 0), 0),
+      tendikP: active.reduce((s, e) => s + (e.qtTendikP || 0), 0),
+      totalGuruTendik: active.reduce((s, e) => s + (e.qtGuruL || 0) + (e.qtGuruP || 0) + (e.qtTendikL || 0) + (e.qtTendikP || 0), 0),
+
       totalInstitusi: entries.length,
       totalPetugas: petugasSet.size,
     };
   }, [entries]);
+
+  const handleLoadMasterData = async () => {
+    if (!selectedBatchId || !user) return;
+    setSaving(true);
+    try {
+      await bulkAddEntriesFromMaster(selectedBatchId, user.uid);
+      await recalculateBatchTotals(selectedBatchId);
+      showToast({ message: 'Berhasil memuat 27 institusi dari Master Data!', variant: 'success' });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: 'Gagal memuat master data institusi', variant: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // ---- Handlers ----
   const handleCreateBatch = async (tanggal: string, copyFromId?: string) => {
@@ -711,175 +1035,6 @@ export function MbgAdminPage() {
     }
   };
 
-  const handleCreateDummyData = async () => {
-    if (!user) return;
-    setSaving(true);
-    try {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const timestamp = new Date().toLocaleTimeString('id-ID', { hour12: false }).replace(/:/g, '');
-      const batchDate = `${todayStr}-dummy-${timestamp}`;
-      
-      const newBatchId = await createBatch(batchDate, user.uid);
-      
-      const dummyEntries: Omit<MbgPmEntry, 'id'>[] = [
-        {
-          batchId: newBatchId,
-          institutionName: 'SD Negeri 01 Sukabumi',
-          institutionType: 'sekolah',
-          schoolLevel: 'sd',
-          qtSiswaBalita: 120,
-          qtBumilBusui: 0,
-          qtGuruKader: 8,
-          qtPobiaNasi: 12,
-          qtPorsiBalita: 0,
-          qtPorsiKecil: 120,
-          qtPorsiBesar: 8,
-          qtPorsiBumilBusui: 0,
-          jumlah: 128,
-          jadwalPengantaran: '06.30 - 08.00',
-          assignedPetugasId: 'kurir-budiman',
-          assignedPetugasName: 'Budiman',
-          menuItems: ['Nasi Putih (Beras Premium)', 'Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
-          menuKeringanItems: ['Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
-          isSekolahLibur: false,
-          notes: 'Kelas 1-3 porsi kecil, kelas 4-6 porsi kecil juga',
-          sortOrder: 0,
-          classesBreakdown: [
-            {
-              id: 'c1',
-              className: 'Kelas 1',
-              totalSiswa: 40,
-              qtPobiaNasi: 4,
-              portionType: 'kecil',
-              qtPorsiKecil: 40,
-              jumlah: 40,
-              menuItems: ['Nasi Putih (Beras Premium)', 'Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
-              menuKeringanItems: ['Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
-              jadwalPengantaran: '06.30 - 07.00',
-            },
-            {
-              id: 'c2',
-              className: 'Kelas 2',
-              totalSiswa: 40,
-              qtPobiaNasi: 4,
-              portionType: 'kecil',
-              qtPorsiKecil: 40,
-              jumlah: 40,
-              menuItems: ['Nasi Putih (Beras Premium)', 'Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
-              menuKeringanItems: ['Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
-              jadwalPengantaran: '07.00 - 07.30',
-            },
-            {
-              id: 'c3',
-              className: 'Kelas 3',
-              totalSiswa: 40,
-              qtPobiaNasi: 4,
-              portionType: 'kecil',
-              qtPorsiKecil: 40,
-              jumlah: 40,
-              menuItems: ['Nasi Putih (Beras Premium)', 'Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
-              menuKeringanItems: ['Ayam Kentucky', 'Tumis Buncis Wortel', 'Susu UHT Cimory Full Cream 125 ml'],
-              jadwalPengantaran: '07.30 - 08.00',
-            }
-          ],
-          createdBy: user.uid,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        {
-          batchId: newBatchId,
-          institutionName: 'SMP Negeri 02 Sukabumi',
-          institutionType: 'sekolah',
-          schoolLevel: 'sd',
-          qtSiswaBalita: 250,
-          qtBumilBusui: 0,
-          qtGuruKader: 15,
-          qtPobiaNasi: 20,
-          qtPorsiBalita: 0,
-          qtPorsiKecil: 0,
-          qtPorsiBesar: 265,
-          qtPorsiBumilBusui: 0,
-          jumlah: 265,
-          jadwalPengantaran: '07.00 - 08.30',
-          assignedPetugasId: 'kurir-ahmad',
-          assignedPetugasName: 'Ahmad',
-          menuItems: ['Nasi Putih (Beras Premium)', 'Semur Daging', 'Capcay', 'Susu UHT Ultra Full Cream 125 ml'],
-          menuKeringanItems: ['Semur Daging', 'Capcay', 'Susu UHT Ultra Full Cream 125 ml'],
-          isSekolahLibur: false,
-          notes: 'Porsi besar semua',
-          sortOrder: 1,
-          classesBreakdown: [
-            {
-              id: 'c4',
-              className: 'Kelas 7',
-              totalSiswa: 100,
-              qtPobiaNasi: 8,
-              portionType: 'besar',
-              qtPorsiBesar: 100,
-              jumlah: 100,
-              menuItems: ['Nasi Putih (Beras Premium)', 'Semur Daging', 'Capcay', 'Susu UHT Ultra Full Cream 125 ml'],
-              menuKeringanItems: ['Semur Daging', 'Capcay', 'Susu UHT Ultra Full Cream 125 ml'],
-              jadwalPengantaran: '07.00 - 07.30',
-            },
-            {
-              id: 'c5',
-              className: 'Kelas 8',
-              totalSiswa: 150,
-              qtPobiaNasi: 12,
-              portionType: 'besar',
-              qtPorsiBesar: 150,
-              jumlah: 150,
-              menuItems: ['Nasi Putih (Beras Premium)', 'Semur Daging', 'Capcay', 'Susu UHT Ultra Full Cream 125 ml'],
-              menuKeringanItems: ['Semur Daging', 'Capcay', 'Susu UHT Ultra Full Cream 125 ml'],
-              jadwalPengantaran: '07.30 - 08.30',
-            }
-          ],
-          createdBy: user.uid,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        {
-          batchId: newBatchId,
-          institutionName: 'Posyandu Melati 03',
-          institutionType: 'posyandu',
-          qtSiswaBalita: 40,
-          qtBumilBusui: 15,
-          qtGuruKader: 5,
-          qtPobiaNasi: 0,
-          qtPorsiBalita: 40,
-          qtPorsiKecil: 0,
-          qtPorsiBesar: 5,
-          qtPorsiBumilBusui: 15,
-          jumlah: 60,
-          jadwalPengantaran: '08.00 - 09.30',
-          assignedPetugasId: 'kurir-sobur',
-          assignedPetugasName: 'Sobur',
-          menuItems: ['Nasi Kuning (Beras Premium)', 'Ayam Kecap', 'Tumis Bayam Jagung Pipil'],
-          menuKeringanItems: [],
-          isSekolahLibur: false,
-          notes: 'Balita: Nasi Kuning & Ayam Kecap, Ibu: porsi hamil/menyusui',
-          sortOrder: 2,
-          createdBy: user.uid,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }
-      ];
-
-      for (const entry of dummyEntries) {
-        await addEntry(entry);
-      }
-
-      await recalculateBatchTotals(newBatchId);
-      setSelectedBatchId(newBatchId);
-      showToast({ message: `Batch dummy ${batchDate} berhasil dibuat!`, variant: 'success' });
-    } catch (err) {
-      console.error(err);
-      showToast({ message: 'Gagal membuat data dummy', variant: 'error' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleSaveMenu = async (
     entryId: string,
     menuItems: string[],
@@ -967,7 +1122,7 @@ export function MbgAdminPage() {
         <div className="text-center py-16 bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm">
           <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
           <p className="text-sm font-bold text-[#6B7280]">Belum ada batch</p>
-          <p className="text-xs text-[#9CA3AF] mt-1 mb-4">Buat batch baru atau data dummy untuk mulai input data PM</p>
+          <p className="text-xs text-[#9CA3AF] mt-1 mb-4">Buat batch baru untuk mulai input data PM</p>
           <div className="flex justify-center gap-3">
             <button
               onClick={() => setShowNewBatchModal(true)}
@@ -975,14 +1130,6 @@ export function MbgAdminPage() {
             >
               <Plus className="h-4 w-4" />
               Batch Baru
-            </button>
-            <button
-              onClick={handleCreateDummyData}
-              disabled={saving}
-              className="inline-flex items-center gap-2 px-5 py-2.5 border border-emerald-200 text-emerald-600 text-sm font-extrabold rounded-xl hover:bg-emerald-50 cursor-pointer transition-colors shadow-sm"
-            >
-              <ChefHat className="h-4 w-4" />
-              {saving ? 'Membuat...' : 'Buat Data Dummy'}
             </button>
           </div>
         </div>
@@ -1020,14 +1167,17 @@ export function MbgAdminPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                onClick={handleCreateDummyData}
-                disabled={saving}
-                className="inline-flex items-center gap-2 px-4 py-2.5 border border-emerald-200 text-emerald-600 text-xs font-extrabold rounded-xl hover:bg-emerald-50 cursor-pointer transition-colors shadow-sm"
-              >
-                <ChefHat className="h-4 w-4" />
-                {saving ? 'Membuat...' : 'Buat Data Dummy'}
-              </button>
+              {selectedBatchId && selectedBatch?.status === 'DRAFT' && (
+                <button
+                  onClick={handleLoadMasterData}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl cursor-pointer transition-colors shadow-sm disabled:opacity-50"
+                  title="Muat otomatis 27 institusi dari Master Data"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  ⚡ Load 27 Master Institusi
+                </button>
+              )}
 
               <button
                 onClick={() => setShowNewBatchModal(true)}
@@ -1049,11 +1199,9 @@ export function MbgAdminPage() {
             </div>
           </div>
 
-
-
-          {/* Search */}
-          <div className="mb-4">
-            <div className="relative max-w-sm">
+          {/* Search & View Mode Switcher */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="relative max-w-sm flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
               <input
                 type="search"
@@ -1062,6 +1210,29 @@ export function MbgAdminPage() {
                 placeholder="Cari institusi atau petugas..."
                 className="w-full rounded-xl border border-[#E5E7EB] bg-white pl-9 pr-4 py-2.5 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
               />
+            </div>
+
+            <div className="inline-flex rounded-xl bg-gray-100 p-1 border border-gray-200 shadow-inner">
+              <button
+                onClick={() => setViewMode('rinci')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'rinci'
+                    ? 'bg-[#FBBF24] text-[#111827] shadow-sm'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                📊 Mode Rinci (L/P & Tendik)
+              </button>
+              <button
+                onClick={() => setViewMode('ringkas')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'ringkas'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                📋 Mode Ringkas
+              </button>
             </div>
           </div>
 
@@ -1075,25 +1246,55 @@ export function MbgAdminPage() {
               <div className="overflow-x-auto border border-[#E5E7EB] rounded-xl bg-white shadow-sm">
                 <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] min-w-[760px]">
                   <thead>
-                    <tr className="bg-[#FEF3C7] text-[10px] font-extrabold text-[#92400E] uppercase tracking-wider">
-                      <th className="px-3 py-3 whitespace-nowrap">Institusi</th>
-                      <th className="px-3 py-3 whitespace-nowrap">Tipe</th>
-                      <th className="px-3 py-3 whitespace-nowrap">Petugas / Kurir</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">QT Siswa / Balita</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">QT Bumil / Busui</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">QT Guru / Kader</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">Pobia Nasi</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">Jumlah</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">Menu & Porsi</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">Jadwal Pengantaran</th>
-                      <th className="px-3 py-3"></th>
-                    </tr>
+                    {viewMode === 'rinci' ? (
+                      <>
+                        <tr className="bg-[#FEF3C7] text-[#92400E] text-[11px] font-extrabold uppercase tracking-wider border-b border-[#FDE68A]">
+                          <th rowSpan={2} className="px-3 py-2 text-left min-w-[140px] align-middle">Institusi</th>
+                          <th rowSpan={2} className="px-2 py-2 text-center min-w-[90px] align-middle">Tipe</th>
+                          <th colSpan={2} className="px-2 py-1.5 text-center bg-amber-100/70 border-x border-[#FDE68A] text-amber-900">Porsi Kecil / Balita</th>
+                          <th colSpan={2} className="px-2 py-1.5 text-center bg-blue-100/70 border-r border-[#FDE68A] text-blue-900">Porsi Besar / Bumil & Busui</th>
+                          <th rowSpan={2} className="px-3 py-2 text-center bg-indigo-100/60 border-r border-[#FDE68A] text-indigo-900 align-middle">Total Siswa / Balita / Ibu</th>
+                          <th colSpan={2} className="px-2 py-1.5 text-center bg-emerald-100/70 border-r border-[#FDE68A] text-emerald-900">Guru</th>
+                          <th colSpan={2} className="px-2 py-1.5 text-center bg-teal-100/70 border-r border-[#FDE68A] text-teal-900">Tendik</th>
+                          <th rowSpan={2} className="px-3 py-2 text-center bg-emerald-200/50 border-r border-[#FDE68A] text-emerald-950 align-middle">Total Guru/Tendik</th>
+                          <th rowSpan={2} className="px-2 py-2 text-center text-red-600 align-middle">Alergi</th>
+                          <th rowSpan={2} className="px-2 py-2 text-center text-emerald-700 align-middle">Tidak Alergi</th>
+                          <th rowSpan={2} className="px-3 py-2 text-center bg-amber-200/60 text-amber-950 align-middle">Total Porsi</th>
+                          <th rowSpan={2} className="px-3 py-2 text-center align-middle">Jadwal</th>
+                          <th rowSpan={2} className="px-3 py-2 align-middle"></th>
+                        </tr>
+                        <tr className="bg-[#FFFBEB] text-[#78350F] text-[10px] font-extrabold text-center border-b border-[#E5E7EB]">
+                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-amber-50/50 text-amber-800">L</th>
+                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-amber-50/50 text-amber-800">P</th>
+                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-blue-50/50 text-blue-800">L</th>
+                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-blue-50/50 text-blue-800">P</th>
+                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-emerald-50/50 text-emerald-800">L</th>
+                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-emerald-50/50 text-emerald-800">P</th>
+                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-teal-50/50 text-teal-800">L</th>
+                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-teal-50/50 text-teal-800">P</th>
+                        </tr>
+                      </>
+                    ) : (
+                      <tr className="bg-[#FEF3C7] text-[10px] font-extrabold text-[#92400E] uppercase tracking-wider">
+                        <th className="px-3 py-3 whitespace-nowrap">Institusi</th>
+                        <th className="px-3 py-3 whitespace-nowrap">Tipe</th>
+                        <th className="px-3 py-3 text-center whitespace-nowrap">QT Siswa / Balita</th>
+                        <th className="px-3 py-3 text-center whitespace-nowrap">QT Bumil / Busui</th>
+                        <th className="px-3 py-3 text-center whitespace-nowrap">QT Guru / Kader</th>
+                        <th className="px-3 py-3 text-center whitespace-nowrap">Pobia Nasi</th>
+                        <th className="px-3 py-3 text-center whitespace-nowrap text-red-600">Alergi</th>
+                        <th className="px-3 py-3 text-center whitespace-nowrap text-emerald-700">Tidak Alergi</th>
+                        <th className="px-3 py-3 text-center whitespace-nowrap">Jumlah</th>
+                        <th className="px-3 py-3 text-center whitespace-nowrap">Jadwal Pengantaran</th>
+                        <th className="px-3 py-3"></th>
+                      </tr>
+                    )}
                   </thead>
                   <tbody>
                     {filteredEntries.length === 0 ? (
                       <tr>
-                        <td colSpan={11} className="px-4 py-8 text-center text-xs font-semibold text-gray-400 italic">
-                          Belum ada data institusi. Klik "Tambah Institusi Baru" di bawah untuk memulai.
+                        <td colSpan={viewMode === 'rinci' ? 16 : 11} className="px-4 py-8 text-center text-xs font-semibold text-gray-400 italic">
+                          Belum ada data institusi. Klik "⚡ Load 27 Master Institusi" di atas atau "Tambah Institusi Baru" di bawah.
                         </td>
                       </tr>
                     ) : (
@@ -1104,27 +1305,53 @@ export function MbgAdminPage() {
                           onUpdate={handleUpdateEntry}
                           onDelete={handleDeleteEntry}
                           isLibur={entry.isSekolahLibur}
-                          onManageMenu={() => setSelectedEntryForMenu(entry)}
                           onManageClasses={() => setSelectedEntryForMenu(entry)}
                           onConfirmAction={setConfirmState}
+                          viewMode={viewMode}
                         />
                       ))
                     )}
                     {/* Total Row */}
                     {filteredEntries.length > 0 && (
-                      <tr className="bg-[#111827] text-white text-xs font-extrabold">
-                        <td className="px-3 py-3" colSpan={3}>TOTAL (YANG AKTIF)</td>
-                        <td className="px-3 py-3 text-center">{grandTotals.siswa}</td>
-                        <td className="px-3 py-3 text-center">{grandTotals.bumil}</td>
-                        <td className="px-3 py-3 text-center">{grandTotals.guru}</td>
-                        <td className="px-3 py-3 text-center">{grandTotals.pobia}</td>
-                        <td className="px-3 py-3 text-center">
-                          <span className="inline-block rounded-full bg-[#FBBF24] text-[#111827] px-3 py-0.5">
-                            {grandTotals.jumlah}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3" colSpan={3}></td>
-                      </tr>
+                      viewMode === 'rinci' ? (
+                        <tr className="bg-[#111827] text-white text-xs font-extrabold">
+                          <td className="px-3 py-3" colSpan={2}>TOTAL (REKAPITULASI)</td>
+                          <td className="px-1.5 py-3 text-center text-amber-300 font-bold">{grandTotals.porsiKecilL}</td>
+                          <td className="px-1.5 py-3 text-center text-amber-300 font-bold">{grandTotals.porsiKecilP}</td>
+                          <td className="px-1.5 py-3 text-center text-blue-300 font-bold">{grandTotals.porsiBesarL}</td>
+                          <td className="px-1.5 py-3 text-center text-blue-300 font-bold">{grandTotals.porsiBesarP}</td>
+                          <td className="px-3 py-3 text-center text-indigo-300 font-black text-sm">{grandTotals.siswa}</td>
+                          <td className="px-1.5 py-3 text-center text-emerald-300 font-bold">{grandTotals.guruL}</td>
+                          <td className="px-1.5 py-3 text-center text-emerald-300 font-bold">{grandTotals.guruP}</td>
+                          <td className="px-1.5 py-3 text-center text-teal-300 font-bold">{grandTotals.tendikL}</td>
+                          <td className="px-1.5 py-3 text-center text-teal-300 font-bold">{grandTotals.tendikP}</td>
+                          <td className="px-3 py-3 text-center text-emerald-300 font-black text-sm">{grandTotals.totalGuruTendik}</td>
+                          <td className="px-2 py-3 text-center text-red-400 font-extrabold">{grandTotals.alergi}</td>
+                          <td className="px-2 py-3 text-center text-emerald-400 font-extrabold">{grandTotals.tidakAlergi}</td>
+                          <td className="px-3 py-3 text-center">
+                            <span className="inline-block rounded-full bg-[#FBBF24] text-[#111827] px-3 py-1 text-xs font-black">
+                              {grandTotals.jumlah}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3" colSpan={2}></td>
+                        </tr>
+                      ) : (
+                        <tr className="bg-[#111827] text-white text-xs font-extrabold">
+                          <td className="px-3 py-3" colSpan={2}>TOTAL (YANG AKTIF)</td>
+                          <td className="px-3 py-3 text-center">{grandTotals.siswa}</td>
+                          <td className="px-3 py-3 text-center">{grandTotals.bumil}</td>
+                          <td className="px-3 py-3 text-center">{grandTotals.guru}</td>
+                          <td className="px-3 py-3 text-center">{grandTotals.pobia}</td>
+                          <td className="px-3 py-3 text-center text-red-400 font-extrabold">{grandTotals.alergi}</td>
+                          <td className="px-3 py-3 text-center text-emerald-400 font-extrabold">{grandTotals.tidakAlergi}</td>
+                          <td className="px-3 py-3 text-center">
+                            <span className="inline-block rounded-full bg-[#FBBF24] text-[#111827] px-3 py-0.5">
+                              {grandTotals.jumlah}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3" colSpan={2}></td>
+                        </tr>
+                      )
                     )}
                   </tbody>
                 </table>

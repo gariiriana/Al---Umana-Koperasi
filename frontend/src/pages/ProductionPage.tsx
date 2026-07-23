@@ -14,6 +14,7 @@ import { ProductImage } from "@/components/ProductImage";
 import { parseIngredients } from "@/lib/ingredientsParser";
 import { getProduct } from "@/services/catalogService";
 import { useToast } from "@/contexts/ToastContext";
+import { isOrderPastDeadline } from "@/lib/orderHelpers";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -28,25 +29,6 @@ const formatSimpleAddress = (address: string) => {
     return parts[0];
   }
   return address.replace(/https?:\/\/[^\s]+/, "").trim();
-};
-
-const isOrderPastDeadline = (order: Order): boolean => {
-  if (!order.eventDate) return false;
-  const datePart = order.eventDate.slice(0, 10);
-  let time = "12:00";
-  if (order.deliveryTime) {
-    const match = order.deliveryTime.match(/(\d{2})[:.](\d{2})/);
-    if (match) {
-      time = `${match[1]}:${match[2]}`;
-    }
-  }
-  const ts = Date.parse(`${datePart}T${time}`);
-  if (isNaN(ts)) return false;
-  
-  const activeStatuses = ["PENDING", "IN_PRODUCTION", "QC", "READY_TO_DELIVER", "OUT_FOR_DELIVERY", "READY"];
-  if (!activeStatuses.includes(order.status)) return false;
-  
-  return Date.now() > ts;
 };
 
 const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {

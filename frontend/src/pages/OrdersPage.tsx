@@ -20,6 +20,7 @@ import { ProductImage } from "@/components/ProductImage";
 import html2canvas from "html2canvas-pro";
 import { aggregateIngredients } from "@/lib/ingredientsParser";
 import { getProduct } from "@/services/catalogService";
+import { isOrderPastDeadline } from "@/lib/orderHelpers";
 
 const statusShortLabels: Record<OrderStatus, string> = {
   PENDING: "Pending",
@@ -338,6 +339,11 @@ export function OrdersPage() {
   };
 
   const handleUpdatePaymentStatus = async (orderId: string, status: PaymentStatus) => {
+    const o = orders.find((x) => x.id === orderId);
+    if (o && isOrderPastDeadline(o)) {
+      showToast({ message: "Pesanan ini sudah melewati deadline dan tidak dapat diubah.", variant: "error" });
+      return;
+    }
     try {
       await updatePaymentStatus(orderId, status);
       showToast({ message: `Status pembayaran diperbarui ke ${status}`, variant: "success" });
@@ -348,6 +354,11 @@ export function OrdersPage() {
   };
 
   const handleTransition = async (orderId: string, action: TransitionAction, reason?: string) => {
+    const o = orders.find((x) => x.id === orderId);
+    if (o && isOrderPastDeadline(o)) {
+      showToast({ message: "Pesanan ini sudah melewati deadline dan tidak dapat diubah.", variant: "error" });
+      return;
+    }
     setTransitioningId(orderId);
     try {
       await transitionOrder(orderId, { action, reason });
@@ -362,6 +373,11 @@ export function OrdersPage() {
 
   const handleManualValidationConfirm = async (data: { contactPhone: string; screenshotFileIds: string[]; notes: string }) => {
     if (!validationTargetId) return;
+    const o = orders.find((x) => x.id === validationTargetId);
+    if (o && isOrderPastDeadline(o)) {
+      showToast({ message: "Pesanan ini sudah melewati deadline dan tidak dapat divalidasi.", variant: "error" });
+      return;
+    }
     try {
       await manuallyValidateOrder(validationTargetId, data);
       showToast({ message: "Verifikasi manual berhasil disimpan!", variant: "success" });
@@ -372,6 +388,11 @@ export function OrdersPage() {
   };
 
   const handleDeleteOrder = async (orderId: string) => {
+    const o = orders.find((x) => x.id === orderId);
+    if (o && isOrderPastDeadline(o)) {
+      showToast({ message: "Pesanan ini sudah melewati deadline dan tidak dapat dihapus.", variant: "error" });
+      return;
+    }
     if (!window.confirm("Apakah Anda yakin ingin menghapus pesanan ini secara permanen dari sistem?")) return;
     try {
       await deleteOrder(orderId);
@@ -405,6 +426,10 @@ export function OrdersPage() {
 
   const handleSaveNotes = async () => {
     if (!previewInvoiceOrder) return;
+    if (isOrderPastDeadline(previewInvoiceOrder)) {
+      showToast({ message: "Pesanan ini sudah melewati deadline dan tidak dapat diubah.", variant: "error" });
+      return;
+    }
     setSavingNotes(true);
     setUploadingComplaint(true);
     
@@ -450,6 +475,10 @@ export function OrdersPage() {
     if (!activeEditRowId) return;
     const targetOrder = filteredOrders.find((o) => o.id === activeEditRowId);
     if (!targetOrder) return;
+    if (isOrderPastDeadline(targetOrder)) {
+      showToast({ message: "Pesanan ini sudah melewati deadline dan tidak dapat diubah.", variant: "error" });
+      return;
+    }
     
     setSavingNotes(true);
     setUploadingComplaint(true);
@@ -1540,6 +1569,7 @@ export function OrdersPage() {
                   const isSigned = !!o.invoiceSignedAt;
                   const isManuallyValidated = !!o.manualValidation;
                   const shortId = o.id.slice(-6).toUpperCase();
+                  const isPast = isOrderPastDeadline(o);
 
                   return (
                     <React.Fragment key={o.id}>
@@ -1639,12 +1669,19 @@ export function OrdersPage() {
 
                       {/* Status Operasional */}
                       <td className="py-4 px-4 whitespace-nowrap">
-                        <StatusBadge status={o.status} />
+                        <div className="flex flex-col gap-1.5 items-start">
+                          <StatusBadge status={o.status} />
+                          {isPast && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-red-100 text-red-700 animate-pulse border border-red-300">
+                              <AlertTriangle className="h-3 w-3 text-red-600 shrink-0" /> TERLEWAT
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Status Pembayaran */}
                       <td className="py-4 px-4 whitespace-nowrap">
-                        {isMonitoring ? (
+                        {isMonitoring || isPast ? (
                           <span
                             className={`inline-block text-xs font-bold rounded-lg px-2.5 py-1.5 border ${
                               o.paymentStatus === "SUDAH_DIBAYAR"
@@ -1809,7 +1846,7 @@ export function OrdersPage() {
                               )}
                             </button>
 
-                            {!isMonitoring && (
+                            {!isMonitoring && !isPast && (
                               <>
                                 <Link
                                   to={`/admin/orders/${o.id}/edit`}
@@ -1988,13 +2025,15 @@ export function OrdersPage() {
                                   )}
 
                                   {/* Edit button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleStartEditNotes(o)}
-                                    className="text-[10px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded px-2 py-1 cursor-pointer shrink-0 transition-all ml-auto self-center"
-                                  >
-                                    Edit Catatan
-                                  </button>
+                                  {!isPast && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEditNotes(o)}
+                                      className="text-[10px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded px-2 py-1 cursor-pointer shrink-0 transition-all ml-auto self-center"
+                                    >
+                                      Edit Catatan
+                                    </button>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -2031,6 +2070,7 @@ export function OrdersPage() {
             const isSigned = !!o.invoiceSignedAt;
             const isManuallyValidated = !!o.manualValidation;
             const shortId = o.id.slice(-6).toUpperCase();
+            const isPast = isOrderPastDeadline(o);
 
             return (
               <div
@@ -2054,12 +2094,19 @@ export function OrdersPage() {
                       {o.orderType}
                     </span>
                   </div>
-                  <StatusBadge
-                    status={o.status}
-                    className="px-1 py-0.5 text-[8px] font-extrabold"
-                  >
-                    {statusShortLabels[o.status]}
-                  </StatusBadge>
+                  <div className="flex flex-col items-end gap-1">
+                    <StatusBadge
+                      status={o.status}
+                      className="px-1 py-0.5 text-[8px] font-extrabold"
+                    >
+                      {statusShortLabels[o.status]}
+                    </StatusBadge>
+                    {isPast && (
+                      <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-extrabold bg-red-100 text-red-700 animate-pulse border border-red-300">
+                        <AlertTriangle className="h-2.5 w-2.5 text-red-600 shrink-0" /> TERLEWAT
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Body: Recipient & Instansi */}
@@ -2134,7 +2181,7 @@ export function OrdersPage() {
                 <div className="flex flex-col gap-1 pt-1 border-t border-[#F3F4F6]">
                   <div className="flex flex-wrap items-center justify-between gap-1">
                     <div className="flex items-center gap-1">
-                      {isMonitoring ? (
+                      {isMonitoring || isPast ? (
                         <span
                           className={`inline-block text-[8px] font-extrabold rounded-md px-1 py-0.5 border ${
                             o.paymentStatus === "SUDAH_DIBAYAR"
@@ -2204,7 +2251,7 @@ export function OrdersPage() {
                     <button
                       className="bg-[#D97706] hover:bg-[#B45309] text-white w-full h-8 rounded-lg text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
                       onClick={() => handleTransition(o.id, "start-production")}
-                      disabled={transitioningId === o.id}
+                      disabled={transitioningId === o.id || isPast}
                     >
                       Mulai Masak
                     </button>
@@ -2213,7 +2260,7 @@ export function OrdersPage() {
                     <button
                       className="bg-purple-600 hover:bg-purple-700 text-white w-full h-8 rounded-lg text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
                       onClick={() => handleTransition(o.id, "complete-production")}
-                      disabled={transitioningId === o.id}
+                      disabled={transitioningId === o.id || isPast}
                     >
                       Selesai Masak
                     </button>
@@ -2223,7 +2270,7 @@ export function OrdersPage() {
                       <button
                         className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 rounded-lg text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
                         onClick={() => handleTransition(o.id, "qc-pass")}
-                        disabled={transitioningId === o.id}
+                        disabled={transitioningId === o.id || isPast}
                       >
                         Lolos
                       </button>
@@ -2233,7 +2280,7 @@ export function OrdersPage() {
                           const reason = prompt("Masukkan alasan kegagalan QC:");
                           if (reason) handleTransition(o.id, "qc-fail", reason);
                         }}
-                        disabled={transitioningId === o.id}
+                        disabled={transitioningId === o.id || isPast}
                       >
                         Gagal
                       </button>
@@ -2349,7 +2396,7 @@ export function OrdersPage() {
                         )}
                       </button>
 
-                      {!isMonitoring && (
+                      {!isMonitoring && !isPast && (
                         <button
                           onClick={() => handleDeleteOrder(o.id)}
                           className="text-red-600 hover:text-white hover:bg-red-600 border border-red-200 hover:border-red-600 rounded-lg transition-all flex items-center justify-center h-8 w-8 shrink-0 cursor-pointer"
@@ -2370,7 +2417,7 @@ export function OrdersPage() {
                         <AlertTriangle className="w-3 h-3 text-amber-500" />
                         <span>Komplain & Bukti</span>
                       </div>
-                      {activeEditRowId !== o.id && (
+                      {activeEditRowId !== o.id && !isPast && (
                         <button
                           type="button"
                           onClick={() => handleStartEditNotes(o)}
@@ -3193,7 +3240,7 @@ export function OrdersPage() {
                   </>
                 )}
               </Button>
-              {!isMonitoring && (
+              {!isMonitoring && !isOrderPastDeadline(previewInvoiceOrder) && (
                 <>
                   <Link to={`/admin/orders/${previewInvoiceOrder.id}/edit`}>
                     <Button

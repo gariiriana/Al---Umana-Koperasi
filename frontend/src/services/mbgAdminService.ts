@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { MbgPmBatch, MbgPmEntry, MbgBatchStatus } from '@/types/mbg';
+import { MBG_MASTER_INSTITUTIONS } from '@/constants/mbgConstants';
 
 const BATCHES_COLLECTION = 'mbg_pm_batches';
 const ENTRIES_COLLECTION = 'mbg_pm_entries';
@@ -145,21 +146,32 @@ export function subscribeAllEntries(
   );
 }
 
+function cleanUndefined<T>(obj: T): T {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanUndefined) as unknown as T;
+  }
+  if (typeof obj === 'object') {
+    const newObj: Record<string, unknown> = {};
+    for (const key of Object.keys(obj)) {
+      const val = (obj as Record<string, unknown>)[key];
+      if (val !== undefined) {
+        newObj[key] = cleanUndefined(val);
+      }
+    }
+    return newObj as unknown as T;
+  }
+  return obj;
+}
+
 export async function addEntry(
   entry: Omit<MbgPmEntry, 'id'>
 ): Promise<string> {
-  const cleanEntry: Record<string, unknown> = {};
-  for (const [key, val] of Object.entries(entry)) {
-    if (val !== undefined) {
-      cleanEntry[key] = val;
-    }
-  }
-
-  const docRef = await addDoc(collection(db, ENTRIES_COLLECTION), {
-    ...cleanEntry,
+  const docRef = await addDoc(collection(db, ENTRIES_COLLECTION), cleanUndefined({
+    ...entry,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-  });
+  }));
   return docRef.id;
 }
 
@@ -173,7 +185,7 @@ export async function updateEntry(
     if (val === undefined) {
       scrubbed[key] = deleteField();
     } else {
-      scrubbed[key] = val;
+      scrubbed[key] = cleanUndefined(val);
     }
   }
 
@@ -196,11 +208,11 @@ export async function addMultipleEntries(
   const now = new Date().toISOString();
   entries.forEach((entry) => {
     const ref = doc(collection(db, ENTRIES_COLLECTION));
-    batch.set(ref, {
+    batch.set(ref, cleanUndefined({
       ...entry,
       createdAt: now,
       updatedAt: now,
-    });
+    }));
   });
   await batch.commit();
 }
@@ -265,15 +277,74 @@ export async function copyFromBatch(
   snapshot.docs.forEach((d) => {
     const data = d.data() as MbgPmEntry;
     const ref = doc(collection(db, ENTRIES_COLLECTION));
-    batch.set(ref, {
+    batch.set(ref, cleanUndefined({
       ...data,
       batchId: targetBatchId,
       isSekolahLibur: false,
       createdBy,
       createdAt: now,
       updatedAt: now,
-    });
+    }));
   });
 
   await batch.commit();
 }
+
+/**
+ * Bulk add all 27 preset master institutions into a batch in 1 click.
+ */
+export async function bulkAddEntriesFromMaster(
+  batchId: string,
+  createdBy: string
+): Promise<void> {
+  const batch = writeBatch(db);
+  const now = new Date().toISOString();
+
+  MBG_MASTER_INSTITUTIONS.forEach((item, idx) => {
+    const ref = doc(collection(db, ENTRIES_COLLECTION));
+    const jumlah = (item.qtSiswaBalita || 0) + (item.qtBumilBusui || 0) + (item.qtGuruKader || 0);
+    const entryData: Omit<MbgPmEntry, 'id'> = {
+      batchId,
+      institutionName: item.institutionName,
+      institutionType: item.institutionType,
+      schoolLevel: item.schoolLevel,
+      qtSiswaBalita: item.qtSiswaBalita,
+      qtBumilBusui: item.qtBumilBusui,
+      qtBumil: item.qtBumil || 0,
+      qtBusui: item.qtBusui || 0,
+      qtGuruKader: item.qtGuruKader,
+      qtPobiaNasi: item.qtPobiaNasi || 0,
+      qtAlergi: item.qtAlergi || 0,
+      qtTidakAlergi: item.qtTidakAlergi ?? (jumlah - (item.qtAlergi || 0)),
+      keteranganAlergi: item.keteranganAlergi || '',
+      qtPorsiBalita: item.qtPorsiBalita || 0,
+      qtPorsiKecil: item.qtPorsiKecil || 0,
+      qtPorsiBesar: item.qtPorsiBesar || 0,
+      qtPorsiBumilBusui: item.qtPorsiBumilBusui || 0,
+      qtPorsiKecilL: item.qtPorsiKecilL || 0,
+      qtPorsiKecilP: item.qtPorsiKecilP || 0,
+      qtPorsiBesarL: item.qtPorsiBesarL || 0,
+      qtPorsiBesarP: item.qtPorsiBesarP || 0,
+      qtGuruL: item.qtGuruL || 0,
+      qtGuruP: item.qtGuruP || 0,
+      qtTendikL: item.qtTendikL || 0,
+      qtTendikP: item.qtTendikP || 0,
+      jumlah,
+      jadwalPengantaran: item.jadwalPengantaran || '06.00-08.30',
+      assignedPetugasId: '',
+      assignedPetugasName: '',
+      menuItems: [],
+      menuKeringanItems: [],
+      isSekolahLibur: false,
+      notes: '',
+      sortOrder: idx + 1,
+      createdBy,
+      createdAt: now,
+      updatedAt: now,
+    };
+    batch.set(ref, cleanUndefined(entryData));
+  });
+
+  await batch.commit();
+}
+

@@ -8,14 +8,21 @@ let timeOffset = 0; // serverTime - localTime
 let timeSynced = false;
 let appLoadPerformanceTime = performance.now();
 let initialServerTime = Date.now();
+let initialLocalTime = Date.now();
 
 export async function syncSecureTime(): Promise<number> {
   try {
-    const isBrowser = typeof window !== "undefined" && window.location && window.location.origin && !window.location.origin.startsWith("null") && !window.location.origin.includes("about:");
+    const isBrowser =
+      typeof window !== "undefined" &&
+      window.location &&
+      window.location.origin &&
+      !window.location.origin.startsWith("null") &&
+      !window.location.origin.includes("about:");
+
     if (!isBrowser) {
       throw new Error("Non-browser environment detected, skipping local sync");
     }
-    
+
     const start = performance.now();
     // Fetch from backend healthz endpoint using absolute URL
     const res = await fetch(`${window.location.origin}/healthz`, { method: "HEAD" });
@@ -24,9 +31,11 @@ export async function syncSecureTime(): Promise<number> {
 
     const dateStr = res.headers.get("date") || res.headers.get("Date");
     if (dateStr) {
-      const serverTime = new Date(dateStr).getTime() + (rtt / 2);
-      timeOffset = serverTime - Date.now();
+      const now = Date.now();
+      const serverTime = new Date(dateStr).getTime() + rtt / 2;
+      timeOffset = serverTime - now;
       initialServerTime = serverTime;
+      initialLocalTime = now;
       appLoadPerformanceTime = performance.now();
       timeSynced = true;
       console.log(`[SecureTime] Synced with backend. Offset: ${timeOffset}ms, RTT: ${rtt}ms`);
@@ -42,9 +51,11 @@ export async function syncSecureTime(): Promise<number> {
       const end = performance.now();
       const rtt = end - start;
       if (data && data.datetime) {
-        const serverTime = new Date(data.datetime).getTime() + (rtt / 2);
-        timeOffset = serverTime - Date.now();
+        const now = Date.now();
+        const serverTime = new Date(data.datetime).getTime() + rtt / 2;
+        timeOffset = serverTime - now;
         initialServerTime = serverTime;
+        initialLocalTime = now;
         appLoadPerformanceTime = performance.now();
         timeSynced = true;
         console.log(`[SecureTime] Synced with WorldTimeAPI. Offset: ${timeOffset}ms`);
@@ -71,14 +82,18 @@ export function getSecureTime(): Date {
 
 /**
  * Checks if the system time has been manipulated relative to performance.now().
- * If the difference between current Date.now() and expected secure time is too large
- * (> 15 seconds), it indicates that the user changed their device system clock.
+ * If the user alters their device system clock after sync, Date.now() will drift from
+ * expectedLocalTime (initialLocalTime + elapsed).
  */
 export function isTimeManipulated(): boolean {
   if (!timeSynced) return false; // Can't determine if never synced
+  const elapsed = performance.now() - appLoadPerformanceTime;
+  const expectedLocalTime = initialLocalTime + elapsed;
   const actualLocalTime = Date.now();
-  const secureTime = getSecureTime().getTime();
-  return Math.abs(actualLocalTime - secureTime) > 15_000;
+
+  // If local device clock shifted by > 30 seconds since sync took place
+  const postSyncDrift = Math.abs(actualLocalTime - expectedLocalTime);
+  return postSyncDrift > 30_000;
 }
 
 export function isSecureTimeSynced(): boolean {

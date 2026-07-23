@@ -1,0 +1,786 @@
+{
+  "informasiBahanPangan": [
+    {
+      "namaBahan": "Asam Jawa",
+      "bdd": 100.0,
+      "harga": 27000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Ayam Fillet",
+      "bdd": 100.0,
+      "harga": 56000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Ayam Potong",
+      "bdd": 58.0,
+      "harga": 40000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Baking Powder Koepoe-Koepoe @45g",
+      "bdd": 100.0,
+      "harga": 8000,
+      "satuan": "botol",
+      "unitBeli": 45.0
+    },
+    {
+      "namaBahan": "Bawang Bombay",
+      "bdd": 100.0,
+      "harga": 40000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bawang Merah Iris",
+      "bdd": 100.0,
+      "harga": 55000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bawang Merah Kupas",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bawang Putih Giling",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bawang Putih Kupas",
+      "bdd": 100.0,
+      "harga": 45000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bayam",
+      "bdd": 80.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bihun Jagung Padamu @300g",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "pcs",
+      "unitBeli": 300.0
+    },
+    {
+      "namaBahan": "Blue Band Margarin",
+      "bdd": 100.0,
+      "harga": 43000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bumbu Dasar Acar Kuning",
+      "bdd": 100.0,
+      "harga": 40000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bumbu Dasar Balado",
+      "bdd": 100.0,
+      "harga": 40000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bumbu Dasar Gulai Kuning",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bumbu Dasar Kari Ayam Kuning",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bumbu Dasar Kuning",
+      "bdd": 100.0,
+      "harga": 40000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bumbu Dasar Kuning (Kunyit Sedikit)",
+      "bdd": 100.0,
+      "harga": 40000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bumbu Dasar Pesmol (Kunyit Sedikit)",
+      "bdd": 100.0,
+      "harga": 40000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bumbu Dasar Putih",
+      "bdd": 100.0,
+      "harga": 40000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bumbu Dasar Rendang",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bumbu Dasar Rica",
+      "bdd": 100.0,
+      "harga": 40000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Buncis",
+      "bdd": 90.0,
+      "harga": 14000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Bunga Lawang",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Cabai Hijau Besar",
+      "bdd": 100.0,
+      "harga": 20000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Cabai Merah Besar",
+      "bdd": 100.0,
+      "harga": 37000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Cabai Merah Besar Giling",
+      "bdd": 100.0,
+      "harga": 60000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Caisim",
+      "bdd": 87.0,
+      "harga": 10000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Cuka Makan Dixi @650ml",
+      "bdd": 100.0,
+      "harga": 18000,
+      "satuan": "botol",
+      "unitBeli": 650.0
+    },
+    {
+      "namaBahan": "Daging Sapi",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Daun Bawang",
+      "bdd": 100.0,
+      "harga": 15000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Daun Jeruk",
+      "bdd": 100.0,
+      "harga": 70000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Daun Kari",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "ikat",
+      "unitBeli": 1.0
+    },
+    {
+      "namaBahan": "Daun Kemangi",
+      "bdd": 100.0,
+      "harga": 35000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Daun Kunyit",
+      "bdd": 100.0,
+      "harga": 6000,
+      "satuan": "ikat",
+      "unitBeli": 1.0
+    },
+    {
+      "namaBahan": "Daun Salam",
+      "bdd": 100.0,
+      "harga": 8500,
+      "satuan": "ikat",
+      "unitBeli": 1.0
+    },
+    {
+      "namaBahan": "Daun Seledri",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Daun Singkong",
+      "bdd": 87.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Edamame",
+      "bdd": 50.0,
+      "harga": 34000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Garam Refina @500g",
+      "bdd": 100.0,
+      "harga": 8000,
+      "satuan": "pcs",
+      "unitBeli": 500.0
+    },
+    {
+      "namaBahan": "Gula Aren",
+      "bdd": 100.0,
+      "harga": 27000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Gula Pasir",
+      "bdd": 100.0,
+      "harga": 19000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Ikan Lele Fillet",
+      "bdd": 100.0,
+      "harga": 67000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Ikan Nila",
+      "bdd": 80.0,
+      "harga": 37000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Ikan Tuna",
+      "bdd": 80.0,
+      "harga": 48000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Jagung Manis Kupas",
+      "bdd": 40.0,
+      "harga": 15000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Jahe Bonggol",
+      "bdd": 100.0,
+      "harga": 25000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Jahe Giling",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Jamur Kuping",
+      "bdd": 95.0,
+      "harga": 26000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Kacang Panjang",
+      "bdd": 90.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Kangkung",
+      "bdd": 75.0,
+      "harga": 13000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Kapulaga",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Kayu Manis",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Kecap Asin ABC @620ml",
+      "bdd": 100.0,
+      "harga": 19000,
+      "satuan": "botol",
+      "unitBeli": 133.0
+    },
+    {
+      "namaBahan": "Kecap Inggris ABC @195ml",
+      "bdd": 100.0,
+      "harga": 17000,
+      "satuan": "botol",
+      "unitBeli": 195.0
+    },
+    {
+      "namaBahan": "Kecap Manis ABC @825g",
+      "bdd": 100.0,
+      "harga": 27000,
+      "satuan": "pcs",
+      "unitBeli": 825.0
+    },
+    {
+      "namaBahan": "Kelapa Parut",
+      "bdd": 100.0,
+      "harga": 15000,
+      "satuan": "butir",
+      "unitBeli": 400.0
+    },
+    {
+      "namaBahan": "Kencur",
+      "bdd": 100.0,
+      "harga": 60000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Ketumbar Bubuk",
+      "bdd": 100.0,
+      "harga": 40000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Kol",
+      "bdd": 85.0,
+      "harga": 12000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Kunyit Giling",
+      "bdd": 100.0,
+      "harga": 25000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Labu Siam",
+      "bdd": 83.0,
+      "harga": 11000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Lada Putih Bubuk",
+      "bdd": 100.0,
+      "harga": 150000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Lengkuas Bonggol",
+      "bdd": 100.0,
+      "harga": 15000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Maizena",
+      "bdd": 100.0,
+      "harga": 25000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Mentimun",
+      "bdd": 85.0,
+      "harga": 12000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Mentimun (Acar)",
+      "bdd": 50.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Minyak Wijen @600ml",
+      "bdd": 100.0,
+      "harga": 55000,
+      "satuan": "botol",
+      "unitBeli": 600.0
+    },
+    {
+      "namaBahan": "Nangka Muda",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Nasi",
+      "bdd": 50.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Nasi Premium",
+      "bdd": 60.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Santan Kelapa Murni",
+      "bdd": 100.0,
+      "harga": 15000,
+      "satuan": "butir",
+      "unitBeli": 750.0
+    },
+    {
+      "namaBahan": "Santan Kelapa Sun Kara @1liter",
+      "bdd": 100.0,
+      "harga": 65000,
+      "satuan": "liter",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Saus Barbeque Delmonte @1kg",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Saus Bulgogi Saori @133ml",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "botol",
+      "unitBeli": 133.0
+    },
+    {
+      "namaBahan": "Saus Sambal Delmonte Extra Hot @1kg",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Saus Teriyaki Saori @1liter",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "botol",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Saus Tiram Saori @1liter",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "botol",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Saus Tomat Delmonte @1kg",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Sawi Putih",
+      "bdd": 87.0,
+      "harga": 11000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Selada",
+      "bdd": 69.0,
+      "harga": 34000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Sereh",
+      "bdd": 100.0,
+      "harga": 8500,
+      "satuan": "ikat",
+      "unitBeli": 1.0
+    },
+    {
+      "namaBahan": "Susu UHT Cimory Full Cream 125 ml",
+      "bdd": 100.0,
+      "harga": 3200,
+      "satuan": "pcs",
+      "unitBeli": 1.0
+    },
+    {
+      "namaBahan": "Susu UHT Ultra Full Cream 125 ml",
+      "bdd": 100.0,
+      "harga": 3300,
+      "satuan": "pcs",
+      "unitBeli": 1.0
+    },
+    {
+      "namaBahan": "Tahu",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Telur Ayam",
+      "bdd": 89.0,
+      "harga": 27000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Tempe",
+      "bdd": 100.0,
+      "harga": 9500,
+      "satuan": "lonjor",
+      "unitBeli": 660.0
+    },
+    {
+      "namaBahan": "Tepung Beras Rose Brand @500g",
+      "bdd": 100.0,
+      "harga": 9500,
+      "satuan": "pcs",
+      "unitBeli": 500.0
+    },
+    {
+      "namaBahan": "Tepung Bumbu Kentucky Sasa @850g",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "pcs",
+      "unitBeli": 850.0
+    },
+    {
+      "namaBahan": "Tepung Bumbu Serbaguna Sasa @900g",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "pcs",
+      "unitBeli": 900.0
+    },
+    {
+      "namaBahan": "Tepung Terigu Cakra Kembar @1kg",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Tepung Terigu Lencana Merah @1kg",
+      "bdd": 100.0,
+      "harga": 0,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Tomat Merah",
+      "bdd": 100.0,
+      "harga": 16000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Totole Kaldu Jamur Non Kolesterol @1kg",
+      "bdd": 100.0,
+      "harga": 58000,
+      "satuan": "pcs",
+      "unitBeli": 1000.0
+    },
+    {
+      "namaBahan": "Wortel",
+      "bdd": 80.0,
+      "harga": 12000,
+      "satuan": "kg",
+      "unitBeli": 1000.0
+    }
+  ],
+  "kategoriBahanPangan": {
+    "bahanUtama": [
+      "Nasi",
+      "Nasi Premium",
+      "Ayam Potong",
+      "Ayam Fillet",
+      "Telur Ayam",
+      "Daging Sapi",
+      "Ikan Nila",
+      "Ikan Tuna",
+      "Ikan Lele",
+      "Tahu",
+      "Tempe",
+      "Edamame",
+      "Kacang Polong",
+      "Susu UHT Ultra Full Cream 125 ml",
+      "Susu UHT Cimory Full Cream 125 ml",
+      "Labu Siam",
+      "Wortel",
+      "Kangkung",
+      "Buncis",
+      "Selada Hidroponik",
+      "Mentimun",
+      "Sawi Putih",
+      "Bayam",
+      "Jagung Manis Kupas",
+      "Kacang Panjang",
+      "Daun Singkong",
+      "Nangka Muda",
+      "Kol",
+      "Caisim",
+      "Jamur Kuping",
+      "Anggur Merah Australia",
+      "Anggur China",
+      "Apel Fuji (Uk 125)",
+      "Apel Fuji (Uk 138)",
+      "Jeruk Medan Brastagi",
+      "Jeruk Medan Polos",
+      "Jeruk Pontianak",
+      "Jeruk Sunkist Neval",
+      "Kelengkeng Stiker Biru",
+      "Kelengkeng Stiker Merah",
+      "Kurma Sukari",
+      "Pear Century",
+      "Pisang Ambon"
+    ],
+    "bumbuPelengkap": [
+      "Bihun Jagung Padamu @300g",
+      "Blue Band Margarin",
+      "Gula Aren",
+      "Gula Pasir",
+      "Kecap Asin ABC @620ml",
+      "Kecap Inggris ABC @195ml",
+      "Kecap Manis ABC @825g",
+      "Kelapa Parut",
+      "Maizena",
+      "Minyak Wijen @600ml",
+      "Santan Kelapa Murni",
+      "Santan Kelapa Sun Kara @1liter",
+      "Saus Barbeque Delmonte @1kg",
+      "Saus Bulgogi Saori @133ml",
+      "Saus Sambal Delmonte Extra Hot @1kg",
+      "Saus Teriyaki Saori @1liter",
+      "Saus Tiram Saori @1liter",
+      "Saus Tomat Delmonte @1kg",
+      "Tepung Beras Rose Brand @500g",
+      "Tepung Bumbu Kentucky Sasa @850g",
+      "Tepung Bumbu Serbaguna Sasa @900g",
+      "Tepung Terigu Cakra Kembar @1kg",
+      "Tepung Terigu Lencana Merah @1kg"
+    ],
+    "bumbuDasar": [
+      "Asam Jawa",
+      "Baking Powder Koepoe-Koepoe @45g",
+      "Bawang Bombay",
+      "Bawang Merah Iris",
+      "Bawang Merah Kupas",
+      "Bawang Putih Giling",
+      "Bawang Putih Kupas",
+      "Bumbu Dasar Acar Kuning",
+      "Bumbu Dasar Balado",
+      "Bumbu Dasar Gulai Kuning",
+      "Bumbu Dasar Kari Ayam Kuning",
+      "Bumbu Dasar Kuning",
+      "Bumbu Dasar Kuning (Kunyit Sedikit)",
+      "Bumbu Dasar Pesmol (Kunyit Sedikit)",
+      "Bumbu Dasar Putih",
+      "Bumbu Dasar Rendang",
+      "Bumbu Dasar Rica",
+      "Bumbu Dasar Tongseng",
+      "Bunga Lawang",
+      "Cabai Hijau Besar",
+      "Cabai Merah Besar",
+      "Cabai Merah Besar Giling",
+      "Cuka Makan Dixi @650ml",
+      "Daun Bawang",
+      "Daun Jeruk",
+      "Daun Kari",
+      "Daun Kemangi",
+      "Daun Kunyit",
+      "Daun Salam",
+      "Daun Seledri",
+      "Jahe Bonggol",
+      "Jahe Giling",
+      "Kapulaga",
+      "Kayu Manis",
+      "Kencur",
+      "Ketumbar Bubuk",
+      "Kunyit Giling",
+      "Lada Putih Bubuk",
+      "Lengkuas Bonggol",
+      "Sereh",
+      "Tomat Merah",
+      "Garam Refina @500g",
+      "Totole Kaldu Jamur Non Kolesterol @1kg"
+    ]
+  }
+}

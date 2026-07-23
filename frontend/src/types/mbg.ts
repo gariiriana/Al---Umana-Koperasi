@@ -102,8 +102,30 @@ export interface MbgPmEntry {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  /** Jumlah penerima yang memiliki alergi */
+  qtAlergi?: number;
+  /** Jumlah penerima yang tidak memiliki alergi */
+  qtTidakAlergi?: number;
+  /** Catatan/rincian alergi */
+  keteranganAlergi?: string;
   /** Breakdown per kelas (hanya untuk tipe 'sekolah') */
   classesBreakdown?: MbgClassBreakdown[];
+  /** Breakdown Porsi Kecil Laki-laki */
+  qtPorsiKecilL?: number;
+  /** Breakdown Porsi Kecil Perempuan */
+  qtPorsiKecilP?: number;
+  /** Breakdown Porsi Besar Laki-laki */
+  qtPorsiBesarL?: number;
+  /** Breakdown Porsi Besar Perempuan */
+  qtPorsiBesarP?: number;
+  /** Breakdown Guru Laki-laki */
+  qtGuruL?: number;
+  /** Breakdown Guru Perempuan */
+  qtGuruP?: number;
+  /** Breakdown Tendik Laki-laki */
+  qtTendikL?: number;
+  /** Breakdown Tendik Perempuan */
+  qtTendikP?: number;
 }
 
 export interface MbgClassBreakdown {
@@ -111,6 +133,9 @@ export interface MbgClassBreakdown {
   className: string;
   totalSiswa: number;
   qtPobiaNasi: number;
+  qtAlergi?: number;
+  qtTidakAlergi?: number;
+  keteranganAlergi?: string;
   portionType?: 'balita' | 'kecil' | 'besar' | 'ibu';
   qtPorsiBalita?: number;
   qtPorsiKecil?: number;

@@ -1,0 +1,202 @@
+[
+  {
+    "targetGroup": "SISWA TK/PAUD",
+    "key": "tk_paud",
+    "harian": {
+      "energi": 1400,
+      "protein": 25,
+      "lemak": 50,
+      "karbohidrat": 220,
+      "serat": 20
+    },
+    "makanSiang": {
+      "energi": 315,
+      "protein": 6,
+      "lemak": 11,
+      "karbohidrat": 50,
+      "serat": 5
+    },
+    "kudapan": {
+      "energi": 210,
+      "protein": 4,
+      "lemak": 8,
+      "karbohidrat": 33,
+      "serat": 3
+    }
+  },
+  {
+    "targetGroup": "SISWA SD/MI KELAS 1-3",
+    "key": "sd_1_3",
+    "harian": {
+      "energi": 1650,
+      "protein": 40,
+      "lemak": 55,
+      "karbohidrat": 250,
+      "serat": 23
+    },
+    "makanSiang": {
+      "energi": 371,
+      "protein": 9,
+      "lemak": 12,
+      "karbohidrat": 56,
+      "serat": 5
+    },
+    "kudapan": {
+      "energi": 248,
+      "protein": 6,
+      "lemak": 8,
+      "karbohidrat": 38,
+      "serat": 3
+    }
+  },
+  {
+    "targetGroup": "SISWA SD/MI KELAS 4-6",
+    "key": "sd_4_6",
+    "harian": {
+      "energi": 1950,
+      "protein": 53,
+      "lemak": 65,
+      "karbohidrat": 290,
+      "serat": 28
+    },
+    "makanSiang": {
+      "energi": 634,
+      "protein": 17,
+      "lemak": 21,
+      "karbohidrat": 94,
+      "serat": 9
+    },
+    "kudapan": {
+      "energi": 293,
+      "protein": 8,
+      "lemak": 10,
+      "karbohidrat": 44,
+      "serat": 4
+    }
+  },
+  {
+    "targetGroup": "SISWA SMP/MTS",
+    "key": "smp_mts",
+    "harian": {
+      "energi": 2225,
+      "protein": 68,
+      "lemak": 75,
+      "karbohidrat": 325,
+      "serat": 32
+    },
+    "makanSiang": {
+      "energi": 723,
+      "protein": 22,
+      "lemak": 24,
+      "karbohidrat": 106,
+      "serat": 10
+    },
+    "kudapan": {
+      "energi": 334,
+      "protein": 10,
+      "lemak": 11,
+      "karbohidrat": 49,
+      "serat": 5
+    }
+  },
+  {
+    "targetGroup": "SISWA SMA/MA/SMK",
+    "key": "sma_smk",
+    "harian": {
+      "energi": 2375,
+      "protein": 70,
+      "lemak": 78,
+      "karbohidrat": 350,
+      "serat": 33
+    },
+    "makanSiang": {
+      "energi": 772,
+      "protein": 23,
+      "lemak": 25,
+      "karbohidrat": 114,
+      "serat": 11
+    },
+    "kudapan": {
+      "energi": 356,
+      "protein": 11,
+      "lemak": 12,
+      "karbohidrat": 53,
+      "serat": 5
+    }
+  },
+  {
+    "targetGroup": "IBU HAMIL",
+    "key": "ibu_hamil",
+    "harian": {
+      "energi": 2460,
+      "protein": 74,
+      "lemak": 65,
+      "karbohidrat": 385,
+      "serat": 35
+    },
+    "makanSiang": {
+      "energi": 800,
+      "protein": 24,
+      "lemak": 21,
+      "karbohidrat": 125,
+      "serat": 11
+    },
+    "kudapan": {
+      "energi": 369,
+      "protein": 11,
+      "lemak": 10,
+      "karbohidrat": 58,
+      "serat": 5
+    }
+  },
+  {
+    "targetGroup": "IBU MENYUSUI",
+    "key": "ibu_menyusui",
+    "harian": {
+      "energi": 2565,
+      "protein": 78,
+      "lemak": 65,
+      "karbohidrat": 400,
+      "serat": 37
+    },
+    "makanSiang": {
+      "energi": 834,
+      "protein": 25,
+      "lemak": 21,
+      "karbohidrat": 130,
+      "serat": 12
+    },
+    "kudapan": {
+      "energi": 385,
+      "protein": 12,
+      "lemak": 10,
+      "karbohidrat": 60,
+      "serat": 5
+    }
+  },
+  {
+    "targetGroup": "BALITA",
+    "key": "balita",
+    "harian": {
+      "energi": 1400,
+      "protein": 25,
+      "lemak": 50,
+      "karbohidrat": 220,
+      "serat": 20
+    },
+    "makanSiang": {
+      "energi": 455,
+      "protein": 8,
+      "lemak": 16,
+      "karbohidrat": 72,
+      "serat": 7
+    },
+    "kudapan": {
+      "energi": 210,
+      "protein": 4,
+      "lemak": 8,
+      "karbohidrat": 33,
+      "serat": 3
+    }
+  }
+]

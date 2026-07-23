@@ -559,6 +559,17 @@ export function DeliveryPage() {
     return myDeliveries.filter((o) => o.status === "OUT_FOR_DELIVERY").map((o) => o.id);
   }, [myDeliveries]);
 
+  // Auto-restore active order that is currently OUT_FOR_DELIVERY on refresh
+  useEffect(() => {
+    if (!activeId && myDeliveries.length > 0) {
+      const enRouteOrder = myDeliveries.find((o) => o.status === "OUT_FOR_DELIVERY");
+      if (enRouteOrder) {
+        setActiveId(enRouteOrder.id);
+        setStep("proof");
+      }
+    }
+  }, [myDeliveries, activeId]);
+
   useEffect(() => {
     if (activeEnRouteOrderIds.length === 0) return;
 

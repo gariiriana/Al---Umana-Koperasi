@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { ROLE_PERMISSIONS, ROLE_DEFAULT_REDIRECT } from "@/constants/roles";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { subscribeOrders } from "@/services/realtimeService";
+import { isOrderPastDeadline } from "@/lib/orderHelpers";
 import {
   Calendar,
   ChevronUp,
@@ -22,8 +24,10 @@ import {
   UtensilsCrossed,
   Warehouse,
   X,
+  AlertCircle,
   type LucideIcon,
 } from "lucide-react";
+
 
 interface NavItem {
   to: string;
@@ -159,6 +163,25 @@ export function Sidebar({
 }: SidebarProps) {
   const { lang } = useLanguage();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [hasPastDeadlineOrders, setHasPastDeadlineOrders] = useState(false);
+
+  useEffect(() => {
+    if (!userRole) return;
+    const isRelevantRole = ["admin", "tim_produksi", "distribusi", "monitoring", "kurir"].includes(userRole);
+    if (!isRelevantRole) return;
+
+    const unsubscribe = subscribeOrders(
+      (orders) => {
+        const anyPast = orders.some((o) => isOrderPastDeadline(o));
+        setHasPastDeadlineOrders(anyPast);
+      },
+      (err) => {
+        console.error("Sidebar orders subscription error:", err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [userRole]);
 
   const allowedItems = SIDEBAR_NAV_ITEMS.filter((item) => {
     if (!userRole) return false;
@@ -251,6 +274,20 @@ export function Sidebar({
                     >
                       <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
                       <span className="truncate">{translatedLabel}</span>
+                      {hasPastDeadlineOrders &&
+                        [
+                          "/admin/orders",
+                          "/admin/production",
+                          "/distribusi/scheduler",
+                          "/distribusi/handover",
+                          "/distribusi/delivery"
+                        ].includes(to) && (
+                          <span title={lang === "id" ? "Ada pesanan terlewat deadline!" : "Catering order passed deadline!"} className="ml-auto shrink-0 flex items-center">
+                            <AlertCircle
+                              className="h-4 w-4 text-red-500 animate-pulse"
+                            />
+                          </span>
+                        )}
                     </motion.span>
                   )}
                 </NavLink>

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { formatIDR } from "@/lib/format";
+import { isOrderPastDeadline } from "@/lib/orderHelpers";
 
 const TIME_OPTIONS = (() => {
   const opts = [];
@@ -275,6 +276,11 @@ export function OrderInputPage() {
       setLoadingOrder(true);
       try {
         const orderData = await getOrder(id!);
+        if (isOrderPastDeadline(orderData)) {
+          showToast({ message: "Pesanan ini sudah melewati deadline dan tidak dapat diubah.", variant: "error" });
+          navigate("/admin/orders");
+          return;
+        }
         
         setOrderType(orderData.orderType);
         setIsPreOrder(!!orderData.isPreOrder);

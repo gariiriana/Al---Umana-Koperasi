@@ -19,7 +19,15 @@ import {
   subscribeRecipeAdjustments, saveRecipeAdjustment, deleteRecipeAdjustment,
 } from '@/services/mbgProductionService';
 import { updateBatchStatus } from '@/services/mbgAdminService';
-import { MBG_BATCH_STATUS_CONFIG, NUTRIENTS_LIST, NUTRITIONAL_MAP } from '@/constants/mbgConstants';
+import {
+  MBG_BATCH_STATUS_CONFIG,
+  NUTRIENTS_LIST,
+  NUTRITIONAL_MAP,
+  MBG_INFORMASI_BAHAN_PANGAN,
+  MBG_KATEGORI_BAHAN_PANGAN,
+  getBahanPanganInfo,
+  MBG_AKG_REFERENCE,
+} from '@/constants/mbgConstants';
 import tkpiDatabase from '@/constants/tkpiDatabase.json';
 import porsiStandardData from '@/constants/standarPorsi.json';
 import resepStandardData from '@/constants/standarResep.json';
@@ -143,9 +151,13 @@ export function MbgProductionPage() {
   const [isBatchDropdownOpen, setIsBatchDropdownOpen] = useState(false);
   const [batchSearchQuery, setBatchSearchQuery] = useState('');
   const [showRecipeSummary, setShowRecipeSummary] = useState(true);
+  const [showAkgMatrix, setShowAkgMatrix] = useState(true);
   const [recipeSearchQuery, setRecipeSearchQuery] = useState('');
   const [showRecipeBook, setShowRecipeBook] = useState(false);
   const [recipeBookQuery, setRecipeBookQuery] = useState('');
+  const [recipeModalTab, setRecipeModalTab] = useState<'resep' | 'bahanPangan'>('resep');
+  const [bahanPanganQuery, setBahanPanganQuery] = useState('');
+  const [selectedBahanCategory, setSelectedBahanCategory] = useState<'all' | 'utama' | 'pelengkap' | 'dasar'>('all');
   const [expandedBahan, setExpandedBahan] = useState<string | null>(null);
   const [selectedRecipeItem, setSelectedRecipeItem] = useState<StandarResep | null>(null);
   const [customRecipes, setCustomRecipes] = useState<StandarResep[]>([]);
@@ -443,6 +455,61 @@ export function MbgProductionPage() {
       groups[key].push(e);
     });
     return groups;
+  }, [entries]);
+
+  const akgDemographicSummary = useMemo(() => {
+    const counts: Record<string, number> = {
+      'SISWA TK/PAUD': 0,
+      'SISWA SD/MI KELAS 1-3': 0,
+      'SISWA SD/MI KELAS 4-6': 0,
+      'SISWA SMP/MTS': 0,
+      'SISWA SMA/MA/SMK': 0,
+      'IBU HAMIL': 0,
+      'IBU MENYUSUI': 0,
+      'BALITA': 0,
+    };
+
+    entries.forEach((e) => {
+      if (e.isSekolahLibur) return;
+      
+      if (e.institutionType === 'sekolah') {
+        if (e.classesBreakdown && e.classesBreakdown.length > 0) {
+          e.classesBreakdown.forEach((c) => {
+            const nameLower = c.className.toLowerCase();
+            if (nameLower.includes('tk') || nameLower.includes('paud')) {
+              counts['SISWA TK/PAUD'] += c.jumlah || 0;
+            } else if (nameLower.includes('1') || nameLower.includes('2') || nameLower.includes('3')) {
+              counts['SISWA SD/MI KELAS 1-3'] += c.jumlah || 0;
+            } else if (nameLower.includes('4') || nameLower.includes('5') || nameLower.includes('6')) {
+              counts['SISWA SD/MI KELAS 4-6'] += c.jumlah || 0;
+            } else if (nameLower.includes('smp') || nameLower.includes('mts')) {
+              counts['SISWA SMP/MTS'] += c.jumlah || 0;
+            } else {
+              counts['SISWA SMA/MA/SMK'] += c.jumlah || 0;
+            }
+          });
+        } else {
+          if (e.schoolLevel === 'tk_paud') {
+            counts['SISWA TK/PAUD'] += e.jumlah || 0;
+          } else if (e.schoolLevel === 'sd') {
+            counts['SISWA SD/MI KELAS 1-3'] += e.qtPorsiKecil || Math.ceil((e.jumlah || 0) / 2);
+            counts['SISWA SD/MI KELAS 4-6'] += e.qtPorsiBesar || Math.floor((e.jumlah || 0) / 2);
+          } else {
+            counts['SISWA SMA/MA/SMK'] += e.jumlah || 0;
+          }
+        }
+      } else {
+        counts['BALITA'] += e.qtPorsiBalita || e.qtSiswaBalita || 0;
+        counts['IBU HAMIL'] += e.qtBumil || 0;
+        counts['IBU MENYUSUI'] += e.qtBusui || 0;
+        if (!e.qtBumil && !e.qtBusui && e.qtBumilBusui) {
+          counts['IBU HAMIL'] += Math.ceil(e.qtBumilBusui / 2);
+          counts['IBU MENYUSUI'] += Math.floor(e.qtBumilBusui / 2);
+        }
+      }
+    });
+
+    return counts;
   }, [entries]);
 
   const combinedRecipes = useMemo(() => {
@@ -761,6 +828,204 @@ export function MbgProductionPage() {
       });
     } catch {
       showToast({ message: 'Gagal menambah data gizi', variant: 'error' });
+    }
+  };
+
+  const handleFillDummyNutritionData = async () => {
+    if (!selectedBatchId || !user) {
+      showToast({ message: 'Silakan pilih tanggal batch terlebih dahulu!', variant: 'error' });
+      return;
+    }
+
+    try {
+      setIsInitializing(true);
+      // 1. Clear existing empty nutrition entries if any
+      for (const entry of nutritionData) {
+        if (!entry.menuItemName || entry.kalori === 0) {
+          await deleteNutritionEntry(entry.id);
+        }
+      }
+
+      // 2. Sample realistic MBG menu items with complete nutrition from TKPI
+      const dummyMenus = [
+        {
+          menuItemName: 'Nasi Putih (Beras Premium)',
+          berat: 150,
+          baseBerat: 100,
+          air: 67.5,
+          kalori: 180,
+          protein: 3.3,
+          lemak: 0.3,
+          karbohidrat: 39.8,
+          serat: 0.6,
+          abu: 0.2,
+          kalsium: 15,
+          fosfor: 40,
+          zatBesi: 0.5,
+          natrium: 1,
+          kalium: 35,
+          tembaga: 0.1,
+          seng: 0.6,
+          vitaminA: 0,
+          bkar: 0,
+          kartotal: 0,
+          thiamin: 0.05,
+          riboflavin: 0.02,
+          niasin: 0.8,
+          vitaminC: 0,
+        },
+        {
+          menuItemName: 'Ayam Goreng Kentucky (Paha)',
+          berat: 60,
+          baseBerat: 100,
+          air: 32.1,
+          kalori: 178,
+          protein: 12.8,
+          lemak: 10.2,
+          karbohidrat: 8.5,
+          serat: 0.3,
+          abu: 1.2,
+          kalsium: 18,
+          fosfor: 110,
+          zatBesi: 0.9,
+          natrium: 220,
+          kalium: 145,
+          tembaga: 0.1,
+          seng: 1.1,
+          vitaminA: 45,
+          bkar: 0,
+          kartotal: 0,
+          thiamin: 0.06,
+          riboflavin: 0.12,
+          niasin: 2.8,
+          vitaminC: 0,
+        },
+        {
+          menuItemName: 'Tumis Buncis Wortel',
+          berat: 50,
+          baseBerat: 100,
+          air: 42.5,
+          kalori: 45,
+          protein: 1.8,
+          lemak: 1.5,
+          karbohidrat: 6.2,
+          serat: 2.1,
+          abu: 0.8,
+          kalsium: 35,
+          fosfor: 28,
+          zatBesi: 0.6,
+          natrium: 85,
+          kalium: 120,
+          tembaga: 0.05,
+          seng: 0.3,
+          vitaminA: 320,
+          bkar: 1800,
+          kartotal: 1800,
+          thiamin: 0.04,
+          riboflavin: 0.05,
+          niasin: 0.6,
+          vitaminC: 12,
+        },
+        {
+          menuItemName: 'Pisang Ambon Segar',
+          berat: 100,
+          baseBerat: 100,
+          air: 72.0,
+          kalori: 92,
+          protein: 1.0,
+          lemak: 0.2,
+          karbohidrat: 23.4,
+          serat: 2.6,
+          abu: 0.6,
+          kalsium: 12,
+          fosfor: 28,
+          zatBesi: 0.5,
+          natrium: 2,
+          kalium: 358,
+          tembaga: 0.1,
+          seng: 0.2,
+          vitaminA: 45,
+          bkar: 120,
+          kartotal: 120,
+          thiamin: 0.05,
+          riboflavin: 0.06,
+          niasin: 0.7,
+          vitaminC: 9,
+        },
+        {
+          menuItemName: 'Susu UHT Ultra Full Cream 125 ml',
+          berat: 125,
+          baseBerat: 100,
+          air: 108.0,
+          kalori: 80,
+          protein: 4.0,
+          lemak: 4.5,
+          karbohidrat: 6.0,
+          serat: 0.0,
+          abu: 1.0,
+          kalsium: 140,
+          fosfor: 110,
+          zatBesi: 0.1,
+          natrium: 65,
+          kalium: 160,
+          tembaga: 0.01,
+          seng: 0.5,
+          vitaminA: 60,
+          bkar: 0,
+          kartotal: 0,
+          thiamin: 0.04,
+          riboflavin: 0.18,
+          niasin: 0.2,
+          vitaminC: 1,
+        },
+      ];
+
+      const totalBatchPorsi = entries.reduce((s, e) => s + (e.jumlah || 0), 0) || 1;
+
+      for (const menu of dummyMenus) {
+        await addNutritionEntry({
+          batchId: selectedBatchId,
+          menuItemName: menu.menuItemName,
+          berat: menu.berat,
+          baseBerat: menu.baseBerat,
+          air: menu.air,
+          kalori: menu.kalori,
+          protein: menu.protein,
+          lemak: menu.lemak,
+          karbohidrat: menu.karbohidrat,
+          serat: menu.serat,
+          abu: menu.abu,
+          kalsium: menu.kalsium,
+          fosfor: menu.fosfor,
+          zatBesi: menu.zatBesi,
+          natrium: menu.natrium,
+          kalium: menu.kalium,
+          tembaga: menu.tembaga,
+          seng: menu.seng,
+          vitaminA: menu.vitaminA,
+          bkar: menu.bkar,
+          kartotal: menu.kartotal,
+          thiamin: menu.thiamin,
+          riboflavin: menu.riboflavin,
+          niasin: menu.niasin,
+          vitaminC: menu.vitaminC,
+          quantity: totalBatchPorsi,
+          totalKalori: menu.kalori,
+          totalProtein: menu.protein,
+          totalLemak: menu.lemak,
+          totalKarbohidrat: menu.karbohidrat,
+          totalSerat: menu.serat,
+          calculatedBy: user.uid,
+          calculatedAt: new Date().toISOString(),
+        });
+      }
+
+      showToast({ message: 'Data Dummy Gizi berhasil diisi & dikalkulasi!', variant: 'success' });
+    } catch (err) {
+      console.error('Error filling dummy nutrition data:', err);
+      showToast({ message: 'Gagal mengisi data dummy gizi', variant: 'error' });
+    } finally {
+      setIsInitializing(false);
     }
   };
 
@@ -1307,6 +1572,13 @@ export function MbgProductionPage() {
             >
               <span>Gizi (TKPI)</span>
             </button>
+            <button
+              onClick={handleFillDummyNutritionData}
+              title="Klik untuk mengisi data dummy gizi otomatis agar bisa mencoba kalkulasinya"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#15803D] hover:bg-[#166534] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+            >
+              <span>⚡ Isi Dummy Gizi</span>
+            </button>
           </div>
         )}
       </div>
@@ -1771,6 +2043,146 @@ export function MbgProductionPage() {
                             </div>
                           </div>
                         ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Collapsible AKG Demographic Reference & Calculation Section */}
+                  <div className="bg-white rounded-2xl border border-[#E5E7EB] mb-6 overflow-hidden shadow-sm font-['Hanken_Grotesk']">
+                    <button
+                      type="button"
+                      onClick={() => setShowAkgMatrix(!showAkgMatrix)}
+                      className="w-full px-5 py-4 bg-gray-50 flex items-center justify-between font-bold text-gray-800 text-xs hover:bg-gray-100 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">📊</span>
+                        <span>Target AKG (Angka Kecukupan Gizi) Kelompok Penerima Manfaat</span>
+                        <span className="text-[10px] font-normal text-gray-400">
+                          (Standard AKG Makan Siang & Harian Berdasarkan Klasifikasi Penerima)
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-amber-600 font-extrabold">
+                        {showAkgMatrix ? 'Sembunyikan ↑' : 'Tampilkan Detail ↓'}
+                      </span>
+                    </button>
+
+                    {showAkgMatrix && (
+                      <div className="p-5 border-t border-[#E5E7EB] space-y-5">
+                        {/* Active Batch Demographic Target Summary */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-xs font-extrabold text-gray-800 uppercase tracking-wider">
+                              1. Total Target AKG Makan Siang Batch Ini (Berdasarkan Data PM Admin)
+                            </h4>
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              {Object.values(akgDemographicSummary).reduce((a, b) => a + b, 0)} Total Porsi Penerima
+                            </span>
+                          </div>
+
+                          <div className="border border-gray-100 rounded-xl overflow-hidden shadow-xs">
+                            <table className="w-full text-xs text-left">
+                              <thead>
+                                <tr className="bg-[#FEF3C7] text-[10px] font-extrabold text-[#92400E] uppercase border-b border-amber-200">
+                                  <th className="px-3 py-2.5">Klasifikasi Penerima</th>
+                                  <th className="px-2 py-2.5 text-center">Jumlah PM</th>
+                                  <th className="px-3 py-2.5 text-right">Target Energi (kcal)</th>
+                                  <th className="px-3 py-2.5 text-right">Target Protein (g)</th>
+                                  <th className="px-3 py-2.5 text-right">Target Lemak (g)</th>
+                                  <th className="px-3 py-2.5 text-right">Target KH (g)</th>
+                                  <th className="px-3 py-2.5 text-right">Target Serat (g)</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {MBG_AKG_REFERENCE.map((ref) => {
+                                  const count = akgDemographicSummary[ref.targetGroup] || 0;
+                                  const totalEnergi = count * ref.makanSiang.energi;
+                                  const totalProtein = count * ref.makanSiang.protein;
+                                  const totalLemak = count * ref.makanSiang.lemak;
+                                  const totalKH = count * ref.makanSiang.karbohidrat;
+                                  const totalSerat = count * ref.makanSiang.serat;
+
+                                  return (
+                                    <tr key={ref.targetGroup} className={`hover:bg-amber-50/20 ${count > 0 ? 'bg-emerald-50/20 font-bold' : 'opacity-60'}`}>
+                                      <td className="px-3 py-2 font-bold text-gray-800 flex items-center gap-1.5">
+                                        <span>{ref.targetGroup}</span>
+                                        {count > 0 && (
+                                          <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[8px] font-extrabold rounded-full">
+                                            Aktif
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-2 py-2 text-center font-extrabold text-amber-900">
+                                        {count > 0 ? `${count} PM` : '-'}
+                                      </td>
+                                      <td className="px-3 py-2 text-right font-semibold text-gray-700">
+                                        {count > 0 ? `${totalEnergi.toLocaleString('id-ID')} kcal` : `${ref.makanSiang.energi} /pm`}
+                                      </td>
+                                      <td className="px-3 py-2 text-right font-semibold text-gray-700">
+                                        {count > 0 ? `${totalProtein.toLocaleString('id-ID')} g` : `${ref.makanSiang.protein}g /pm`}
+                                      </td>
+                                      <td className="px-3 py-2 text-right font-semibold text-gray-700">
+                                        {count > 0 ? `${totalLemak.toLocaleString('id-ID')} g` : `${ref.makanSiang.lemak}g /pm`}
+                                      </td>
+                                      <td className="px-3 py-2 text-right font-semibold text-gray-700">
+                                        {count > 0 ? `${totalKH.toLocaleString('id-ID')} g` : `${ref.makanSiang.karbohidrat}g /pm`}
+                                      </td>
+                                      <td className="px-3 py-2 text-right font-semibold text-gray-700">
+                                        {count > 0 ? `${totalSerat.toLocaleString('id-ID')} g` : `${ref.makanSiang.serat}g /pm`}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Standard AKG Matrix Table Reference */}
+                        <div>
+                          <h4 className="text-xs font-extrabold text-gray-800 uppercase tracking-wider mb-2">
+                            2. Matriks Standar AKG Per Orang (Makan Siang & Harian)
+                          </h4>
+                          <div className="border border-gray-100 rounded-xl overflow-x-auto shadow-xs">
+                            <table className="w-full text-[11px] text-left min-w-[700px]">
+                              <thead>
+                                <tr className="bg-[#1E293B] text-white text-[9px] font-extrabold uppercase">
+                                  <th className="px-3 py-2" rowSpan={2}>Sasaran</th>
+                                  <th className="px-2 py-1 text-center bg-[#0F172A]" colSpan={5}>AKG MAKAN SIANG</th>
+                                  <th className="px-2 py-1 text-center bg-[#334155]" colSpan={5}>AKG HARIAN</th>
+                                </tr>
+                                <tr className="bg-[#0F172A] text-amber-300 text-[8px] font-extrabold uppercase border-t border-slate-700">
+                                  <th className="px-2 py-1 text-center">Energi</th>
+                                  <th className="px-2 py-1 text-center">Protein</th>
+                                  <th className="px-2 py-1 text-center">Lemak</th>
+                                  <th className="px-2 py-1 text-center">KH</th>
+                                  <th className="px-2 py-1 text-center">Serat</th>
+                                  <th className="px-2 py-1 text-center">Energi</th>
+                                  <th className="px-2 py-1 text-center">Protein</th>
+                                  <th className="px-2 py-1 text-center">Lemak</th>
+                                  <th className="px-2 py-1 text-center">KH</th>
+                                  <th className="px-2 py-1 text-center">Serat</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {MBG_AKG_REFERENCE.map((ref) => (
+                                  <tr key={ref.targetGroup} className="hover:bg-gray-50">
+                                    <td className="px-3 py-2 font-extrabold text-gray-800">{ref.targetGroup}</td>
+                                    <td className="px-2 py-2 text-center font-bold text-amber-700">{ref.makanSiang.energi} kcal</td>
+                                    <td className="px-2 py-2 text-center font-bold text-gray-700">{ref.makanSiang.protein} g</td>
+                                    <td className="px-2 py-2 text-center font-bold text-gray-700">{ref.makanSiang.lemak} g</td>
+                                    <td className="px-2 py-2 text-center font-bold text-gray-700">{ref.makanSiang.karbohidrat} g</td>
+                                    <td className="px-2 py-2 text-center font-bold text-gray-700">{ref.makanSiang.serat} g</td>
+                                    <td className="px-2 py-2 text-center font-medium text-gray-500">{ref.harian.energi} kcal</td>
+                                    <td className="px-2 py-2 text-center font-medium text-gray-500">{ref.harian.protein} g</td>
+                                    <td className="px-2 py-2 text-center font-medium text-gray-500">{ref.harian.lemak} g</td>
+                                    <td className="px-2 py-2 text-center font-medium text-gray-500">{ref.harian.karbohidrat} g</td>
+                                    <td className="px-2 py-2 text-center font-medium text-gray-500">{ref.harian.serat} g</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2748,41 +3160,206 @@ export function MbgProductionPage() {
         <div className="fixed inset-0 bg-[#0F172A]/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full flex flex-col max-h-[85vh] border border-[#E2E8F0] font-['Hanken_Grotesk']">
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-[#F1F5F9] flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-extrabold text-[#1E293B]">
-                  {selectedRecipeItem 
-                    ? `Detail Resep: ${selectedRecipeItem.namaMenu}` 
-                    : 'Pedoman Standar Resep & Porsi MBG'
-                  }
-                </h3>
-                <p className="text-xs text-[#64748B] mt-0.5">
-                  {selectedRecipeItem 
-                    ? `Bahan dan takaran standar porsi masakan` 
-                    : 'Daftar 56 resep masakan terintegrasi dengan kebutuhan gizi'
-                  }
-                </p>
+            <div className="px-6 py-4 border-b border-[#F1F5F9]">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-extrabold text-[#1E293B]">
+                    {selectedRecipeItem 
+                      ? `Detail Resep: ${selectedRecipeItem.namaMenu}` 
+                      : 'Pedoman Standar Resep, Porsi & Bahan Pangan MBG'
+                    }
+                  </h3>
+                  <p className="text-xs text-[#64748B] mt-0.5">
+                    {selectedRecipeItem 
+                      ? `Bahan dan takaran standar porsi masakan` 
+                      : `Daftar ${combinedRecipes.length} resep masakan & ${MBG_INFORMASI_BAHAN_PANGAN.length} spesifikasi bahan pangan terintegrasi`
+                    }
+                  </p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    if (selectedRecipeItem) {
+                      setSelectedRecipeItem(null);
+                    } else {
+                      setShowRecipeBook(false);
+                    }
+                  }}
+                  title="Tutup"
+                  aria-label="Tutup"
+                  className="p-1.5 hover:bg-[#F1F5F9] rounded-lg transition-colors cursor-pointer text-[#64748B]"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <button 
-                type="button"
-                onClick={() => {
-                  if (selectedRecipeItem) {
-                    setSelectedRecipeItem(null);
-                  } else {
-                    setShowRecipeBook(false);
-                  }
-                }}
-                title="Tutup"
-                aria-label="Tutup"
-                className="p-1.5 hover:bg-[#F1F5F9] rounded-lg transition-colors cursor-pointer text-[#64748B]"
-              >
-                <X className="h-5 w-5" />
-              </button>
+
+              {!selectedRecipeItem && !isAddingRecipe && (
+                <div className="flex gap-2 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setRecipeModalTab('resep')}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      recipeModalTab === 'resep'
+                        ? 'bg-[#15803D] text-white shadow-sm'
+                        : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'
+                    }`}
+                  >
+                    📖 Standar Resep & Porsi ({combinedRecipes.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRecipeModalTab('bahanPangan')}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      recipeModalTab === 'bahanPangan'
+                        ? 'bg-[#15803D] text-white shadow-sm'
+                        : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'
+                    }`}
+                  >
+                    🥗 Informasi & Kategori Bahan Pangan ({MBG_INFORMASI_BAHAN_PANGAN.length})
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Modal Body */}
             <div className="p-6 flex-1 overflow-y-auto font-['Hanken_Grotesk']">
-              {isAddingRecipe ? (
+              {recipeModalTab === 'bahanPangan' && !selectedRecipeItem && !isAddingRecipe ? (
+                /* Informasi & Kategori Bahan Pangan View */
+                <div className="space-y-4">
+                  {/* Search and Category Filters */}
+                  <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+                    <div className="relative flex-1 w-full">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#64748B]" />
+                      <input
+                        type="text"
+                        placeholder="Cari nama bahan pangan..."
+                        value={bahanPanganQuery}
+                        onChange={(e) => setBahanPanganQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-[#E2E8F0] rounded-xl text-xs focus:ring-2 focus:ring-[#15803D] focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBahanCategory('all')}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
+                          selectedBahanCategory === 'all'
+                            ? 'bg-[#1E293B] text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        Semua ({MBG_INFORMASI_BAHAN_PANGAN.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBahanCategory('utama')}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
+                          selectedBahanCategory === 'utama'
+                            ? 'bg-[#15803D] text-white'
+                            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                        }`}
+                      >
+                        Bahan Utama ({MBG_KATEGORI_BAHAN_PANGAN.bahanUtama.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBahanCategory('pelengkap')}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
+                          selectedBahanCategory === 'pelengkap'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                        }`}
+                      >
+                        Bumbu Pelengkap ({MBG_KATEGORI_BAHAN_PANGAN.bumbuPelengkap.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBahanCategory('dasar')}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
+                          selectedBahanCategory === 'dasar'
+                            ? 'bg-amber-600 text-white'
+                            : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                        }`}
+                      >
+                        Bumbu Dasar ({MBG_KATEGORI_BAHAN_PANGAN.bumbuDasar.length})
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Bahan Pangan Table */}
+                  <div className="border border-gray-100 rounded-xl overflow-hidden shadow-xs">
+                    <table className="w-full text-xs text-left">
+                      <thead>
+                        <tr className="bg-[#F8FAFC] text-[10px] font-extrabold text-[#64748B] uppercase border-b border-[#E2E8F0]">
+                          <th className="px-4 py-3">Nama Bahan</th>
+                          <th className="px-4 py-3 text-center">Kategori</th>
+                          <th className="px-4 py-3 text-center">% BDD</th>
+                          <th className="px-4 py-3 text-right">Harga Estimasi</th>
+                          <th className="px-4 py-3 text-center">Satuan / Unit Beli</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {MBG_INFORMASI_BAHAN_PANGAN
+                          .filter((b) => {
+                            const matchQuery = b.namaBahan.toLowerCase().includes(bahanPanganQuery.toLowerCase());
+                            if (!matchQuery) return false;
+
+                            if (selectedBahanCategory === 'utama') {
+                              return MBG_KATEGORI_BAHAN_PANGAN.bahanUtama.includes(b.namaBahan);
+                            }
+                            if (selectedBahanCategory === 'pelengkap') {
+                              return MBG_KATEGORI_BAHAN_PANGAN.bumbuPelengkap.includes(b.namaBahan);
+                            }
+                            if (selectedBahanCategory === 'dasar') {
+                              return MBG_KATEGORI_BAHAN_PANGAN.bumbuDasar.includes(b.namaBahan);
+                            }
+                            return true;
+                          })
+                          .map((b) => {
+                            const isUtama = MBG_KATEGORI_BAHAN_PANGAN.bahanUtama.includes(b.namaBahan);
+                            const isPelengkap = MBG_KATEGORI_BAHAN_PANGAN.bumbuPelengkap.includes(b.namaBahan);
+                            const isDasar = MBG_KATEGORI_BAHAN_PANGAN.bumbuDasar.includes(b.namaBahan);
+
+                            return (
+                              <tr key={b.namaBahan} className="hover:bg-amber-50/20 transition-colors">
+                                <td className="px-4 py-2.5 font-bold text-gray-800">{b.namaBahan}</td>
+                                <td className="px-4 py-2.5 text-center">
+                                  {isUtama && (
+                                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[9px] font-extrabold uppercase">
+                                      Bahan Utama
+                                    </span>
+                                  )}
+                                  {isPelengkap && (
+                                    <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-[9px] font-extrabold uppercase">
+                                      Bumbu Pelengkap
+                                    </span>
+                                  )}
+                                  {isDasar && (
+                                    <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[9px] font-extrabold uppercase">
+                                      Bumbu Dasar
+                                    </span>
+                                  )}
+                                  {!isUtama && !isPelengkap && !isDasar && (
+                                    <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[9px] font-semibold">
+                                      Lainnya
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2.5 text-center font-bold text-gray-700">{b.bdd}%</td>
+                                <td className="px-4 py-2.5 text-right font-extrabold text-emerald-700">
+                                  {b.harga > 0 ? `Rp ${b.harga.toLocaleString('id-ID')}` : '-'}
+                                </td>
+                                <td className="px-4 py-2.5 text-center text-gray-600 font-semibold">
+                                  {b.satuan} ({b.unitBeli} unit)
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : isAddingRecipe ? (
                 /* Add/Edit Recipe Form View */
                 <form 
                   onSubmit={async (e) => {
@@ -3074,18 +3651,27 @@ export function MbgProductionPage() {
                           <th className="px-4 py-2.5">Nama Bahan</th>
                           <th className="px-4 py-2.5 text-center">Takaran (Base Resep)</th>
                           <th className="px-4 py-2.5 text-center">Satuan</th>
+                          <th className="px-4 py-2.5 text-center">% BDD</th>
+                          <th className="px-4 py-2.5 text-right">Harga Est.</th>
                           <th className="px-4 py-2.5">Keterangan</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {selectedRecipeItem.ingredients.map((ing) => (
-                          <tr key={ing.bahan} className="hover:bg-gray-50/50">
-                            <td className="px-4 py-2.5 font-bold text-gray-800">{ing.bahan}</td>
-                            <td className="px-4 py-2.5 text-center font-extrabold text-amber-700">{ing.kebutuhan}</td>
-                            <td className="px-4 py-2.5 text-center font-semibold text-gray-500">{ing.satuan}</td>
-                            <td className="px-4 py-2.5 text-gray-400 font-medium">{ing.resepPer || '-'}</td>
-                          </tr>
-                        ))}
+                        {selectedRecipeItem.ingredients.map((ing) => {
+                          const info = getBahanPanganInfo(ing.bahan);
+                          return (
+                            <tr key={ing.bahan} className="hover:bg-gray-50/50">
+                              <td className="px-4 py-2.5 font-bold text-gray-800">{ing.bahan}</td>
+                              <td className="px-4 py-2.5 text-center font-extrabold text-amber-700">{ing.kebutuhan}</td>
+                              <td className="px-4 py-2.5 text-center font-semibold text-gray-500">{ing.satuan}</td>
+                              <td className="px-4 py-2.5 text-center text-gray-600 font-semibold">{info ? `${info.bdd}%` : '-'}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-emerald-700">
+                                {info && info.harga > 0 ? `Rp ${info.harga.toLocaleString('id-ID')}` : '-'}
+                              </td>
+                              <td className="px-4 py-2.5 text-gray-400 font-medium">{ing.resepPer || '-'}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

@@ -3202,5 +3202,470 @@
         "resepPer": ""
       }
     ]
+  },
+  {
+    "namaMenu": "Tongseng Ayam",
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "mainBahan": "Ayam Potong",
+    "baseQty": 58.0,
+    "satuanMainBahan": "kg",
+    "ingredients": [
+      {
+        "bahan": "Ayam Potong",
+        "kebutuhan": 58.0,
+        "satuan": "kg",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Ayam Goreng",
+    "jenisMenu": "Lauk Hewani (Ayam Potong)",
+    "mainBahan": "Ayam Potong",
+    "baseQty": 48.3,
+    "satuanMainBahan": "kg",
+    "ingredients": [
+      {
+        "bahan": "Ayam Potong",
+        "kebutuhan": 48.3,
+        "satuan": "kg",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Ayam Fillet Lada Garam",
+    "jenisMenu": "Lauk Hewani (Ayam Fillet)",
+    "mainBahan": "Ayam Fillet",
+    "baseQty": 65.0,
+    "satuanMainBahan": "kg",
+    "ingredients": [
+      {
+        "bahan": "Ayam Fillet",
+        "kebutuhan": 65.0,
+        "satuan": "kg",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Telur Ceplok Asam Manis",
+    "jenisMenu": "Lauk Hewani (Telur Ayam)",
+    "mainBahan": "Telur Ayam",
+    "baseQty": 63.6,
+    "satuanMainBahan": "kg",
+    "ingredients": [
+      {
+        "bahan": "Telur Ayam",
+        "kebutuhan": 63.6,
+        "satuan": "kg",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Telur Ceplok Gulai Kuning",
+    "jenisMenu": "Lauk Hewani (Telur Ayam)",
+    "mainBahan": "Telur Ayam",
+    "baseQty": 63.6,
+    "satuanMainBahan": "kg",
+    "ingredients": [
+      {
+        "bahan": "Telur Ayam",
+        "kebutuhan": 63.6,
+        "satuan": "kg",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Telur Ayam Rebus",
+    "jenisMenu": "Lauk Hewani (Telur Ayam)",
+    "mainBahan": "Telur Ayam",
+    "baseQty": 63.6,
+    "satuanMainBahan": "kg",
+    "ingredients": [
+      {
+        "bahan": "Telur Ayam",
+        "kebutuhan": 63.6,
+        "satuan": "kg",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Telur Puyuh Rebus",
+    "jenisMenu": "Lauk Hewani (Telur Burung)",
+    "mainBahan": "Telur Puyuh",
+    "baseQty": 48.0,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Telur Puyuh",
+        "kebutuhan": 48.0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Nugget Ikan",
+    "jenisMenu": "Lauk Hewani (Lainnya)",
+    "mainBahan": "Nugget Ikan",
+    "baseQty": 1,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Nugget Ikan",
+        "kebutuhan": 1,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Abon Ikan",
+    "jenisMenu": "Lauk Hewani (Lainnya)",
+    "mainBahan": "Abon Ikan",
+    "baseQty": 15.0,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Abon Ikan",
+        "kebutuhan": 15.0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Kacang Polong Rebus",
+    "jenisMenu": "Lauk Nabati (Lainnya)",
+    "mainBahan": "Kacang Polong",
+    "baseQty": 30.0,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Kacang Polong",
+        "kebutuhan": 30.0,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Vsoy Multigrain 200 ml",
+    "jenisMenu": "Lauk Nabati (Lainnya)",
+    "mainBahan": "Vsoy Multigrain 200 ml",
+    "baseQty": 1.0,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Vsoy Multigrain 200 ml",
+        "kebutuhan": 1.0,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Susu UHT Ultra Full Cream 200 ml",
+    "jenisMenu": "Lauk Nabati (Lainnya)",
+    "mainBahan": "Susu UHT Ultra Full Cream 200 ml",
+    "baseQty": 1.0,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Susu UHT Ultra Full Cream 200 ml",
+        "kebutuhan": 1.0,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Susu UHT Prenagen 185 ml",
+    "jenisMenu": "Lauk Nabati (Lainnya)",
+    "mainBahan": "Susu UHT Prenagen 185 ml",
+    "baseQty": 1.0,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Susu UHT Prenagen 185 ml",
+        "kebutuhan": 1.0,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Lalap Selada Mentimun",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Selada",
+    "baseQty": 11.0,
+    "satuanMainBahan": "kg",
+    "ingredients": [
+      {
+        "bahan": "Selada",
+        "kebutuhan": 11.0,
+        "satuan": "kg",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Lalap Mentimun",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Mentimun",
+    "baseQty": 39.0,
+    "satuanMainBahan": "kg",
+    "ingredients": [
+      {
+        "bahan": "Mentimun",
+        "kebutuhan": 39.0,
+        "satuan": "kg",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Mix Veggie",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Wortel",
+    "baseQty": 22.5,
+    "satuanMainBahan": "kg",
+    "ingredients": [
+      {
+        "bahan": "Wortel",
+        "kebutuhan": 22.5,
+        "satuan": "kg",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Tumis Pakcoy Wortel",
+    "jenisMenu": "Sayur",
+    "mainBahan": "Pakcoy",
+    "baseQty": 35.0,
+    "satuanMainBahan": "g",
+    "ingredients": [
+      {
+        "bahan": "Pakcoy",
+        "kebutuhan": 35.0,
+        "satuan": "g",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Pisang Ambon",
+    "jenisMenu": "Buah",
+    "mainBahan": "Pisang Ambon",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Pisang Ambon",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Jeruk Medan Polos",
+    "jenisMenu": "Buah",
+    "mainBahan": "Jeruk Medan Polos",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Jeruk Medan Polos",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Jeruk Medan Brastagi",
+    "jenisMenu": "Buah",
+    "mainBahan": "Jeruk Medan Brastagi",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Jeruk Medan Brastagi",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Jeruk Pontianak",
+    "jenisMenu": "Buah",
+    "mainBahan": "Jeruk Pontianak",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Jeruk Pontianak",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Kurma Sukari",
+    "jenisMenu": "Buah",
+    "mainBahan": "Kurma Sukari",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Kurma Sukari",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Anggur Merah Australia",
+    "jenisMenu": "Buah",
+    "mainBahan": "Anggur Merah Australia",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Anggur Merah Australia",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Kelengkeng Stiker Merah",
+    "jenisMenu": "Buah",
+    "mainBahan": "Kelengkeng Stiker Merah",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Kelengkeng Stiker Merah",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Kelengkeng Stiker Biru",
+    "jenisMenu": "Buah",
+    "mainBahan": "Kelengkeng Stiker Biru",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Kelengkeng Stiker Biru",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Apel Fuji (Uk 125)",
+    "jenisMenu": "Buah",
+    "mainBahan": "Apel Fuji (Uk 125)",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Apel Fuji (Uk 125)",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Apel Fuji (Uk 138)",
+    "jenisMenu": "Buah",
+    "mainBahan": "Apel Fuji (Uk 138)",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Apel Fuji (Uk 138)",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Pear Century",
+    "jenisMenu": "Buah",
+    "mainBahan": "Pear Century",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Pear Century",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Jeruk Sunkist Neval",
+    "jenisMenu": "Buah",
+    "mainBahan": "Jeruk Sunkist Neval",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Jeruk Sunkist Neval",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Anggur China",
+    "jenisMenu": "Buah",
+    "mainBahan": "Anggur China",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Anggur China",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
+  },
+  {
+    "namaMenu": "Leci Merah",
+    "jenisMenu": "Buah",
+    "mainBahan": "Leci Merah",
+    "baseQty": 1,
+    "satuanMainBahan": "pcs",
+    "ingredients": [
+      {
+        "bahan": "Leci Merah",
+        "kebutuhan": 1,
+        "satuan": "pcs",
+        "resepPer": ""
+      }
+    ]
   }
 ]

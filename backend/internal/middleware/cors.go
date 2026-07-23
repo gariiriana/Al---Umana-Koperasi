@@ -91,6 +91,7 @@ func CORSWithConfig(cfg CORSConfig) Middleware {
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
 				w.Header().Set("Access-Control-Allow-Methods", allowedMethods)
 				w.Header().Set("Access-Control-Allow-Headers", allowedHeaders)
+				w.Header().Set("Access-Control-Expose-Headers", "Date, Content-Type")
 			}
 
 			if r.Method == http.MethodOptions {

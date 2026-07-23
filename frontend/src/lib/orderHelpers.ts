@@ -54,3 +54,24 @@ export function getStatusBadgeClass(status: OrderStatus): string {
       return "bg-gray-50 border-gray-200 text-gray-700";
   }
 }
+
+export const isOrderPastDeadline = (order: { eventDate?: string; deliveryTime?: string; status: OrderStatus }): boolean => {
+  if (!order.eventDate) return false;
+
+  const terminalStatuses = ["COMPLETED", "DELIVERED", "FAILED", "DELIVERY_FAILED"];
+  if (terminalStatuses.includes(order.status)) return false;
+
+  const datePart = order.eventDate.slice(0, 10);
+  let time = "12:00";
+  if (order.deliveryTime) {
+    const match = order.deliveryTime.match(/(\d{2})[:.](\d{2})/);
+    if (match) {
+      time = `${match[1]}:${match[2]}`;
+    }
+  }
+  const ts = Date.parse(`${datePart}T${time}`);
+  if (isNaN(ts)) return false;
+
+  return Date.now() > ts;
+};
+
