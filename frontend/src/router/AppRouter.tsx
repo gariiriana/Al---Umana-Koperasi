@@ -639,7 +639,7 @@ function RoutesTree() {
         path="/mbg/admin"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Admin MBG" allowedRoles={["admin_mbg"]}>
+            <ShelledRoute pageTitle="Admin MBG" allowedRoles={["admin_mbg", "produksi_mbg"]}>
               <MbgAdminPage />
             </ShelledRoute>
           </Protected>
@@ -649,7 +649,7 @@ function RoutesTree() {
         path="/mbg/archive"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Arsip PM" allowedRoles={["admin_mbg"]}>
+            <ShelledRoute pageTitle="Arsip PM" allowedRoles={["admin_mbg", "produksi_mbg"]}>
               <MbgArchivePage />
             </ShelledRoute>
           </Protected>
@@ -669,7 +669,7 @@ function RoutesTree() {
         path="/mbg/production"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Produksi MBG" allowedRoles={["produksi_mbg"]}>
+            <ShelledRoute pageTitle="Produksi MBG" allowedRoles={["produksi_mbg", "admin_mbg"]}>
               <MbgProductionPage />
             </ShelledRoute>
           </Protected>
@@ -679,7 +679,7 @@ function RoutesTree() {
         path="/mbg/cooking"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Masak MBG" allowedRoles={["produksi_mbg"]}>
+            <ShelledRoute pageTitle="Masak MBG" allowedRoles={["produksi_mbg", "admin_mbg"]}>
               <MbgCookingPage />
             </ShelledRoute>
           </Protected>

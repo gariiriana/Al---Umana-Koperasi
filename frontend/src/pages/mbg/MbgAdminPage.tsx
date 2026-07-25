@@ -320,7 +320,7 @@ function PmEntryRow({
 
     // Recalculate qtTidakAlergi
     const alergi = (field === 'qtAlergi' ? (value as number) : entry.qtAlergi) || 0;
-            updates.qtTidakAlergi = Math.max(0, newJumlah - alergi);
+    updates.qtTidakAlergi = Math.max(0, newJumlah - alergi);
 
     onUpdate(entry.id, updates);
   };
@@ -400,11 +400,10 @@ function PmEntryRow({
 
               <button
                 onClick={onManageClasses}
-                className={`inline-flex items-center justify-center px-2 py-0.5 rounded border text-[10px] font-semibold transition-colors cursor-pointer w-full ${
-                  hasClasses
+                className={`inline-flex items-center justify-center px-2 py-0.5 rounded border text-[10px] font-semibold transition-colors cursor-pointer w-full ${hasClasses
                     ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
+                  }`}
                 title="Atur Breakdown Kelas"
               >
                 <span>Kelas ({entry.classesBreakdown?.length || 0})</span>
@@ -424,11 +423,10 @@ function PmEntryRow({
             value={entry.qtSiswaBalita || ''}
             onChange={(e) => handleFieldChange('qtSiswaBalita', parseInt(e.target.value) || 0)}
             placeholder={isPosyandu ? 'Balita' : 'Siswa'}
-            className={`w-16 rounded-md border px-2 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-1 focus:ring-slate-500 ${
-              hasClasses
+            className={`w-16 rounded-md border px-2 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-1 focus:ring-slate-500 ${hasClasses
                 ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
                 : 'border-slate-300 text-slate-800 bg-white'
-            }`}
+              }`}
           />
         </div>
       </td>
@@ -491,11 +489,10 @@ function PmEntryRow({
             value={entry.qtPobiaNasi || ''}
             onChange={(e) => handleFieldChange('qtPobiaNasi', parseInt(e.target.value) || 0)}
             placeholder="0"
-            className={`w-14 rounded-md border px-2 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-1 focus:ring-slate-500 ${
-              hasClasses
+            className={`w-14 rounded-md border px-2 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-1 focus:ring-slate-500 ${hasClasses
                 ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
                 : 'border-slate-300 text-slate-800 bg-white'
-            }`}
+              }`}
           />
         </div>
       </td>
@@ -516,11 +513,10 @@ function PmEntryRow({
               });
             }}
             placeholder="0"
-            className={`w-14 rounded-md border px-2 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-1 focus:ring-slate-500 ${
-              (entry.qtAlergi || 0) > 0
+            className={`w-14 rounded-md border px-2 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-1 focus:ring-slate-500 ${(entry.qtAlergi || 0) > 0
                 ? 'border-red-300 text-red-700 bg-red-50/30'
                 : 'border-slate-300 text-slate-800 bg-white'
-            }`}
+              }`}
           />
           {(entry.qtAlergi || 0) > 0 && (
             <input
@@ -557,11 +553,10 @@ function PmEntryRow({
           value={entry.jadwalPengantaran}
           onChange={(e) => handleFieldChange('jadwalPengantaran', e.target.value)}
           placeholder="06.00-08.30"
-          className={`w-full min-w-[105px] rounded-md border px-2 py-1 text-xs text-center font-medium focus:outline-none focus:ring-1 focus:ring-slate-500 ${
-            hasClasses
+          className={`w-full min-w-[105px] rounded-md border px-2 py-1 text-xs text-center font-medium focus:outline-none focus:ring-1 focus:ring-slate-500 ${hasClasses
               ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
               : 'border-slate-300 text-slate-800 bg-white'
-          }`}
+            }`}
         />
       </td>
 
@@ -1128,10 +1123,10 @@ export function MbgAdminPage() {
             >
               <div className="flex items-center gap-3 mb-4">
                 <div className={`p-2.5 rounded-xl ${confirmState.variant === 'danger'
-                    ? 'bg-red-50 text-red-600'
-                    : confirmState.variant === 'warning'
-                      ? 'bg-amber-50 text-amber-600'
-                      : 'bg-blue-50 text-blue-600'
+                  ? 'bg-red-50 text-red-600'
+                  : confirmState.variant === 'warning'
+                    ? 'bg-amber-50 text-amber-600'
+                    : 'bg-blue-50 text-blue-600'
                   }`}>
                   {confirmState.variant === 'danger' ? (
                     <Trash2 className="h-5 w-5" />
@@ -1159,8 +1154,8 @@ export function MbgAdminPage() {
                     setConfirmState(null);
                   }}
                   className={`flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-colors cursor-pointer ${confirmState.variant === 'danger'
-                      ? 'bg-red-600 hover:bg-red-700'
-                      : 'bg-[#FBBF24] text-[#111827] hover:bg-[#F59E0B]'
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-[#FBBF24] text-[#111827] hover:bg-[#F59E0B]'
                     }`}
                 >
                   Ya, Lanjutkan

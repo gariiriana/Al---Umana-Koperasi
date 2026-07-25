@@ -59,6 +59,8 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/mbg/admin",
     "/mbg/admin/batch/new",
     "/mbg/archive",
+    "/mbg/production",
+    "/mbg/cooking",
     "/mbg/reports",
     "/mbg/orders",
     "/mbg/purchasing/recap",
@@ -66,11 +68,14 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
 
   /**
    * Tim Produksi MBG: kelola menu MBG, hitung kadar gizi, proses masak,
-   * dokumentasi foto, export PDF.
+   * dokumentasi foto, export PDF, serta akses admin.
    */
   produksi_mbg: [
     "/mbg/production",
     "/mbg/cooking",
+    "/mbg/admin",
+    "/mbg/admin/batch/new",
+    "/mbg/archive",
     "/mbg/reports",
     "/mbg/orders",
   ],
