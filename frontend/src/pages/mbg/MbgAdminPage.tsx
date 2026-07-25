@@ -13,7 +13,6 @@ import {
   Loader2,
   X,
   AlertTriangle,
-  Sparkles,
   ChefHat,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,7 +29,6 @@ import {
   recalculateBatchTotals,
   copyFromBatch,
   deleteBatch,
-  bulkAddEntriesFromMaster,
 } from '@/services/mbgAdminService';
 import { subscribeCustomRecipes } from '@/services/mbgProductionService';
 import resepStandardData from '@/constants/standarResep.json';
@@ -175,7 +173,6 @@ function PmEntryRow({
   isLibur,
   onManageClasses,
   onConfirmAction,
-  viewMode,
 }: {
   entry: MbgPmEntry;
   onUpdate: (id: string, updates: Partial<MbgPmEntry>) => void;
@@ -188,7 +185,6 @@ function PmEntryRow({
     onConfirm: () => void;
     variant?: 'danger' | 'warning' | 'info';
   }) => void;
-  viewMode: 'ringkas' | 'rinci';
 }) {
   const isPosyandu = entry.institutionType === 'posyandu';
   const hasClasses = entry.classesBreakdown && entry.classesBreakdown.length > 0;
@@ -324,7 +320,7 @@ function PmEntryRow({
 
     // Recalculate qtTidakAlergi
     const alergi = (field === 'qtAlergi' ? (value as number) : entry.qtAlergi) || 0;
-    updates.qtTidakAlergi = Math.max(0, newJumlah - alergi);
+            updates.qtTidakAlergi = Math.max(0, newJumlah - alergi);
 
     onUpdate(entry.id, updates);
   };
@@ -334,15 +330,13 @@ function PmEntryRow({
   return (
     <tr
       className={`
-        border-b border-[#F3F4F6] transition-colors text-xs
-        ${isLibur ? 'bg-red-50 opacity-60' : 'hover:bg-[#FAFAFA]'}
-        ${entry.qtPobiaNasi > 0 ? 'bg-amber-50/50' : ''}
-        ${(entry.qtAlergi || 0) > 0 ? 'bg-red-50/30' : ''}
+        border-b border-slate-200 transition-colors text-xs hover:bg-slate-50/70
+        ${isLibur ? 'bg-slate-100/70 opacity-60' : 'bg-white'}
       `}
     >
       {/* Institusi */}
       <td className="px-3 py-2.5">
-        <div className="flex flex-col gap-1 min-w-[140px]">
+        <div className="flex flex-col gap-1 min-w-[160px]">
           <select
             value={isMasterSelected ? entry.institutionName : entry.institutionName ? '_custom_' : ''}
             onChange={(e) => {
@@ -355,7 +349,7 @@ function PmEntryRow({
               }
             }}
             title="Pilih Institusi Master"
-            className="w-full rounded-lg border border-[#E5E7EB] px-2 py-1.5 text-xs font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent bg-white cursor-pointer shadow-sm"
+            className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-500 focus:border-slate-500 bg-white cursor-pointer transition-colors"
           >
             <option value="">— Pilih Master Institusi —</option>
             {MBG_MASTER_INSTITUTIONS.map((inst) => (
@@ -372,20 +366,20 @@ function PmEntryRow({
               value={entry.institutionName}
               onChange={(e) => handleFieldChange('institutionName', e.target.value)}
               placeholder="Nama Institusi Custom"
-              className="w-full rounded-lg border border-[#E5E7EB] px-2 py-1 text-xs font-semibold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+              className="w-full rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-500 bg-slate-50/50"
             />
           )}
         </div>
       </td>
 
       {/* Tipe */}
-      <td className="px-2 py-2 min-w-[90px]">
+      <td className="px-2 py-2.5 min-w-[105px]">
         <div className="flex flex-col gap-1 items-center w-full">
           <select
             value={entry.institutionType}
             onChange={(e) => handleFieldChange('institutionType', e.target.value as MbgInstitutionType)}
             title="Tipe Institusi"
-            className="w-full min-w-[85px] rounded-lg border border-[#E5E7EB] px-1.5 py-1 text-xs font-semibold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+            className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-slate-500 cursor-pointer"
           >
             <option value="sekolah">Sekolah</option>
             <option value="posyandu">Posyandu</option>
@@ -397,7 +391,7 @@ function PmEntryRow({
                 value={entry.schoolLevel || 'sd'}
                 onChange={(e) => handleFieldChange('schoolLevel', e.target.value)}
                 title="Tingkatan Sekolah"
-                className="w-full min-w-[85px] rounded-lg border border-[#E5E7EB] px-1.5 py-1 text-[10px] font-semibold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                className="w-full rounded-md border border-slate-300 px-2 py-0.5 text-[11px] font-medium text-slate-600 bg-white focus:outline-none focus:ring-1 focus:ring-slate-500"
               >
                 <option value="tk_paud">TK / PAUD</option>
                 <option value="sd">SD</option>
@@ -406,274 +400,109 @@ function PmEntryRow({
 
               <button
                 onClick={onManageClasses}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors cursor-pointer shadow-sm w-full justify-center ${
+                className={`inline-flex items-center justify-center px-2 py-0.5 rounded border text-[10px] font-semibold transition-colors cursor-pointer w-full ${
                   hasClasses
-                    ? 'bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100/70 hover:border-blue-300'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                    ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
                 title="Atur Breakdown Kelas"
               >
-                <span>Atur Kelas ({entry.classesBreakdown?.length || 0})</span>
+                <span>Kelas ({entry.classesBreakdown?.length || 0})</span>
               </button>
             </>
           )}
         </div>
       </td>
 
-      {viewMode === 'rinci' ? (
-        <>
-          {/* Porsi Posyandu (Balita, Bumil, Busui) ATAU Sekolah (Porsi Kecil & Porsi Besar L/P) */}
-          {isPosyandu ? (
-            <>
-              {/* Porsi Balita */}
-              <td colSpan={2} className="px-2 py-2 text-center bg-amber-50/40 border-r border-[#E5E7EB]">
-                <div className="flex flex-col items-center">
-                  <span className="text-[9px] font-extrabold text-amber-800 mb-0.5 uppercase tracking-tight">Porsi Balita</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={entry.qtSiswaBalita || ''}
-                    onChange={(e) => handleFieldChange('qtSiswaBalita', parseInt(e.target.value) || 0)}
-                    placeholder="0"
-                    className="w-14 rounded-lg border border-amber-300 bg-white px-1 py-1 text-xs text-center font-extrabold text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  />
-                </div>
-              </td>
+      {/* QT Siswa/Balita */}
+      <td className="px-3 py-2.5">
+        <div className="flex justify-center">
+          <input
+            type="number"
+            min={0}
+            disabled={hasClasses}
+            value={entry.qtSiswaBalita || ''}
+            onChange={(e) => handleFieldChange('qtSiswaBalita', parseInt(e.target.value) || 0)}
+            placeholder={isPosyandu ? 'Balita' : 'Siswa'}
+            className={`w-16 rounded-md border px-2 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-1 focus:ring-slate-500 ${
+              hasClasses
+                ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                : 'border-slate-300 text-slate-800 bg-white'
+            }`}
+          />
+        </div>
+      </td>
 
-              {/* Porsi Bumil */}
-              <td className="px-1.5 py-2 text-center bg-orange-50/40">
-                <div className="flex flex-col items-center">
-                  <span className="text-[9px] font-extrabold text-orange-800 mb-0.5 uppercase tracking-tight">Porsi Bumil</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={entry.qtBumil || ''}
-                    onChange={(e) => handleFieldChange('qtBumil', parseInt(e.target.value) || 0)}
-                    placeholder="0"
-                    className="w-12 rounded-lg border border-orange-300 bg-white px-1 py-1 text-xs text-center font-extrabold text-orange-900 focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
-                </div>
-              </td>
-
-              {/* Porsi Busui */}
-              <td className="px-1.5 py-2 text-center bg-purple-50/40 border-r border-[#E5E7EB]">
-                <div className="flex flex-col items-center">
-                  <span className="text-[9px] font-extrabold text-purple-800 mb-0.5 uppercase tracking-tight">Porsi Busui</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={entry.qtBusui || ''}
-                    onChange={(e) => handleFieldChange('qtBusui', parseInt(e.target.value) || 0)}
-                    placeholder="0"
-                    className="w-12 rounded-lg border border-purple-300 bg-white px-1 py-1 text-xs text-center font-bold text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                  />
-                </div>
-              </td>
-            </>
-          ) : (
-            <>
-              {/* Porsi Kecil L & P */}
-              <td className="px-1.5 py-2.5 text-center bg-amber-50/20">
-                <input
-                  type="number"
-                  min={0}
-                  value={entry.qtPorsiKecilL || ''}
-                  onChange={(e) => handleFieldChange('qtPorsiKecilL', parseInt(e.target.value) || 0)}
-                  placeholder="0"
-                  className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-amber-400"
-                />
-              </td>
-              <td className="px-1.5 py-2.5 text-center bg-amber-50/20 border-r border-[#E5E7EB]">
-                <input
-                  type="number"
-                  min={0}
-                  value={entry.qtPorsiKecilP || ''}
-                  onChange={(e) => handleFieldChange('qtPorsiKecilP', parseInt(e.target.value) || 0)}
-                  placeholder="0"
-                  className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-amber-400"
-                />
-              </td>
-
-              {/* Porsi Besar L & P */}
-              <td className="px-1.5 py-2.5 text-center bg-blue-50/20">
-                <input
-                  type="number"
-                  min={0}
-                  value={entry.qtPorsiBesarL || ''}
-                  onChange={(e) => handleFieldChange('qtPorsiBesarL', parseInt(e.target.value) || 0)}
-                  placeholder="0"
-                  className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
-              </td>
-              <td className="px-1.5 py-2.5 text-center bg-blue-50/20 border-r border-[#E5E7EB]">
-                <input
-                  type="number"
-                  min={0}
-                  value={entry.qtPorsiBesarP || ''}
-                  onChange={(e) => handleFieldChange('qtPorsiBesarP', parseInt(e.target.value) || 0)}
-                  placeholder="0"
-                  className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
-              </td>
-            </>
-          )}
-
-          {/* Total Siswa / Balita / Ibu */}
-          <td className="px-2 py-2.5 text-center bg-indigo-50/30 border-r border-[#E5E7EB]">
-            <span className="inline-block min-w-[36px] rounded-lg bg-indigo-50 border border-indigo-200 px-2 py-1 text-xs font-black text-indigo-700">
-              {(entry.qtSiswaBalita || 0) + (isPosyandu ? (entry.qtBumilBusui || 0) : 0)}
-            </span>
-          </td>
-
-          {/* Guru L & P */}
-          <td className="px-1.5 py-2.5 text-center bg-emerald-50/20">
-            <input
-              type="number"
-              min={0}
-              value={entry.qtGuruL || ''}
-              onChange={(e) => handleFieldChange('qtGuruL', parseInt(e.target.value) || 0)}
-              placeholder="0"
-              className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-emerald-400"
-            />
-          </td>
-          <td className="px-1.5 py-2.5 text-center bg-emerald-50/20 border-r border-[#E5E7EB]">
-            <input
-              type="number"
-              min={0}
-              value={entry.qtGuruP || ''}
-              onChange={(e) => handleFieldChange('qtGuruP', parseInt(e.target.value) || 0)}
-              placeholder="0"
-              className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-emerald-400"
-            />
-          </td>
-
-          {/* Tendik L & P */}
-          <td className="px-1.5 py-2.5 text-center bg-teal-50/20">
-            <input
-              type="number"
-              min={0}
-              value={entry.qtTendikL || ''}
-              onChange={(e) => handleFieldChange('qtTendikL', parseInt(e.target.value) || 0)}
-              placeholder="0"
-              className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-teal-400"
-            />
-          </td>
-          <td className="px-1.5 py-2.5 text-center bg-teal-50/20 border-r border-[#E5E7EB]">
-            <input
-              type="number"
-              min={0}
-              value={entry.qtTendikP || ''}
-              onChange={(e) => handleFieldChange('qtTendikP', parseInt(e.target.value) || 0)}
-              placeholder="0"
-              className="w-10 rounded-lg border border-[#E5E7EB] px-1 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-teal-400"
-            />
-          </td>
-
-          {/* Total Guru & Tendik */}
-          <td className="px-2 py-2.5 text-center bg-emerald-100/30 border-r border-[#E5E7EB]">
-            <span className="inline-block min-w-[36px] rounded-lg bg-emerald-100 border border-emerald-300 px-2 py-1 text-xs font-black text-emerald-800">
-              {entry.qtGuruKader || 0}
-            </span>
-          </td>
-        </>
-      ) : (
-        <>
-          {/* QT Siswa/Balita */}
-          <td className="px-3 py-2.5">
-            <div className="flex justify-center">
+      {/* QT Bumil/Busui */}
+      <td className="px-3 py-2.5">
+        {isPosyandu ? (
+          <div className="flex flex-col gap-1 items-center min-w-[100px]">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-medium text-slate-600 w-8 text-right">Bml:</span>
               <input
                 type="number"
                 min={0}
-                disabled={hasClasses}
-                value={entry.qtSiswaBalita || ''}
-                onChange={(e) => handleFieldChange('qtSiswaBalita', parseInt(e.target.value) || 0)}
-                placeholder={isPosyandu ? 'Balita' : 'Siswa'}
-                className={`w-14 rounded-lg border px-1.5 py-1 text-xs text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#FBBF24] ${
-                  hasClasses
-                    ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'
-                    : 'border-[#E5E7EB] text-[#111827]'
-                }`}
-              />
-            </div>
-          </td>
-
-          {/* QT Bumil/Busui (Split for Posyandu) */}
-          <td className="px-3 py-2.5">
-            {isPosyandu ? (
-              <div className="flex flex-col gap-1 items-center min-w-[95px]">
-                <div className="flex items-center gap-1">
-                  <span className="text-[11px] font-bold text-[#D97706] w-9 text-right">Bml:</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={entry.qtBumil ?? 0}
-                    onChange={(e) => handleFieldChange('qtBumil', parseInt(e.target.value) || 0)}
-                    placeholder="0"
-                    className="w-11 rounded-lg border border-[#E5E7EB] px-1.5 py-0.5 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-                  />
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-[11px] font-bold text-[#D97706] w-9 text-right">Bsi:</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={entry.qtBusui ?? 0}
-                    onChange={(e) => handleFieldChange('qtBusui', parseInt(e.target.value) || 0)}
-                    placeholder="0"
-                    className="w-11 rounded-lg border border-[#E5E7EB] px-1.5 py-0.5 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="flex justify-center">
-                <input
-                  type="number"
-                  disabled
-                  placeholder="—"
-                  className="w-14 rounded-lg border border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed px-1.5 py-1 text-xs text-center font-bold"
-                />
-              </div>
-            )}
-          </td>
-
-          {/* QT Guru/Kader */}
-          <td className="px-3 py-2.5">
-            <div className="flex justify-center">
-              <input
-                type="number"
-                min={0}
-                value={entry.qtGuruKader || ''}
-                onChange={(e) => handleFieldChange('qtGuruKader', parseInt(e.target.value) || 0)}
-                placeholder={isPosyandu ? 'Kader' : 'Guru'}
-                className="w-14 rounded-lg border border-[#E5E7EB] px-1.5 py-1 text-xs text-center font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
-              />
-            </div>
-          </td>
-
-          {/* Pobia Nasi */}
-          <td className="px-3 py-2.5">
-            <div className="flex justify-center">
-              <input
-                type="number"
-                min={0}
-                disabled={hasClasses}
-                value={entry.qtPobiaNasi || ''}
-                onChange={(e) => handleFieldChange('qtPobiaNasi', parseInt(e.target.value) || 0)}
+                value={entry.qtBumil ?? 0}
+                onChange={(e) => handleFieldChange('qtBumil', parseInt(e.target.value) || 0)}
                 placeholder="0"
-                className={`w-12 rounded-lg border px-1.5 py-1 text-xs text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#FBBF24] ${
-                  hasClasses
-                    ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'
-                    : 'border-[#E5E7EB] text-[#111827]'
-                }`}
+                className="w-12 rounded-md border border-slate-300 px-1.5 py-0.5 text-xs text-center font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-500"
               />
             </div>
-          </td>
-        </>
-      )}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-medium text-slate-600 w-8 text-right">Bsi:</span>
+              <input
+                type="number"
+                min={0}
+                value={entry.qtBusui ?? 0}
+                onChange={(e) => handleFieldChange('qtBusui', parseInt(e.target.value) || 0)}
+                placeholder="0"
+                className="w-12 rounded-md border border-slate-300 px-1.5 py-0.5 text-xs text-center font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-center">
+            <span className="text-slate-300">—</span>
+          </div>
+        )}
+      </td>
+
+      {/* QT Guru/Kader */}
+      <td className="px-3 py-2.5">
+        <div className="flex justify-center">
+          <input
+            type="number"
+            min={0}
+            value={entry.qtGuruKader || ''}
+            onChange={(e) => handleFieldChange('qtGuruKader', parseInt(e.target.value) || 0)}
+            placeholder={isPosyandu ? 'Kader' : 'Guru'}
+            className="w-16 rounded-md border border-slate-300 px-2 py-1 text-xs text-center font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-500 bg-white"
+          />
+        </div>
+      </td>
+
+      {/* Pobia Nasi */}
+      <td className="px-3 py-2.5">
+        <div className="flex justify-center">
+          <input
+            type="number"
+            min={0}
+            disabled={hasClasses}
+            value={entry.qtPobiaNasi || ''}
+            onChange={(e) => handleFieldChange('qtPobiaNasi', parseInt(e.target.value) || 0)}
+            placeholder="0"
+            className={`w-14 rounded-md border px-2 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-1 focus:ring-slate-500 ${
+              hasClasses
+                ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                : 'border-slate-300 text-slate-800 bg-white'
+            }`}
+          />
+        </div>
+      </td>
 
       {/* Alergi */}
       <td className="px-2 py-2.5">
-        <div className="flex flex-col gap-1 items-center min-w-[70px]">
+        <div className="flex flex-col gap-1 items-center min-w-[75px]">
           <input
             type="number"
             min={0}
@@ -687,16 +516,20 @@ function PmEntryRow({
               });
             }}
             placeholder="0"
-            className="w-12 rounded-lg border border-red-200 bg-red-50/50 px-1.5 py-1 text-xs text-center font-bold text-red-600 focus:outline-none focus:ring-2 focus:ring-red-400"
+            className={`w-14 rounded-md border px-2 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-1 focus:ring-slate-500 ${
+              (entry.qtAlergi || 0) > 0
+                ? 'border-red-300 text-red-700 bg-red-50/30'
+                : 'border-slate-300 text-slate-800 bg-white'
+            }`}
           />
           {(entry.qtAlergi || 0) > 0 && (
             <input
               type="text"
               value={entry.keteranganAlergi || ''}
               onChange={(e) => onUpdate(entry.id, { keteranganAlergi: e.target.value })}
-              placeholder="Rincian alergi"
+              placeholder="Ket. alergi"
               title="Ket. Alergi (mis. 2 Telur, 1 Udang)"
-              className="w-full text-[10px] border border-red-200 rounded px-1 py-0.5 text-red-700 bg-red-50 focus:outline-none"
+              className="w-full text-[10px] border border-red-200 rounded px-1.5 py-0.5 text-red-700 bg-white focus:outline-none"
             />
           )}
         </div>
@@ -704,14 +537,14 @@ function PmEntryRow({
 
       {/* Tidak Alergi */}
       <td className="px-2 py-2.5 text-center">
-        <span className="inline-block min-w-[36px] rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-1 text-xs font-bold text-emerald-700">
+        <span className="inline-flex items-center justify-center min-w-[36px] rounded bg-slate-50 border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700">
           {entry.qtTidakAlergi ?? Math.max(0, (entry.jumlah || 0) - (entry.qtAlergi || 0))}
         </span>
       </td>
 
       {/* Jumlah (auto) */}
       <td className="px-3 py-2.5 text-center">
-        <span className="inline-block min-w-[40px] rounded-full bg-[#FBBF24]/20 px-3 py-1 text-xs font-extrabold text-[#92400E]">
+        <span className="inline-flex items-center justify-center min-w-[42px] rounded bg-slate-100 border border-slate-300 px-2.5 py-1 text-xs font-bold text-slate-900">
           {entry.jumlah}
         </span>
       </td>
@@ -724,36 +557,17 @@ function PmEntryRow({
           value={entry.jadwalPengantaran}
           onChange={(e) => handleFieldChange('jadwalPengantaran', e.target.value)}
           placeholder="06.00-08.30"
-          className={`w-full min-w-[105px] rounded-lg border px-1.5 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-2 focus:ring-[#FBBF24] ${
+          className={`w-full min-w-[105px] rounded-md border px-2 py-1 text-xs text-center font-medium focus:outline-none focus:ring-1 focus:ring-slate-500 ${
             hasClasses
-              ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'
-              : 'border-[#E5E7EB] text-[#111827]'
+              ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+              : 'border-slate-300 text-slate-800 bg-white'
           }`}
         />
       </td>
 
-      {/* Flags & Actions */}
+      {/* Actions */}
       <td className="px-3 py-2.5">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => {
-              const actionText = entry.isSekolahLibur ? 'mengaktifkan kembali' : 'meliburkan';
-              onConfirmAction({
-                title: entry.isSekolahLibur ? 'Aktifkan Institusi' : 'Liburkan Institusi',
-                message: `Apakah Anda yakin ingin ${actionText} institusi ${entry.institutionName || 'ini'}?`,
-                onConfirm: () => handleFieldChange('isSekolahLibur', !entry.isSekolahLibur),
-                variant: 'warning',
-              });
-            }}
-            title={entry.isSekolahLibur ? 'Aktifkan' : 'Tandai Libur'}
-            className={`p-1.5 rounded-lg text-[10px] font-bold cursor-pointer transition-colors ${
-              entry.isSekolahLibur
-                ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
-            }`}
-          >
-            {entry.isSekolahLibur ? '🔴' : '⚪'}
-          </button>
+        <div className="flex items-center justify-center">
           <button
             onClick={() => {
               onConfirmAction({
@@ -763,8 +577,8 @@ function PmEntryRow({
                 variant: 'danger',
               });
             }}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors"
-            title="Hapus"
+            className="p-1.5 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 cursor-pointer transition-colors"
+            title="Hapus Institusi"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -790,7 +604,6 @@ export function MbgAdminPage() {
   const [selectedEntryForMenu, setSelectedEntryForMenu] = useState<MbgPmEntry | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
-  const [viewMode, setViewMode] = useState<'ringkas' | 'rinci'>('rinci');
   const [confirmState, setConfirmState] = useState<{
     title: string;
     message: string;
@@ -806,10 +619,10 @@ export function MbgAdminPage() {
         const draftBatches = b.filter((batch) => batch.status === 'DRAFT');
         setBatches(draftBatches);
         setLoadingBatches(false);
-        
+
         const todayStr = new Date().toISOString().split('T')[0];
         const todayBatch = draftBatches.find((batch) => batch.tanggal === todayStr);
-        
+
         if (todayBatch) {
           setSelectedBatchId((current) => current || todayBatch.id);
         } else if (user) {
@@ -884,7 +697,7 @@ export function MbgAdminPage() {
       alergi: active.reduce((s, e) => s + (e.qtAlergi || 0), 0),
       tidakAlergi: active.reduce((s, e) => s + (e.qtTidakAlergi ?? Math.max(0, (e.jumlah || 0) - (e.qtAlergi || 0))), 0),
       jumlah: active.reduce((s, e) => s + (e.jumlah || 0), 0),
-      
+
       // Detailed L/P breakdown
       porsiKecilL: active.reduce((s, e) => s + (e.qtPorsiKecilL || 0), 0),
       porsiKecilP: active.reduce((s, e) => s + (e.qtPorsiKecilP || 0), 0),
@@ -900,21 +713,6 @@ export function MbgAdminPage() {
       totalPetugas: petugasSet.size,
     };
   }, [entries]);
-
-  const handleLoadMasterData = async () => {
-    if (!selectedBatchId || !user) return;
-    setSaving(true);
-    try {
-      await bulkAddEntriesFromMaster(selectedBatchId, user.uid);
-      await recalculateBatchTotals(selectedBatchId);
-      showToast({ message: 'Berhasil memuat 27 institusi dari Master Data!', variant: 'success' });
-    } catch (err) {
-      console.error(err);
-      showToast({ message: 'Gagal memuat master data institusi', variant: 'error' });
-    } finally {
-      setSaving(false);
-    }
-  };
 
   // ---- Handlers ----
   const handleCreateBatch = async (tanggal: string, copyFromId?: string) => {
@@ -1167,18 +965,6 @@ export function MbgAdminPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              {selectedBatchId && selectedBatch?.status === 'DRAFT' && (
-                <button
-                  onClick={handleLoadMasterData}
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl cursor-pointer transition-colors shadow-sm disabled:opacity-50"
-                  title="Muat otomatis 27 institusi dari Master Data"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  ⚡ Load 27 Master Institusi
-                </button>
-              )}
-
               <button
                 onClick={() => setShowNewBatchModal(true)}
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FBBF24] text-[#111827] text-xs font-extrabold rounded-xl hover:bg-[#F59E0B] cursor-pointer transition-colors shadow-sm"
@@ -1199,7 +985,7 @@ export function MbgAdminPage() {
             </div>
           </div>
 
-          {/* Search & View Mode Switcher */}
+          {/* Search Bar */}
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="relative max-w-sm flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
@@ -1211,29 +997,6 @@ export function MbgAdminPage() {
                 className="w-full rounded-xl border border-[#E5E7EB] bg-white pl-9 pr-4 py-2.5 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
               />
             </div>
-
-            <div className="inline-flex rounded-xl bg-gray-100 p-1 border border-gray-200 shadow-inner">
-              <button
-                onClick={() => setViewMode('rinci')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                  viewMode === 'rinci'
-                    ? 'bg-[#FBBF24] text-[#111827] shadow-sm'
-                    : 'text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                📊 Mode Rinci (L/P & Tendik)
-              </button>
-              <button
-                onClick={() => setViewMode('ringkas')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                  viewMode === 'ringkas'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                📋 Mode Ringkas
-              </button>
-            </div>
           </div>
 
           {/* Single Unified Table */}
@@ -1243,58 +1006,28 @@ export function MbgAdminPage() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto border border-[#E5E7EB] rounded-xl bg-white shadow-sm">
+              <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-xs">
                 <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] min-w-[760px]">
                   <thead>
-                    {viewMode === 'rinci' ? (
-                      <>
-                        <tr className="bg-[#FEF3C7] text-[#92400E] text-[11px] font-extrabold uppercase tracking-wider border-b border-[#FDE68A]">
-                          <th rowSpan={2} className="px-3 py-2 text-left min-w-[140px] align-middle">Institusi</th>
-                          <th rowSpan={2} className="px-2 py-2 text-center min-w-[90px] align-middle">Tipe</th>
-                          <th colSpan={2} className="px-2 py-1.5 text-center bg-amber-100/70 border-x border-[#FDE68A] text-amber-900">Porsi Kecil / Balita</th>
-                          <th colSpan={2} className="px-2 py-1.5 text-center bg-blue-100/70 border-r border-[#FDE68A] text-blue-900">Porsi Besar / Bumil & Busui</th>
-                          <th rowSpan={2} className="px-3 py-2 text-center bg-indigo-100/60 border-r border-[#FDE68A] text-indigo-900 align-middle">Total Siswa / Balita / Ibu</th>
-                          <th colSpan={2} className="px-2 py-1.5 text-center bg-emerald-100/70 border-r border-[#FDE68A] text-emerald-900">Guru</th>
-                          <th colSpan={2} className="px-2 py-1.5 text-center bg-teal-100/70 border-r border-[#FDE68A] text-teal-900">Tendik</th>
-                          <th rowSpan={2} className="px-3 py-2 text-center bg-emerald-200/50 border-r border-[#FDE68A] text-emerald-950 align-middle">Total Guru/Tendik</th>
-                          <th rowSpan={2} className="px-2 py-2 text-center text-red-600 align-middle">Alergi</th>
-                          <th rowSpan={2} className="px-2 py-2 text-center text-emerald-700 align-middle">Tidak Alergi</th>
-                          <th rowSpan={2} className="px-3 py-2 text-center bg-amber-200/60 text-amber-950 align-middle">Total Porsi</th>
-                          <th rowSpan={2} className="px-3 py-2 text-center align-middle">Jadwal</th>
-                          <th rowSpan={2} className="px-3 py-2 align-middle"></th>
-                        </tr>
-                        <tr className="bg-[#FFFBEB] text-[#78350F] text-[10px] font-extrabold text-center border-b border-[#E5E7EB]">
-                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-amber-50/50 text-amber-800">L</th>
-                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-amber-50/50 text-amber-800">P</th>
-                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-blue-50/50 text-blue-800">L</th>
-                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-blue-50/50 text-blue-800">P</th>
-                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-emerald-50/50 text-emerald-800">L</th>
-                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-emerald-50/50 text-emerald-800">P</th>
-                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-teal-50/50 text-teal-800">L</th>
-                          <th className="px-1.5 py-1 border-r border-[#FDE68A] bg-teal-50/50 text-teal-800">P</th>
-                        </tr>
-                      </>
-                    ) : (
-                      <tr className="bg-[#FEF3C7] text-[10px] font-extrabold text-[#92400E] uppercase tracking-wider">
-                        <th className="px-3 py-3 whitespace-nowrap">Institusi</th>
-                        <th className="px-3 py-3 whitespace-nowrap">Tipe</th>
-                        <th className="px-3 py-3 text-center whitespace-nowrap">QT Siswa / Balita</th>
-                        <th className="px-3 py-3 text-center whitespace-nowrap">QT Bumil / Busui</th>
-                        <th className="px-3 py-3 text-center whitespace-nowrap">QT Guru / Kader</th>
-                        <th className="px-3 py-3 text-center whitespace-nowrap">Pobia Nasi</th>
-                        <th className="px-3 py-3 text-center whitespace-nowrap text-red-600">Alergi</th>
-                        <th className="px-3 py-3 text-center whitespace-nowrap text-emerald-700">Tidak Alergi</th>
-                        <th className="px-3 py-3 text-center whitespace-nowrap">Jumlah</th>
-                        <th className="px-3 py-3 text-center whitespace-nowrap">Jadwal Pengantaran</th>
-                        <th className="px-3 py-3"></th>
-                      </tr>
-                    )}
+                    <tr className="bg-slate-100/90 text-[11px] font-bold text-slate-600 uppercase tracking-wider border-b border-slate-200">
+                      <th className="px-3 py-3 whitespace-nowrap">Institusi</th>
+                      <th className="px-3 py-3 whitespace-nowrap">Tipe</th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap">QT Siswa / Balita</th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap">QT Bumil / Busui</th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap">QT Guru / Kader</th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap">Pobia Nasi</th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap">Alergi</th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap">Tidak Alergi</th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap">Jumlah</th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap">Jadwal Pengantaran</th>
+                      <th className="px-3 py-3"></th>
+                    </tr>
                   </thead>
                   <tbody>
                     {filteredEntries.length === 0 ? (
                       <tr>
-                        <td colSpan={viewMode === 'rinci' ? 16 : 11} className="px-4 py-8 text-center text-xs font-semibold text-gray-400 italic">
-                          Belum ada data institusi. Klik "⚡ Load 27 Master Institusi" di atas atau "Tambah Institusi Baru" di bawah.
+                        <td colSpan={11} className="px-4 py-8 text-center text-xs font-medium text-slate-400 italic">
+                          Belum ada data institusi. Klik "Tambah Institusi Baru" di bawah untuk menambah data.
                         </td>
                       </tr>
                     ) : (
@@ -1307,59 +1040,34 @@ export function MbgAdminPage() {
                           isLibur={entry.isSekolahLibur}
                           onManageClasses={() => setSelectedEntryForMenu(entry)}
                           onConfirmAction={setConfirmState}
-                          viewMode={viewMode}
                         />
                       ))
                     )}
                     {/* Total Row */}
                     {filteredEntries.length > 0 && (
-                      viewMode === 'rinci' ? (
-                        <tr className="bg-[#111827] text-white text-xs font-extrabold">
-                          <td className="px-3 py-3" colSpan={2}>TOTAL (REKAPITULASI)</td>
-                          <td className="px-1.5 py-3 text-center text-amber-300 font-bold">{grandTotals.porsiKecilL}</td>
-                          <td className="px-1.5 py-3 text-center text-amber-300 font-bold">{grandTotals.porsiKecilP}</td>
-                          <td className="px-1.5 py-3 text-center text-blue-300 font-bold">{grandTotals.porsiBesarL}</td>
-                          <td className="px-1.5 py-3 text-center text-blue-300 font-bold">{grandTotals.porsiBesarP}</td>
-                          <td className="px-3 py-3 text-center text-indigo-300 font-black text-sm">{grandTotals.siswa}</td>
-                          <td className="px-1.5 py-3 text-center text-emerald-300 font-bold">{grandTotals.guruL}</td>
-                          <td className="px-1.5 py-3 text-center text-emerald-300 font-bold">{grandTotals.guruP}</td>
-                          <td className="px-1.5 py-3 text-center text-teal-300 font-bold">{grandTotals.tendikL}</td>
-                          <td className="px-1.5 py-3 text-center text-teal-300 font-bold">{grandTotals.tendikP}</td>
-                          <td className="px-3 py-3 text-center text-emerald-300 font-black text-sm">{grandTotals.totalGuruTendik}</td>
-                          <td className="px-2 py-3 text-center text-red-400 font-extrabold">{grandTotals.alergi}</td>
-                          <td className="px-2 py-3 text-center text-emerald-400 font-extrabold">{grandTotals.tidakAlergi}</td>
-                          <td className="px-3 py-3 text-center">
-                            <span className="inline-block rounded-full bg-[#FBBF24] text-[#111827] px-3 py-1 text-xs font-black">
-                              {grandTotals.jumlah}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3" colSpan={2}></td>
-                        </tr>
-                      ) : (
-                        <tr className="bg-[#111827] text-white text-xs font-extrabold">
-                          <td className="px-3 py-3" colSpan={2}>TOTAL (YANG AKTIF)</td>
-                          <td className="px-3 py-3 text-center">{grandTotals.siswa}</td>
-                          <td className="px-3 py-3 text-center">{grandTotals.bumil}</td>
-                          <td className="px-3 py-3 text-center">{grandTotals.guru}</td>
-                          <td className="px-3 py-3 text-center">{grandTotals.pobia}</td>
-                          <td className="px-3 py-3 text-center text-red-400 font-extrabold">{grandTotals.alergi}</td>
-                          <td className="px-3 py-3 text-center text-emerald-400 font-extrabold">{grandTotals.tidakAlergi}</td>
-                          <td className="px-3 py-3 text-center">
-                            <span className="inline-block rounded-full bg-[#FBBF24] text-[#111827] px-3 py-0.5">
-                              {grandTotals.jumlah}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3" colSpan={2}></td>
-                        </tr>
-                      )
+                      <tr className="bg-slate-800 text-white text-xs font-bold border-t border-slate-700">
+                        <td className="px-3 py-3 font-semibold" colSpan={2}>TOTAL (AKTIF)</td>
+                        <td className="px-3 py-3 text-center font-semibold">{grandTotals.siswa}</td>
+                        <td className="px-3 py-3 text-center font-semibold">{grandTotals.bumil}</td>
+                        <td className="px-3 py-3 text-center font-semibold">{grandTotals.guru}</td>
+                        <td className="px-3 py-3 text-center font-semibold">{grandTotals.pobia}</td>
+                        <td className="px-3 py-3 text-center font-bold text-red-300">{grandTotals.alergi}</td>
+                        <td className="px-3 py-3 text-center font-bold text-emerald-300">{grandTotals.tidakAlergi}</td>
+                        <td className="px-3 py-3 text-center">
+                          <span className="inline-flex items-center justify-center rounded bg-white text-slate-900 font-extrabold px-3 py-0.5 text-xs shadow-xs">
+                            {grandTotals.jumlah}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3" colSpan={2}></td>
+                      </tr>
                     )}
                   </tbody>
                 </table>
                 <button
                   onClick={handleAddRow}
-                  className="w-full py-3.5 text-xs font-bold text-[#6B7280] hover:text-[#111827] hover:bg-[#F9FAFB] border-t border-[#E5E7EB] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  className="w-full py-3 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 border-t border-slate-200 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <Plus className="h-4 w-4" />
                   Tambah Institusi Baru
                 </button>
               </div>
@@ -1419,13 +1127,12 @@ export function MbgAdminPage() {
               className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
             >
               <div className="flex items-center gap-3 mb-4">
-                <div className={`p-2.5 rounded-xl ${
-                  confirmState.variant === 'danger'
+                <div className={`p-2.5 rounded-xl ${confirmState.variant === 'danger'
                     ? 'bg-red-50 text-red-600'
                     : confirmState.variant === 'warning'
-                    ? 'bg-amber-50 text-amber-600'
-                    : 'bg-blue-50 text-blue-600'
-                }`}>
+                      ? 'bg-amber-50 text-amber-600'
+                      : 'bg-blue-50 text-blue-600'
+                  }`}>
                   {confirmState.variant === 'danger' ? (
                     <Trash2 className="h-5 w-5" />
                   ) : (
@@ -1451,11 +1158,10 @@ export function MbgAdminPage() {
                     confirmState.onConfirm();
                     setConfirmState(null);
                   }}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-colors cursor-pointer ${
-                    confirmState.variant === 'danger'
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-colors cursor-pointer ${confirmState.variant === 'danger'
                       ? 'bg-red-600 hover:bg-red-700'
                       : 'bg-[#FBBF24] text-[#111827] hover:bg-[#F59E0B]'
-                  }`}
+                    }`}
                 >
                   Ya, Lanjutkan
                 </button>
@@ -1495,7 +1201,7 @@ export function ManageMenuModal({
   const [classes, setClasses] = useState<MbgClassBreakdown[]>([]);
   const [isRegManual, setIsRegManual] = useState(false);
   const [isKerManual, setIsKerManual] = useState(false);
-  
+
   const [customRecipes, setCustomRecipes] = useState<{ namaMenu: string; jenisMenu: string }[]>([]);
 
   useEffect(() => {
@@ -1694,9 +1400,8 @@ export function ManageMenuModal({
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className={`bg-white rounded-2xl shadow-2xl w-full p-6 font-['Hanken_Grotesk',system-ui,sans-serif] transition-all duration-300 ${
-          isSekolah ? 'max-w-5xl' : 'max-w-3xl'
-        }`}
+        className={`bg-white rounded-2xl shadow-2xl w-full p-6 font-['Hanken_Grotesk',system-ui,sans-serif] transition-all duration-300 ${isSekolah ? 'max-w-5xl' : 'max-w-3xl'
+          }`}
       >
         <div className="flex items-center justify-between mb-5">
           <div>

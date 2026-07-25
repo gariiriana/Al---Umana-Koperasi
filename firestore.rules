@@ -313,18 +313,18 @@ service cloud.firestore {
     // MBG PM Batches (batch pengiriman per tanggal)
     // -------------------------------------------------------------------
     match /mbg_pm_batches/{batchId} {
-      allow read: if request.auth != null && (isAdmin() || isAnyMbg());
-      allow create, update: if isAdmin() || isAdminMbg() || isProduksiMbg() || isDistribusiMbg() || isPurchasingMbg();
-      allow delete: if isAdmin();
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow create, update: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow delete: if isAdmin() || isAdminMbg();
     }
 
     // -------------------------------------------------------------------
     // MBG PM Entries (data per institusi dalam batch)
     // -------------------------------------------------------------------
     match /mbg_pm_entries/{entryId} {
-      allow read: if request.auth != null && (isAdmin() || isAnyMbg());
-      allow create, update: if isAdmin() || isAdminMbg();
-      allow delete: if isAdmin() || isAdminMbg();
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow create, update: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
     }
 
     // -------------------------------------------------------------------
