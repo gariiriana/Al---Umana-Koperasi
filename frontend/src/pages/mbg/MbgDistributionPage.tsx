@@ -32,6 +32,34 @@ import {
   updateDeliveryTask,
 } from '@/services/mbgDistributionService';
 import { SearchableBatchSelector } from '@/components/mbg/SearchableBatchSelector';
+import { MBG_SATUAN_OPTIONS } from '@/constants/mbgConstants';
+import porsiStandardData from '@/constants/standarPorsi.json';
+import resepStandardData from '@/constants/standarResep.json';
+
+interface StandarPorsi {
+  kode: number;
+  jenisMenu: string;
+  namaMenu: string;
+  bahanUtama: string;
+  porsiKecil: number;
+  porsiBesar: number;
+}
+
+interface StandarResep {
+  namaMenu: string;
+  jenisMenu: string;
+  mainBahan: string;
+  baseQty: number;
+  satuanMainBahan: string;
+  ingredients: {
+    bahan: string;
+    kebutuhan: number;
+    satuan: string;
+  }[];
+}
+
+const standarPorsi = porsiStandardData as StandarPorsi[];
+const standarResep = resepStandardData as StandarResep[];
 
 export function MbgDistributionPage() {
   const { user } = useAuth();
@@ -85,15 +113,158 @@ export function MbgDistributionPage() {
     };
   }, [selectedBatchId]);
 
+  // Fallback calculation for ingredients if orders collection is empty in Firestore
+  const fallbackIngredients = useMemo(() => {
+    if (entries.length === 0) return [];
+    const rawIngredients: Record<
+      string,
+      { name: string; amount: number; satuan: string; sourceMenus: string[] }
+    > = {};
+
+    const menuMainTotals: Record<string, { totalQty: number; countKecil: number; countBesar: number }> = {};
+
+    entries.forEach((entry) => {
+      if (entry.isSekolahLibur) return;
+      const qtyKecil = entry.qtSiswaBalita || 0;
+      const qtyBesar = (entry.qtBumilBusui || 0) + (entry.qtGuruKader || 0);
+
+      const items = [...(entry.menuItems || []), ...(entry.menuKeringanItems || [])];
+
+      items.forEach((menuName) => {
+        const porsiCfg = standarPorsi.find(
+          (p) => p.namaMenu.toLowerCase().trim() === menuName.toLowerCase().trim()
+        );
+        const portionSize = porsiCfg ? (qtyKecil * porsiCfg.porsiKecil + qtyBesar * porsiCfg.porsiBesar) : 0;
+        const weight = portionSize;
+
+        const normName = menuName.trim();
+        if (!menuMainTotals[normName]) {
+          menuMainTotals[normName] = { totalQty: 0, countKecil: 0, countBesar: 0 };
+        }
+        menuMainTotals[normName].totalQty += weight;
+        menuMainTotals[normName].countKecil += qtyKecil;
+        menuMainTotals[normName].countBesar += qtyBesar;
+      });
+    });
+
+    Object.entries(menuMainTotals).forEach(([menuName, totals]) => {
+      const recipe = standarResep.find(
+        (r) => r.namaMenu.toLowerCase().trim() === menuName.toLowerCase().trim()
+      );
+
+      if (recipe && recipe.baseQty > 0) {
+        const ratio = totals.totalQty / recipe.baseQty;
+        recipe.ingredients.forEach((ing) => {
+          const key = ing.bahan.toLowerCase().trim();
+          if (!rawIngredients[key]) {
+            rawIngredients[key] = { name: ing.bahan, amount: 0, satuan: ing.satuan, sourceMenus: [] };
+          }
+          rawIngredients[key].amount += ing.kebutuhan * ratio;
+          if (!rawIngredients[key].sourceMenus.includes(menuName)) {
+            rawIngredients[key].sourceMenus.push(menuName);
+          }
+        });
+      } else {
+        const porsiCfg = standarPorsi.find(
+          (p) => p.namaMenu.toLowerCase().trim() === menuName.toLowerCase().trim()
+        );
+        const name = porsiCfg ? porsiCfg.bahanUtama : menuName;
+        const key = name.toLowerCase().trim();
+        const totalPortions = totals.countKecil + totals.countBesar;
+
+        if (!rawIngredients[key]) {
+          const isUnitItem = porsiCfg && porsiCfg.porsiKecil === 1;
+          rawIngredients[key] = {
+            name,
+            amount: 0,
+            satuan: isUnitItem ? 'pcs' : 'g',
+            sourceMenus: [],
+          };
+        }
+        rawIngredients[key].amount += totals.totalQty || totalPortions;
+        if (!rawIngredients[key].sourceMenus.includes(menuName)) {
+          rawIngredients[key].sourceMenus.push(menuName);
+        }
+      }
+    });
+
+    return Object.values(rawIngredients).map((r) => {
+      let qty = r.amount;
+      let unit = 'Kg';
+
+      const sLower = r.satuan.toLowerCase();
+      if (sLower === 'g') {
+        if (r.amount >= 1000) {
+          qty = r.amount / 1000;
+          unit = 'Kg';
+        } else {
+          qty = r.amount;
+          unit = 'g';
+        }
+      } else if (sLower === 'ml') {
+        if (r.amount >= 1000) {
+          qty = r.amount / 1000;
+          unit = 'Liter';
+        } else {
+          qty = r.amount;
+          unit = 'ml';
+        }
+      } else if (sLower === 'pcs') {
+        unit = 'Pcs';
+      } else if (sLower === 'ikat') {
+        unit = 'Ikat';
+      } else if (sLower === 'siung' || sLower === 'lembar') {
+        unit = 'Pcs';
+      } else {
+        const matched = MBG_SATUAN_OPTIONS.find((opt) => opt.toLowerCase() === sLower);
+        unit = matched || 'Kg';
+      }
+
+      qty = Math.round(qty * 100) / 100;
+
+      return {
+        bahanName: r.name,
+        jamKedatangan: '08:00',
+        jumlah: qty,
+        satuan: unit,
+        hargaSatuan: 0,
+        totalHarga: 0,
+        keterangan: `Resep: ${r.sourceMenus.slice(0, 2).join(', ')}`,
+      };
+    });
+  }, [entries]);
+
+  const effectiveOrders = useMemo(() => {
+    if (orders.length > 0) return orders;
+    if (fallbackIngredients.length === 0) return [];
+    const fallbackPo: MbgPurchaseOrder = {
+      id: `fallback_${selectedBatchId}`,
+      batchId: selectedBatchId || '',
+      supplierId: 'pasar_utama',
+      supplierName: 'PASAR / SUPPLIER UTAMA',
+      type: 'harian',
+      targetDate: new Date().toISOString().split('T')[0],
+      groupLabel: 'Pesanan A',
+      items: fallbackIngredients,
+      totalPengeluaran: 0,
+      status: 'ordered',
+      orderedBy: 'system',
+      orderedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    return [fallbackPo];
+  }, [orders, fallbackIngredients, selectedBatchId]);
+
   // Group PO items by supplier for receiving tab
   const receivingData = useMemo(() => {
-    return orders.map((order) => ({
+    return effectiveOrders.map((order) => ({
       supplierName: order.supplierName,
       status: order.status,
       groupLabel: order.groupLabel,
       items: order.items,
     }));
-  }, [orders]);
+  }, [effectiveOrders]);
   
   // Group PM entries by petugas
   const groupedEntries = useMemo(() => {
@@ -382,7 +553,7 @@ export function MbgDistributionPage() {
               {/* QC Tab */}
               {activeTab === 'qc' ? (
                 <div className="space-y-4">
-                  {orders.map((order) => {
+                  {effectiveOrders.map((order) => {
                     const check = qcChecks.find((c) => c.purchaseOrderId === order.id);
                     return (
                       <div
