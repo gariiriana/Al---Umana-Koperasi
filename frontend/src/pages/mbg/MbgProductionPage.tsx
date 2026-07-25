@@ -475,27 +475,65 @@ export function MbgProductionPage() {
       if (e.institutionType === 'sekolah') {
         if (e.classesBreakdown && e.classesBreakdown.length > 0) {
           e.classesBreakdown.forEach((c) => {
-            const nameLower = c.className.toLowerCase();
-            if (nameLower.includes('tk') || nameLower.includes('paud')) {
-              counts['SISWA TK/PAUD'] += c.jumlah || 0;
-            } else if (nameLower.includes('1') || nameLower.includes('2') || nameLower.includes('3')) {
-              counts['SISWA SD/MI KELAS 1-3'] += c.jumlah || 0;
-            } else if (nameLower.includes('4') || nameLower.includes('5') || nameLower.includes('6')) {
-              counts['SISWA SD/MI KELAS 4-6'] += c.jumlah || 0;
-            } else if (nameLower.includes('smp') || nameLower.includes('mts')) {
-              counts['SISWA SMP/MTS'] += c.jumlah || 0;
+            const qty = c.jumlah || 0;
+            if (qty <= 0) return;
+
+            const nameLower = (c.className + ' ' + (e.institutionName || '')).toLowerCase();
+            const schoolLevel = e.schoolLevel as string | undefined;
+
+            if (
+              schoolLevel === 'sma' ||
+              nameLower.includes('sma') ||
+              nameLower.includes('smk') ||
+              nameLower.includes('ma ') ||
+              nameLower.includes(' ma') ||
+              /\b(10|11|12)\b/.test(c.className)
+            ) {
+              counts['SISWA SMA/MA/SMK'] += qty;
+            } else if (
+              schoolLevel === 'smp' ||
+              nameLower.includes('smp') ||
+              nameLower.includes('mts') ||
+              /\b(7|8|9)\b/.test(c.className)
+            ) {
+              counts['SISWA SMP/MTS'] += qty;
+            } else if (
+              schoolLevel === 'tk_paud' ||
+              nameLower.includes('tk') ||
+              nameLower.includes('paud') ||
+              nameLower.includes('sps')
+            ) {
+              counts['SISWA TK/PAUD'] += qty;
+            } else if (
+              schoolLevel === 'sd' ||
+              nameLower.includes('sd') ||
+              nameLower.includes('mi')
+            ) {
+              if (c.portionType === 'kecil' || /\b(1|2|3)\b/.test(c.className)) {
+                counts['SISWA SD/MI KELAS 1-3'] += qty;
+              } else {
+                counts['SISWA SD/MI KELAS 4-6'] += qty;
+              }
             } else {
-              counts['SISWA SMA/MA/SMK'] += c.jumlah || 0;
+              // General Fallback based on portionType
+              if (c.portionType === 'kecil') {
+                counts['SISWA SD/MI KELAS 1-3'] += qty;
+              } else {
+                counts['SISWA SMA/MA/SMK'] += qty;
+              }
             }
           });
         } else {
+          const qty = e.jumlah || 0;
+          if (qty <= 0) return;
+
           if (e.schoolLevel === 'tk_paud') {
-            counts['SISWA TK/PAUD'] += e.jumlah || 0;
+            counts['SISWA TK/PAUD'] += qty;
           } else if (e.schoolLevel === 'sd') {
-            counts['SISWA SD/MI KELAS 1-3'] += e.qtPorsiKecil || Math.ceil((e.jumlah || 0) / 2);
-            counts['SISWA SD/MI KELAS 4-6'] += e.qtPorsiBesar || Math.floor((e.jumlah || 0) / 2);
+            counts['SISWA SD/MI KELAS 1-3'] += e.qtPorsiKecil || Math.ceil(qty / 2);
+            counts['SISWA SD/MI KELAS 4-6'] += e.qtPorsiBesar || Math.floor(qty / 2);
           } else {
-            counts['SISWA SMA/MA/SMK'] += e.jumlah || 0;
+            counts['SISWA SMA/MA/SMK'] += qty;
           }
         }
       } else {
