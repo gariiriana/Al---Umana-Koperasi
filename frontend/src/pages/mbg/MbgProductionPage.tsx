@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState, Fragment } from 'react';
 import {
-  Plus, Trash2, FileDown, Calendar, Loader2, CheckCircle2, Search, X, Folder,
+  Plus, Trash2, FileDown, Calendar, Loader2, CheckCircle2, Search, X, Folder, Send,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -1247,16 +1247,6 @@ export function MbgProductionPage() {
     }
   };
 
-  const handleSubmitToPurchasing = async () => {
-    if (!selectedBatchId) return;
-    try {
-      await updateBatchStatus(selectedBatchId, 'PURCHASING');
-      showToast({ message: 'Data gizi berhasil disubmit ke Purchasing!', variant: 'success' });
-    } catch {
-      showToast({ message: 'Gagal men-submit data ke Purchasing', variant: 'error' });
-    }
-  };
-
   const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
     try {
       const res = await fetch(url);
@@ -1553,6 +1543,19 @@ export function MbgProductionPage() {
     );
   }, [nutritionData]);
 
+  const handleSubmitToPurchasing = async () => {
+    if (!selectedBatchId) return;
+    if (window.confirm('Kirim/Submit data resep dan estimasi kebutuhan bahan ke Purchasing MBG?')) {
+      try {
+        await updateBatchStatus(selectedBatchId, 'PURCHASING');
+        showToast({ message: 'Data resep & kebutuhan bahan berhasil disubmit ke Purchasing MBG!', variant: 'success' });
+      } catch (err) {
+        console.error(err);
+        showToast({ message: 'Gagal menyubmit data ke Purchasing', variant: 'error' });
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen font-['Hanken_Grotesk',system-ui,sans-serif]">
       {/* Header */}
@@ -1582,6 +1585,14 @@ export function MbgProductionPage() {
         </div>
         {activeTab === 'nutrition' && selectedBatchId && (
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleSubmitToPurchasing}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+              title="Kirim data resep dan kebutuhan bahan ke Purchasing MBG"
+            >
+              <Send className="h-4 w-4 text-white" />
+              <span>Submit ke Purchasing</span>
+            </button>
             <button
               onClick={handleExportPdf}
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#111827] text-white text-xs font-extrabold rounded-xl shadow hover:bg-[#1F2937] transition-colors cursor-pointer"

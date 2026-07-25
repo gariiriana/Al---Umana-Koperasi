@@ -11,12 +11,13 @@ import {
   Loader2,
   X,
   Save,
-  DollarSign,
   AlertTriangle,
   Clock,
   Briefcase,
   Grid,
   List,
+  Send,
+  ShoppingCart,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -408,11 +409,6 @@ export function MbgPurchasingPage() {
     }
   };
 
-  // Total expenditure of the current batch
-  const grandTotal = useMemo(() => {
-    return orders.reduce((sum, order) => sum + (order.totalPengeluaran || 0), 0);
-  }, [orders]);
-
   const filteredOrders = useMemo(() => {
     return orders;
   }, [orders]);
@@ -573,6 +569,29 @@ export function MbgPurchasingPage() {
     });
   };
 
+  const handleSubmitToDistribution = async () => {
+    if (!selectedBatchId) return;
+    setConfirmState({
+      title: 'Submit ke Distribusi MBG (Cek QC)?',
+      message: 'Daftar belanjaan & PO bahan makanan akan dikirim ke Tim Distribusi MBG untuk proses Quality Control (QC).',
+      variant: 'info',
+      onConfirm: async () => {
+        try {
+          await updateBatchStatus(selectedBatchId, 'QC_PENDING');
+          showToast({ message: 'PO berhasil disubmit ke Distribusi MBG untuk Cek QC!', variant: 'success' });
+        } catch {
+          showToast({ message: 'Gagal menyubmit ke Distribusi', variant: 'error' });
+        } finally {
+          setConfirmState(null);
+        }
+      },
+    });
+  };
+
+  const totalItemCount = useMemo(() => {
+    return orders.reduce((sum, o) => sum + (o.items?.length || 0), 0);
+  }, [orders]);
+
   return (
     <div className="min-h-screen font-['Hanken_Grotesk',system-ui,sans-serif] p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -585,19 +604,29 @@ export function MbgPurchasingPage() {
         </div>
 
         {selectedBatchId && (
-          <button
-            onClick={() => {
-              setNewPoData((prev) => ({
-                ...prev,
-                targetDate: selectedBatch?.tanggal || new Date().toISOString().split('T')[0],
-              }));
-              setIsNewPoOpen(true);
-            }}
-            className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-3 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all"
-          >
-            <Plus className="h-4 w-4 text-[#FBBF24]" />
-            Tambah PO Baru
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSubmitToDistribution}
+              className="flex items-center gap-2 bg-[#059669] hover:bg-[#047857] text-white font-extrabold text-xs px-4 py-3 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all"
+              title="Submit PO & Daftar Belanjaan ke Distribusi MBG untuk Cek QC"
+            >
+              <Send className="h-4 w-4 text-white" />
+              <span>Submit ke Distribusi (Cek QC)</span>
+            </button>
+            <button
+              onClick={() => {
+                setNewPoData((prev) => ({
+                  ...prev,
+                  targetDate: selectedBatch?.tanggal || new Date().toISOString().split('T')[0],
+                }));
+                setIsNewPoOpen(true);
+              }}
+              className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-3 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all"
+            >
+              <Plus className="h-4 w-4 text-[#FBBF24]" />
+              Tambah PO Baru
+            </button>
+          </div>
         )}
       </div>
 
@@ -635,15 +664,15 @@ export function MbgPurchasingPage() {
                 </div>
 
                 <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 flex items-center gap-4 shadow-sm">
-                  <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center text-green-600">
-                    <DollarSign className="h-5 w-5" />
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                    <ShoppingCart className="h-5 w-5" />
                   </div>
                   <div>
                     <span className="text-[10px] font-bold text-gray-400 block uppercase">
-                      Grand Total Pengeluaran
+                      Total Item Bahan
                     </span>
                     <span className="text-lg font-extrabold text-gray-800">
-                      Rp {grandTotal.toLocaleString('id-ID')}
+                      {totalItemCount} item belanja
                     </span>
                   </div>
                 </div>
@@ -947,19 +976,15 @@ export function MbgPurchasingPage() {
                             <Trash2 className="h-4.5 w-4.5" />
                           </button>
                         </div>
-                      </div>
-
-                      {/* Items Table */}
+                      </div>                      {/* Items Table */}
                       <div className="overflow-x-auto">
-                        <table className="w-full text-xs min-w-[900px]">
+                        <table className="w-full text-xs min-w-[700px]">
                           <thead>
                             <tr className="bg-gray-50 border-b border-gray-100 text-left font-bold text-gray-500 uppercase tracking-wider text-[10px]">
                               <th className="py-3 px-4 w-1/3">List Pesanan Bahan</th>
                               <th className="py-3 px-4">Jam Kedatangan</th>
                               <th className="py-3 px-4">Jumlah</th>
                               <th className="py-3 px-4">Satuan</th>
-                              <th className="py-3 px-4">Harga Satuan (Rp)</th>
-                              <th className="py-3 px-4">Total (Rp)</th>
                               <th className="py-3 px-4">Keterangan</th>
                               <th className="py-3 px-4 text-center">Aksi</th>
                             </tr>
@@ -1025,22 +1050,6 @@ export function MbgPurchasingPage() {
                                 </td>
                                 <td className="py-2.5 px-4">
                                   <input
-                                    type="number"
-                                    value={item.hargaSatuan || ''}
-                                    title="Harga Satuan"
-                                    disabled={order.submittedToRecap === true}
-                                    onChange={(e) =>
-                                      handleUpdateItem(order.id, idx, 'hargaSatuan', Number(e.target.value))
-                                    }
-                                    placeholder="0"
-                                    className="w-28 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[#FBBF24] focus:outline-none py-1 disabled:opacity-60"
-                                  />
-                                </td>
-                                <td className="py-2.5 px-4 font-bold text-[#111827] disabled:opacity-60">
-                                  Rp {(item.totalHarga || 0).toLocaleString('id-ID')}
-                                </td>
-                                <td className="py-2.5 px-4">
-                                  <input
                                     type="text"
                                     value={item.keterangan}
                                     title="Keterangan"
@@ -1071,7 +1080,7 @@ export function MbgPurchasingPage() {
                           </tbody>
                         </table>
                       </div>
- 
+
                       {/* Footer Section / Action Row */}
                       <div className="px-6 py-3 bg-gray-50 border-t border-[#E5E7EB] flex justify-between items-center">
                         <div className="flex gap-2">
@@ -1084,7 +1093,7 @@ export function MbgPurchasingPage() {
                                 <Plus className="h-3.5 w-3.5 text-[#FBBF24]" />
                                 Tambah Baris Bahan
                               </button>
-                               <button
+                              <button
                                 type="button"
                                 onClick={() => handleAutoLoadIngredients(order.id)}
                                 className="flex items-center gap-1.5 font-extrabold text-xs text-emerald-800 hover:text-emerald-950 py-1 px-3 border border-emerald-300 bg-emerald-50 rounded-lg hover:bg-emerald-100 cursor-pointer transition-all active:scale-95 shadow-sm"
@@ -1094,12 +1103,12 @@ export function MbgPurchasingPage() {
                             </>
                           )}
                         </div>
- 
+
                         <div className="flex items-center gap-3">
                           <div className="text-right text-xs font-bold text-gray-700">
-                            Total Belanja Supplier:{' '}
+                            Total Item Bahan:{' '}
                             <span className="text-sm font-extrabold text-[#111827] ml-1.5 mr-3">
-                              Rp {(order.totalPengeluaran || 0).toLocaleString('id-ID')}
+                              {order.items.length} jenis
                             </span>
                           </div>
                           

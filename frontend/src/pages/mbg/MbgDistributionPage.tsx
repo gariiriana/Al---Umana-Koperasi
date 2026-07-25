@@ -9,6 +9,7 @@ import {
   Loader2,
   UserCheck,
   Building2,
+  ChefHat,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -298,6 +299,16 @@ export function MbgDistributionPage() {
     }
   };
 
+  const handleHandoverToCooking = async () => {
+    if (!selectedBatchId) return;
+    try {
+      await updateBatchStatus(selectedBatchId, 'COOKING');
+      showToast({ message: 'Bahan makanan telah lolos QC & diserahkan ke Tim Produksi untuk dimasak!', variant: 'success' });
+    } catch {
+      showToast({ message: 'Gagal melakukan handover ke tim produksi', variant: 'error' });
+    }
+  };
+
   return (
     <div className="min-h-screen font-['Hanken_Grotesk',system-ui,sans-serif] p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -309,14 +320,28 @@ export function MbgDistributionPage() {
           </p>
         </div>
 
-        {selectedBatchId && activeTab === 'assignment' && (
-          <button
-            onClick={handleSyncDeliveryTasks}
-            className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-3 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all"
-          >
-            <UserCheck className="h-4 w-4 text-[#FBBF24]" />
-            Sinkron Tugas Kurir
-          </button>
+        {selectedBatchId && (
+          <div className="flex items-center gap-2">
+            {activeTab === 'qc' && (
+              <button
+                onClick={handleHandoverToCooking}
+                className="flex items-center gap-2 bg-[#0284C7] hover:bg-[#0369A1] text-white font-extrabold text-xs px-4 py-3 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all"
+                title="Handover bahan yang telah di-QC ke Tim Produksi untuk proses masak"
+              >
+                <ChefHat className="h-4 w-4 text-[#FBBF24]" />
+                <span>Handover ke Tim Produksi (Siap Masak)</span>
+              </button>
+            )}
+            {activeTab === 'assignment' && (
+              <button
+                onClick={handleSyncDeliveryTasks}
+                className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-3 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all"
+              >
+                <UserCheck className="h-4 w-4 text-[#FBBF24]" />
+                <span>Sinkron Tugas Kurir</span>
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -490,6 +515,11 @@ export function MbgDistributionPage() {
               ) : (
                 /* Kurir Assignment Tab - Petugas format matching Foto 2 */
                 <div className="space-y-6">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs font-bold text-amber-900 flex items-center gap-2 shadow-xs">
+                    <Truck className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>💡 Penugasan Kurir dapat dilakukan langsung setelah Data PM disubmit oleh Admin MBG, tanpa perlu menunggu proses masak selesai.</span>
+                  </div>
+
                   {/* GANTI MENU KERINGAN label */}
                   {hasMenuKeringan && (
                     <div className="flex items-center gap-2 text-xs font-extrabold text-red-700 bg-red-50 px-4 py-3 rounded-xl border border-red-200">

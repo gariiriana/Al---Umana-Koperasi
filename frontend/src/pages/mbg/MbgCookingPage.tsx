@@ -42,7 +42,7 @@ export function MbgCookingPage() {
 
   useEffect(() => {
     const unsub = subscribeBatches((b) => {
-      setBatches(b.filter((batch) => ['QC_PASSED', 'COOKING', 'COOKED'].includes(batch.status)));
+      setBatches(b.filter((batch) => batch.status !== 'DRAFT'));
       setLoading(false);
     });
     return unsub;
