@@ -14,7 +14,7 @@ import {
   FlashlightOff,
   SwitchCamera,
 } from "lucide-react";
-import { getSecureTime, isTimeManipulated } from "@/services/secureTimeService";
+import { getSecureTime, isTimeManipulated, syncSecureTime, lastSyncAge } from "@/services/secureTimeService";
 import { verifyGpsLocation } from "@/services/gpsVerification";
 import { reverseGeocode } from "@/services/geocodingService";
 
@@ -74,6 +74,28 @@ export function LiveCamera({
         return "KEGIATAN";
     }
   };
+
+  // ─── 0. Re-sync SecureTime when camera opens ───
+  // After device sleep (courier traveling), performance.now() baseline
+  // is stale. Re-sync resets it so isTimeManipulated() won't false-positive.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Re-sync if last sync was > 2 minutes ago (likely device slept)
+    if (lastSyncAge() > 120_000) {
+      console.log("[LiveCamera] Re-syncing SecureTime (stale after travel)...");
+      syncSecureTime()
+        .then(() => {
+          // After fresh sync, re-evaluate time check
+          setTimeCheck(!isTimeManipulated());
+        })
+        .catch(() => {
+          // Sync failed (offline) — give benefit of the doubt
+          console.warn("[LiveCamera] SecureTime re-sync failed. Allowing camera.");
+          setTimeCheck(true);
+        });
+    }
+  }, [isOpen]);
 
   // ─── 1. GPS Watch ───
   useEffect(() => {
