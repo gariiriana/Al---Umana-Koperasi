@@ -267,7 +267,7 @@ export function MbgReportPage() {
 
       // 4. Totals and Notes at the bottom
       let nextY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
-      
+
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8.5);
       doc.setTextColor(...slateDark);
@@ -291,11 +291,11 @@ export function MbgReportPage() {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
       doc.setTextColor(...slateDark);
-      
+
       const todayStr = new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
       doc.text(`Sukabumi, ${todayStr}`, pageW - 60, nextY);
       doc.text('Penanggung Jawab SPPG Sukabumi,', pageW - 60, nextY + 4.5);
-      
+
       doc.setDrawColor(200, 200, 200);
       doc.line(pageW - 60, nextY + 23, pageW - 14, nextY + 23);
       doc.setFont('helvetica', 'bold');
@@ -310,7 +310,7 @@ export function MbgReportPage() {
       const pageH = doc.internal.pageSize.getHeight();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
-        
+
         // Header accent: Solid Amber Gold header band (3mm height) with a dark accent line
         doc.setFillColor(251, 191, 36); // #FBBF24 (Gold)
         doc.rect(0, 0, pageW, 3, 'F');
@@ -404,7 +404,7 @@ export function MbgReportPage() {
       });
 
       const uniqueEntries = Array.from(latestEntriesMap.values());
-      
+
       let maxSiswa = 0;
       let maxBalita = 0;
       let maxBumil = 0;
@@ -483,7 +483,7 @@ export function MbgReportPage() {
       // Render paragraph block safely wrapping lines
       const splitLatarBelakang = doc.splitTextToSize(weeklyLatarBelakang, pageW - 28);
       doc.text(splitLatarBelakang, 14, 76);
-      
+
       let curY = 76 + (splitLatarBelakang.length * 4) + 4;
 
       doc.setFont('helvetica', 'bold');
@@ -494,7 +494,7 @@ export function MbgReportPage() {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
       doc.setTextColor(31, 41, 55);
-      
+
       const splitTujuan = doc.splitTextToSize(weeklyTujuan, pageW - 28);
       doc.text(splitTujuan, 14, curY + 4);
 
@@ -509,7 +509,7 @@ export function MbgReportPage() {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
       doc.setTextColor(31, 41, 55);
-      
+
       const sasaranText = `Selama periode laporan ini, SPPG Sukabumi Gunungguruh Kebonmanggu telah mendistribusikan makan bergizi seimbang dengan rincian sasaran penerima manfaat unik maksimal sebagai berikut:`;
       const splitSasaranText = doc.splitTextToSize(sasaranText, pageW - 28);
       doc.text(splitSasaranText, 14, curY + 4);
@@ -542,7 +542,7 @@ export function MbgReportPage() {
 
       // Draw page break to begin BAB II
       doc.addPage();
-      
+
       // BAB II. PELAKSANAAN KEGIATAN
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(11);
@@ -671,11 +671,11 @@ export function MbgReportPage() {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
       doc.setTextColor(...slateDark);
-      
+
       const todayStr = new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
       doc.text(`Sukabumi, ${todayStr}`, pageW - 60, nextY);
       doc.text('Penanggung Jawab SPPG Sukabumi,', pageW - 60, nextY + 4.5);
-      
+
       doc.setDrawColor(200, 200, 200);
       doc.line(pageW - 60, nextY + 23, pageW - 14, nextY + 23);
       doc.setFont('helvetica', 'bold');
@@ -689,7 +689,7 @@ export function MbgReportPage() {
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
-        
+
         // Header accent: Solid Amber Gold header band (3mm height) with a dark accent line
         doc.setFillColor(251, 191, 36); // #FBBF24 (Gold)
         doc.rect(0, 0, pageW, 3, 'F');
@@ -739,21 +739,19 @@ export function MbgReportPage() {
       <div className="flex border-b border-[#E5E7EB] mb-6">
         <button
           onClick={() => setActiveTab('harian')}
-          className={`px-5 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${
-            activeTab === 'harian'
+          className={`px-5 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === 'harian'
               ? 'border-[#FBBF24] text-[#B45309]'
               : 'border-transparent text-[#6B7280] hover:text-[#111827]'
-          }`}
+            }`}
         >
           Laporan Harian Operasional
         </button>
         <button
           onClick={() => setActiveTab('mingguan')}
-          className={`px-5 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${
-            activeTab === 'mingguan'
+          className={`px-5 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === 'mingguan'
               ? 'border-[#FBBF24] text-[#B45309]'
               : 'border-transparent text-[#6B7280] hover:text-[#111827]'
-          }`}
+            }`}
         >
           Laporan Mingguan Operasional
         </button>

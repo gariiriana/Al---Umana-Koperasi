@@ -5,16 +5,16 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
   Camera, FileDown, Loader2, CheckCircle2,
-  ChefHat, Clock, Image as ImageIcon,
+  ChefHat, Clock, Image as ImageIcon, Upload, Trash2, Eye, X
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import type { MbgPmBatch, MbgCookingSession, MbgPmEntry, MbgNutritionEntry, MbgPurchaseOrder } from '@/types/mbg';
+import type { MbgPmBatch, MbgCookingSession, MbgPmEntry, MbgNutritionEntry, MbgPurchaseOrder, MbgCookingPhoto } from '@/types/mbg';
 import { subscribeBatches, subscribeEntries } from '@/services/mbgAdminService';
 import {
-  subscribeCookingSessions, createCookingSession, updateCookingSession, addCookingPhoto, subscribeNutrition
+  subscribeCookingSessions, createCookingSession, updateCookingSession, addCookingPhoto, addCookingPhotos, deleteCookingPhoto, subscribeNutrition
 } from '@/services/mbgProductionService';
 import { subscribePurchaseOrders } from '@/services/mbgPurchasingService';
 import { updateBatchStatus } from '@/services/mbgAdminService';
@@ -35,6 +35,8 @@ export function MbgCookingPage() {
   const [showCamera, setShowCamera] = useState(false);
   const [selectedDescription, setSelectedDescription] = useState<string>(MBG_COOKING_PHOTO_TEMPLATES[0]);
   const [activeSession, setActiveSession] = useState<MbgCookingSession | null>(null);
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
 
   const selectedBatch = useMemo(() => {
     return batches.find((b) => b.id === selectedBatchId);
@@ -43,25 +45,34 @@ export function MbgCookingPage() {
   useEffect(() => {
     const unsub = subscribeBatches((b) => {
       setBatches(b.filter((batch) => batch.status !== 'DRAFT'));
-      setLoading(false);
     });
-    return unsub;
+    return () => unsub();
   }, []);
 
   useEffect(() => {
+    if (batches.length > 0 && !selectedBatchId) {
+      setSelectedBatchId(batches[0].id);
+    }
+  }, [batches, selectedBatchId]);
+
+  useEffect(() => {
     if (!selectedBatchId) return;
-    const unsub1 = subscribeCookingSessions(selectedBatchId, (s) => {
-      setSessions(s);
-      if (s.length > 0) setActiveSession(s[0]);
+    setLoading(true);
+    const unsubS = subscribeCookingSessions(selectedBatchId, (sList) => {
+      setSessions(sList);
+      const active = sList.find((s) => s.status !== 'done') || sList[0] || null;
+      setActiveSession(active);
+      setLoading(false);
     });
-    const unsub2 = subscribeEntries(selectedBatchId, setEntries);
-    const unsub3 = subscribeNutrition(selectedBatchId, setNutritionData);
-    const unsub4 = subscribePurchaseOrders(selectedBatchId, setOrders);
+    const unsubE = subscribeEntries(selectedBatchId, (eList) => setEntries(eList));
+    const unsubN = subscribeNutrition(selectedBatchId, (nList) => setNutritionData(nList));
+    const unsubPO = subscribePurchaseOrders(selectedBatchId, (poList) => setOrders(poList));
+
     return () => {
-      unsub1();
-      unsub2();
-      unsub3();
-      unsub4();
+      unsubS();
+      unsubE();
+      unsubN();
+      unsubPO();
     };
   }, [selectedBatchId]);
 
@@ -76,16 +87,25 @@ export function MbgCookingPage() {
     }
   };
 
-  const handlePhotoCapture = async () => {
+  const handlePhotoCapture = async (file?: File) => {
     if (!activeSession) return;
     setShowCamera(false);
-    // In production, this would upload via chunkUploadService and get a fileId
+    let photoUrl = '';
+    if (file) {
+      photoUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(file);
+      });
+    }
     const fakeFileId = `photo_${Date.now()}`;
     try {
       await addCookingPhoto(activeSession.id, activeSession.photos, {
         fileId: fakeFileId,
         description: selectedDescription,
         capturedAt: new Date().toISOString(),
+        url: photoUrl || undefined,
       });
       showToast({ message: 'Foto berhasil ditambahkan!', variant: 'success' });
     } catch {
@@ -353,35 +373,124 @@ export function MbgCookingPage() {
                          </span>
                        </div>
 
-                       {/* Photo Description Selector + Capture */}
-                       <div className="flex flex-col sm:flex-row gap-3 mb-4">
-                         <select value={selectedDescription} onChange={(e) => setSelectedDescription(e.target.value)}
-                           title="Keterangan Foto"
-                           className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-xs font-semibold focus:ring-2 focus:ring-[#FBBF24] focus:outline-none">
-                           {MBG_COOKING_PHOTO_TEMPLATES.map((t) => (
-                             <option key={t} value={t}>{t}</option>
-                           ))}
-                         </select>
-                         <button onClick={() => setShowCamera(true)}
-                           className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#FBBF24] text-[#111827] rounded-xl text-xs font-extrabold cursor-pointer hover:bg-[#F59E0B] transition-colors">
-                           <Camera className="h-4 w-4" /> Ambil Foto
-                         </button>
-                       </div>
+                        {/* Photo Description Selector + Capture & Upload */}
+                        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                          <select value={selectedDescription} onChange={(e) => setSelectedDescription(e.target.value)}
+                            title="Keterangan Foto"
+                            className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-xs font-semibold focus:ring-2 focus:ring-[#FBBF24] focus:outline-none">
+                            {MBG_COOKING_PHOTO_TEMPLATES.map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => setShowCamera(true)}
+                              className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FBBF24] text-[#111827] rounded-xl text-xs font-extrabold cursor-pointer hover:bg-[#F59E0B] transition-colors">
+                              <Camera className="h-4 w-4" /> Live Camera
+                            </button>
+                            <label className={`inline-flex items-center gap-2 px-4 py-2.5 bg-[#0284C7] hover:bg-[#0369A1] text-white rounded-xl text-xs font-extrabold cursor-pointer transition-colors ${isUploadingPhotos ? 'opacity-50 pointer-events-none' : ''}`}>
+                              {isUploadingPhotos ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Upload className="h-4 w-4" />
+                              )}
+                              {isUploadingPhotos ? 'Mengunggah...' : 'Upload Device'}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                disabled={isUploadingPhotos}
+                                onChange={async (e) => {
+                                  const files = Array.from(e.target.files || []);
+                                  if (files.length > 0 && activeSession) {
+                                    setIsUploadingPhotos(true);
+                                    try {
+                                      const newPhotos: MbgCookingPhoto[] = [];
+                                      for (let i = 0; i < files.length; i++) {
+                                        const file = files[i];
+                                        const url = await new Promise<string>((resolve) => {
+                                          const reader = new FileReader();
+                                          reader.onload = () => resolve(reader.result as string);
+                                          reader.onerror = () => resolve('');
+                                          reader.readAsDataURL(file);
+                                        });
+                                        newPhotos.push({
+                                          fileId: `photo_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}`,
+                                          description: selectedDescription,
+                                          capturedAt: new Date().toISOString(),
+                                          url: url || undefined,
+                                        });
+                                      }
+                                      await addCookingPhotos(activeSession.id, activeSession.photos, newPhotos);
+                                      showToast({
+                                        message: `${newPhotos.length} foto dari device berhasil diunggah!`,
+                                        variant: 'success',
+                                      });
+                                    } catch (err) {
+                                      console.error('Error uploading photos:', err);
+                                      showToast({ message: 'Gagal mengunggah foto', variant: 'error' });
+                                    } finally {
+                                      setIsUploadingPhotos(false);
+                                      e.target.value = '';
+                                    }
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
 
                       {/* Photo Gallery */}
                       {activeSession.photos.length > 0 && (
                         <div>
-                          <p className="text-xs font-bold text-[#6B7280] mb-2">Dokumentasi Foto ({activeSession.photos.length})</p>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-bold text-[#6B7280]">Dokumentasi Foto ({activeSession.photos.length})</p>
+                            <span className="text-[10px] text-gray-400 font-medium">Klik foto untuk perbesar</span>
+                          </div>
                           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                             {activeSession.photos.map((photo, i) => (
-                              <div key={i} className="bg-[#F9FAFB] rounded-xl border border-[#E5E7EB] p-3 text-center">
-                                <div className="w-full h-24 bg-gray-200 rounded-lg flex items-center justify-center mb-2">
-                                  <ImageIcon className="h-8 w-8 text-gray-400" />
+                              <div key={photo.fileId || i} className="bg-[#F9FAFB] rounded-xl border border-[#E5E7EB] p-2.5 text-center relative group">
+                                <div
+                                  onClick={() => photo.url && setPreviewPhotoUrl(photo.url)}
+                                  className="w-full h-24 bg-gray-200 rounded-lg flex items-center justify-center mb-2 overflow-hidden relative cursor-pointer group-hover:brightness-95 transition-all"
+                                >
+                                  {photo.url ? (
+                                    <img src={photo.url} alt={photo.description} className="w-full h-full object-cover rounded-lg" />
+                                  ) : (
+                                    <ImageIcon className="h-8 w-8 text-gray-400" />
+                                  )}
+                                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    {photo.url && <Eye className="h-5 w-5 text-white drop-shadow" />}
+                                  </div>
                                 </div>
-                                <p className="text-[10px] font-bold text-[#111827]">{photo.description}</p>
-                                <p className="text-[9px] text-[#9CA3AF] mt-0.5">
-                                  {new Date(photo.capturedAt).toLocaleTimeString('id-ID')}
-                                </p>
+                                <div className="flex items-center justify-between gap-1">
+                                  <div className="text-left overflow-hidden flex-1">
+                                    <p className="text-[10px] font-bold text-[#111827] truncate" title={photo.description}>{photo.description}</p>
+                                    <p className="text-[9px] text-[#9CA3AF]">
+                                      {new Date(photo.capturedAt).toLocaleTimeString('id-ID')}
+                                    </p>
+                                  </div>
+                                  {activeSession.status !== 'done' && (
+                                    <button
+                                      type="button"
+                                      title="Hapus foto"
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        if (confirm("Hapus foto ini?")) {
+                                          try {
+                                            await deleteCookingPhoto(activeSession.id, activeSession.photos, photo.fileId);
+                                            showToast({ message: "Foto berhasil dihapus", variant: "info" });
+                                          } catch {
+                                            showToast({ message: "Gagal menghapus foto", variant: "error" });
+                                          }
+                                        }
+                                      }}
+                                      className="p-1 text-gray-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -420,6 +529,21 @@ export function MbgCookingPage() {
         activityType="PRODUKSI"
         orderId={selectedBatchId || ''}
       />
+
+      {/* Preview Image Modal */}
+      {previewPhotoUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setPreviewPhotoUrl(null)}>
+          <div className="relative max-w-3xl max-h-[90vh] bg-neutral-900 rounded-2xl overflow-hidden p-2" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setPreviewPhotoUrl(null)}
+              className="absolute top-4 right-4 p-2 text-white/80 hover:text-white bg-black/50 hover:bg-black/80 rounded-full z-10 transition-colors"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <img src={previewPhotoUrl} alt="Preview Foto Dokumentasi" className="w-full h-auto max-h-[85vh] object-contain rounded-xl" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

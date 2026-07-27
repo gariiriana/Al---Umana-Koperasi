@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import type { MbgPmBatch, MbgPmEntry, MbgInstitutionType, MbgClassBreakdown } from '@/types/mbg';
+import type { MbgPmBatch, MbgPmEntry, MbgInstitutionType, MbgClassBreakdown, MbgDayMenu } from '@/types/mbg';
+import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
 import {
   subscribeBatches,
   subscribeEntries,
@@ -29,10 +30,14 @@ import {
   recalculateBatchTotals,
   copyFromBatch,
   deleteBatch,
+  subscribeWeeklySchedule,
+  saveWeeklySchedule,
+  getMenuForDate,
+  bulkAddEntriesFromMaster,
 } from '@/services/mbgAdminService';
 import { subscribeCustomRecipes } from '@/services/mbgProductionService';
 import resepStandardData from '@/constants/standarResep.json';
-import { MBG_BATCH_STATUS_CONFIG, MBG_MASTER_INSTITUTIONS } from '@/constants/mbgConstants';
+import { MBG_BATCH_STATUS_CONFIG, MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
 
 // ---- Helper: Auto-calculate portion suggestions based on levels and inputs ----
 function getAutoPortions(entry: Partial<MbgPmEntry>) {
@@ -161,6 +166,85 @@ function NewBatchModal({
           </button>
         </div>
       </motion.div>
+    </div>
+  );
+}
+
+// ---- Master Institutions Side Panel ----
+function MasterInstitutionsSidePanel({
+  entries,
+  onApplyScheduleMenu,
+  onOpenScheduleModal,
+}: {
+  entries: MbgPmEntry[];
+  onApplyScheduleMenu: () => void;
+  onOpenScheduleModal: () => void;
+}) {
+  const existingNames = new Set(entries.map((e) => e.institutionName.toLowerCase().trim()));
+
+  return (
+    <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-sm space-y-3 font-['Hanken_Grotesk',system-ui,sans-serif]">
+      <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+        <div>
+          <h3 className="font-extrabold text-xs text-[#111827] flex items-center gap-1.5">
+            <span>🏫 Institusi Master</span>
+            <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full">
+              {MBG_MASTER_INSTITUTIONS.length} Target
+            </span>
+          </h3>
+          <p className="text-[10px] text-gray-400 mt-0.5">Daftar Sekolah & Posyandu</p>
+        </div>
+        <button
+          onClick={onOpenScheduleModal}
+          className="text-[11px] font-extrabold text-[#059669] hover:text-[#047857] flex items-center gap-1 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200 cursor-pointer"
+        >
+          <Calendar className="h-3.5 w-3.5" />
+          <span>Jadwal Menu</span>
+        </button>
+      </div>
+
+      <button
+        onClick={onApplyScheduleMenu}
+        className="w-full bg-[#111827] hover:bg-black text-white font-extrabold text-xs py-2.5 px-3 rounded-xl cursor-pointer shadow-xs active:scale-95 transition-all flex items-center justify-center gap-2"
+      >
+        <span>✨ Sync Menu Jadwal Hari Ini</span>
+      </button>
+
+      <div className="space-y-1.5 max-h-[520px] overflow-y-auto pr-1">
+        {MBG_MASTER_INSTITUTIONS.map((inst, idx) => {
+          const isAdded = existingNames.has(inst.institutionName.toLowerCase().trim());
+          const isSekolah = inst.institutionType === 'sekolah';
+          const totalPorsi = inst.qtSiswaBalita + inst.qtBumilBusui + inst.qtGuruKader;
+
+          return (
+            <div
+              key={idx}
+              className={`p-2 rounded-xl border text-xs flex items-center justify-between transition-all ${isAdded
+                  ? 'bg-emerald-50/40 border-emerald-200/80 text-emerald-950'
+                  : 'bg-gray-50/80 border-gray-200 text-gray-500'
+                }`}
+            >
+              <div className="space-y-0.5">
+                <div className="font-bold flex items-center gap-1 text-[11px] text-[#111827]">
+                  <span>{isSekolah ? '🏫' : '👶'}</span>
+                  <span className="truncate max-w-[170px]">{inst.institutionName}</span>
+                </div>
+                <div className="text-[9px] text-gray-400 font-semibold">
+                  {inst.schoolLevel ? inst.schoolLevel.toUpperCase() : inst.institutionType} • {totalPorsi} Porsi
+                </div>
+              </div>
+              {isAdded ? (
+                <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+                  <CheckCircle2 className="h-3 w-3" />
+                  <span>Aktif</span>
+                </span>
+              ) : (
+                <span className="text-[9px] font-semibold text-gray-400">Belum Ada</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -327,16 +411,46 @@ function PmEntryRow({
 
   const isMasterSelected = MBG_MASTER_INSTITUTIONS.some((m) => m.institutionName === entry.institutionName);
 
+  if (isLibur) {
+    return (
+      <tr className="bg-[#DC2626] text-white font-extrabold border-b border-red-700 text-xs text-center">
+        <td className="px-3 py-2.5 text-left font-extrabold border-r border-red-700 min-w-[180px]">
+          🚫 {entry.institutionName || 'Sekolah'} (LIBUR)
+        </td>
+        <td colSpan={19} className="px-3 py-2.5 text-center text-red-100 italic tracking-wider font-semibold">
+          SEKOLAH LIBUR / TIDAK ADA PENGIRIMAN
+        </td>
+        <td className="px-3 py-2.5 text-center font-extrabold bg-red-900 text-white">0</td>
+        <td className="px-2 py-2.5">
+          <button
+            type="button"
+            onClick={() => handleFieldChange('isSekolahLibur', false)}
+            className="text-[10px] font-bold bg-white text-red-700 hover:bg-red-50 px-2 py-1 rounded shadow-xs cursor-pointer"
+          >
+            Aktifkan
+          </button>
+        </td>
+      </tr>
+    );
+  }
+
+  const totalSiswaL = isPosyandu
+    ? (entry.qtPorsiKecilL || entry.qtSiswaBalita || 0)
+    : ((entry.qtPorsiKecilL || 0) + (entry.qtPorsiBesarL || 0));
+
+  const totalSiswaP = isPosyandu
+    ? ((entry.qtPorsiKecilP || 0) + (entry.qtBumil || 0) + (entry.qtBusui || 0))
+    : ((entry.qtPorsiKecilP || 0) + (entry.qtPorsiBesarP || 0));
+
+  const totalSiswaJml = isPosyandu
+    ? ((entry.qtSiswaBalita || 0) + (entry.qtBumilBusui || 0))
+    : (entry.qtSiswaBalita || 0);
+
   return (
-    <tr
-      className={`
-        border-b border-slate-200 transition-colors text-xs hover:bg-slate-50/70
-        ${isLibur ? 'bg-slate-100/70 opacity-60' : 'bg-white'}
-      `}
-    >
-      {/* Institusi */}
-      <td className="px-3 py-2.5">
-        <div className="flex flex-col gap-1 min-w-[160px]">
+    <tr className="border-b border-slate-300 hover:bg-slate-50 text-xs font-semibold text-slate-800">
+      {/* 1. SEKOLAH / POSYANDU */}
+      <td className="px-3 py-2.5 border-r border-slate-200">
+        <div className="flex flex-col gap-1 min-w-[170px]">
           <select
             value={isMasterSelected ? entry.institutionName : entry.institutionName ? '_custom_' : ''}
             onChange={(e) => {
@@ -348,8 +462,8 @@ function PmEntryRow({
                 handleSelectMaster(e.target.value);
               }
             }}
-            title="Pilih Institusi Master"
-            className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-500 focus:border-slate-500 bg-white cursor-pointer transition-colors"
+            title="Pilih Master Institusi"
+            className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs font-bold text-slate-900 bg-white focus:outline-none focus:ring-1 focus:ring-slate-500 cursor-pointer"
           >
             <option value="">— Pilih Master Institusi —</option>
             {MBG_MASTER_INSTITUTIONS.map((inst) => (
@@ -366,213 +480,328 @@ function PmEntryRow({
               value={entry.institutionName}
               onChange={(e) => handleFieldChange('institutionName', e.target.value)}
               placeholder="Nama Institusi Custom"
-              className="w-full rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-500 bg-slate-50/50"
+              className="w-full rounded-md border border-slate-300 px-2 py-0.5 text-xs text-slate-800 focus:outline-none bg-slate-50"
             />
           )}
-        </div>
-      </td>
 
-      {/* Tipe */}
-      <td className="px-2 py-2.5 min-w-[105px]">
-        <div className="flex flex-col gap-1 items-center w-full">
-          <select
-            value={entry.institutionType}
-            onChange={(e) => handleFieldChange('institutionType', e.target.value as MbgInstitutionType)}
-            title="Tipe Institusi"
-            className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-slate-500 cursor-pointer"
-          >
-            <option value="sekolah">Sekolah</option>
-            <option value="posyandu">Posyandu</option>
-          </select>
+          <div className="flex items-center gap-1 mt-0.5">
+            <select
+              value={entry.institutionType}
+              onChange={(e) => handleFieldChange('institutionType', e.target.value as MbgInstitutionType)}
+              title="Tipe Institusi"
+              className={`text-[10px] font-bold rounded border px-1.5 py-0.5 cursor-pointer ${
+                isPosyandu ? 'bg-purple-100 text-purple-800 border-purple-300' : 'bg-slate-100 text-slate-700 border-slate-200'
+              }`}
+            >
+              <option value="sekolah">Sekolah</option>
+              <option value="posyandu">Posyandu</option>
+            </select>
 
-          {!isPosyandu && (
-            <>
-              <select
-                value={entry.schoolLevel || 'sd'}
-                onChange={(e) => handleFieldChange('schoolLevel', e.target.value)}
-                title="Tingkatan Sekolah"
-                className="w-full rounded-md border border-slate-300 px-2 py-0.5 text-[11px] font-medium text-slate-600 bg-white focus:outline-none focus:ring-1 focus:ring-slate-500"
-              >
-                <option value="tk_paud">TK / PAUD</option>
-                <option value="sd">SD</option>
-                <option value="sma">SMP / SMA</option>
-              </select>
-
+            {!isPosyandu && (
               <button
+                type="button"
                 onClick={onManageClasses}
-                className={`inline-flex items-center justify-center px-2 py-0.5 rounded border text-[10px] font-semibold transition-colors cursor-pointer w-full ${hasClasses
-                    ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}
-                title="Atur Breakdown Kelas"
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                  hasClasses ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+                title="Atur Kelas"
               >
-                <span>Kelas ({entry.classesBreakdown?.length || 0})</span>
+                Kelas ({entry.classesBreakdown?.length || 0})
               </button>
-            </>
-          )}
+            )}
+          </div>
         </div>
       </td>
 
-      {/* QT Siswa/Balita */}
-      <td className="px-3 py-2.5">
-        <div className="flex justify-center">
+      {/* 2. PORSI BESAR L (Sekolah) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {!isPosyandu ? (
           <input
             type="number"
             min={0}
             disabled={hasClasses}
-            value={entry.qtSiswaBalita || ''}
-            onChange={(e) => handleFieldChange('qtSiswaBalita', parseInt(e.target.value) || 0)}
-            placeholder={isPosyandu ? 'Balita' : 'Siswa'}
-            className={`w-16 rounded-md border px-2 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-1 focus:ring-slate-500 ${hasClasses
-                ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-                : 'border-slate-300 text-slate-800 bg-white'
-              }`}
+            value={entry.qtPorsiBesarL || ''}
+            onChange={(e) => handleFieldChange('qtPorsiBesarL', parseInt(e.target.value) || 0)}
+            placeholder="0"
+            title="Porsi Besar (Laki-laki)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
           />
-        </div>
-      </td>
-
-      {/* QT Bumil/Busui */}
-      <td className="px-3 py-2.5">
-        {isPosyandu ? (
-          <div className="flex flex-col gap-1 items-center min-w-[100px]">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-medium text-slate-600 w-8 text-right">Bml:</span>
-              <input
-                type="number"
-                min={0}
-                value={entry.qtBumil ?? 0}
-                onChange={(e) => handleFieldChange('qtBumil', parseInt(e.target.value) || 0)}
-                placeholder="0"
-                className="w-12 rounded-md border border-slate-300 px-1.5 py-0.5 text-xs text-center font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-500"
-              />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-medium text-slate-600 w-8 text-right">Bsi:</span>
-              <input
-                type="number"
-                min={0}
-                value={entry.qtBusui ?? 0}
-                onChange={(e) => handleFieldChange('qtBusui', parseInt(e.target.value) || 0)}
-                placeholder="0"
-                className="w-12 rounded-md border border-slate-300 px-1.5 py-0.5 text-xs text-center font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-500"
-              />
-            </div>
-          </div>
         ) : (
-          <div className="flex justify-center">
-            <span className="text-slate-300">—</span>
-          </div>
+          <span className="text-slate-300 text-xs">—</span>
         )}
       </td>
 
-      {/* QT Guru/Kader */}
-      <td className="px-3 py-2.5">
-        <div className="flex justify-center">
-          <input
-            type="number"
-            min={0}
-            value={entry.qtGuruKader || ''}
-            onChange={(e) => handleFieldChange('qtGuruKader', parseInt(e.target.value) || 0)}
-            placeholder={isPosyandu ? 'Kader' : 'Guru'}
-            className="w-16 rounded-md border border-slate-300 px-2 py-1 text-xs text-center font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-500 bg-white"
-          />
-        </div>
-      </td>
-
-      {/* Pobia Nasi */}
-      <td className="px-3 py-2.5">
-        <div className="flex justify-center">
+      {/* 3. PORSI BESAR P (Sekolah) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {!isPosyandu ? (
           <input
             type="number"
             min={0}
             disabled={hasClasses}
-            value={entry.qtPobiaNasi || ''}
-            onChange={(e) => handleFieldChange('qtPobiaNasi', parseInt(e.target.value) || 0)}
+            value={entry.qtPorsiBesarP || ''}
+            onChange={(e) => handleFieldChange('qtPorsiBesarP', parseInt(e.target.value) || 0)}
             placeholder="0"
-            className={`w-14 rounded-md border px-2 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-1 focus:ring-slate-500 ${hasClasses
-                ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-                : 'border-slate-300 text-slate-800 bg-white'
-              }`}
+            title="Porsi Besar (Perempuan)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
           />
-        </div>
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        )}
       </td>
 
-      {/* Alergi */}
-      <td className="px-2 py-2.5">
-        <div className="flex flex-col gap-1 items-center min-w-[75px]">
+      {/* 4. PORSI KECIL L (Sekolah) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {!isPosyandu ? (
           <input
             type="number"
             min={0}
-            value={entry.qtAlergi ?? 0}
-            onChange={(e) => {
-              const alergiVal = parseInt(e.target.value) || 0;
-              const totalVal = entry.jumlah || 0;
-              onUpdate(entry.id, {
-                qtAlergi: alergiVal,
-                qtTidakAlergi: Math.max(0, totalVal - alergiVal),
-              });
-            }}
+            disabled={hasClasses}
+            value={entry.qtPorsiKecilL || ''}
+            onChange={(e) => handleFieldChange('qtPorsiKecilL', parseInt(e.target.value) || 0)}
             placeholder="0"
-            className={`w-14 rounded-md border px-2 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-1 focus:ring-slate-500 ${(entry.qtAlergi || 0) > 0
-                ? 'border-red-300 text-red-700 bg-red-50/30'
-                : 'border-slate-300 text-slate-800 bg-white'
-              }`}
+            title="Porsi Kecil (Laki-laki)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
           />
-          {(entry.qtAlergi || 0) > 0 && (
-            <input
-              type="text"
-              value={entry.keteranganAlergi || ''}
-              onChange={(e) => onUpdate(entry.id, { keteranganAlergi: e.target.value })}
-              placeholder="Ket. alergi"
-              title="Ket. Alergi (mis. 2 Telur, 1 Udang)"
-              className="w-full text-[10px] border border-red-200 rounded px-1.5 py-0.5 text-red-700 bg-white focus:outline-none"
-            />
-          )}
-        </div>
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        )}
       </td>
 
-      {/* Tidak Alergi */}
-      <td className="px-2 py-2.5 text-center">
-        <span className="inline-flex items-center justify-center min-w-[36px] rounded bg-slate-50 border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700">
-          {entry.qtTidakAlergi ?? Math.max(0, (entry.jumlah || 0) - (entry.qtAlergi || 0))}
-        </span>
+      {/* 5. PORSI KECIL P (Sekolah) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {!isPosyandu ? (
+          <input
+            type="number"
+            min={0}
+            disabled={hasClasses}
+            value={entry.qtPorsiKecilP || ''}
+            onChange={(e) => handleFieldChange('qtPorsiKecilP', parseInt(e.target.value) || 0)}
+            placeholder="0"
+            title="Porsi Kecil (Perempuan)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+          />
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        )}
       </td>
 
-      {/* Jumlah (auto) */}
-      <td className="px-3 py-2.5 text-center">
-        <span className="inline-flex items-center justify-center min-w-[42px] rounded bg-slate-100 border border-slate-300 px-2.5 py-1 text-xs font-bold text-slate-900">
-          {entry.jumlah}
-        </span>
+      {/* 6. PORSI BALITA L (Posyandu) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {isPosyandu ? (
+          <input
+            type="number"
+            min={0}
+            value={entry.qtPorsiKecilL || ''}
+            onChange={(e) => handleFieldChange('qtPorsiKecilL', parseInt(e.target.value) || 0)}
+            placeholder="Balita L"
+            title="Porsi Balita (Laki-laki)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+          />
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        )}
       </td>
 
-      {/* Jadwal Pengantaran */}
-      <td className="px-3 py-2.5">
-        <input
-          type="text"
-          disabled={hasClasses}
-          value={entry.jadwalPengantaran}
-          onChange={(e) => handleFieldChange('jadwalPengantaran', e.target.value)}
-          placeholder="06.00-08.30"
-          className={`w-full min-w-[105px] rounded-md border px-2 py-1 text-xs text-center font-medium focus:outline-none focus:ring-1 focus:ring-slate-500 ${hasClasses
-              ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-              : 'border-slate-300 text-slate-800 bg-white'
-            }`}
-        />
+      {/* 7. PORSI BALITA P (Posyandu) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {isPosyandu ? (
+          <input
+            type="number"
+            min={0}
+            value={entry.qtPorsiKecilP || ''}
+            onChange={(e) => handleFieldChange('qtPorsiKecilP', parseInt(e.target.value) || 0)}
+            placeholder="Balita P"
+            title="Porsi Balita (Perempuan)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+          />
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        )}
       </td>
 
-      {/* Actions */}
-      <td className="px-3 py-2.5">
-        <div className="flex items-center justify-center">
+      {/* 8. PORSI BUMIL & BUSUI L (BUMIL - Posyandu) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {isPosyandu ? (
+          <input
+            type="number"
+            min={0}
+            value={entry.qtBumil ?? ''}
+            onChange={(e) => handleFieldChange('qtBumil', parseInt(e.target.value) || 0)}
+            placeholder="Bumil"
+            title="Porsi Ibu Hamil (Bumil)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+          />
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        )}
+      </td>
+
+      {/* 9. PORSI BUMIL & BUSUI P (BUSUI - Posyandu) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {isPosyandu ? (
+          <input
+            type="number"
+            min={0}
+            value={entry.qtBusui ?? ''}
+            onChange={(e) => handleFieldChange('qtBusui', parseInt(e.target.value) || 0)}
+            placeholder="Busui"
+            title="Porsi Ibu Menyusui (Busui)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+          />
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        )}
+      </td>
+
+      {/* 10. TOTAL L */}
+      <td className="px-2 py-2 border-r border-slate-200 text-center bg-slate-50 font-bold text-slate-700">
+        {totalSiswaL || '—'}
+      </td>
+
+      {/* 11. TOTAL P */}
+      <td className="px-2 py-2 border-r border-slate-200 text-center bg-slate-100/70 font-bold text-slate-700">
+        {totalSiswaP || '—'}
+      </td>
+
+      {/* 12. TOTAL JML */}
+      <td className="px-2.5 py-2 border-r border-slate-300 text-center bg-slate-200 font-extrabold text-slate-900">
+        {totalSiswaJml}
+      </td>
+
+      {/* 13. PIC / GURU L (Sekolah) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {!isPosyandu ? (
+          <input
+            type="number"
+            min={0}
+            value={entry.qtGuruL || ''}
+            onChange={(e) => handleFieldChange('qtGuruL', parseInt(e.target.value) || 0)}
+            placeholder="Guru L"
+            title="PIC / Guru Sekolah (Laki-laki)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+          />
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        )}
+      </td>
+
+      {/* 14. PIC / GURU P (Sekolah) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {!isPosyandu ? (
+          <input
+            type="number"
+            min={0}
+            value={entry.qtGuruP || ''}
+            onChange={(e) => handleFieldChange('qtGuruP', parseInt(e.target.value) || 0)}
+            placeholder="Guru P"
+            title="PIC / Guru Sekolah (Perempuan)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+          />
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        )}
+      </td>
+
+      {/* 15. KADER L (Posyandu) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {isPosyandu ? (
+          <input
+            type="number"
+            min={0}
+            value={entry.qtGuruL || ''}
+            onChange={(e) => handleFieldChange('qtGuruL', parseInt(e.target.value) || 0)}
+            placeholder="Kader L"
+            title="Kader Posyandu (Laki-laki)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+          />
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        )}
+      </td>
+
+      {/* 16. KADER P (Posyandu) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {isPosyandu ? (
+          <input
+            type="number"
+            min={0}
+            value={entry.qtGuruP || ''}
+            onChange={(e) => handleFieldChange('qtGuruP', parseInt(e.target.value) || 0)}
+            placeholder="Kader P"
+            title="Kader Posyandu (Perempuan)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+          />
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        )}
+      </td>
+
+      {/* 17. TENDIK L (Sekolah) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {!isPosyandu ? (
+          <input
+            type="number"
+            min={0}
+            value={entry.qtTendikL || ''}
+            onChange={(e) => handleFieldChange('qtTendikL', parseInt(e.target.value) || 0)}
+            placeholder="Tendik L"
+            title="Tendik / Staf Sekolah (Laki-laki)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+          />
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        )}
+      </td>
+
+      {/* 18. TENDIK P (Sekolah) */}
+      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+        {!isPosyandu ? (
+          <input
+            type="number"
+            min={0}
+            value={entry.qtTendikP || ''}
+            onChange={(e) => handleFieldChange('qtTendikP', parseInt(e.target.value) || 0)}
+            placeholder="Tendik P"
+            title="Tendik / Staf Sekolah (Perempuan)"
+            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+          />
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        )}
+      </td>
+
+      {/* 19. JML STAF / KADER */}
+      <td className="px-2.5 py-2 border-r border-slate-300 text-center bg-slate-200/80 font-extrabold text-slate-900">
+        {entry.qtGuruKader || 0}
+      </td>
+
+      {/* 20. TOTAL KESELURUHAN */}
+      <td className="px-3 py-2 border-r border-slate-300 text-center bg-[#FEF3C7] font-black text-[#92400E] text-sm">
+        {entry.jumlah}
+      </td>
+
+      {/* 21. AKSI */}
+      <td className="px-2 py-2 text-center">
+        <div className="flex items-center justify-center gap-1">
           <button
+            type="button"
+            onClick={() => handleFieldChange('isSekolahLibur', true)}
+            title="Tandai Sekolah Libur"
+            className="p-1 rounded text-amber-600 hover:bg-amber-50 cursor-pointer"
+          >
+            🏖️
+          </button>
+          <button
+            type="button"
             onClick={() => {
               onConfirmAction({
                 title: 'Hapus Institusi',
-                message: `Apakah Anda yakin ingin menghapus data institusi ${entry.institutionName || 'ini'}? Tindakan ini tidak dapat dibatalkan.`,
+                message: `Apakah Anda yakin ingin menghapus data institusi ${entry.institutionName || 'ini'}?`,
                 onConfirm: () => onDelete(entry.id),
                 variant: 'danger',
               });
             }}
-            className="p-1.5 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 cursor-pointer transition-colors"
+            className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 cursor-pointer"
             title="Hapus Institusi"
           >
             <Trash2 className="h-4 w-4" />
@@ -599,12 +828,20 @@ export function MbgAdminPage() {
   const [selectedEntryForMenu, setSelectedEntryForMenu] = useState<MbgPmEntry | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
+  const [weeklySchedule, setWeeklySchedule] = useState<MbgDayMenu[]>(DEFAULT_WEEKLY_SCHEDULE);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [confirmState, setConfirmState] = useState<{
     title: string;
     message: string;
     onConfirm: () => void;
     variant?: 'danger' | 'warning' | 'info';
   } | null>(null);
+
+  // Subscribe to weekly menu schedule
+  useEffect(() => {
+    const unsub = subscribeWeeklySchedule(setWeeklySchedule);
+    return unsub;
+  }, []);
 
   // Subscribe to batches and auto-create today's batch
   useEffect(() => {
@@ -710,15 +947,54 @@ export function MbgAdminPage() {
   }, [entries]);
 
   // ---- Handlers ----
+  const handleApplyScheduleMenuToBatch = async () => {
+    if (!selectedBatchId || !selectedBatch) return;
+    const { menuItems, menuKeringanItems } = getMenuForDate(selectedBatch.tanggal, weeklySchedule);
+
+    try {
+      if (entries.length === 0) {
+        await bulkAddEntriesFromMaster(selectedBatchId, user?.uid || '', selectedBatch.tanggal, weeklySchedule);
+        await recalculateBatchTotals(selectedBatchId);
+      } else {
+        const batchOps = entries.map((e) =>
+          updateEntry(e.id, {
+            menuItems: [...menuItems],
+            menuKeringanItems: [...menuKeringanItems],
+          })
+        );
+        await Promise.all(batchOps);
+      }
+      showToast({
+        message: `Berhasil menerapkan menu jadwal (${menuItems.join(', ')}) ke seluruh institusi!`,
+        variant: 'success',
+      });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: 'Gagal mengupdate menu jadwal ke institusi', variant: 'error' });
+    }
+  };
+
+  const handleSaveWeeklySchedule = async (updatedDays: MbgDayMenu[]) => {
+    if (!user) return;
+    try {
+      await saveWeeklySchedule(updatedDays, user.uid);
+      setWeeklySchedule(updatedDays);
+      showToast({ message: 'Master Jadwal Menu Mingguan berhasil disimpan!', variant: 'success' });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: 'Gagal menyimpan jadwal menu mingguan', variant: 'error' });
+    }
+  };
+
   const handleCreateBatch = async (tanggal: string, copyFromId?: string) => {
     if (!user) return;
     try {
-      const newId = await createBatch(tanggal, user.uid);
+      const newId = await createBatch(tanggal, user.uid, true, weeklySchedule);
       if (copyFromId) {
         await copyFromBatch(copyFromId, newId, user.uid);
       }
       setSelectedBatchId(newId);
-      showToast({ message: 'Batch baru berhasil dibuat!', variant: 'success' });
+      showToast({ message: 'Batch baru berhasil dibuat dengan menu jadwal otomatis!', variant: 'success' });
     } catch (err) {
       console.error(err);
       showToast({ message: 'Gagal membuat batch', variant: 'error' });
@@ -959,7 +1235,15 @@ export function MbgAdminPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setShowScheduleModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#059669] text-white text-xs font-extrabold rounded-xl hover:bg-[#047857] cursor-pointer transition-colors shadow-sm"
+              >
+                <Calendar className="h-4 w-4 text-[#FBBF24]" />
+                Master Jadwal Menu
+              </button>
+
               <button
                 onClick={() => setShowNewBatchModal(true)}
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FBBF24] text-[#111827] text-xs font-extrabold rounded-xl hover:bg-[#F59E0B] cursor-pointer transition-colors shadow-sm"
@@ -980,114 +1264,165 @@ export function MbgAdminPage() {
             </div>
           </div>
 
-          {/* Search Bar */}
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="relative max-w-sm flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari institusi atau petugas..."
-                className="w-full rounded-xl border border-[#E5E7EB] bg-white pl-9 pr-4 py-2.5 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+          {/* Main Content Layout with Side Panel */}
+          <div className="flex flex-col lg:flex-row gap-6 items-start">
+            {/* Left Side Panel: Master Institutions */}
+            <div className="w-full lg:w-80 shrink-0">
+              <MasterInstitutionsSidePanel
+                entries={entries}
+                onApplyScheduleMenu={handleApplyScheduleMenuToBatch}
+                onOpenScheduleModal={() => setShowScheduleModal(true)}
               />
             </div>
-          </div>
 
-          {/* Single Unified Table */}
-          {loadingEntries ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-[#FBBF24]" />
-            </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-xs">
-                <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] min-w-[760px]">
-                  <thead>
-                    <tr className="bg-slate-100/90 text-[11px] font-bold text-slate-600 uppercase tracking-wider border-b border-slate-200">
-                      <th className="px-3 py-3 whitespace-nowrap">Institusi</th>
-                      <th className="px-3 py-3 whitespace-nowrap">Tipe</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">QT Siswa / Balita</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">QT Bumil / Busui</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">QT Guru / Kader</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">Pobia Nasi</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">Alergi</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">Tidak Alergi</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">Jumlah</th>
-                      <th className="px-3 py-3 text-center whitespace-nowrap">Jadwal Pengantaran</th>
-                      <th className="px-3 py-3"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredEntries.length === 0 ? (
-                      <tr>
-                        <td colSpan={11} className="px-4 py-8 text-center text-xs font-medium text-slate-400 italic">
-                          Belum ada data institusi. Klik "Tambah Institusi Baru" di bawah untuk menambah data.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredEntries.map((entry) => (
-                        <PmEntryRow
-                          key={entry.id}
-                          entry={entry}
-                          onUpdate={handleUpdateEntry}
-                          onDelete={handleDeleteEntry}
-                          isLibur={entry.isSekolahLibur}
-                          onManageClasses={() => setSelectedEntryForMenu(entry)}
-                          onConfirmAction={setConfirmState}
-                        />
-                      ))
-                    )}
-                    {/* Total Row */}
-                    {filteredEntries.length > 0 && (
-                      <tr className="bg-slate-800 text-white text-xs font-bold border-t border-slate-700">
-                        <td className="px-3 py-3 font-semibold" colSpan={2}>TOTAL (AKTIF)</td>
-                        <td className="px-3 py-3 text-center font-semibold">{grandTotals.siswa}</td>
-                        <td className="px-3 py-3 text-center font-semibold">{grandTotals.bumil}</td>
-                        <td className="px-3 py-3 text-center font-semibold">{grandTotals.guru}</td>
-                        <td className="px-3 py-3 text-center font-semibold">{grandTotals.pobia}</td>
-                        <td className="px-3 py-3 text-center font-bold text-red-300">{grandTotals.alergi}</td>
-                        <td className="px-3 py-3 text-center font-bold text-emerald-300">{grandTotals.tidakAlergi}</td>
-                        <td className="px-3 py-3 text-center">
-                          <span className="inline-flex items-center justify-center rounded bg-white text-slate-900 font-extrabold px-3 py-0.5 text-xs shadow-xs">
-                            {grandTotals.jumlah}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3" colSpan={2}></td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-                <button
-                  onClick={handleAddRow}
-                  className="w-full py-3 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 border-t border-slate-200 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                >
-                  <Plus className="h-4 w-4" />
-                  Tambah Institusi Baru
-                </button>
+            {/* Right Panel: Batch Entries Table */}
+            <div className="flex-1 w-full min-w-0">
+              {/* Search Bar */}
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="relative max-w-sm flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Cari institusi atau petugas..."
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white pl-9 pr-4 py-2.5 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                  />
+                </div>
               </div>
 
-              {/* Submit Button */}
-              {selectedBatch && selectedBatch.status === 'DRAFT' && entries.length > 0 && (
-                <div className="mt-8 flex justify-end">
-                  <button
-                    onClick={handleSubmitBatch}
-                    disabled={saving}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-[#059669] text-white text-sm font-extrabold rounded-xl hover:bg-[#047857] cursor-pointer transition-colors shadow-lg shadow-green-500/20 disabled:opacity-50"
-                  >
-                    {saving ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4" />
-                    )}
-                    Submit Data PM
-                  </button>
+              {/* Single Unified Table */}
+              {loadingEntries ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-[#FBBF24]" />
                 </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto border border-slate-300 rounded-xl bg-white shadow-xs">
+                    <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] min-w-[980px] border-collapse border border-slate-300">
+                      <thead>
+                        <tr className="bg-slate-200 text-[10px] font-extrabold text-slate-800 uppercase tracking-wider text-center border-b border-slate-300">
+                          <th rowSpan={2} className="px-3 py-2 border-r border-slate-300 text-left min-w-[180px]">SEKOLAH / POSYANDU</th>
+                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">PORSI BESAR</th>
+                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">PORSI KECIL</th>
+                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">PORSI BALITA</th>
+                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">PORSI BUMIL & BUSUI</th>
+                          <th colSpan={3} className="px-2 py-1.5 border-r border-slate-300 bg-slate-300/60 font-black">TOTAL SISWA / PENERIMA</th>
+                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">PIC / GURU</th>
+                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">KADER</th>
+                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">TENDIK</th>
+                          <th rowSpan={2} className="px-2 py-2 border-r border-slate-300 bg-slate-300/50 font-extrabold">JML STAF / KADER</th>
+                          <th rowSpan={2} className="px-3 py-2 border-r border-slate-300 bg-amber-100/80 text-amber-900 font-extrabold">TOTAL KESELURUHAN</th>
+                          <th rowSpan={2} className="px-2 py-2">AKSI</th>
+                        </tr>
+                        <tr className="bg-slate-100 text-[9px] font-bold text-slate-700 uppercase tracking-wider text-center border-b border-slate-300">
+                          {/* Porsi Besar (1) */}
+                          <th className="px-2 py-1 border-r border-slate-300">L</th>
+                          <th className="px-2 py-1 border-r border-slate-300">P</th>
+                          {/* Porsi Kecil (2) */}
+                          <th className="px-2 py-1 border-r border-slate-300">L</th>
+                          <th className="px-2 py-1 border-r border-slate-300">P</th>
+                          {/* Porsi Balita (3) */}
+                          <th className="px-2 py-1 border-r border-slate-300">L</th>
+                          <th className="px-2 py-1 border-r border-slate-300">P</th>
+                          {/* Porsi Bumil & Busui (4) */}
+                          <th className="px-2 py-1 border-r border-slate-300">L</th>
+                          <th className="px-2 py-1 border-r border-slate-300">P</th>
+                          {/* Total Siswa */}
+                          <th className="px-2 py-1 border-r border-slate-300 bg-slate-200/50">L</th>
+                          <th className="px-2 py-1 border-r border-slate-300 bg-slate-200/50">P</th>
+                          <th className="px-2 py-1 border-r border-slate-300 bg-slate-300/70 font-extrabold text-slate-900">JML</th>
+                          {/* Officers */}
+                          <th className="px-2 py-1 border-r border-slate-300">L</th>
+                          <th className="px-2 py-1 border-r border-slate-300">P</th>
+                          <th className="px-2 py-1 border-r border-slate-300">L</th>
+                          <th className="px-2 py-1 border-r border-slate-300">P</th>
+                          <th className="px-2 py-1 border-r border-slate-300">L</th>
+                          <th className="px-2 py-1 border-r border-slate-300">P</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredEntries.length === 0 ? (
+                          <tr>
+                            <td colSpan={11} className="px-4 py-8 text-center text-xs font-medium text-slate-400 italic">
+                              Belum ada data institusi. Klik "Tambah Institusi Baru" di bawah untuk menambah data.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredEntries.map((entry) => (
+                            <PmEntryRow
+                              key={entry.id}
+                              entry={entry}
+                              onUpdate={handleUpdateEntry}
+                              onDelete={handleDeleteEntry}
+                              isLibur={entry.isSekolahLibur}
+                              onManageClasses={() => setSelectedEntryForMenu(entry)}
+                              onConfirmAction={setConfirmState}
+                            />
+                          ))
+                        )}
+                        {/* Total Row */}
+                        {filteredEntries.length > 0 && (
+                          <tr className="bg-slate-800 text-white text-xs font-bold border-t border-slate-700">
+                            <td className="px-3 py-3 font-semibold" colSpan={2}>TOTAL (AKTIF)</td>
+                            <td className="px-3 py-3 text-center font-semibold">{grandTotals.siswa}</td>
+                            <td className="px-3 py-3 text-center font-semibold">{grandTotals.bumil}</td>
+                            <td className="px-3 py-3 text-center font-semibold">{grandTotals.guru}</td>
+                            <td className="px-3 py-3 text-center font-semibold">{grandTotals.pobia}</td>
+                            <td className="px-3 py-3 text-center font-bold text-red-300">{grandTotals.alergi}</td>
+                            <td className="px-3 py-3 text-center font-bold text-emerald-300">{grandTotals.tidakAlergi}</td>
+                            <td className="px-3 py-3 text-center">
+                              <span className="inline-flex items-center justify-center rounded bg-white text-slate-900 font-extrabold px-3 py-0.5 text-xs shadow-xs">
+                                {grandTotals.jumlah}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3" colSpan={2}></td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                    <button
+                      onClick={handleAddRow}
+                      className="w-full py-3 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 border-t border-slate-200 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Tambah Institusi Baru
+                    </button>
+                  </div>
+
+                  {/* Submit Button */}
+                  {selectedBatch && selectedBatch.status === 'DRAFT' && entries.length > 0 && (
+                    <div className="mt-8 flex justify-end">
+                      <button
+                        onClick={handleSubmitBatch}
+                        disabled={saving}
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-[#059669] text-white text-sm font-extrabold rounded-xl hover:bg-[#047857] cursor-pointer transition-colors shadow-lg shadow-green-500/20 disabled:opacity-50"
+                      >
+                        {saving ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4" />
+                        )}
+                        Submit Data PM
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
-            </>
-          )}
+            </div>
+          </div>
         </>
       )}
+
+      {/* Weekly Schedule Modal */}
+      <AnimatePresence>
+        <WeeklyScheduleModal
+          isOpen={showScheduleModal}
+          onClose={() => setShowScheduleModal(false)}
+          scheduleDays={weeklySchedule}
+          onSave={handleSaveWeeklySchedule}
+        />
+      </AnimatePresence>
 
       {/* New Batch Modal */}
       <AnimatePresence>

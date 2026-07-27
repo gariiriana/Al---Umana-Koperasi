@@ -98,6 +98,28 @@ export async function addCookingPhoto(
   });
 }
 
+export async function addCookingPhotos(
+  sessionId: string,
+  currentPhotos: MbgCookingPhoto[],
+  newPhotos: MbgCookingPhoto[]
+): Promise<void> {
+  await updateDoc(doc(db, COOKING_COLLECTION, sessionId), {
+    photos: [...currentPhotos, ...newPhotos],
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function deleteCookingPhoto(
+  sessionId: string,
+  currentPhotos: MbgCookingPhoto[],
+  photoId: string
+): Promise<void> {
+  await updateDoc(doc(db, COOKING_COLLECTION, sessionId), {
+    photos: currentPhotos.filter((p) => p.fileId !== photoId),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 // ---- Custom TKPI Entries ----
 
 const CUSTOM_TKPI_COLLECTION = 'mbg_custom_tkpi';

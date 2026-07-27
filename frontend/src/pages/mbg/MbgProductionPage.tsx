@@ -10,8 +10,9 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import type { MbgPmBatch, MbgPmEntry, MbgNutritionEntry } from '@/types/mbg';
-import { subscribeBatches, subscribeEntries, subscribeAllEntries } from '@/services/mbgAdminService';
+import type { MbgPmBatch, MbgPmEntry, MbgNutritionEntry, MbgDayMenu } from '@/types/mbg';
+import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
+import { subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule, saveWeeklySchedule } from '@/services/mbgAdminService';
 import {
   subscribeNutrition, addNutritionEntry, updateNutritionEntry, deleteNutritionEntry,
   subscribeCustomTkpiEntries, addCustomTkpiEntry, updateCustomTkpiEntry, deleteCustomTkpiEntry,
@@ -27,6 +28,7 @@ import {
   MBG_KATEGORI_BAHAN_PANGAN,
   getBahanPanganInfo,
   MBG_AKG_REFERENCE,
+  DEFAULT_WEEKLY_SCHEDULE,
 } from '@/constants/mbgConstants';
 import tkpiDatabase from '@/constants/tkpiDatabase.json';
 import porsiStandardData from '@/constants/standarPorsi.json';
@@ -230,6 +232,25 @@ export function MbgProductionPage() {
   const [isSavingDbItem, setIsSavingDbItem] = useState(false);
   const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null);
   const [editingDbItemId, setEditingDbItemId] = useState<string | null>(null);
+  const [weeklySchedule, setWeeklySchedule] = useState<MbgDayMenu[]>(DEFAULT_WEEKLY_SCHEDULE);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeWeeklySchedule(setWeeklySchedule);
+    return unsub;
+  }, []);
+
+  const handleSaveWeeklySchedule = async (updatedDays: MbgDayMenu[]) => {
+    if (!user) return;
+    try {
+      await saveWeeklySchedule(updatedDays, user.uid);
+      setWeeklySchedule(updatedDays);
+      showToast({ message: 'Master Jadwal Menu Mingguan berhasil disimpan!', variant: 'success' });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: 'Gagal menyimpan jadwal menu mingguan', variant: 'error' });
+    }
+  };
 
   // Subscribe custom TKPI entries
   useEffect(() => {
@@ -1583,16 +1604,25 @@ export function MbgProductionPage() {
             </button>
           ))}
         </div>
-        {activeTab === 'nutrition' && selectedBatchId && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSubmitToPurchasing}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
-              title="Kirim data resep dan kebutuhan bahan ke Purchasing MBG"
-            >
-              <Send className="h-4 w-4 text-white" />
-              <span>Submit ke Purchasing</span>
-            </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowScheduleModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#059669] hover:bg-[#047857] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+            title="Lihat / Edit Master Jadwal Menu Mingguan MBG"
+          >
+            <Calendar className="h-4 w-4 text-[#FBBF24]" />
+            <span>Master Jadwal Menu</span>
+          </button>
+          {activeTab === 'nutrition' && selectedBatchId && (
+            <>
+              <button
+                onClick={handleSubmitToPurchasing}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+                title="Kirim data resep dan kebutuhan bahan ke Purchasing MBG"
+              >
+                <Send className="h-4 w-4 text-white" />
+                <span>Submit ke Purchasing</span>
+              </button>
             <button
               onClick={handleExportPdf}
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#111827] text-white text-xs font-extrabold rounded-xl shadow hover:bg-[#1F2937] transition-colors cursor-pointer"
@@ -1628,8 +1658,9 @@ export function MbgProductionPage() {
             >
               <span>⚡ Isi Dummy Gizi</span>
             </button>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -3864,6 +3895,14 @@ export function MbgProductionPage() {
           </div>
         </div>
       )}
+
+      {/* Weekly Master Schedule Modal */}
+      <WeeklyScheduleModal
+        isOpen={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        scheduleDays={weeklySchedule}
+        onSave={handleSaveWeeklySchedule}
+      />
     </div>
   );
 }

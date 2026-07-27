@@ -2,7 +2,7 @@
 // MBG Purchasing Page — Purchasing MBG: Purchase Orders
 // ============================================================================
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus,
@@ -18,7 +18,13 @@ import {
   Send,
   ShoppingCart,
   Wand2,
+  FileDown,
+  FileText,
+  Camera,
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { exportPurchasingToDocx } from '@/utils/docxExporter';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { MbgPmBatch, MbgPurchaseOrder, MbgPurchaseItem, MbgPurchaseStatus, MbgPmEntry, MbgNutritionEntry } from '@/types/mbg';
@@ -278,91 +284,94 @@ export function MbgPurchasingPage() {
   }, [recipeRequirements, recipeAdjustments]);
 
   // Handler for Generating a new PO automatically from Production requirements
-  const handleGenerateNewPoFromProduction = async (batchIdToUse?: string) => {
-    const targetBatchId = batchIdToUse || selectedBatchId;
-    if (!targetBatchId || !user) return;
-    if (adjustedRecipeRequirements.length === 0) {
-      showToast({ message: 'Tidak ada data kalkulasi bahan baku dari Tim Produksi.', variant: 'error' });
-      return;
-    }
-
-    const loadedItems: MbgPurchaseItem[] = adjustedRecipeRequirements.map((r) => {
-      let qty = r.amount;
-      let unit = 'Kg';
-
-      const sLower = r.satuan.toLowerCase();
-      if (sLower === 'g') {
-        if (r.amount >= 1000) {
-          qty = r.amount / 1000;
-          unit = 'Kg';
-        } else {
-          qty = r.amount;
-          unit = 'g';
-        }
-      } else if (sLower === 'ml') {
-        if (r.amount >= 1000) {
-          qty = r.amount / 1000;
-          unit = 'Liter';
-        } else {
-          qty = r.amount;
-          unit = 'ml';
-        }
-      } else if (sLower === 'pcs') {
-        unit = 'Pcs';
-      } else if (sLower === 'ikat') {
-        unit = 'Ikat';
-      } else if (sLower === 'siung' || sLower === 'lembar') {
-        unit = 'Pcs';
-      } else {
-        const matched = MBG_SATUAN_OPTIONS.find((opt) => opt.toLowerCase() === sLower);
-        unit = matched || 'Kg';
+  const handleGenerateNewPoFromProduction = useCallback(
+    async (batchIdToUse?: string) => {
+      const targetBatchId = batchIdToUse || selectedBatchId;
+      if (!targetBatchId || !user) return;
+      if (adjustedRecipeRequirements.length === 0) {
+        showToast({ message: 'Tidak ada data kalkulasi bahan baku dari Tim Produksi.', variant: 'error' });
+        return;
       }
 
-      qty = Math.round(qty * 100) / 100;
+      const loadedItems: MbgPurchaseItem[] = adjustedRecipeRequirements.map((r) => {
+        let qty = r.amount;
+        let unit = 'Kg';
 
-      let remark = '';
-      if (r.isCustom) {
-        remark = 'Tambahan Manual Produksi';
-      } else if (r.adjustmentId) {
-        remark = 'Koreksi Kuantitas Produksi';
-      } else {
-        remark = `Resep: ${r.sourceMenus.slice(0, 2).join(', ')}`;
-      }
+        const sLower = r.satuan.toLowerCase();
+        if (sLower === 'g') {
+          if (r.amount >= 1000) {
+            qty = r.amount / 1000;
+            unit = 'Kg';
+          } else {
+            qty = r.amount;
+            unit = 'g';
+          }
+        } else if (sLower === 'ml') {
+          if (r.amount >= 1000) {
+            qty = r.amount / 1000;
+            unit = 'Liter';
+          } else {
+            qty = r.amount;
+            unit = 'ml';
+          }
+        } else if (sLower === 'pcs') {
+          unit = 'Pcs';
+        } else if (sLower === 'ikat') {
+          unit = 'Ikat';
+        } else if (sLower === 'siung' || sLower === 'lembar') {
+          unit = 'Pcs';
+        } else {
+          const matched = MBG_SATUAN_OPTIONS.find((opt) => opt.toLowerCase() === sLower);
+          unit = matched || 'Kg';
+        }
 
-      return {
-        bahanName: r.name,
-        jamKedatangan: '08:00',
-        jumlah: qty,
-        satuan: unit,
-        hargaSatuan: 0,
-        totalHarga: 0,
-        keterangan: remark,
-      };
-    });
+        qty = Math.round(qty * 100) / 100;
 
-    try {
-      const batchObj = batches.find((b) => b.id === targetBatchId);
-      await addPurchaseOrder({
-        batchId: targetBatchId,
-        supplierId: 'pasar_utama',
-        supplierName: 'PASAR / SUPPLIER UTAMA',
-        type: 'harian',
-        targetDate: batchObj?.tanggal || new Date().toISOString().split('T')[0],
-        groupLabel: 'Pesanan A',
-        items: loadedItems,
-        totalPengeluaran: 0,
-        status: 'pending',
-        orderedBy: user.uid,
-        orderedAt: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        let remark = '';
+        if (r.isCustom) {
+          remark = 'Tambahan Manual Produksi';
+        } else if (r.adjustmentId) {
+          remark = 'Koreksi Kuantitas Produksi';
+        } else {
+          remark = `Resep: ${r.sourceMenus.slice(0, 2).join(', ')}`;
+        }
+
+        return {
+          bahanName: r.name,
+          jamKedatangan: '08:00',
+          jumlah: qty,
+          satuan: unit,
+          hargaSatuan: 0,
+          totalHarga: 0,
+          keterangan: remark,
+        };
       });
-      showToast({ message: `Berhasil meng-generate ${loadedItems.length} item daftar belanja dari Tim Produksi!`, variant: 'success' });
-    } catch (err) {
-      console.error(err);
-      showToast({ message: 'Gagal meng-generate Purchase Order', variant: 'error' });
-    }
-  };
+
+      try {
+        const batchObj = batches.find((b) => b.id === targetBatchId);
+        await addPurchaseOrder({
+          batchId: targetBatchId,
+          supplierId: 'pasar_utama',
+          supplierName: 'PASAR / SUPPLIER UTAMA',
+          type: 'harian',
+          targetDate: batchObj?.tanggal || new Date().toISOString().split('T')[0],
+          groupLabel: 'Pesanan A',
+          items: loadedItems,
+          totalPengeluaran: 0,
+          status: 'pending',
+          orderedBy: user.uid,
+          orderedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        showToast({ message: `Berhasil meng-generate ${loadedItems.length} item daftar belanja dari Tim Produksi!`, variant: 'success' });
+      } catch (err) {
+        console.error(err);
+        showToast({ message: 'Gagal meng-generate Purchase Order', variant: 'error' });
+      }
+    },
+    [selectedBatchId, user, adjustedRecipeRequirements, batches, showToast]
+  );
 
   // Auto-generate PO if batch has production data but no PO document exists yet
   const autoGeneratedBatchRef = useRef<string | null>(null);
@@ -372,7 +381,7 @@ export function MbgPurchasingPage() {
       autoGeneratedBatchRef.current = selectedBatchId;
       handleGenerateNewPoFromProduction(selectedBatchId);
     }
-  }, [selectedBatchId, loading, orders.length, adjustedRecipeRequirements]);
+  }, [selectedBatchId, loading, orders.length, adjustedRecipeRequirements, handleGenerateNewPoFromProduction]);
 
   // 4. Handler for Auto loading ingredients into PO
   const handleAutoLoadIngredients = async (orderId: string) => {
@@ -683,6 +692,236 @@ export function MbgPurchasingPage() {
         }
       },
     });
+  };
+
+  const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  const handleExportPdfForOrder = async (order: MbgPurchaseOrder) => {
+    try {
+      showToast({ message: 'Menyiapkan Form Pemeriksaan PDF...', variant: 'info' });
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+
+      // 1. Logo BADAN GIZI NASIONAL
+      const logoBase64 = await getBase64ImageFromUrl('/logo_badan_gizi.png');
+      if (logoBase64) {
+        doc.addImage(logoBase64, 'PNG', 14, 10, 16, 16);
+      }
+
+      // BADAN GIZI NASIONAL text next to logo
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text('BADAN', 32, 15);
+      doc.text('GIZI', 32, 19.5);
+      doc.text('NASIONAL', 32, 24);
+
+      // Title Right
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(15, 23, 42);
+      doc.text('FORM PEMERIKSAAN BAHAN MAKANAN', pageW - 14, 16, { align: 'right' });
+
+      // Form Number format: NO : 01/PBM/III/2026
+      const targetDateObj = new Date(order.targetDate || Date.now());
+      const romanMonths = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+      const monthRoman = romanMonths[targetDateObj.getMonth()] || 'III';
+      const year = targetDateObj.getFullYear();
+      const orderNo = order.id ? order.id.slice(0, 2).replace(/\D/g, '01') : '01';
+      const formNoStr = `NO : ${orderNo.padStart(2, '0')}/PBM/${monthRoman}/${year}`;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.text(formNoStr, pageW - 14, 22, { align: 'right' });
+
+      // 2. Metadata Section (Dari, Kepada, Waktu)
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(30, 41, 59);
+
+      const formattedDate = targetDateObj.toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      });
+
+      doc.text('Dari       : Koperasi Al Umanaa Sejahtera Mandiri', 14, 34);
+      doc.text(`Kepada : ${order.supplierName || 'SPPG Sukabumi Gunungguruh Kebonmanggu'}`, 14, 39);
+      doc.text(`Waktu    : ${formattedDate}`, 14, 44);
+
+      // 3. Pre-load item photo base64 strings
+      const itemPhotosBase64: (string | null)[] = await Promise.all(
+        order.items.map(async (item) => {
+          if (item.photoUrl) {
+            return await getBase64ImageFromUrl(item.photoUrl);
+          }
+          return null;
+        })
+      );
+
+      // 4. AutoTable Configuration
+      const tableHead = [
+        [
+          { content: 'No', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
+          { content: 'Jenis Bahan Makanan', rowSpan: 2, styles: { halign: 'left' as const, valign: 'middle' as const } },
+          { content: 'Banyaknya\n(Angka)', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
+          { content: 'Satuan', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
+          { content: 'Jumlah', colSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
+          { content: 'Kondisi Bahan\nMakanan', colSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
+          { content: 'Dokumentasi', rowSpan: 2, styles: { halign: 'center' as const, valign: 'middle' as const } },
+        ],
+        [
+          { content: 'Sesuai', styles: { halign: 'center' as const } },
+          { content: 'Tidak', styles: { halign: 'center' as const } },
+          { content: 'Baik', styles: { halign: 'center' as const } },
+          { content: 'Rusak', styles: { halign: 'center' as const } },
+        ],
+      ];
+
+      const tableBody = order.items.map((item, idx) => [
+        `${idx + 1}`,
+        item.bahanName,
+        `${item.jumlah}`,
+        item.satuan,
+        'V',
+        '',
+        'V',
+        '',
+        '',
+      ]);
+
+      autoTable(doc, {
+        startY: 48,
+        head: tableHead,
+        body: tableBody,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [255, 255, 255],
+          textColor: [0, 0, 0],
+          lineColor: [0, 0, 0],
+          lineWidth: 0.2,
+          fontStyle: 'bold',
+          fontSize: 8,
+        },
+        bodyStyles: {
+          textColor: [0, 0, 0],
+          lineColor: [0, 0, 0],
+          lineWidth: 0.2,
+          fontSize: 8,
+          minCellHeight: 8,
+        },
+        columnStyles: {
+          0: { cellWidth: 10, halign: 'center' },
+          1: { cellWidth: 50 },
+          2: { cellWidth: 20, halign: 'center' },
+          3: { cellWidth: 18, halign: 'center' },
+          4: { cellWidth: 14, halign: 'center' },
+          5: { cellWidth: 14, halign: 'center' },
+          6: { cellWidth: 14, halign: 'center' },
+          7: { cellWidth: 14, halign: 'center' },
+          8: { cellWidth: 28, halign: 'center' },
+        },
+        didDrawCell: (dataCell) => {
+          if (dataCell.section === 'body' && dataCell.column.index === 8) {
+            const rowIndex = dataCell.row.index;
+            const imgData = itemPhotosBase64[rowIndex];
+            if (imgData) {
+              try {
+                const cell = dataCell.cell;
+                const dim = Math.min(cell.width - 2, cell.height - 2);
+                const posX = cell.x + (cell.width - dim) / 2;
+                const posY = cell.y + (cell.height - dim) / 2;
+                doc.addImage(imgData, 'JPEG', posX, posY, dim, dim);
+              } catch {
+                /* ignore image error */
+              }
+            }
+          }
+        },
+      });
+
+      // 5. Signature Section
+      const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 12;
+      const signX = pageW - 55;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.text(`Sukabumi, ${formattedDate}`, signX, finalY, { align: 'center' });
+      doc.text('Kepala Satuan Pelayanan Pemenuhan Gizi', signX, finalY + 4.5, { align: 'center' });
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('Ragha Eskha Utama, S. Hum.', signX, finalY + 24, { align: 'center' });
+
+      doc.save(`Form_Pemeriksaan_Bahan_${order.supplierName.replace(/\s+/g, '_')}_${order.targetDate}.pdf`);
+      showToast({ message: 'Export PDF Form Pemeriksaan berhasil!', variant: 'success' });
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      showToast({ message: 'Gagal mengekspor PDF Form Pemeriksaan', variant: 'error' });
+    }
+  };
+
+  const handleExportDocxForOrder = async (order: MbgPurchaseOrder) => {
+    try {
+      showToast({ message: 'Menyiapkan Form Pemeriksaan Word (.docx)...', variant: 'info' });
+      const logoBase64 = await getBase64ImageFromUrl('/logo_badan_gizi.png');
+
+      const targetDateObj = new Date(order.targetDate || Date.now());
+      const romanMonths = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+      const monthRoman = romanMonths[targetDateObj.getMonth()] || 'III';
+      const year = targetDateObj.getFullYear();
+      const orderNo = order.id ? order.id.slice(0, 2).replace(/\D/g, '01') : '01';
+      const formNoStr = `NO : ${orderNo.padStart(2, '0')}/PBM/${monthRoman}/${year}`;
+
+      const formattedDate = targetDateObj.toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      });
+
+      await exportPurchasingToDocx(
+        {
+          title: 'FORM PEMERIKSAAN BAHAN MAKANAN',
+          formNo: formNoStr,
+          dari: 'Koperasi Al Umanaa Sejahtera Mandiri',
+          kepada: order.supplierName || 'SPPG Sukabumi Gunungguruh Kebonmanggu',
+          waktu: formattedDate,
+          batchDate: order.targetDate,
+          totalItems: order.items.length,
+          logoBase64: logoBase64 || undefined,
+          officerName: 'Ragha Eskha Utama, S. Hum.',
+          items: order.items.map((it) => ({
+            name: it.bahanName,
+            category: order.groupLabel,
+            qty: it.jumlah,
+            unit: it.satuan,
+            pricePerUnit: it.hargaSatuan,
+            totalPrice: it.totalHarga,
+            supplierName: order.supplierName,
+            photoUrl: it.photoUrl,
+            jamKedatangan: it.jamKedatangan,
+            keterangan: it.keterangan,
+          })),
+        },
+        `Form_Pemeriksaan_Bahan_${order.supplierName.replace(/\s+/g, '_')}_${order.targetDate}`
+      );
+      showToast({ message: 'Export DOCX Form Pemeriksaan berhasil!', variant: 'success' });
+    } catch (err) {
+      console.error('Failed to export DOCX:', err);
+      showToast({ message: 'Gagal mengekspor DOCX Form Pemeriksaan', variant: 'error' });
+    }
   };
 
   const totalItemCount = useMemo(() => {
@@ -1071,14 +1310,30 @@ export function MbgPurchasingPage() {
                             })}
                           </div>
 
-                          <button
-                            onClick={() => handleDeleteOrder(order.id)}
-                            title="Hapus Purchase Order"
-                            aria-label="Hapus Purchase Order"
-                            className="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 cursor-pointer transition-all"
-                          >
-                            <Trash2 className="h-4.5 w-4.5" />
-                          </button>
+                          <div className="flex items-center gap-1.5 border-l border-gray-200 pl-2">
+                            <button
+                              onClick={() => handleExportPdfForOrder(order)}
+                              title="Export PO ini ke PDF"
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-[#1E293B] hover:bg-[#0F172A] text-white text-[11px] font-extrabold rounded-lg shadow-xs cursor-pointer transition-colors"
+                            >
+                              <FileDown className="h-3.5 w-3.5" /> PDF
+                            </button>
+                            <button
+                              onClick={() => handleExportDocxForOrder(order)}
+                              title="Export PO ini ke DOCX (Word)"
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[11px] font-extrabold rounded-lg shadow-xs cursor-pointer transition-colors"
+                            >
+                              <FileText className="h-3.5 w-3.5" /> DOCX
+                            </button>
+                            <button
+                              onClick={() => handleDeleteOrder(order.id)}
+                              title="Hapus Purchase Order"
+                              aria-label="Hapus Purchase Order"
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 cursor-pointer transition-all"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>                      {/* Items Table */}
                       <div className="overflow-x-auto">
@@ -1086,6 +1341,7 @@ export function MbgPurchasingPage() {
                           <thead>
                             <tr className="bg-gray-50 border-b border-gray-100 text-left font-bold text-gray-500 uppercase tracking-wider text-[10px]">
                               <th className="py-3 px-4 w-1/3">List Pesanan Bahan</th>
+                              <th className="py-3 px-4 text-center">Foto Bahan</th>
                               <th className="py-3 px-4">Jam Kedatangan</th>
                               <th className="py-3 px-4">Jumlah</th>
                               <th className="py-3 px-4">Satuan</th>
@@ -1108,6 +1364,57 @@ export function MbgPurchasingPage() {
                                     placeholder="Contoh: Beras Ramos, Telur Ayam"
                                     className="w-full bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[#FBBF24] focus:outline-none py-1 font-bold text-[#111827] disabled:opacity-60"
                                   />
+                                </td>
+                                <td className="py-2.5 px-4 text-center">
+                                  {item.photoUrl ? (
+                                    <div className="relative group inline-block">
+                                      <img
+                                        src={item.photoUrl}
+                                        alt={item.bahanName}
+                                        className="h-10 w-10 object-cover rounded-lg border border-gray-200 shadow-xs"
+                                      />
+                                      <label className="absolute inset-0 bg-black/50 text-white rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-[9px] font-bold">
+                                        Ganti
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          className="hidden"
+                                          disabled={order.submittedToRecap === true}
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                              const reader = new FileReader();
+                                              reader.onload = () => {
+                                                handleUpdateItem(order.id, idx, 'photoUrl', reader.result as string);
+                                              };
+                                              reader.readAsDataURL(file);
+                                            }
+                                          }}
+                                        />
+                                      </label>
+                                    </div>
+                                  ) : (
+                                    <label className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-[10px] font-bold cursor-pointer transition-colors">
+                                      <Camera className="h-3 w-3 text-gray-500" />
+                                      Foto
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        disabled={order.submittedToRecap === true}
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) {
+                                            const reader = new FileReader();
+                                            reader.onload = () => {
+                                              handleUpdateItem(order.id, idx, 'photoUrl', reader.result as string);
+                                            };
+                                            reader.readAsDataURL(file);
+                                          }
+                                        }}
+                                      />
+                                    </label>
+                                  )}
                                 </td>
                                 <td className="py-2.5 px-4">
                                   <input

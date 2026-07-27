@@ -10,7 +10,13 @@ import {
   UserCheck,
   Building2,
   ChefHat,
+  FileDown,
+  FileText,
+  Image as ImageIcon,
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { exportDistributionToDocx } from '@/utils/docxExporter';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type {
@@ -391,6 +397,83 @@ export function MbgDistributionPage() {
       }
     } catch {
       showToast({ message: 'Gagal memproses QC', variant: 'error' });
+    }
+  };
+
+  const handleExportPdfForQc = (poOrder: MbgPurchaseOrder) => {
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.setTextColor(17, 24, 39);
+      doc.text('LAPORAN HASIL CHECKLIST QC BAHAN MBG', pageW / 2, 18, { align: 'center' });
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Supplier: ${poOrder.supplierName} | Tanggal: ${poOrder.targetDate}`, pageW / 2, 25, { align: 'center' });
+
+      doc.setDrawColor(226, 232, 240);
+      doc.line(14, 29, pageW - 14, 29);
+
+      const tableHeaders = ['No', 'Nama Bahan', 'Qty Dipesan', 'Qty Diterima', 'Status QC', 'Catatan'];
+      const tableRows = qcItems.map((item, idx) => [
+        `${idx + 1}`,
+        item.bahanName,
+        `${item.jumlahOrdered} ${item.satuanOrdered}`,
+        `${item.jumlahReceived} ${item.satuanOrdered}`,
+        item.status === 'ok' ? 'LULUS (OK)' : 'REJECTED',
+        item.failReason || 'Sesuai Spesifikasi',
+      ]);
+
+      autoTable(doc, {
+        startY: 34,
+        head: [tableHeaders],
+        body: tableRows,
+        theme: 'striped',
+        headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 8, textColor: [15, 23, 42] },
+      });
+
+      doc.save(`Laporan_QC_${poOrder.supplierName.replace(/\s+/g, '_')}_${poOrder.targetDate}.pdf`);
+      showToast({ message: 'Export PDF QC berhasil!', variant: 'success' });
+    } catch (err) {
+      console.error('Failed to export PDF QC:', err);
+      showToast({ message: 'Gagal mengekspor PDF QC', variant: 'error' });
+    }
+  };
+
+  const handleExportDocxForQc = async (poOrder: MbgPurchaseOrder) => {
+    try {
+      showToast({ message: 'Menyiapkan file Word QC (.docx)...', variant: 'info' });
+      const purchasingPhotos = poOrder.items.map((i) => i.photoUrl).filter(Boolean) as string[];
+
+      await exportDistributionToDocx(
+        {
+          title: `Laporan QC & Delivery ${poOrder.supplierName}`,
+          deliveryDate: poOrder.targetDate,
+          institutionName: poOrder.supplierName,
+          institutionType: 'sekolah',
+          driverName: 'Tim Transportasi MBG',
+          vehicleNumber: 'B 1234 MBG',
+          qtPorsiBesar: 0,
+          qtPorsiKecil: 0,
+          qtPorsiBalita: 0,
+          qtPorsiBumilBusui: 0,
+          qtGuruKader: 0,
+          totalPortions: poOrder.items.length,
+          qcStatus: qcOverallStatus === 'passed' ? 'PASS' : 'FAIL',
+          qcNotes: qcNotes,
+          photos: purchasingPhotos,
+        },
+        `QC_Report_${poOrder.supplierName.replace(/\s+/g, '_')}_${poOrder.targetDate}`
+      );
+      showToast({ message: 'Export DOCX QC berhasil!', variant: 'success' });
+    } catch (err) {
+      console.error('Failed to export DOCX QC:', err);
+      showToast({ message: 'Gagal mengekspor DOCX QC', variant: 'error' });
     }
   };
 
@@ -941,6 +1024,26 @@ export function MbgDistributionPage() {
                   </table>
                 </div>
 
+                {/* Purchasing Photos Preview Section */}
+                {selectedOrderForQc.items.some((i) => i.photoUrl) && (
+                  <div className="p-4 bg-amber-50/50 rounded-xl border border-amber-200">
+                    <p className="text-xs font-bold text-amber-900 mb-2 flex items-center gap-1.5">
+                      <ImageIcon className="h-4 w-4 text-amber-600" />
+                      Foto Bukti Belanjaan dari Tim Purchasing ({selectedOrderForQc.items.filter((i) => i.photoUrl).length} Foto)
+                    </p>
+                    <div className="flex gap-3 overflow-x-auto pb-1">
+                      {selectedOrderForQc.items
+                        .filter((i) => i.photoUrl)
+                        .map((it, idx) => (
+                          <div key={idx} className="shrink-0 bg-white p-2 rounded-lg border border-amber-200 text-center shadow-xs">
+                            <img src={it.photoUrl} alt={it.bahanName} className="h-16 w-20 object-cover rounded-md mb-1" />
+                            <p className="text-[10px] font-bold text-slate-800 truncate max-w-[80px]">{it.bahanName}</p>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Overall status & Notes */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100">
                   <div className="space-y-2">
@@ -985,19 +1088,38 @@ export function MbgDistributionPage() {
               </div>
 
               {/* Footer */}
-              <div className="p-6 border-t border-[#E5E7EB] bg-gray-50 flex justify-end gap-3">
-                <button
-                  onClick={() => setSelectedOrderForQc(null)}
-                  className="px-5 py-2.5 border border-gray-300 rounded-xl hover:bg-gray-100 text-xs font-bold text-gray-700 cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  onClick={handleSubmitQc}
-                  className="px-5 py-2.5 bg-[#111827] text-white hover:bg-black rounded-xl cursor-pointer text-xs font-bold"
-                >
-                  Simpan Hasil QC
-                </button>
+              <div className="p-6 border-t border-[#E5E7EB] bg-gray-50 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleExportPdfForQc(selectedOrderForQc)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#1E293B] hover:bg-[#0F172A] text-white text-xs font-extrabold rounded-xl shadow-xs cursor-pointer transition-colors"
+                  >
+                    <FileDown className="h-4 w-4" /> Export PDF QC
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExportDocxForQc(selectedOrderForQc)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-extrabold rounded-xl shadow-xs cursor-pointer transition-colors"
+                  >
+                    <FileText className="h-4 w-4" /> Export DOCX QC
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setSelectedOrderForQc(null)}
+                    className="px-5 py-2.5 border border-gray-300 rounded-xl hover:bg-gray-100 text-xs font-bold text-gray-700 cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={handleSubmitQc}
+                    className="px-5 py-2.5 bg-[#111827] text-white hover:bg-black rounded-xl cursor-pointer text-xs font-bold"
+                  >
+                    Simpan Hasil QC
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

@@ -257,6 +257,8 @@ export interface MbgPurchaseItem {
   totalHarga: number;
   /** Catatan tambahan */
   keterangan: string;
+  /** Foto barang belanjaan */
+  photoUrl?: string;
 }
 
 /**
@@ -284,6 +286,8 @@ export interface MbgPurchaseOrder {
   updatedAt: string;
   submittedToRecap?: boolean;
   submittedAt?: string;
+  /** Foto bukti belanjaan per PO */
+  photos?: string[];
 }
 
 // === QC (Quality Control) ===
@@ -342,6 +346,8 @@ export interface MbgCookingPhoto {
   /** Deskripsi template or custom */
   description: string;
   capturedAt: string;
+  /** Preview URL (DataURL or Remote URL) */
+  url?: string;
 }
 
 /**
@@ -389,3 +395,34 @@ export interface MbgDeliveryTask {
   createdAt: string;
   updatedAt: string;
 }
+
+// === JADWAL MENU MINGGUAN (Weekly Menu Schedule) ===
+
+/** Menu terklasifikasi per hari dalam seminggu */
+export interface MbgDayMenu {
+  dayOfWeek: number; // 0 = Minggu, 1 = Senin, ..., 6 = Sabtu
+  dayName: string; // "Senin", "Selasa", dll
+  hewani: string; // e.g. "Ayam Goreng Lengkuas"
+  sayur: string; // e.g. "Sayur Sop Wortel Buncis"
+  buah: string; // e.g. "Pisang Ambon"
+  nabati: string; // e.g. "Tempe Goreng Tepung"
+  karbohidrat?: string; // e.g. "Nasi Putih"
+  menuKeringan?: string; // e.g. "Roti Abon Kering"
+  /** Multi-item arrays for categories with multiple dishes */
+  hewaniItems?: string[];
+  sayurItems?: string[];
+  buahItems?: string[];
+  nabatiItems?: string[];
+  karbohidratItems?: string[];
+  menuKeringanItems?: string[];
+}
+
+/** Konfigurasi Master Jadwal Menu Mingguan MBG */
+export interface MbgWeeklyScheduleConfig {
+  id: string;
+  title: string;
+  days: MbgDayMenu[];
+  updatedAt: string;
+  updatedBy: string;
+}
+

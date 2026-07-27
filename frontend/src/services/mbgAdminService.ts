@@ -17,12 +17,91 @@ import {
   deleteField,
   type Unsubscribe,
 } from 'firebase/firestore';
+import { setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { MbgPmBatch, MbgPmEntry, MbgBatchStatus } from '@/types/mbg';
-import { MBG_MASTER_INSTITUTIONS } from '@/constants/mbgConstants';
+import type { MbgPmBatch, MbgPmEntry, MbgBatchStatus, MbgDayMenu } from '@/types/mbg';
+import { MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
 
 const BATCHES_COLLECTION = 'mbg_pm_batches';
 const ENTRIES_COLLECTION = 'mbg_pm_entries';
+const SCHEDULE_DOC_REF = doc(db, 'mbg_settings', 'weekly_schedule');
+
+export function parseCategoryItems(input?: string | string[]): string[] {
+  if (Array.isArray(input)) {
+    return input.map((s) => s.trim()).filter(Boolean);
+  }
+  if (typeof input === 'string') {
+    return input.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+export function getMenuForDate(dateStr: string, scheduleDays?: MbgDayMenu[]) {
+  const days = scheduleDays || DEFAULT_WEEKLY_SCHEDULE;
+  let dayOfWeek = 1;
+  if (dateStr) {
+    const parts = dateStr.split('-').map(Number);
+    if (parts.length === 3) {
+      const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+      dayOfWeek = dateObj.getDay();
+    }
+  }
+
+  const found = days.find((d) => d.dayOfWeek === dayOfWeek) || days[0];
+
+  const hewaniList = parseCategoryItems(found.hewaniItems || found.hewani);
+  const sayurList = parseCategoryItems(found.sayurItems || found.sayur);
+  const buahList = parseCategoryItems(found.buahItems || found.buah);
+  const nabatiList = parseCategoryItems(found.nabatiItems || found.nabati);
+  const karboList = parseCategoryItems(found.karbohidratItems || found.karbohidrat);
+  const keringanList = parseCategoryItems(found.menuKeringanItems || found.menuKeringan);
+
+  const menuItems = [...hewaniList, ...sayurList, ...buahList, ...nabatiList, ...karboList];
+  const menuKeringanItems = keringanList.length > 0 ? keringanList : (found.menuKeringan ? [found.menuKeringan] : []);
+
+  return { dayMenu: found, menuItems, menuKeringanItems };
+}
+
+export function subscribeWeeklySchedule(
+  callback: (days: MbgDayMenu[]) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  return onSnapshot(
+    SCHEDULE_DOC_REF,
+    (snapshot) => {
+      if (snapshot.exists() && snapshot.data().days) {
+        callback(snapshot.data().days as MbgDayMenu[]);
+      } else {
+        setDoc(SCHEDULE_DOC_REF, {
+          id: 'weekly_schedule',
+          title: 'Master Jadwal Menu Mingguan MBG',
+          days: DEFAULT_WEEKLY_SCHEDULE,
+          updatedAt: new Date().toISOString(),
+          updatedBy: 'system',
+        }).catch(console.error);
+        callback(DEFAULT_WEEKLY_SCHEDULE as MbgDayMenu[]);
+      }
+    },
+    (error) => onError?.(error)
+  );
+}
+
+export async function saveWeeklySchedule(
+  days: MbgDayMenu[],
+  updatedBy: string
+): Promise<void> {
+  await setDoc(
+    SCHEDULE_DOC_REF,
+    {
+      id: 'weekly_schedule',
+      title: 'Master Jadwal Menu Mingguan MBG',
+      days,
+      updatedAt: new Date().toISOString(),
+      updatedBy,
+    },
+    { merge: true }
+  );
+}
 
 // ---- Batch Operations ----
 
@@ -49,7 +128,9 @@ export function subscribeBatches(
 
 export async function createBatch(
   tanggal: string,
-  createdBy: string
+  createdBy: string,
+  autoPopulate = true,
+  scheduleDays?: MbgDayMenu[]
 ): Promise<string> {
   const batch: Omit<MbgPmBatch, 'id'> = {
     tanggal,
@@ -66,6 +147,12 @@ export async function createBatch(
     updatedAt: new Date().toISOString(),
   };
   const docRef = await addDoc(collection(db, BATCHES_COLLECTION), batch);
+
+  if (autoPopulate) {
+    await bulkAddEntriesFromMaster(docRef.id, createdBy, tanggal, scheduleDays);
+    await recalculateBatchTotals(docRef.id);
+  }
+
   return docRef.id;
 }
 
@@ -295,10 +382,21 @@ export async function copyFromBatch(
  */
 export async function bulkAddEntriesFromMaster(
   batchId: string,
-  createdBy: string
+  createdBy: string,
+  dateStr?: string,
+  scheduleDays?: MbgDayMenu[]
 ): Promise<void> {
   const batch = writeBatch(db);
   const now = new Date().toISOString();
+
+  let menuItems: string[] = [];
+  let menuKeringanItems: string[] = [];
+
+  if (dateStr) {
+    const res = getMenuForDate(dateStr, scheduleDays);
+    menuItems = res.menuItems;
+    menuKeringanItems = res.menuKeringanItems;
+  }
 
   MBG_MASTER_INSTITUTIONS.forEach((item, idx) => {
     const ref = doc(collection(db, ENTRIES_COLLECTION));
@@ -333,8 +431,8 @@ export async function bulkAddEntriesFromMaster(
       jadwalPengantaran: item.jadwalPengantaran || '06.00-08.30',
       assignedPetugasId: '',
       assignedPetugasName: '',
-      menuItems: [],
-      menuKeringanItems: [],
+      menuItems: [...menuItems],
+      menuKeringanItems: [...menuKeringanItems],
       isSekolahLibur: false,
       notes: '',
       sortOrder: idx + 1,

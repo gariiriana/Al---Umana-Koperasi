@@ -315,3 +315,80 @@ export const MBG_MASTER_INSTITUTIONS: MbgMasterInstitution[] = [
   { institutionName: 'Bumil Cempaka', institutionType: 'posyandu', qtSiswaBalita: 0, qtBumilBusui: 35, qtBumil: 35, qtBusui: 0, qtGuruKader: 13, qtPorsiBumilBusui: 35, qtPorsiBesar: 13, qtPorsiBesarL: 0, qtPorsiBesarP: 35, qtGuruL: 0, qtGuruP: 0, qtTendikL: 0, qtTendikP: 13, qtTidakAlergi: 48, jadwalPengantaran: '06.00-08.30' },
   { institutionName: 'Busui Cempaka', institutionType: 'posyandu', qtSiswaBalita: 0, qtBumilBusui: 92, qtBumil: 0, qtBusui: 92, qtGuruKader: 0, qtPorsiBumilBusui: 92, qtPorsiBesarL: 0, qtPorsiBesarP: 92, qtTidakAlergi: 92, jadwalPengantaran: '06.00-08.30' },
 ];
+
+import type { MbgDayMenu } from '@/types/mbg';
+
+/** Master Jadwal Menu Mingguan Default MBG */
+export const DEFAULT_WEEKLY_SCHEDULE: MbgDayMenu[] = [
+  {
+    dayOfWeek: 1, // Senin
+    dayName: 'Senin',
+    hewani: 'Ayam Goreng Lengkuas',
+    sayur: 'Sayur Sop Wortel Buncis',
+    buah: 'Pisang Ambon',
+    nabati: 'Tempe Goreng Tepung',
+    karbohidrat: 'Nasi Putih',
+    menuKeringan: 'Roti Abon Kering',
+  },
+  {
+    dayOfWeek: 2, // Selasa
+    dayName: 'Selasa',
+    hewani: 'Daging Sapi Semur',
+    sayur: 'Tumis Buncis Jagung',
+    buah: 'Jeruk Manis',
+    nabati: 'Tahu Bacem',
+    karbohidrat: 'Nasi Putih',
+    menuKeringan: 'Biskuit Gandum',
+  },
+  {
+    dayOfWeek: 3, // Rabu
+    dayName: 'Rabu',
+    hewani: 'Telur Balado',
+    sayur: 'Capcay Kuah Segar',
+    buah: 'Melon Segar',
+    nabati: 'Perkedel Tahu',
+    karbohidrat: 'Nasi Putih',
+    menuKeringan: 'Roti Cokelat',
+  },
+  {
+    dayOfWeek: 4, // Kamis
+    dayName: 'Kamis',
+    hewani: 'Ikan Goreng Crispy',
+    sayur: 'Sayur Bening Bayam',
+    buah: 'Semangka Potong',
+    nabati: 'Tempe Bacem',
+    karbohidrat: 'Nasi Putih',
+    menuKeringan: 'Kue Bojo Kering',
+  },
+  {
+    dayOfWeek: 5, // Jumat
+    dayName: 'Jumat',
+    hewani: 'Ayam Kecap Mentega',
+    sayur: 'Tumis Labu Siam',
+    buah: 'Pisang Cavendish',
+    nabati: 'Tahu Goreng Crispy',
+    karbohidrat: 'Nasi Putih',
+    menuKeringan: 'Roti Keju',
+  },
+  {
+    dayOfWeek: 6, // Sabtu
+    dayName: 'Sabtu',
+    hewani: 'Telur Dadar Sayur',
+    sayur: 'Sayur Asem',
+    buah: 'Jeruk Medan',
+    nabati: 'Tempe Mendoan',
+    karbohidrat: 'Nasi Putih',
+    menuKeringan: 'Biskuit Kelapa',
+  },
+  {
+    dayOfWeek: 0, // Minggu
+    dayName: 'Minggu',
+    hewani: 'Ayam Suwir Gurih',
+    sayur: 'Tumis Kacang Panjang',
+    buah: 'Pisang Raja',
+    nabati: 'Tahu Goreng Kuning',
+    karbohidrat: 'Nasi Putih',
+    menuKeringan: 'Roti Kering',
+  },
+];
+
