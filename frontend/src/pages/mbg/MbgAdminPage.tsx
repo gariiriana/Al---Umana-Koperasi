@@ -909,27 +909,53 @@ export function MbgAdminPage() {
   useEffect(() => {
     if (!selectedBatchId || !selectedBatch || loadingEntries) return;
 
-    if (
-      entries.length === 0 &&
-      selectedBatch.status === 'DRAFT' &&
-      !isAutoPopulatingRef.current[selectedBatchId]
-    ) {
-      isAutoPopulatingRef.current[selectedBatchId] = true;
+    if (entries.length === 0 && selectedBatch.status === 'DRAFT') {
+      const batchKey = `${selectedBatchId}_${selectedBatch.tanggal}`;
+      if (isAutoPopulatingRef.current[batchKey]) return;
+
+      isAutoPopulatingRef.current[batchKey] = true;
       (async () => {
         try {
           await bulkAddEntriesFromMaster(selectedBatchId, user?.uid || '', selectedBatch.tanggal, weeklySchedule);
           await recalculateBatchTotals(selectedBatchId);
+          const { dayMenu } = getMenuForDate(selectedBatch.tanggal, weeklySchedule);
           showToast({
-            message: `Otomatis meng-generate 27 Institusi Master & Menu Jadwal untuk ${selectedBatch.tanggal}`,
+            message: `Otomatis meng-generate 27 Institusi Master & Menu (${dayMenu.dayName}) untuk ${selectedBatch.tanggal}`,
             variant: 'success',
           });
         } catch (err) {
           console.error('Failed to auto-generate batch entries:', err);
-          isAutoPopulatingRef.current[selectedBatchId] = false;
+          delete isAutoPopulatingRef.current[batchKey];
         }
       })();
     }
   }, [selectedBatchId, selectedBatch, entries.length, loadingEntries, user, weeklySchedule, showToast]);
+
+  const handleSelectOrPickDate = async (newDateStr: string) => {
+    if (!newDateStr || !user) return;
+
+    const existing = batches.find((b) => b.tanggal === newDateStr);
+    if (existing) {
+      setSelectedBatchId(existing.id);
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const newId = await createBatch(newDateStr, user.uid, true, weeklySchedule);
+      setSelectedBatchId(newId);
+      const { dayMenu } = getMenuForDate(newDateStr, weeklySchedule);
+      showToast({
+        message: `Otomatis membuat batch ${newDateStr} (${dayMenu.dayName}) dengan 27 Institusi & Menu Jadwal!`,
+        variant: 'success',
+      });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: 'Gagal membuat batch untuk tanggal tersebut', variant: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Filter entries based on search query
   const filteredEntries = useMemo(() => {
@@ -1251,27 +1277,36 @@ export function MbgAdminPage() {
       ) : (
         <>
           {/* Dropdown Selector Card */}
-          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 mb-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 mb-6 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-center gap-3 flex-wrap">
               <div className="p-3 bg-amber-50 rounded-xl text-amber-500">
                 <Calendar className="h-5 w-5" />
               </div>
               <div className="space-y-1">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Tanggal Pengiriman</span>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={selectedBatchId || ''}
-                    onChange={(e) => setSelectedBatchId(e.target.value)}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input
+                    type="date"
                     title="Pilih Tanggal Pengiriman"
-                    aria-label="Pilih Tanggal Pengiriman"
-                    className="text-sm font-extrabold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] rounded-lg border border-[#E5E7EB] px-3 py-1.5 bg-gray-50 cursor-pointer min-w-[180px]"
-                  >
-                    {batches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.tanggal}
-                      </option>
-                    ))}
-                  </select>
+                    value={selectedBatch ? selectedBatch.tanggal : new Date().toISOString().split('T')[0]}
+                    onChange={(e) => handleSelectOrPickDate(e.target.value)}
+                    className="text-sm font-extrabold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] rounded-lg border border-[#E5E7EB] px-3 py-1.5 bg-gray-50 cursor-pointer"
+                  />
+                  {batches.length > 0 && (
+                    <select
+                      value={selectedBatchId || ''}
+                      onChange={(e) => setSelectedBatchId(e.target.value)}
+                      title="Pilih Batch Terdaftar"
+                      aria-label="Pilih Batch Terdaftar"
+                      className="text-sm font-extrabold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] rounded-lg border border-[#E5E7EB] px-3 py-1.5 bg-gray-50 cursor-pointer min-w-[130px]"
+                    >
+                      {batches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.tanggal}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   {selectedBatch && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF3C7] text-[#92400E]">
                       {MBG_BATCH_STATUS_CONFIG[selectedBatch.status]?.label || selectedBatch.status}
@@ -1279,6 +1314,19 @@ export function MbgAdminPage() {
                   )}
                 </div>
               </div>
+
+              {/* Dynamic Day & Weekly Menu Badge */}
+              {selectedBatch && (
+                <div className="ml-0 lg:ml-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs font-extrabold flex flex-col gap-0.5">
+                  <div className="flex items-center gap-1.5 text-emerald-800">
+                    <span>🗓️ Hari {getMenuForDate(selectedBatch.tanggal, weeklySchedule).dayMenu.dayName}</span>
+                    <span className="text-[9px] bg-emerald-200/80 text-emerald-900 px-1.5 py-0.2 rounded font-bold">Auto-Weekly</span>
+                  </div>
+                  <div className="text-[10px] text-emerald-700 font-semibold truncate max-w-[280px]">
+                    {getMenuForDate(selectedBatch.tanggal, weeklySchedule).menuItems.join(', ')}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
