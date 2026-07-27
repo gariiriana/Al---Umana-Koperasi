@@ -2,7 +2,7 @@
 // MBG Admin Page — Administrasi MBG: Input Data PM
 // ============================================================================
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus,
@@ -837,6 +837,8 @@ export function MbgAdminPage() {
     variant?: 'danger' | 'warning' | 'info';
   } | null>(null);
 
+  const isAutoPopulatingRef = useRef<Record<string, boolean>>({});
+
   // Subscribe to weekly menu schedule
   useEffect(() => {
     const unsub = subscribeWeeklySchedule(setWeeklySchedule);
@@ -862,7 +864,7 @@ export function MbgAdminPage() {
           const anyTodayBatch = b.find((batch) => batch.tanggal === todayStr);
           if (!anyTodayBatch) {
             try {
-              const newId = await createBatch(todayStr, user.uid);
+              const newId = await createBatch(todayStr, user.uid, true, weeklySchedule);
               setSelectedBatchId(newId);
             } catch (err) {
               console.error('Failed to auto-create batch for today:', err);
@@ -878,7 +880,7 @@ export function MbgAdminPage() {
       }
     );
     return unsub;
-  }, [user]);
+  }, [user, weeklySchedule]);
 
   // Subscribe to entries when batch is selected
   useEffect(() => {
@@ -902,6 +904,32 @@ export function MbgAdminPage() {
   }, [selectedBatchId]);
 
   const selectedBatch = batches.find((b) => b.id === selectedBatchId);
+
+  // Auto-generate 27 Master Institutions if selected batch is DRAFT and has 0 entries
+  useEffect(() => {
+    if (!selectedBatchId || !selectedBatch || loadingEntries) return;
+
+    if (
+      entries.length === 0 &&
+      selectedBatch.status === 'DRAFT' &&
+      !isAutoPopulatingRef.current[selectedBatchId]
+    ) {
+      isAutoPopulatingRef.current[selectedBatchId] = true;
+      (async () => {
+        try {
+          await bulkAddEntriesFromMaster(selectedBatchId, user?.uid || '', selectedBatch.tanggal, weeklySchedule);
+          await recalculateBatchTotals(selectedBatchId);
+          showToast({
+            message: `Otomatis meng-generate 27 Institusi Master & Menu Jadwal untuk ${selectedBatch.tanggal}`,
+            variant: 'success',
+          });
+        } catch (err) {
+          console.error('Failed to auto-generate batch entries:', err);
+          isAutoPopulatingRef.current[selectedBatchId] = false;
+        }
+      })();
+    }
+  }, [selectedBatchId, selectedBatch, entries.length, loadingEntries, user, weeklySchedule, showToast]);
 
   // Filter entries based on search query
   const filteredEntries = useMemo(() => {
@@ -971,6 +999,24 @@ export function MbgAdminPage() {
     } catch (err) {
       console.error(err);
       showToast({ message: 'Gagal mengupdate menu jadwal ke institusi', variant: 'error' });
+    }
+  };
+
+  const handleBulkGenerateMaster = async () => {
+    if (!selectedBatchId || !selectedBatch) return;
+    try {
+      setSaving(true);
+      await bulkAddEntriesFromMaster(selectedBatchId, user?.uid || '', selectedBatch.tanggal, weeklySchedule);
+      await recalculateBatchTotals(selectedBatchId);
+      showToast({
+        message: `Berhasil meng-generate 27 Institusi Master & Menu Jadwal untuk batch ${selectedBatch.tanggal}!`,
+        variant: 'success',
+      });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: 'Gagal meng-generate institusi master', variant: 'error' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1237,6 +1283,15 @@ export function MbgAdminPage() {
 
             <div className="flex items-center gap-2 flex-wrap">
               <button
+                onClick={handleBulkGenerateMaster}
+                disabled={saving}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] text-white text-xs font-extrabold rounded-xl hover:bg-[#1D4ED8] cursor-pointer transition-colors shadow-sm disabled:opacity-50"
+              >
+                <ChefHat className="h-4 w-4 text-[#FBBF24]" />
+                Auto-Generate 27 Institusi
+              </button>
+
+              <button
                 onClick={() => setShowScheduleModal(true)}
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#059669] text-white text-xs font-extrabold rounded-xl hover:bg-[#047857] cursor-pointer transition-colors shadow-sm"
               >
@@ -1344,8 +1399,18 @@ export function MbgAdminPage() {
                       <tbody>
                         {filteredEntries.length === 0 ? (
                           <tr>
-                            <td colSpan={11} className="px-4 py-8 text-center text-xs font-medium text-slate-400 italic">
-                              Belum ada data institusi. Klik "Tambah Institusi Baru" di bawah untuk menambah data.
+                            <td colSpan={22} className="px-4 py-12 text-center text-xs font-medium text-slate-500">
+                              <div className="flex flex-col items-center justify-center gap-3">
+                                <p className="font-bold text-slate-600">Belum ada data institusi dalam batch ini.</p>
+                                <button
+                                  onClick={handleBulkGenerateMaster}
+                                  disabled={saving}
+                                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#2563EB] text-white text-xs font-extrabold rounded-xl hover:bg-[#1D4ED8] cursor-pointer transition-colors shadow-md disabled:opacity-50"
+                                >
+                                  <ChefHat className="h-4 w-4 text-[#FBBF24]" />
+                                  ✨ Generate 27 Master Institusi & Menu Jadwal
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ) : (
