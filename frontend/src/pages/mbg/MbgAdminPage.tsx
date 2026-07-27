@@ -1331,15 +1331,6 @@ export function MbgAdminPage() {
 
             <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={handleBulkGenerateMaster}
-                disabled={saving}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] text-white text-xs font-extrabold rounded-xl hover:bg-[#1D4ED8] cursor-pointer transition-colors shadow-sm disabled:opacity-50"
-              >
-                <ChefHat className="h-4 w-4 text-[#FBBF24]" />
-                Auto-Generate 27 Institusi
-              </button>
-
-              <button
                 onClick={() => setShowScheduleModal(true)}
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#059669] text-white text-xs font-extrabold rounded-xl hover:bg-[#047857] cursor-pointer transition-colors shadow-sm"
               >
@@ -1447,18 +1438,8 @@ export function MbgAdminPage() {
                       <tbody>
                         {filteredEntries.length === 0 ? (
                           <tr>
-                            <td colSpan={22} className="px-4 py-12 text-center text-xs font-medium text-slate-500">
-                              <div className="flex flex-col items-center justify-center gap-3">
-                                <p className="font-bold text-slate-600">Belum ada data institusi dalam batch ini.</p>
-                                <button
-                                  onClick={handleBulkGenerateMaster}
-                                  disabled={saving}
-                                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#2563EB] text-white text-xs font-extrabold rounded-xl hover:bg-[#1D4ED8] cursor-pointer transition-colors shadow-md disabled:opacity-50"
-                                >
-                                  <ChefHat className="h-4 w-4 text-[#FBBF24]" />
-                                  ✨ Generate 27 Master Institusi & Menu Jadwal
-                                </button>
-                              </div>
+                            <td colSpan={22} className="px-4 py-8 text-center text-xs font-medium text-slate-400 italic">
+                              Belum ada data institusi. Klik "Tambah Institusi Baru" di bawah untuk menambah data.
                             </td>
                           </tr>
                         ) : (
