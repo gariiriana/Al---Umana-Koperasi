@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState, Fragment } from 'react';
 import {
-  Plus, Trash2, FileDown, Calendar, Loader2, CheckCircle2, Search, X, Folder, Send,
+  Plus, Trash2, FileDown, Calendar, Loader2, CheckCircle2, Search, X, Folder, Send, ChefHat,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -74,69 +74,7 @@ const standarPorsi = porsiStandardData as StandarPorsi[];
 const standarResep = resepStandardData as StandarResep[];
 
 
-function findBestTkpiMatch(name: string, database: typeof tkpiDatabase) {
-  const cleanName = name.toLowerCase().trim();
-  if (!cleanName) return null;
 
-  // 1. Exact match
-  let match = database.find(item => item.nama.toLowerCase() === cleanName);
-  if (match) return match;
-
-  // 2. Specialized manual mappings for common MBG inputs
-  const manualMappings: Record<string, string> = {
-    'nasi putih': 'nasi',
-    'nasi': 'nasi',
-    'buah pisang': 'pisang ambon, segar',
-    'pisang': 'pisang ambon, segar',
-    'susu uht': 'susu sapi, segar',
-    'susu': 'susu sapi, segar',
-    'ayam goreng': 'ayam goreng kentucky, paha',
-    'ayam goreng tepung': 'ayam goreng kentucky, paha',
-    'empal daging': 'daging sapi, segar',
-    'daging sapi': 'daging sapi, segar',
-    'tumis buncis': 'buncis, segar',
-    'buncis': 'buncis, segar',
-    'kentang goreng': 'kentang, segar',
-    'kentang rebus': 'kentang, segar',
-    'kentang': 'kentang, segar',
-    'sup sayur': 'wortel, segar',
-    'sop wortel kentang': 'wortel, segar',
-  };
-
-  const mappedName = manualMappings[cleanName];
-  if (mappedName) {
-    match = database.find(item => item.nama.toLowerCase() === mappedName);
-    if (match) return match;
-  }
-
-  // 3. Word overlap matching (fuzzy keyword match)
-  const words = cleanName.split(/\s+/).filter(w => w.length > 2);
-  if (words.length > 0) {
-    let bestItem: typeof database[number] | null = null;
-    let bestScore = 0;
-
-    for (const item of database) {
-      const itemNamaLower = item.nama.toLowerCase();
-      let score = 0;
-      for (const word of words) {
-        if (itemNamaLower.includes(word)) {
-          score += 1;
-        }
-      }
-      if (score > bestScore) {
-        bestScore = score;
-        bestItem = item;
-      }
-    }
-
-    if (bestScore > 0) {
-      return bestItem;
-    }
-  }
-
-  // 4. Fallback: contains any part of the name
-  return database.find(item => item.nama.toLowerCase().includes(cleanName)) || null;
-}
 
 export function MbgProductionPage() {
   const { user } = useAuth();
@@ -365,107 +303,7 @@ export function MbgProductionPage() {
     });
   }, [archivedBatches, allEntries, archiveSearchQuery, archiveSearchDate]);
 
-  // Auto-populate unique menu items from entries to nutrition data
-  useEffect(() => {
-    if (!selectedBatchId || loading || isInitializing || !user) return;
-    
-    // Auto populate only if entries exist, nutritionData is empty, and batch status is PM_SUBMITTED
-    if (entries.length > 0 && nutritionData.length === 0 && selectedBatch?.status === 'PM_SUBMITTED') {
-      const runInit = async () => {
-        setIsInitializing(true);
-        try {
-          const menuQuantities: Record<string, number> = {};
-          entries.forEach((e) => {
-            if (e.isSekolahLibur) return;
-            // Reguler menu items
-            const regularQty = e.jumlah - (e.qtPobiaNasi || 0);
-            if (regularQty > 0 && e.menuItems) {
-              e.menuItems.forEach((m) => {
-                const trimmed = m.trim();
-                if (!trimmed) return;
-                menuQuantities[trimmed] = (menuQuantities[trimmed] || 0) + regularQty;
-              });
-            }
-            // Keringan menu items
-            const keringanQty = e.qtPobiaNasi || 0;
-            if (keringanQty > 0 && e.menuKeringanItems) {
-              e.menuKeringanItems.forEach((m) => {
-                const trimmed = m.trim();
-                if (!trimmed) return;
-                menuQuantities[trimmed] = (menuQuantities[trimmed] || 0) + keringanQty;
-              });
-            }
-          });
 
-          // Add to Firestore
-          for (const [itemName, qty] of Object.entries(menuQuantities)) {
-            const match = findBestTkpiMatch(itemName, combinedTkpiDatabase);
-            
-            let baseBerat = 100;
-            let berat = qty * 100;
-            const nutrients: Record<string, number> = {};
-            
-            if (match) {
-              baseBerat = match.berat || 100;
-              berat = qty * baseBerat;
-              const ratio = berat / 100;
-              const matchObj = match as unknown as Record<string, number>;
-              for (const [key, tkpiKey] of Object.entries(NUTRITIONAL_MAP)) {
-                nutrients[key] = ratio * Number(matchObj[tkpiKey] || 0);
-              }
-            } else {
-              for (const key of Object.keys(NUTRITIONAL_MAP)) {
-                nutrients[key] = 0;
-              }
-            }
-
-            await addNutritionEntry({
-              batchId: selectedBatchId,
-              menuItemName: itemName,
-              berat,
-              baseBerat,
-              air: nutrients.air || 0,
-              kalori: nutrients.kalori || 0,
-              protein: nutrients.protein || 0,
-              lemak: nutrients.lemak || 0,
-              karbohidrat: nutrients.karbohidrat || 0,
-              serat: nutrients.serat || 0,
-              abu: nutrients.abu || 0,
-              kalsium: nutrients.kalsium || 0,
-              fosfor: nutrients.fosfor || 0,
-              zatBesi: nutrients.zatBesi || 0,
-              natrium: nutrients.natrium || 0,
-              kalium: nutrients.kalium || 0,
-              tembaga: nutrients.tembaga || 0,
-              seng: nutrients.seng || 0,
-              vitaminA: nutrients.vitaminA || 0,
-              bkar: nutrients.bkar || 0,
-              kartotal: nutrients.kartotal || 0,
-              thiamin: nutrients.thiamin || 0,
-              riboflavin: nutrients.riboflavin || 0,
-              niasin: nutrients.niasin || 0,
-              vitaminC: nutrients.vitaminC || 0,
-              quantity: qty,
-              totalKalori: nutrients.kalori || 0,
-              totalProtein: nutrients.protein || 0,
-              totalLemak: nutrients.lemak || 0,
-              totalKarbohidrat: nutrients.karbohidrat || 0,
-              totalSerat: nutrients.serat || 0,
-              calculatedBy: user.uid,
-              calculatedAt: new Date().toISOString(),
-            });
-          }
-          showToast({ message: 'Menu makanan otomatis diimpor & dikalkulasi dari data PM!', variant: 'success' });
-        } catch (err) {
-          console.error('Error auto prepopulating nutrition:', err);
-          showToast({ message: 'Gagal mengimpor menu otomatis', variant: 'error' });
-        } finally {
-          setIsInitializing(false);
-        }
-      };
-      runInit();
-    }
-  }, [entries, nutritionData, selectedBatchId, loading, selectedBatch, isInitializing, user, combinedTkpiDatabase, showToast]);
 
   // Group PM entries by petugas
   const groupedEntries = useMemo(() => {
@@ -609,23 +447,43 @@ export function MbgProductionPage() {
       const menuList = e.menuItems || [];
       const qtyKecil = e.qtSiswaBalita || 0;
       const qtyBesar = (e.qtBumilBusui || 0) + (e.qtGuruKader || 0);
+      const entryPorsiTotal = e.jumlah || (qtyKecil + qtyBesar) || 1;
       
       menuList.forEach((menuName) => {
-        // Find standard portion config
-        const porsiCfg = combinedPorsi.find(
-          (p) => p.namaMenu.toLowerCase().trim() === menuName.toLowerCase().trim()
-        );
-        
-        const smallWeight = porsiCfg ? porsiCfg.porsiKecil : 0;
-        const largeWeight = porsiCfg ? porsiCfg.porsiBesar : 0;
-        const weight = (qtyKecil * smallWeight) + (qtyBesar * largeWeight);
-        
+        // Flexible porsi matching
         const normName = menuName.trim();
+        const normLower = normName.toLowerCase();
+        let porsiCfg = combinedPorsi.find(
+          (p) => p.namaMenu.toLowerCase().trim() === normLower
+        );
+        if (!porsiCfg) {
+          porsiCfg = combinedPorsi.find((p) => {
+            const pName = p.namaMenu.toLowerCase().trim();
+            return pName.includes(normLower) || normLower.includes(pName);
+          });
+        }
+        if (!porsiCfg) {
+          const words = normLower.split(/\s+/).filter((w) => w.length > 2);
+          if (words.length > 0) {
+            porsiCfg = combinedPorsi.find((p) => {
+              const pName = p.namaMenu.toLowerCase().trim();
+              return words.some((w) => pName.includes(w));
+            });
+          }
+        }
+        
+        const smallWeight = (porsiCfg && porsiCfg.porsiKecil > 0) ? porsiCfg.porsiKecil : 100;
+        const largeWeight = (porsiCfg && porsiCfg.porsiBesar > 0) ? porsiCfg.porsiBesar : 150;
+        let weight = (qtyKecil * smallWeight) + (qtyBesar * largeWeight);
+        if (weight === 0) {
+          weight = entryPorsiTotal * 100; // fallback 100g per portion
+        }
+        
         if (!menuMainTotals[normName]) {
           menuMainTotals[normName] = { totalQty: 0, countKecil: 0, countBesar: 0 };
         }
         menuMainTotals[normName].totalQty += weight;
-        menuMainTotals[normName].countKecil += qtyKecil;
+        menuMainTotals[normName].countKecil += qtyKecil || entryPorsiTotal;
         menuMainTotals[normName].countBesar += qtyBesar;
       });
     });
@@ -643,10 +501,26 @@ export function MbgProductionPage() {
     > = {};
 
     Object.entries(menuMainTotals).forEach(([menuName, totals]) => {
-      // Find standard recipe
-      const recipe = combinedRecipes.find(
-        (r) => r.namaMenu.toLowerCase().trim() === menuName.toLowerCase().trim()
+      // Find standard recipe with smart flexible matching
+      const normMenu = menuName.toLowerCase().trim();
+      let recipe = combinedRecipes.find(
+        (r) => r.namaMenu.toLowerCase().trim() === normMenu
       );
+      if (!recipe) {
+        recipe = combinedRecipes.find((r) => {
+          const rName = r.namaMenu.toLowerCase().trim();
+          return rName.includes(normMenu) || normMenu.includes(rName);
+        });
+      }
+      if (!recipe) {
+        const words = normMenu.split(/\s+/).filter((w) => w.length > 2);
+        if (words.length > 0) {
+          recipe = combinedRecipes.find((r) => {
+            const rName = r.namaMenu.toLowerCase().trim();
+            return words.some((w) => rName.includes(w));
+          });
+        }
+      }
 
       if (recipe && recipe.baseQty > 0) {
         // Scaling ratio: required main ingredient weight / base weight in recipe
@@ -658,12 +532,13 @@ export function MbgProductionPage() {
             rawIngredients[key] = {
               name: ing.bahan,
               amount: 0,
-              satuan: ing.satuan,
+              satuan: ing.satuan || 'g',
               sourceMenus: [],
               menuBreakdown: [],
             };
           }
-          const ingAmount = ing.kebutuhan * ratio;
+          const baseKebutuhan = ing.kebutuhan > 0 ? ing.kebutuhan : (recipe.baseQty / 100);
+          const ingAmount = baseKebutuhan * ratio;
           rawIngredients[key].amount += ingAmount;
           if (!rawIngredients[key].sourceMenus.includes(menuName)) {
             rawIngredients[key].sourceMenus.push(menuName);
@@ -677,7 +552,7 @@ export function MbgProductionPage() {
             rawIngredients[key].menuBreakdown.push({
               menuName,
               amount: ingAmount,
-              satuan: ing.satuan,
+              satuan: ing.satuan || 'g',
             });
           }
         });
@@ -688,7 +563,7 @@ export function MbgProductionPage() {
         );
         const name = porsiCfg ? porsiCfg.bahanUtama : menuName;
         const key = name.toLowerCase().trim();
-        const totalPortions = totals.countKecil + totals.countBesar;
+        const totalPortions = totals.countKecil + totals.countBesar || 1;
         const fallbackSatuan = porsiCfg && porsiCfg.porsiKecil === 1 ? 'pcs' : 'g';
 
         if (!rawIngredients[key]) {
@@ -700,7 +575,7 @@ export function MbgProductionPage() {
             menuBreakdown: [],
           };
         }
-        const fallbackAmount = totals.totalQty || totalPortions;
+        const fallbackAmount = totals.totalQty > 0 ? totals.totalQty : (totalPortions * 100);
         rawIngredients[key].amount += fallbackAmount;
         if (!rawIngredients[key].sourceMenus.includes(menuName)) {
           rawIngredients[key].sourceMenus.push(menuName);
@@ -890,203 +765,132 @@ export function MbgProductionPage() {
     }
   };
 
-  const handleFillDummyNutritionData = async () => {
+  const handleSyncNutritionFromIngredients = async () => {
     if (!selectedBatchId || !user) {
       showToast({ message: 'Silakan pilih tanggal batch terlebih dahulu!', variant: 'error' });
       return;
     }
 
+    if (adjustedRecipeRequirements.length === 0) {
+      showToast({ message: 'Belum ada data kebutuhan bahan baku dari resep untuk batch ini.', variant: 'error' });
+      return;
+    }
+
     try {
       setIsInitializing(true);
-      // 1. Clear existing empty nutrition entries if any
+      // 1. Clear existing nutrition entries for this batch
       for (const entry of nutritionData) {
-        if (!entry.menuItemName || entry.kalori === 0) {
-          await deleteNutritionEntry(entry.id);
-        }
+        await deleteNutritionEntry(entry.id);
       }
-
-      // 2. Sample realistic MBG menu items with complete nutrition from TKPI
-      const dummyMenus = [
-        {
-          menuItemName: 'Nasi Putih (Beras Premium)',
-          berat: 150,
-          baseBerat: 100,
-          air: 67.5,
-          kalori: 180,
-          protein: 3.3,
-          lemak: 0.3,
-          karbohidrat: 39.8,
-          serat: 0.6,
-          abu: 0.2,
-          kalsium: 15,
-          fosfor: 40,
-          zatBesi: 0.5,
-          natrium: 1,
-          kalium: 35,
-          tembaga: 0.1,
-          seng: 0.6,
-          vitaminA: 0,
-          bkar: 0,
-          kartotal: 0,
-          thiamin: 0.05,
-          riboflavin: 0.02,
-          niasin: 0.8,
-          vitaminC: 0,
-        },
-        {
-          menuItemName: 'Ayam Goreng Kentucky (Paha)',
-          berat: 60,
-          baseBerat: 100,
-          air: 32.1,
-          kalori: 178,
-          protein: 12.8,
-          lemak: 10.2,
-          karbohidrat: 8.5,
-          serat: 0.3,
-          abu: 1.2,
-          kalsium: 18,
-          fosfor: 110,
-          zatBesi: 0.9,
-          natrium: 220,
-          kalium: 145,
-          tembaga: 0.1,
-          seng: 1.1,
-          vitaminA: 45,
-          bkar: 0,
-          kartotal: 0,
-          thiamin: 0.06,
-          riboflavin: 0.12,
-          niasin: 2.8,
-          vitaminC: 0,
-        },
-        {
-          menuItemName: 'Tumis Buncis Wortel',
-          berat: 50,
-          baseBerat: 100,
-          air: 42.5,
-          kalori: 45,
-          protein: 1.8,
-          lemak: 1.5,
-          karbohidrat: 6.2,
-          serat: 2.1,
-          abu: 0.8,
-          kalsium: 35,
-          fosfor: 28,
-          zatBesi: 0.6,
-          natrium: 85,
-          kalium: 120,
-          tembaga: 0.05,
-          seng: 0.3,
-          vitaminA: 320,
-          bkar: 1800,
-          kartotal: 1800,
-          thiamin: 0.04,
-          riboflavin: 0.05,
-          niasin: 0.6,
-          vitaminC: 12,
-        },
-        {
-          menuItemName: 'Pisang Ambon Segar',
-          berat: 100,
-          baseBerat: 100,
-          air: 72.0,
-          kalori: 92,
-          protein: 1.0,
-          lemak: 0.2,
-          karbohidrat: 23.4,
-          serat: 2.6,
-          abu: 0.6,
-          kalsium: 12,
-          fosfor: 28,
-          zatBesi: 0.5,
-          natrium: 2,
-          kalium: 358,
-          tembaga: 0.1,
-          seng: 0.2,
-          vitaminA: 45,
-          bkar: 120,
-          kartotal: 120,
-          thiamin: 0.05,
-          riboflavin: 0.06,
-          niasin: 0.7,
-          vitaminC: 9,
-        },
-        {
-          menuItemName: 'Susu UHT Ultra Full Cream 125 ml',
-          berat: 125,
-          baseBerat: 100,
-          air: 108.0,
-          kalori: 80,
-          protein: 4.0,
-          lemak: 4.5,
-          karbohidrat: 6.0,
-          serat: 0.0,
-          abu: 1.0,
-          kalsium: 140,
-          fosfor: 110,
-          zatBesi: 0.1,
-          natrium: 65,
-          kalium: 160,
-          tembaga: 0.01,
-          seng: 0.5,
-          vitaminA: 60,
-          bkar: 0,
-          kartotal: 0,
-          thiamin: 0.04,
-          riboflavin: 0.18,
-          niasin: 0.2,
-          vitaminC: 1,
-        },
-      ];
 
       const totalBatchPorsi = entries.reduce((s, e) => s + (e.jumlah || 0), 0) || 1;
 
-      for (const menu of dummyMenus) {
-        await addNutritionEntry({
+      // 2. Consolidate ingredient requirements by clean name to avoid duplicates
+      const consolidatedIngs = new Map<string, {
+        name: string;
+        amount: number;
+        satuan: string;
+      }>();
+
+      adjustedRecipeRequirements.forEach((ing) => {
+        const key = ing.name.toLowerCase().trim();
+        if (!consolidatedIngs.has(key)) {
+          consolidatedIngs.set(key, { name: ing.name, amount: ing.amount, satuan: ing.satuan });
+        } else {
+          const existing = consolidatedIngs.get(key)!;
+          existing.amount += ing.amount;
+        }
+      });
+
+      // 3. Loop through consolidated ingredient requirements
+      for (const ing of Array.from(consolidatedIngs.values())) {
+        let beratInGrams = ing.amount;
+        if (ing.satuan === 'kg' || ing.satuan === 'L' || ing.satuan === 'Liter') {
+          beratInGrams = ing.amount * 1000;
+        } else if (ing.satuan === 'pcs' || ing.satuan === 'butir' || ing.satuan === 'buah') {
+          beratInGrams = ing.amount * 50;
+        } else if (ing.satuan === 'ikat') {
+          beratInGrams = ing.amount * 100;
+        } else if (ing.satuan === 'siung' || ing.satuan === 'lembar') {
+          beratInGrams = ing.amount * 5;
+        }
+
+        // Ensure valid weight if calculated amount was 0 or minor seasoning
+        if (beratInGrams <= 0) {
+          beratInGrams = totalBatchPorsi * 2; // minimum 2g per portion for minor ingredients/seasonings
+        }
+
+        const ingNameLower = ing.name.toLowerCase().trim();
+        const match = combinedTkpiDatabase.find((item) => {
+          const itemLower = item.nama.toLowerCase().trim();
+          return itemLower === ingNameLower || itemLower.includes(ingNameLower) || ingNameLower.includes(itemLower);
+        });
+
+        const baseBerat = match?.berat || 100;
+        const ratio = beratInGrams / 100;
+
+        const entryPayload: Omit<MbgNutritionEntry, 'id'> = {
           batchId: selectedBatchId,
-          menuItemName: menu.menuItemName,
-          berat: menu.berat,
-          baseBerat: menu.baseBerat,
-          air: menu.air,
-          kalori: menu.kalori,
-          protein: menu.protein,
-          lemak: menu.lemak,
-          karbohidrat: menu.karbohidrat,
-          serat: menu.serat,
-          abu: menu.abu,
-          kalsium: menu.kalsium,
-          fosfor: menu.fosfor,
-          zatBesi: menu.zatBesi,
-          natrium: menu.natrium,
-          kalium: menu.kalium,
-          tembaga: menu.tembaga,
-          seng: menu.seng,
-          vitaminA: menu.vitaminA,
-          bkar: menu.bkar,
-          kartotal: menu.kartotal,
-          thiamin: menu.thiamin,
-          riboflavin: menu.riboflavin,
-          niasin: menu.niasin,
-          vitaminC: menu.vitaminC,
+          menuItemName: ing.name,
+          berat: Math.round(beratInGrams * 10) / 10,
+          baseBerat: baseBerat,
           quantity: totalBatchPorsi,
-          totalKalori: menu.kalori,
-          totalProtein: menu.protein,
-          totalLemak: menu.lemak,
-          totalKarbohidrat: menu.karbohidrat,
-          totalSerat: menu.serat,
+          air: match ? Math.round(ratio * (Number(match.air) || 0) * 10) / 10 : 0,
+          kalori: match ? Math.round(ratio * (Number(match.energi) || 0)) : 0,
+          protein: match ? Math.round(ratio * (Number(match.protein) || 0) * 10) / 10 : 0,
+          lemak: match ? Math.round(ratio * (Number(match.lemak) || 0) * 10) / 10 : 0,
+          karbohidrat: match ? Math.round(ratio * (Number(match.kh) || 0) * 10) / 10 : 0,
+          serat: match ? Math.round(ratio * (Number(match.serat) || 0) * 10) / 10 : 0,
+          abu: match ? Math.round(ratio * (Number(match.abu) || 0) * 10) / 10 : 0,
+          kalsium: match ? Math.round(ratio * (Number(match.kalsium) || 0)) : 0,
+          fosfor: match ? Math.round(ratio * (Number(match.fosfor) || 0)) : 0,
+          zatBesi: match ? Math.round(ratio * (Number(match.besi) || 0) * 10) / 10 : 0,
+          natrium: match ? Math.round(ratio * (Number(match.natrium) || 0)) : 0,
+          kalium: match ? Math.round(ratio * (Number(match.kalium) || 0)) : 0,
+          tembaga: match ? Math.round(ratio * (Number(match.tembaga) || 0) * 100) / 100 : 0,
+          seng: match ? Math.round(ratio * (Number(match.seng) || 0) * 10) / 10 : 0,
+          vitaminA: match ? Math.round(ratio * (Number(match.retinol) || 0)) : 0,
+          bkar: match ? Math.round(ratio * (Number(match.bkar) || 0)) : 0,
+          kartotal: match ? Math.round(ratio * (Number(match.kartotal) || 0)) : 0,
+          thiamin: match ? Math.round(ratio * (Number(match.thiamin) || 0) * 100) / 100 : 0,
+          riboflavin: match ? Math.round(ratio * (Number(match.riboflavin) || 0) * 100) / 100 : 0,
+          niasin: match ? Math.round(ratio * (Number(match.niasin) || 0) * 10) / 10 : 0,
+          vitaminC: match ? Math.round(ratio * (Number(match.vit_c) || 0) * 10) / 10 : 0,
+          totalKalori: match ? Math.round(ratio * (Number(match.energi) || 0)) : 0,
+          totalProtein: match ? Math.round(ratio * (Number(match.protein) || 0) * 10) / 10 : 0,
+          totalLemak: match ? Math.round(ratio * (Number(match.lemak) || 0) * 10) / 10 : 0,
+          totalKarbohidrat: match ? Math.round(ratio * (Number(match.kh) || 0) * 10) / 10 : 0,
+          totalSerat: match ? Math.round(ratio * (Number(match.serat) || 0) * 10) / 10 : 0,
           calculatedBy: user.uid,
           calculatedAt: new Date().toISOString(),
-        });
+        };
+
+        await addNutritionEntry(entryPayload);
       }
 
-      showToast({ message: 'Data Dummy Gizi berhasil diisi & dikalkulasi!', variant: 'success' });
+      showToast({
+        message: `Berhasil meng-kalkulasi & meng-sync kadar gizi ${consolidatedIngs.size} Bahan Makanan dari database TKPI!`,
+        variant: 'success',
+      });
     } catch (err) {
-      console.error('Error filling dummy nutrition data:', err);
-      showToast({ message: 'Gagal mengisi data dummy gizi', variant: 'error' });
+      console.error('Error syncing nutrition from ingredients:', err);
+      showToast({ message: 'Gagal meng-sync data gizi bahan makanan', variant: 'error' });
     } finally {
       setIsInitializing(false);
     }
   };
+
+  // Auto-populate nutrition entries from raw ingredients (Standar Resep + TKPI)
+  useEffect(() => {
+    if (!selectedBatchId || loading || isInitializing || !user) return;
+    
+    // Auto populate only if entries exist, nutritionData is empty, and batch status is PM_SUBMITTED
+    if (entries.length > 0 && nutritionData.length === 0 && selectedBatch?.status === 'PM_SUBMITTED') {
+      if (adjustedRecipeRequirements.length > 0) {
+        handleSyncNutritionFromIngredients();
+      }
+    }
+  }, [entries, nutritionData.length, selectedBatchId, selectedBatch?.status, adjustedRecipeRequirements.length, loading, isInitializing, user, handleSyncNutritionFromIngredients]);
 
   const handleUpdateNutrition = async (id: string, updates: Partial<MbgNutritionEntry>) => {
     try {
@@ -1386,10 +1190,10 @@ export function MbgProductionPage() {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
       doc.setTextColor(...slateDark);
-      doc.text("2. DATA KADAR GIZI MENU MAKANAN & MINUMAN", 14, nextY);
+      doc.text("2. DATA KADAR GIZI BAHAN MAKANAN (INGREDIENTS)", 14, nextY);
 
       const giziHeaders = [
-        'Menu Item',
+        'Bahan Makanan',
         'Qty',
         'Berat',
         ...NUTRIENTS_LIST.map((nut) => nut.label.split(' ')[0]),
@@ -1652,11 +1456,11 @@ export function MbgProductionPage() {
               <span>Gizi (TKPI)</span>
             </button>
             <button
-              onClick={handleFillDummyNutritionData}
-              title="Klik untuk mengisi data dummy gizi otomatis agar bisa mencoba kalkulasinya"
+              onClick={handleSyncNutritionFromIngredients}
+              title="Kalkulasi dan sync kadar gizi dari seluruh bahan baku resep batch ke database TKPI"
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#15803D] hover:bg-[#166534] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
             >
-              <span>⚡ Isi Dummy Gizi</span>
+              <span>⚡ Auto-Sync Gizi</span>
             </button>
             </>
           )}
@@ -2596,6 +2400,26 @@ export function MbgProductionPage() {
                     )}
                   </div>
 
+                  {/* Nutrition Section Header & Auto-Sync Button */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+                    <div>
+                      <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
+                        3. Analisis & Kadar Gizi Per Bahan Makanan (Bahan Baku Batch)
+                      </h4>
+                      <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                        Hitungan gizi dikalkulasi per jenis bahan baku dari standar resep batch dikalikan referensi TKPI 2020.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSyncNutritionFromIngredients}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-extrabold rounded-xl shadow-xs cursor-pointer transition-all shrink-0"
+                    >
+                      <ChefHat className="h-4 w-4 text-[#FBBF24]" />
+                      ✨ Auto-Sync Gizi dari Resep & TKPI
+                    </button>
+                  </div>
+
                   {/* Summary Cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
                     {[
@@ -2618,7 +2442,7 @@ export function MbgProductionPage() {
                       <table className="w-full text-xs font-['Hanken_Grotesk']">
                         <thead>
                           <tr className="bg-[#F3F4F6] text-[10px] font-extrabold text-[#6B7280] uppercase tracking-wider">
-                            <th className="px-3 py-2.5 text-left min-w-[200px]">Menu Item</th>
+                            <th className="px-3 py-2.5 text-left min-w-[200px]">Bahan Makanan</th>
                             <th className="px-2 py-2.5 text-center">Qty</th>
                             <th className="px-2 py-2.5 text-center">Berat (g)</th>
                             {NUTRIENTS_LIST.map((nut) => (
@@ -2727,7 +2551,7 @@ export function MbgProductionPage() {
                     </div>
                     <button onClick={handleAddNutrition}
                       className="w-full py-2.5 text-xs font-bold text-[#6B7280] hover:text-[#111827] hover:bg-[#F9FAFB] border-t border-[#E5E7EB] flex items-center justify-center gap-1.5 cursor-pointer">
-                      <Plus className="h-3.5 w-3.5" /> Tambah Menu Item
+                      <Plus className="h-3.5 w-3.5" /> Tambah Bahan Makanan
                     </button>
                   </div>
 
