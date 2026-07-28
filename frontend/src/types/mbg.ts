@@ -126,6 +126,16 @@ export interface MbgPmEntry {
   qtTendikL?: number;
   /** Breakdown Tendik Perempuan */
   qtTendikP?: number;
+  /** Foto Menu Makanan / Box porsi */
+  photoMenuUrl?: string;
+  /** Foto Serah Terima di lokasi penerima */
+  photoSerahTerimaUrl?: string;
+  /** Timestamp foto serah terima */
+  photoSerahTerimaTimestamp?: string;
+  /** Geotag lokasi foto serah terima */
+  photoSerahTerimaLocation?: string;
+  /** Foto Surat Jalan / Berita Acara Penerimaan (BAST) berstempel */
+  photoSuratJalanUrl?: string;
 }
 
 export interface MbgClassBreakdown {
@@ -367,6 +377,16 @@ export interface MbgCookingSession {
 
 // === DELIVERY (Kurir MBG) ===
 
+export interface MbgSchoolProof {
+  institutionName: string;
+  photoMenuUrl?: string;
+  photoSerahTerimaUrl?: string;
+  photoSerahTerimaTimestamp?: string;
+  photoSerahTerimaLocation?: string;
+  photoSuratJalanUrl?: string;
+  updatedAt?: string;
+}
+
 /**
  * Delivery task — satu tugas per petugas/kurir.
  *
@@ -391,6 +411,8 @@ export interface MbgDeliveryTask {
   status: MbgDeliveryStatus;
   /** Bukti foto per delivery stop */
   deliveryPhotos: { fileId: string; description: string; institutionName: string }[];
+  /** Bukti foto 3-kategori (Menu, Serah Terima, Surat Jalan) per ID institusi */
+  schoolProofs?: Record<string, MbgSchoolProof>;
   completedAt: string;
   createdAt: string;
   updatedAt: string;

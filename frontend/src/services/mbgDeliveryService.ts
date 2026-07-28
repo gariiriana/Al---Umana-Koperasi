@@ -61,3 +61,100 @@ export async function addDeliveryPhoto(
     updatedAt: new Date().toISOString(),
   });
 }
+
+export async function compressImageBase64(
+  dataUrl: string,
+  maxWidth = 800,
+  maxHeight = 800,
+  quality = 0.75
+): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxWidth || height > maxHeight) {
+        if (width / height > maxWidth / maxHeight) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        } else {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } else {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+/**
+ * Update delivery proof foto (menu, serah terima, atau surat jalan) untuk 1 sekolah/entry
+ */
+export async function updateSchoolDeliveryProof(
+  entryId: string,
+  institutionName: string,
+  proofType: 'menu' | 'serah_terima' | 'surat_jalan',
+  rawPhotoDataUrl: string,
+  taskId?: string,
+  extraMeta?: { timestamp?: string; location?: string }
+): Promise<string> {
+  const compressedPhoto = await compressImageBase64(rawPhotoDataUrl, 800, 800, 0.75);
+
+  const entryUpdates: Record<string, unknown> = {
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (proofType === 'menu') {
+    entryUpdates.photoMenuUrl = compressedPhoto;
+  } else if (proofType === 'serah_terima') {
+    entryUpdates.photoSerahTerimaUrl = compressedPhoto;
+    if (extraMeta?.timestamp) entryUpdates.photoSerahTerimaTimestamp = extraMeta.timestamp;
+    if (extraMeta?.location) entryUpdates.photoSerahTerimaLocation = extraMeta.location;
+  } else if (proofType === 'surat_jalan') {
+    entryUpdates.photoSuratJalanUrl = compressedPhoto;
+  }
+
+  // Update Firestore mbg_pm_entries
+  await updateDoc(doc(db, 'mbg_pm_entries', entryId), entryUpdates);
+
+  // Sync to task if taskId provided
+  if (taskId) {
+    const taskRef = doc(db, DELIVERY_COLLECTION, taskId);
+    const proofKey = `schoolProofs.${entryId}`;
+    const taskUpdates: Record<string, unknown> = {
+      [`${proofKey}.institutionName`]: institutionName,
+      [`${proofKey}.updatedAt`]: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (proofType === 'menu') {
+      taskUpdates[`${proofKey}.photoMenuUrl`] = compressedPhoto;
+    } else if (proofType === 'serah_terima') {
+      taskUpdates[`${proofKey}.photoSerahTerimaUrl`] = compressedPhoto;
+      if (extraMeta?.timestamp) taskUpdates[`${proofKey}.photoSerahTerimaTimestamp`] = extraMeta.timestamp;
+      if (extraMeta?.location) taskUpdates[`${proofKey}.photoSerahTerimaLocation`] = extraMeta.location;
+    } else if (proofType === 'surat_jalan') {
+      taskUpdates[`${proofKey}.photoSuratJalanUrl`] = compressedPhoto;
+    }
+
+    try {
+      await updateDoc(taskRef, taskUpdates);
+    } catch (err) {
+      console.warn('Failed syncing to delivery task:', err);
+    }
+  }
+
+  return compressedPhoto;
+}
+

@@ -25,6 +25,7 @@ import {
   updateTaskStatus,
   setHandoverPhoto,
   addDeliveryPhoto,
+  updateSchoolDeliveryProof,
 } from '@/services/mbgDeliveryService';
 import { LiveCamera } from '@/components/LiveCamera';
 import { MBG_DELIVERY_STATUS_CONFIG } from '@/constants/mbgConstants';
@@ -48,6 +49,10 @@ export function MbgDeliveryPage() {
   const [cameraMode, setCameraMode] = useState<'handover' | 'delivery'>('handover');
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [selectedEntryForDeliveryPhoto, setSelectedEntryForDeliveryPhoto] = useState<MbgPmEntry | null>(null);
+
+  // 3-Proof Modal state
+  const [proofModalEntry, setProofModalEntry] = useState<MbgPmEntry | null>(null);
+  const [targetProofType, setTargetProofType] = useState<'menu' | 'serah_terima' | 'surat_jalan'>('serah_terima');
 
   // Subscribe active batches
   useEffect(() => {
@@ -149,18 +154,47 @@ export function MbgDeliveryPage() {
     }
   };
 
-  const handleStartDeliveryPhoto = (entry: MbgPmEntry) => {
+  const handleStartProofCapture = (entry: MbgPmEntry, type: 'menu' | 'serah_terima' | 'surat_jalan') => {
     if (!activeTask) return;
     setCameraMode('delivery');
+    setTargetProofType(type);
     setActiveTaskId(activeTask.id);
     setSelectedEntryForDeliveryPhoto(entry);
     setShowCamera(true);
   };
 
+  const handleFileUploadForProof = async (
+    entry: MbgPmEntry,
+    type: 'menu' | 'serah_terima' | 'surat_jalan',
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result as string;
+        const timestampStr = new Date().toLocaleString('id-ID');
+        await updateSchoolDeliveryProof(
+          entry.id,
+          entry.institutionName,
+          type,
+          dataUrl,
+          activeTask?.id,
+          { timestamp: timestampStr }
+        );
+        showToast({ message: `Foto ${type.replace('_', ' ')} berhasil disimpan!`, variant: 'success' });
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error(err);
+      showToast({ message: 'Gagal mengunggah foto', variant: 'error' });
+    }
+  };
+
   const handlePhotoCapture = async (_file: File) => {
     if (!activeTaskId) return;
     setShowCamera(false);
-    console.log('Captured photo details:', _file.name, _file.size);
 
     const fakeFileId = `photo_${Date.now()}`;
 
@@ -169,28 +203,31 @@ export function MbgDeliveryPage() {
         await setHandoverPhoto(activeTaskId, fakeFileId);
         showToast({ message: 'Foto serah terima berhasil diunggah', variant: 'success' });
       } else if (cameraMode === 'delivery' && selectedEntryForDeliveryPhoto) {
-        await addDeliveryPhoto(activeTaskId, activeTask?.deliveryPhotos || [], {
-          fileId: fakeFileId,
-          description: `Bukti pengantaran sampai di ${selectedEntryForDeliveryPhoto.institutionName}`,
-          institutionName: selectedEntryForDeliveryPhoto.institutionName,
-        });
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const dataUrl = reader.result as string;
+          const timestampStr = new Date().toLocaleString('id-ID');
+          await updateSchoolDeliveryProof(
+            selectedEntryForDeliveryPhoto.id,
+            selectedEntryForDeliveryPhoto.institutionName,
+            targetProofType,
+            dataUrl,
+            activeTaskId,
+            { timestamp: timestampStr, location: 'SPPG Sukabumi' }
+          );
 
-        // Check if all active stops have proof
-        const deliveredStops = [...(activeTask?.deliveryPhotos || []), { institutionName: selectedEntryForDeliveryPhoto.institutionName }];
-        const activeStops = taskEntries.filter((e) => !e.isSekolahLibur);
-        const allDone = activeStops.every((stop) =>
-          deliveredStops.some((photo) => photo.institutionName === stop.institutionName)
-        );
+          await addDeliveryPhoto(activeTaskId, activeTask?.deliveryPhotos || [], {
+            fileId: fakeFileId,
+            description: `Bukti ${targetProofType} untuk ${selectedEntryForDeliveryPhoto.institutionName}`,
+            institutionName: selectedEntryForDeliveryPhoto.institutionName,
+          });
 
-        if (allDone) {
-          await updateTaskStatus(activeTaskId, 'delivered');
-          showToast({ message: 'Semua pesanan selesai terkirim!', variant: 'success' });
-        } else {
           showToast({
-            message: `Foto bukti pengantaran untuk ${selectedEntryForDeliveryPhoto.institutionName} berhasil disimpan`,
+            message: `Foto ${targetProofType.replace('_', ' ')} untuk ${selectedEntryForDeliveryPhoto.institutionName} berhasil disimpan`,
             variant: 'success',
           });
-        }
+        };
+        reader.readAsDataURL(_file);
       }
     } catch {
       showToast({ message: 'Gagal memproses foto', variant: 'error' });
@@ -326,24 +363,24 @@ export function MbgDeliveryPage() {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left min-w-[800px]">
+                  <table className="w-full text-xs text-left min-w-[900px]">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-bold uppercase text-[9px] tracking-wider">
                         <th className="py-3 px-6">Institusi</th>
-                        <th className="py-3 px-6 text-center">QT Siswa/Balita</th>
-                        <th className="py-3 px-6 text-center">QT Bumil/Busui</th>
-                        <th className="py-3 px-6 text-center">QT Guru/Kader</th>
-                        <th className="py-3 px-6 text-center">Pobia Nasi</th>
-                        <th className="py-3 px-6 text-center">Jumlah</th>
-                        <th className="py-3 px-6">Jadwal Pengantaran</th>
-                        <th className="py-3 px-6 text-center">Aksi / Bukti</th>
+                        <th className="py-3 px-4 text-center">Porsi</th>
+                        <th className="py-3 px-4 text-center">🍱 Foto Menu</th>
+                        <th className="py-3 px-4 text-center">🤝 Foto Serah Terima</th>
+                        <th className="py-3 px-4 text-center">📄 Foto Surat Jalan</th>
+                        <th className="py-3 px-6 text-center">Kelola Bukti</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {taskEntries.map((entry) => {
-                        const hasPhoto = activeTask.deliveryPhotos.some(
-                          (p) => p.institutionName === entry.institutionName
-                        );
+                        const hasMenu = !!entry.photoMenuUrl;
+                        const hasSerahTerima = !!entry.photoSerahTerimaUrl;
+                        const hasSuratJalan = !!entry.photoSuratJalanUrl;
+                        const proofCount = (hasMenu ? 1 : 0) + (hasSerahTerima ? 1 : 0) + (hasSuratJalan ? 1 : 0);
+
                         return (
                           <tr
                             key={entry.id}
@@ -351,59 +388,98 @@ export function MbgDeliveryPage() {
                               entry.isSekolahLibur ? 'bg-red-50/40 text-red-500' : ''
                             }`}
                           >
-                            <td className="py-3 px-6 font-bold flex items-center gap-2">
-                              <Building className="h-4 w-4 text-gray-400" />
-                              <div>
-                                <div>{entry.institutionName}</div>
-                                {entry.isSekolahLibur && (
-                                  <span className="text-[9px] text-red-600 bg-red-100 px-1.5 py-0.5 rounded font-extrabold uppercase">
-                                    Libur
-                                  </span>
-                                )}
+                            <td className="py-3 px-6 font-bold">
+                              <div className="flex items-center gap-2">
+                                <Building className="h-4 w-4 text-gray-400 shrink-0" />
+                                <div>
+                                  <div className="text-gray-900">{entry.institutionName}</div>
+                                  <div className="text-[10px] text-gray-400 font-normal">
+                                    Jadwal: {entry.jadwalPengantaran || '-'}
+                                  </div>
+                                  {entry.isSekolahLibur && (
+                                    <span className="text-[9px] text-red-600 bg-red-100 px-1.5 py-0.5 rounded font-extrabold uppercase mt-1 inline-block">
+                                      Libur
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </td>
-                            <td className="py-3 px-6 text-center font-bold">
-                              {entry.qtSiswaBalita}
-                            </td>
-                            <td className="py-3 px-6 text-center font-bold">
-                              {entry.qtBumilBusui}
-                            </td>
-                            <td className="py-3 px-6 text-center font-bold">
-                              {entry.qtGuruKader}
-                            </td>
-                            <td className="py-3 px-6 text-center font-bold text-amber-600">
-                              {entry.qtPobiaNasi}
-                            </td>
-                            <td className="py-3 px-6 text-center">
+
+                            <td className="py-3 px-4 text-center">
                               <span className="px-2 py-0.5 bg-[#FBBF24]/20 text-[#92400E] rounded-full font-extrabold text-[10px]">
-                                {entry.jumlah}
+                                {entry.jumlah} porsi
                               </span>
                             </td>
-                            <td className="py-3 px-6 font-bold text-gray-700">
-                              {entry.jadwalPengantaran || '-'}
+
+                            {/* Foto Menu */}
+                            <td className="py-3 px-4 text-center">
+                              {hasMenu ? (
+                                <img
+                                  src={entry.photoMenuUrl}
+                                  alt="Menu"
+                                  className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs"
+                                />
+                              ) : (
+                                <button
+                                  onClick={() => handleStartProofCapture(entry, 'menu')}
+                                  className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer"
+                                >
+                                  + Upload
+                                </button>
+                              )}
                             </td>
+
+                            {/* Foto Serah Terima */}
+                            <td className="py-3 px-4 text-center">
+                              {hasSerahTerima ? (
+                                <img
+                                  src={entry.photoSerahTerimaUrl}
+                                  alt="Serah Terima"
+                                  className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs"
+                                />
+                              ) : (
+                                <button
+                                  onClick={() => handleStartProofCapture(entry, 'serah_terima')}
+                                  className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto"
+                                >
+                                  <Camera className="h-3 w-3" /> Geotag
+                                </button>
+                              )}
+                            </td>
+
+                            {/* Foto Surat Jalan */}
+                            <td className="py-3 px-4 text-center">
+                              {hasSuratJalan ? (
+                                <img
+                                  src={entry.photoSuratJalanUrl}
+                                  alt="Surat Jalan"
+                                  className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs"
+                                />
+                              ) : (
+                                <button
+                                  onClick={() => handleStartProofCapture(entry, 'surat_jalan')}
+                                  className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer"
+                                >
+                                  + Upload
+                                </button>
+                              )}
+                            </td>
+
+                            {/* Kelola Bukti Button */}
                             <td className="py-3 px-6 text-center">
                               {entry.isSekolahLibur ? (
                                 <span className="text-gray-400 text-[10px]">Skip (Libur)</span>
-                              ) : activeTask.status === 'delivering' ? (
-                                hasPhoto ? (
-                                  <span className="text-[10px] font-extrabold text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-lg">
-                                    ✓ Terkirim
-                                  </span>
-                                ) : (
-                                  <button
-                                    onClick={() => handleStartDeliveryPhoto(entry)}
-                                    className="flex items-center gap-1 mx-auto py-1 px-3 bg-[#111827] text-white hover:bg-black font-extrabold text-[10px] rounded-lg cursor-pointer transition-all active:scale-95"
-                                  >
-                                    <Camera className="h-3 w-3" /> Ambil Foto
-                                  </button>
-                                )
-                              ) : activeTask.status === 'delivered' ? (
-                                <span className="text-[10px] font-extrabold text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-lg">
-                                  ✓ Selesai
-                                </span>
                               ) : (
-                                <span className="text-gray-400 text-[10px]">Menunggu Handover</span>
+                                <button
+                                  onClick={() => setProofModalEntry(entry)}
+                                  className={`py-1.5 px-3 rounded-xl text-[10px] font-extrabold transition-all cursor-pointer shadow-xs ${
+                                    proofCount === 3
+                                      ? 'bg-green-600 text-white hover:bg-green-700'
+                                      : 'bg-[#111827] text-white hover:bg-black'
+                                  }`}
+                                >
+                                  {proofCount === 3 ? '✓ Complete (3/3)' : `Kelola (${proofCount}/3)`}
+                                </button>
                               )}
                             </td>
                           </tr>
@@ -448,6 +524,164 @@ export function MbgDeliveryPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* 3-Proof Management Modal */}
+      {proofModalEntry && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-start border-b border-gray-100 pb-4">
+              <div>
+                <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">
+                  Kelola Bukti Pengiriman
+                </span>
+                <h3 className="text-lg font-extrabold text-gray-900">
+                  {proofModalEntry.institutionName}
+                </h3>
+              </div>
+              <button
+                onClick={() => setProofModalEntry(null)}
+                className="text-gray-400 hover:text-gray-600 text-lg font-bold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Slot 1: Foto Menu Makanan */}
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  {proofModalEntry.photoMenuUrl ? (
+                    <img
+                      src={proofModalEntry.photoMenuUrl}
+                      alt="Menu"
+                      className="w-14 h-14 object-cover rounded-xl border border-green-400"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center text-xl font-bold">
+                      🍱
+                    </div>
+                  )}
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900">1. Foto Menu / Box Porsi</h4>
+                    <p className="text-[10px] text-gray-500 mt-0.5">
+                      {proofModalEntry.photoMenuUrl ? '✓ Foto tersimpan' : 'Wadah / box porsi makanan'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <button
+                    onClick={() => handleStartProofCapture(proofModalEntry, 'menu')}
+                    className="px-3 py-1.5 bg-[#111827] text-white hover:bg-black text-[10px] font-bold rounded-xl cursor-pointer"
+                  >
+                    Kamera
+                  </button>
+                  <label className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 text-[10px] font-bold rounded-xl cursor-pointer text-center">
+                    Upload
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleFileUploadForProof(proofModalEntry, 'menu', e)}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Slot 2: Foto Serah Terima */}
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  {proofModalEntry.photoSerahTerimaUrl ? (
+                    <img
+                      src={proofModalEntry.photoSerahTerimaUrl}
+                      alt="Serah Terima"
+                      className="w-14 h-14 object-cover rounded-xl border border-green-400"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center text-xl font-bold">
+                      🤝
+                    </div>
+                  )}
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900">2. Foto Serah Terima (Geotag)</h4>
+                    <p className="text-[10px] text-gray-500 mt-0.5">
+                      {proofModalEntry.photoSerahTerimaUrl ? '✓ Foto serah terima tersimpan' : 'Penyerahan dengan pihak sekolah'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <button
+                    onClick={() => handleStartProofCapture(proofModalEntry, 'serah_terima')}
+                    className="px-3 py-1.5 bg-[#FBBF24] text-[#111827] hover:bg-[#F59E0B] text-[10px] font-extrabold rounded-xl cursor-pointer flex items-center gap-1"
+                  >
+                    <Camera className="h-3 w-3" /> Geotag
+                  </button>
+                  <label className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 text-[10px] font-bold rounded-xl cursor-pointer text-center">
+                    Upload
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleFileUploadForProof(proofModalEntry, 'serah_terima', e)}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Slot 3: Foto Surat Jalan */}
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  {proofModalEntry.photoSuratJalanUrl ? (
+                    <img
+                      src={proofModalEntry.photoSuratJalanUrl}
+                      alt="Surat Jalan"
+                      className="w-14 h-14 object-cover rounded-xl border border-green-400"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center text-xl font-bold">
+                      📄
+                    </div>
+                  )}
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900">3. Foto Surat Jalan / BAST</h4>
+                    <p className="text-[10px] text-gray-500 mt-0.5">
+                      {proofModalEntry.photoSuratJalanUrl ? '✓ Berita acara tersimpan' : 'Sudah TTD & stempel sekolah'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <button
+                    onClick={() => handleStartProofCapture(proofModalEntry, 'surat_jalan')}
+                    className="px-3 py-1.5 bg-[#111827] text-white hover:bg-black text-[10px] font-bold rounded-xl cursor-pointer"
+                  >
+                    Kamera
+                  </button>
+                  <label className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 text-[10px] font-bold rounded-xl cursor-pointer text-center">
+                    Upload
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleFileUploadForProof(proofModalEntry, 'surat_jalan', e)}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setProofModalEntry(null)}
+                className="px-5 py-2.5 bg-[#111827] text-white font-extrabold text-xs rounded-xl hover:bg-black cursor-pointer"
+              >
+                Selesai
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Live Camera Dialog */}

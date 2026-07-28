@@ -16,6 +16,8 @@ import { useToast } from '@/contexts/ToastContext';
 import type { MbgPmBatch, MbgPmEntry } from '@/types/mbg';
 import { subscribeBatches, subscribeEntries } from '@/services/mbgAdminService';
 
+import { generateMbgDistributionDocx } from '@/utils/mbgReportDocxGenerator';
+
 const chunkArray = <T,>(arr: T[], size: number): T[][] => {
   const chunks: T[][] = [];
   for (let i = 0; i < arr.length; i += size) {
@@ -28,12 +30,22 @@ export function MbgReportPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'harian' | 'mingguan'>('harian');
+  const [activeTab, setActiveTab] = useState<'distribusi' | 'harian' | 'mingguan'>('distribusi');
   const [batches, setBatches] = useState<MbgPmBatch[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string>('');
   const [harianEntries, setHarianEntries] = useState<MbgPmEntry[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
   const [loadingEntries, setLoadingEntries] = useState(false);
+
+  // Distribution report state (PDF & DOCX)
+  const [distribusiDateGroups, setDistribusiDateGroups] = useState<{
+    tanggal: string;
+    formattedTanggal: string;
+    entries: MbgPmEntry[];
+  }[]>([]);
+  const [loadingDistribusi, setLoadingDistribusi] = useState(false);
+  const [generatingDistribusiPdf, setGeneratingDistribusiPdf] = useState(false);
+  const [generatingDistribusiDocx, setGeneratingDistribusiDocx] = useState(false);
 
   // Weekly report configuration
   const [startDate, setStartDate] = useState<string>(
@@ -103,6 +115,229 @@ export function MbgReportPage() {
       month: 'long',
       day: 'numeric',
     });
+  };
+
+  // Load data for Distribusi Tab (PDF & DOCX)
+  useEffect(() => {
+    if (activeTab !== 'distribusi' || !startDate || !endDate) return;
+
+    let isMounted = true;
+    setLoadingDistribusi(true);
+
+    const loadDistribusiData = async () => {
+      try {
+        const q = query(
+          collection(db, 'mbg_pm_batches'),
+          where('tanggal', '>=', startDate),
+          where('tanggal', '<=', endDate),
+          orderBy('tanggal', 'asc')
+        );
+        const snap = await getDocs(q);
+        const rangeBatches = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() } as MbgPmBatch))
+          .filter((b) => b.status !== 'DRAFT');
+
+        const groups: {
+          tanggal: string;
+          formattedTanggal: string;
+          entries: MbgPmEntry[];
+        }[] = [];
+
+        for (const batch of rangeBatches) {
+          const entriesQ = query(
+            collection(db, 'mbg_pm_entries'),
+            where('batchId', '==', batch.id),
+            orderBy('sortOrder', 'asc')
+          );
+          const entriesSnap = await getDocs(entriesQ);
+          const entries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgPmEntry));
+
+          groups.push({
+            tanggal: batch.tanggal,
+            formattedTanggal: formatIndoDate(batch.tanggal),
+            entries,
+          });
+        }
+
+        if (isMounted) {
+          setDistribusiDateGroups(groups);
+          setLoadingDistribusi(false);
+        }
+      } catch (err) {
+        console.error('Error loading distribution data:', err);
+        if (isMounted) setLoadingDistribusi(false);
+      }
+    };
+
+    loadDistribusiData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTab, startDate, endDate]);
+
+  const handleExportDistribusiPdf = async () => {
+    if (distribusiDateGroups.length === 0) return;
+    setGeneratingDistribusiPdf(true);
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+
+      // Brand Color Schemes
+      const brandAmberDark: [number, number, number] = [146, 64, 14];
+      const slateDark: [number, number, number] = [17, 24, 39];
+
+      // 1. COVER PAGE
+      const logoBase64 = await getBase64ImageFromUrl('/logo_badan_gizi.png');
+      if (logoBase64) {
+        doc.addImage(logoBase64, 'PNG', pageW / 2 - 18, 25, 36, 36);
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(...slateDark);
+      doc.text('BADAN GIZI NASIONAL', pageW / 2, 70, { align: 'center' });
+
+      doc.setFontSize(12);
+      doc.text('SPPG SUKABUMI GUNUNGGURUH KEBONMANGGU', pageW / 2, 77, { align: 'center' });
+
+      doc.setFontSize(11);
+      doc.setTextColor(...brandAmberDark);
+      doc.text('YAYASAN LEMBAGA AL UMANAA', pageW / 2, 84, { align: 'center' });
+
+      doc.setFontSize(16);
+      doc.setTextColor(...slateDark);
+      doc.text('LAPORAN KEGIATAN DISTRIBUSI', pageW / 2, 105, { align: 'center' });
+
+      const periodText = `PERIODE ${formatIndoDate(startDate).toUpperCase()} - ${formatIndoDate(endDate).toUpperCase()}`;
+      doc.setFontSize(11);
+      doc.setTextColor(...brandAmberDark);
+      doc.text(periodText, pageW / 2, 113, { align: 'center' });
+
+      // Tabel Outline Keterangan Cover
+      autoTable(doc, {
+        startY: 135,
+        head: [['NO', 'KETERANGAN']],
+        body: [
+          ['1.', 'Laporan Dokumentasi'],
+          ['2.', 'Lampiran Surat Jalan'],
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [243, 244, 246], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 10, halign: 'left' },
+        bodyStyles: { fontSize: 10, textColor: [31, 41, 55] },
+        columnStyles: {
+          0: { cellWidth: 20, halign: 'center' },
+          1: { cellWidth: 100 },
+        },
+        margin: { left: (pageW - 120) / 2 },
+      });
+
+      // 2. REPORT PAGES PER DATE
+      for (const group of distribusiDateGroups) {
+        doc.addPage();
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor(...slateDark);
+        doc.text(group.formattedTanggal, 14, 16);
+
+        const activeEntries = group.entries.filter((e) => !e.isSekolahLibur);
+        const tableRows: string[][] = [];
+        let rowIdx = 1;
+
+        for (const entry of activeEntries) {
+          tableRows.push([
+            `${rowIdx}.`,
+            entry.institutionName,
+            '', // MENU
+            '', // SERAH TERIMA
+            '', // SURAT JALAN
+          ]);
+          rowIdx++;
+        }
+
+        autoTable(doc, {
+          startY: 20,
+          head: [['NO', 'SEKOLAH', 'MENU', 'SERAH TERIMA', 'SURAT JALAN']],
+          body: tableRows,
+          theme: 'grid',
+          headStyles: { fillColor: [243, 244, 246], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 9, halign: 'center' },
+          bodyStyles: { fontSize: 8.5, textColor: [17, 24, 39], minCellHeight: 28 },
+          columnStyles: {
+            0: { cellWidth: 10, halign: 'center', valign: 'middle' },
+            1: { cellWidth: 38, fontStyle: 'bold', valign: 'middle' },
+            2: { cellWidth: 44, halign: 'center', valign: 'middle' },
+            3: { cellWidth: 44, halign: 'center', valign: 'middle' },
+            4: { cellWidth: 44, halign: 'center', valign: 'middle' },
+          },
+          didDrawCell: (data) => {
+            if (data.section === 'body') {
+              const entry = activeEntries[data.row.index];
+              if (!entry) return;
+
+              const pad = 1.5;
+              const imgW = data.column.width - pad * 2;
+              const imgH = data.row.height - pad * 2;
+
+              if (data.column.index === 2 && entry.photoMenuUrl) {
+                try {
+                  doc.addImage(entry.photoMenuUrl, 'JPEG', data.cell.x + pad, data.cell.y + pad, imgW, imgH);
+                } catch (err) {
+                  console.warn('Failed rendering menu photo in PDF:', err);
+                }
+              } else if (data.column.index === 3 && entry.photoSerahTerimaUrl) {
+                try {
+                  doc.addImage(entry.photoSerahTerimaUrl, 'JPEG', data.cell.x + pad, data.cell.y + pad, imgW, imgH);
+                } catch (err) {
+                  console.warn('Failed rendering serah terima photo in PDF:', err);
+                }
+              } else if (data.column.index === 4 && entry.photoSuratJalanUrl) {
+                try {
+                  doc.addImage(entry.photoSuratJalanUrl, 'JPEG', data.cell.x + pad, data.cell.y + pad, imgW, imgH);
+                } catch (err) {
+                  console.warn('Failed rendering surat jalan photo in PDF:', err);
+                }
+              }
+            }
+          },
+          margin: { left: 14, right: 14 },
+        });
+      }
+
+      doc.save(`Laporan_Kegiatan_Distribusi_MBG_${startDate}_sd_${endDate}.pdf`);
+      showToast({ message: 'Laporan Kegiatan Distribusi (PDF) berhasil diunduh!', variant: 'success' });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: 'Gagal mengekspor PDF Laporan Kegiatan Distribusi', variant: 'error' });
+    } finally {
+      setGeneratingDistribusiPdf(false);
+    }
+  };
+
+  const handleExportDistribusiDocx = async () => {
+    if (distribusiDateGroups.length === 0) return;
+    setGeneratingDistribusiDocx(true);
+    try {
+      const logoBase64 = await getBase64ImageFromUrl('/logo_badan_gizi.png');
+      const periodStr = `PERIODE ${formatIndoDate(startDate).toUpperCase()} - ${formatIndoDate(endDate).toUpperCase()}`;
+
+      const blob = await generateMbgDistributionDocx(periodStr, distribusiDateGroups, logoBase64);
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Laporan_Kegiatan_Distribusi_MBG_${startDate}_sd_${endDate}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast({ message: 'Laporan Kegiatan Distribusi (DOCX) berhasil diunduh!', variant: 'success' });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: 'Gagal mengekspor Word DOCX Laporan Kegiatan Distribusi', variant: 'error' });
+    } finally {
+      setGeneratingDistribusiDocx(false);
+    }
   };
 
   // Helper to load logo image
@@ -736,31 +971,175 @@ export function MbgReportPage() {
       </div>
 
       {/* Navigation tabs */}
-      <div className="flex border-b border-[#E5E7EB] mb-6">
+      <div className="flex border-b border-[#E5E7EB] mb-6 overflow-x-auto">
         <button
-          onClick={() => setActiveTab('harian')}
-          className={`px-5 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === 'harian'
+          onClick={() => setActiveTab('distribusi')}
+          className={`px-5 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer shrink-0 ${
+            activeTab === 'distribusi'
               ? 'border-[#FBBF24] text-[#B45309]'
               : 'border-transparent text-[#6B7280] hover:text-[#111827]'
-            }`}
+          }`}
+        >
+          📄 Laporan Kegiatan Distribusi (PDF & DOCX)
+        </button>
+        <button
+          onClick={() => setActiveTab('harian')}
+          className={`px-5 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer shrink-0 ${
+            activeTab === 'harian'
+              ? 'border-[#FBBF24] text-[#B45309]'
+              : 'border-transparent text-[#6B7280] hover:text-[#111827]'
+          }`}
         >
           Laporan Harian Operasional
         </button>
         <button
           onClick={() => setActiveTab('mingguan')}
-          className={`px-5 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === 'mingguan'
+          className={`px-5 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer shrink-0 ${
+            activeTab === 'mingguan'
               ? 'border-[#FBBF24] text-[#B45309]'
               : 'border-transparent text-[#6B7280] hover:text-[#111827]'
-            }`}
+          }`}
         >
           Laporan Mingguan Operasional
         </button>
       </div>
 
       {/* Content based on Active Tab */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {activeTab === 'harian' ? (
-          <>
+      {activeTab === 'distribusi' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Form Filter & Export Buttons */}
+          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 lg:col-span-1 space-y-5 h-fit shadow-sm">
+            <div>
+              <span className="text-[10px] font-extrabold text-amber-600 uppercase tracking-wider block">
+                Official Report Exporter
+              </span>
+              <h3 className="text-base font-extrabold text-gray-900 mt-0.5">
+                Laporan Kegiatan Distribusi
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Format resmi Badan Gizi Nasional (SPPG Sukabumi Al Umanaa) lengkap dengan Cover Page, Logo, & Foto Bukti per Sekolah.
+              </p>
+            </div>
+
+            {/* Date Range Selection */}
+            <div className="space-y-3 pt-2 border-t border-gray-100">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Tanggal Mulai</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Tanggal Selesai</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                />
+              </div>
+            </div>
+
+            {/* Export Buttons */}
+            <div className="space-y-2.5 pt-4 border-t border-gray-100">
+              <button
+                onClick={handleExportDistribusiPdf}
+                disabled={generatingDistribusiPdf || loadingDistribusi || distribusiDateGroups.length === 0}
+                className="w-full py-3 px-4 bg-[#111827] text-white hover:bg-black font-extrabold text-xs rounded-xl cursor-pointer shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {generatingDistribusiPdf ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-[#FBBF24]" />
+                ) : (
+                  <Download className="h-4 w-4 text-[#FBBF24]" />
+                )}
+                Export to PDF (.pdf)
+              </button>
+
+              <button
+                onClick={handleExportDistribusiDocx}
+                disabled={generatingDistribusiDocx || loadingDistribusi || distribusiDateGroups.length === 0}
+                className="w-full py-3 px-4 bg-blue-700 text-white hover:bg-blue-800 font-extrabold text-xs rounded-xl cursor-pointer shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {generatingDistribusiDocx ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-white" />
+                ) : (
+                  <FileText className="h-4 w-4 text-blue-200" />
+                )}
+                Export to Word (.docx)
+              </button>
+            </div>
+          </div>
+
+          {/* Data Summary & Preview */}
+          <div className="lg:col-span-2 space-y-4">
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 shadow-sm">
+              <div className="flex justify-between items-center mb-4">
+                <h4 className="text-xs font-extrabold text-gray-700 uppercase tracking-wider">
+                  Ringkasan Data Pengiriman Periode
+                </h4>
+                <span className="text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
+                  {distribusiDateGroups.length} Tanggal Pengiriman
+                </span>
+              </div>
+
+              {loadingDistribusi ? (
+                <div className="flex items-center justify-center py-12 gap-2 text-xs font-bold text-gray-400">
+                  <Loader2 className="h-5 w-5 animate-spin text-[#FBBF24]" />
+                  Memuat data foto & bukti pengiriman...
+                </div>
+              ) : distribusiDateGroups.length === 0 ? (
+                <div className="p-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <Info className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-gray-600">Tidak ada data batch pada rentang tanggal terpilih.</p>
+                  <p className="text-[10px] text-gray-400 mt-1">Ubah filter Tanggal Mulai dan Tanggal Selesai di sebelah kiri.</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                  {distribusiDateGroups.map((group) => {
+                    const activeEntries = group.entries.filter((e) => !e.isSekolahLibur);
+                    const menuCount = activeEntries.filter((e) => e.photoMenuUrl).length;
+                    const serahCount = activeEntries.filter((e) => e.photoSerahTerimaUrl).length;
+                    const sjCount = activeEntries.filter((e) => e.photoSuratJalanUrl).length;
+
+                    return (
+                      <div
+                        key={group.tanggal}
+                        className="p-4 rounded-xl border border-gray-100 bg-gray-50/70 hover:bg-gray-50 transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-3"
+                      >
+                        <div>
+                          <h5 className="text-xs font-extrabold text-gray-900">{group.formattedTanggal}</h5>
+                          <p className="text-[10px] text-gray-500 mt-0.5">
+                            {activeEntries.length} Sekolah/Institusi Sasaran
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 text-[10px] font-bold">
+                          <span className={`px-2.5 py-1 rounded-lg border ${menuCount === activeEntries.length ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                            🍱 Menu: {menuCount}/{activeEntries.length}
+                          </span>
+                          <span className={`px-2.5 py-1 rounded-lg border ${serahCount === activeEntries.length ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                            🤝 Serah Terima: {serahCount}/{activeEntries.length}
+                          </span>
+                          <span className={`px-2.5 py-1 rounded-lg border ${sjCount === activeEntries.length ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                            📄 Surat Jalan: {sjCount}/{activeEntries.length}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {activeTab === 'harian' ? (
+            <>
             {/* Harian configuration form */}
             <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 lg:col-span-1 space-y-5 h-fit shadow-sm">
               <h3 className="text-sm font-extrabold flex items-center gap-1.5 text-gray-800 uppercase tracking-wider">
@@ -969,6 +1348,7 @@ export function MbgReportPage() {
           </>
         )}
       </div>
+    )}
     </div>
   );
 }
