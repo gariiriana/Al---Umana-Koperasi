@@ -86,8 +86,9 @@ export function MbgDistributionPage() {
   const [qcNotes, setQcNotes] = useState('');
   const [qcOverallStatus, setQcOverallStatus] = useState<'passed' | 'failed'>('passed');
 
-  // Edit kurir assignment modal state
-  const [editingEntry, setEditingEntry] = useState<MbgPmEntry | null>(null);
+  // Edit kurir assignment modal state (per batch group)
+  const [editingGroupKey, setEditingGroupKey] = useState<string | null>(null);
+  const [editingEntriesGroup, setEditingEntriesGroup] = useState<MbgPmEntry[]>([]);
   const [newPetugasName, setNewPetugasName] = useState('');
 
   // Subscribe batches
@@ -477,21 +478,34 @@ export function MbgDistributionPage() {
     }
   };
 
-  // Assign kurir
-  const handleOpenAssign = (entry: MbgPmEntry) => {
-    setEditingEntry(entry);
-    setNewPetugasName(entry.assignedPetugasName || '');
+  // Assign kurir per batch group
+  const handleOpenAssignGroup = (petugasName: string, groupEntries: MbgPmEntry[]) => {
+    setEditingGroupKey(petugasName);
+    setEditingEntriesGroup(groupEntries);
+    setNewPetugasName(petugasName === 'Belum Ditugaskan' ? '' : petugasName);
   };
 
-  const handleSaveAssignment = async () => {
-    if (!editingEntry) return;
+  const handleSaveGroupAssignment = async () => {
+    if (!editingGroupKey || editingEntriesGroup.length === 0 || !newPetugasName.trim()) return;
+    const cleanName = newPetugasName.trim();
+    const petugasId = cleanName.toLowerCase().replace(/\s+/g, '-');
+
     try {
-      await updateEntry(editingEntry.id, {
-        assignedPetugasName: newPetugasName,
-        assignedPetugasId: newPetugasName.toLowerCase().replace(/\s+/g, '-'), // Dummy UID generation
+      await Promise.all(
+        editingEntriesGroup.map((entry) =>
+          updateEntry(entry.id, {
+            assignedPetugasName: cleanName,
+            assignedPetugasId: petugasId,
+          })
+        )
+      );
+
+      showToast({
+        message: `${editingEntriesGroup.length} institusi berhasil ditugaskan ke ${cleanName}`,
+        variant: 'success',
       });
-      showToast({ message: 'Petugas berhasil ditugaskan', variant: 'success' });
-      setEditingEntry(null);
+      setEditingGroupKey(null);
+      setEditingEntriesGroup([]);
     } catch {
       showToast({ message: 'Gagal menugaskan petugas', variant: 'error' });
     }
@@ -794,12 +808,19 @@ export function MbgDistributionPage() {
                         className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm"
                       >
                         {/* Header */}
-                        <div className="px-6 py-4 bg-[#111827] text-white flex justify-between items-center">
-                          <div className="flex items-center gap-2">
-                            <Truck className="h-4.5 w-4.5 text-[#FBBF24]" />
+                        <div className="px-6 py-4 bg-[#111827] text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                          <div className="flex items-center gap-3">
+                            <Truck className="h-5 w-5 text-[#FBBF24]" />
                             <span className="text-sm font-extrabold uppercase tracking-wider">
                               PETUGAS: {petugasName}
                             </span>
+                            <button
+                              onClick={() => handleOpenAssignGroup(petugasName, entriesList)}
+                              className="px-3.5 py-1.5 bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] font-extrabold text-xs rounded-xl cursor-pointer transition-all shadow-xs flex items-center gap-1.5 active:scale-95 ml-2"
+                            >
+                              <UserCheck className="h-4 w-4 text-[#111827]" />
+                              {petugasName === 'Belum Ditugaskan' ? 'Tugaskan Kurir Batch' : 'Ubah Kurir Batch'}
+                            </button>
                           </div>
                           <div className="flex gap-3 text-xs font-bold text-white bg-white/10 px-3.5 py-1.5 rounded-full">
                             <span>{entriesList.length} Institusi</span>
@@ -817,7 +838,7 @@ export function MbgDistributionPage() {
 
                         {/* Table of deliveries for this petugas */}
                         <div className="overflow-x-auto">
-                          <table className="w-full text-xs text-left min-w-[800px]">
+                          <table className="w-full text-xs text-left min-w-[700px]">
                             <thead>
                               <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-bold uppercase text-[9px] tracking-wider">
                                 <th className="py-3 px-6">Institusi</th>
@@ -827,7 +848,6 @@ export function MbgDistributionPage() {
                                 <th className="py-3 px-6 text-center">Pobia Nasi</th>
                                 <th className="py-3 px-6 text-center">Jumlah</th>
                                 <th className="py-3 px-6">Jadwal Pengantaran</th>
-                                <th className="py-3 px-6 text-center">Aksi</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -869,14 +889,6 @@ export function MbgDistributionPage() {
                                   <td className="py-3 px-6 font-bold text-gray-700">
                                     {entry.jadwalPengantaran || '-'}
                                   </td>
-                                  <td className="py-3 px-6 text-center">
-                                    <button
-                                      onClick={() => handleOpenAssign(entry)}
-                                      className="py-1 px-3 border border-gray-300 rounded-lg hover:border-gray-400 font-extrabold text-[10px] text-gray-700 bg-white cursor-pointer transition-all active:scale-95"
-                                    >
-                                      Ubah Kurir
-                                    </button>
-                                  </td>
                                 </tr>
                               ))}
                               {/* Total Row */}
@@ -891,7 +903,7 @@ export function MbgDistributionPage() {
                                     {totalPorsi}
                                   </span>
                                 </td>
-                                <td className="py-3 px-6" colSpan={2}></td>
+                                <td className="py-3 px-6" colSpan={1}></td>
                               </tr>
                             </tbody>
                           </table>
@@ -1126,9 +1138,9 @@ export function MbgDistributionPage() {
         )}
       </AnimatePresence>
 
-      {/* Reassign Kurir Modal */}
+      {/* Reassign Kurir Batch Modal */}
       <AnimatePresence>
-        {editingEntry && (
+        {editingGroupKey && editingEntriesGroup.length > 0 && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -1136,12 +1148,18 @@ export function MbgDistributionPage() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 font-['Hanken_Grotesk',system-ui,sans-serif]"
             >
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-lg font-extrabold text-[#111827]">Tugaskan Kurir</h3>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider block">
+                    Penugasan Kurir Batch
+                  </span>
+                  <h3 className="text-lg font-extrabold text-[#111827]">
+                    {editingGroupKey === 'Belum Ditugaskan' ? 'Tugaskan Kurir Baru' : `Ubah Kurir (${editingGroupKey})`}
+                  </h3>
+                </div>
                 <button
-                  onClick={() => setEditingEntry(null)}
-                  title="Tutup Modal Tugas Kurir"
-                  aria-label="Tutup Modal Tugas Kurir"
+                  onClick={() => setEditingGroupKey(null)}
+                  title="Tutup Modal"
                   className="p-1.5 rounded-full hover:bg-gray-100 cursor-pointer"
                 >
                   <X className="h-5 w-5 text-gray-400" />
@@ -1149,11 +1167,38 @@ export function MbgDistributionPage() {
               </div>
 
               <div className="space-y-4">
+                {/* Batch Stats */}
+                <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 flex justify-between items-center text-xs font-bold text-amber-900">
+                  <span>Target Penugasan:</span>
+                  <div className="flex gap-2">
+                    <span className="bg-white px-2 py-0.5 rounded border border-amber-300">
+                      {editingEntriesGroup.length} Institusi
+                    </span>
+                    <span className="bg-amber-600 text-white px-2 py-0.5 rounded">
+                      {editingEntriesGroup.reduce((s, e) => s + (e.jumlah || 0), 0)} Porsi
+                    </span>
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
                 <div>
-                  <span className="block text-[10px] font-bold text-gray-400 uppercase">Institusi</span>
-                  <span className="block font-extrabold text-sm text-[#111827] mt-0.5">
-                    {editingEntry.institutionName}
-                  </span>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5">Pilih Petugas / Preset</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['Rahmat Dede', 'Erik Yusep', 'Yendi Firdi', 'Hilman'].map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setNewPetugasName(name)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                          newPetugasName === name
+                            ? 'bg-[#111827] text-white border-[#111827]'
+                            : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div>
@@ -1165,24 +1210,25 @@ export function MbgDistributionPage() {
                     title="Nama Petugas / Kurir"
                     value={newPetugasName}
                     onChange={(e) => setNewPetugasName(e.target.value)}
-                    placeholder="Contoh: Rahmat Dede, Erik Yusep"
-                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FBBF24] transition-all font-bold"
+                    placeholder="Ketik atau pilih nama petugas..."
+                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FBBF24] transition-all font-bold text-gray-900"
                   />
                 </div>
 
                 <div className="pt-4 border-t border-gray-100 flex gap-3">
                   <button
                     type="button"
-                    onClick={() => setEditingEntry(null)}
+                    onClick={() => setEditingGroupKey(null)}
                     className="flex-1 py-2.5 border border-gray-300 rounded-xl hover:bg-gray-100 text-xs font-bold text-gray-700 cursor-pointer text-center"
                   >
                     Batal
                   </button>
                   <button
-                    onClick={handleSaveAssignment}
-                    className="flex-1 py-2.5 bg-[#111827] text-white hover:bg-black rounded-xl cursor-pointer text-xs font-bold"
+                    onClick={handleSaveGroupAssignment}
+                    disabled={!newPetugasName.trim()}
+                    className="flex-1 py-2.5 bg-[#111827] text-white hover:bg-black rounded-xl cursor-pointer text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Simpan Penugasan
+                    Simpan Penugasan Batch
                   </button>
                 </div>
               </div>
