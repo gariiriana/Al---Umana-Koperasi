@@ -107,7 +107,7 @@ export async function updateSchoolDeliveryProof(
   proofType: 'menu' | 'serah_terima' | 'surat_jalan',
   rawPhotoDataUrl: string,
   taskId?: string,
-  extraMeta?: { timestamp?: string; location?: string }
+  extraMeta?: { timestamp?: string; location?: string; description?: string }
 ): Promise<string> {
   const compressedPhoto = await compressImageBase64(rawPhotoDataUrl, 800, 800, 0.75);
 
@@ -117,12 +117,15 @@ export async function updateSchoolDeliveryProof(
 
   if (proofType === 'menu') {
     entryUpdates.photoMenuUrl = compressedPhoto;
+    if (extraMeta?.description) entryUpdates.photoMenuDesc = extraMeta.description;
   } else if (proofType === 'serah_terima') {
     entryUpdates.photoSerahTerimaUrl = compressedPhoto;
+    if (extraMeta?.description) entryUpdates.photoSerahTerimaDesc = extraMeta.description;
     if (extraMeta?.timestamp) entryUpdates.photoSerahTerimaTimestamp = extraMeta.timestamp;
     if (extraMeta?.location) entryUpdates.photoSerahTerimaLocation = extraMeta.location;
   } else if (proofType === 'surat_jalan') {
     entryUpdates.photoSuratJalanUrl = compressedPhoto;
+    if (extraMeta?.description) entryUpdates.photoSuratJalanDesc = extraMeta.description;
   }
 
   // Update Firestore mbg_pm_entries
@@ -140,12 +143,15 @@ export async function updateSchoolDeliveryProof(
 
     if (proofType === 'menu') {
       taskUpdates[`${proofKey}.photoMenuUrl`] = compressedPhoto;
+      if (extraMeta?.description) taskUpdates[`${proofKey}.photoMenuDesc`] = extraMeta.description;
     } else if (proofType === 'serah_terima') {
       taskUpdates[`${proofKey}.photoSerahTerimaUrl`] = compressedPhoto;
+      if (extraMeta?.description) taskUpdates[`${proofKey}.photoSerahTerimaDesc`] = extraMeta.description;
       if (extraMeta?.timestamp) taskUpdates[`${proofKey}.photoSerahTerimaTimestamp`] = extraMeta.timestamp;
       if (extraMeta?.location) taskUpdates[`${proofKey}.photoSerahTerimaLocation`] = extraMeta.location;
     } else if (proofType === 'surat_jalan') {
       taskUpdates[`${proofKey}.photoSuratJalanUrl`] = compressedPhoto;
+      if (extraMeta?.description) taskUpdates[`${proofKey}.photoSuratJalanDesc`] = extraMeta.description;
     }
 
     try {
@@ -156,5 +162,24 @@ export async function updateSchoolDeliveryProof(
   }
 
   return compressedPhoto;
+}
+
+/**
+ * Update deskripsi foto tanpa mengubah foto itu sendiri
+ */
+export async function updatePhotoDescription(
+  entryId: string,
+  proofType: 'menu' | 'serah_terima' | 'surat_jalan',
+  description: string
+): Promise<void> {
+  const fieldMap: Record<string, string> = {
+    menu: 'photoMenuDesc',
+    serah_terima: 'photoSerahTerimaDesc',
+    surat_jalan: 'photoSuratJalanDesc',
+  };
+  await updateDoc(doc(db, 'mbg_pm_entries', entryId), {
+    [fieldMap[proofType]]: description,
+    updatedAt: new Date().toISOString(),
+  });
 }
 

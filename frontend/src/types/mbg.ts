@@ -128,14 +128,20 @@ export interface MbgPmEntry {
   qtTendikP?: number;
   /** Foto Menu Makanan / Box porsi */
   photoMenuUrl?: string;
+  /** Deskripsi foto menu */
+  photoMenuDesc?: string;
   /** Foto Serah Terima di lokasi penerima */
   photoSerahTerimaUrl?: string;
+  /** Deskripsi foto serah terima */
+  photoSerahTerimaDesc?: string;
   /** Timestamp foto serah terima */
   photoSerahTerimaTimestamp?: string;
   /** Geotag lokasi foto serah terima */
   photoSerahTerimaLocation?: string;
   /** Foto Surat Jalan / Berita Acara Penerimaan (BAST) berstempel */
   photoSuratJalanUrl?: string;
+  /** Deskripsi foto surat jalan */
+  photoSuratJalanDesc?: string;
 }
 
 export interface MbgClassBreakdown {

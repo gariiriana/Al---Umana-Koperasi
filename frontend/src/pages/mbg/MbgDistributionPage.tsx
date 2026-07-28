@@ -433,9 +433,10 @@ export function MbgDistributionPage() {
         startY: 34,
         head: [tableHeaders],
         body: tableRows,
-        theme: 'striped',
-        headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+        theme: 'grid',
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 9 },
         bodyStyles: { fontSize: 8, textColor: [15, 23, 42] },
+        styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
       });
 
       doc.save(`Laporan_QC_${poOrder.supplierName.replace(/\s+/g, '_')}_${poOrder.targetDate}.pdf`);

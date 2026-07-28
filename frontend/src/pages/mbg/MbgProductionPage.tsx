@@ -1178,9 +1178,10 @@ export function MbgProductionPage() {
         startY: 54,
         head: [['Institusi', 'Tipe', 'Petugas', 'Siswa/Balita', 'Bumil/Busui', 'Guru/Kader', 'Pobia Nasi', 'Jumlah', 'Jadwal', 'Status']],
         body: pmRows,
-        theme: 'striped',
-        headStyles: { fillColor: [251, 191, 36], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 7 },
+        theme: 'grid',
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 7 },
         bodyStyles: { fontSize: 7 },
+        styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
         margin: { left: 14, right: 14 },
       });
 
@@ -1213,9 +1214,10 @@ export function MbgProductionPage() {
         startY: nextY + 3,
         head: [giziHeaders],
         body: giziRows,
-        theme: 'striped',
-        headStyles: { fillColor: [17, 24, 39], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6 },
+        theme: 'grid',
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 6 },
         bodyStyles: { fontSize: 6 },
+        styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
         margin: { left: 14, right: 14 },
       });
 
@@ -1239,9 +1241,10 @@ export function MbgProductionPage() {
         startY: nextY + 3,
         head: [['Kadar Gizi', 'Total Nilai']],
         body: totalRows,
-        theme: 'plain',
-        headStyles: { fillColor: [243, 244, 246], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
+        theme: 'grid',
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
         bodyStyles: { fontSize: 8 },
+        styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
         margin: { left: 14, right: 14 },
       });
 
@@ -1283,9 +1286,10 @@ export function MbgProductionPage() {
         startY: nextY + 3,
         head: [recipeHeaders],
         body: recipeRows,
-        theme: 'striped',
-        headStyles: { fillColor: [17, 24, 39], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
+        theme: 'grid',
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 7 },
         bodyStyles: { fontSize: 7 },
+        styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
         margin: { left: 14, right: 14 },
       });
 

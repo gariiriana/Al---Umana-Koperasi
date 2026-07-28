@@ -2,7 +2,7 @@
 // MBG Delivery Page — Kurir MBG: Handover, Delivery, and Proof
 // ============================================================================
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { AnimatePresence } from 'motion/react';
 import {
   Calendar,
@@ -14,7 +14,10 @@ import {
   ClipboardList,
   Building,
   Navigation,
+  X,
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { MbgPmBatch, MbgDeliveryTask, MbgPmEntry } from '@/types/mbg';
@@ -26,9 +29,13 @@ import {
   setHandoverPhoto,
   addDeliveryPhoto,
   updateSchoolDeliveryProof,
+  updatePhotoDescription,
 } from '@/services/mbgDeliveryService';
 import { LiveCamera } from '@/components/LiveCamera';
 import { MBG_DELIVERY_STATUS_CONFIG } from '@/constants/mbgConstants';
+
+// MBG Logo base64 (small placeholder — replaced by real logo at runtime)
+const MBG_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Badan_Gizi_Nasional.svg/1200px-Badan_Gizi_Nasional.svg.png';
 
 export function MbgDeliveryPage() {
   const { user, profile } = useAuth();
@@ -53,6 +60,9 @@ export function MbgDeliveryPage() {
   // 3-Proof Modal state
   const [proofModalEntry, setProofModalEntry] = useState<MbgPmEntry | null>(null);
   const [targetProofType, setTargetProofType] = useState<'menu' | 'serah_terima' | 'surat_jalan'>('serah_terima');
+
+  // Description edit state (per entry per proof type)
+  const descTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Subscribe active batches
   useEffect(() => {
@@ -163,35 +173,6 @@ export function MbgDeliveryPage() {
     setShowCamera(true);
   };
 
-  const handleFileUploadForProof = async (
-    entry: MbgPmEntry,
-    type: 'menu' | 'serah_terima' | 'surat_jalan',
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const dataUrl = reader.result as string;
-        const timestampStr = new Date().toLocaleString('id-ID');
-        await updateSchoolDeliveryProof(
-          entry.id,
-          entry.institutionName,
-          type,
-          dataUrl,
-          activeTask?.id,
-          { timestamp: timestampStr }
-        );
-        showToast({ message: `Foto ${type.replace('_', ' ')} berhasil disimpan!`, variant: 'success' });
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error(err);
-      showToast({ message: 'Gagal mengunggah foto', variant: 'error' });
-    }
-  };
-
   const handlePhotoCapture = async (_file: File) => {
     if (!activeTaskId) return;
     setShowCamera(false);
@@ -231,6 +212,209 @@ export function MbgDeliveryPage() {
       }
     } catch {
       showToast({ message: 'Gagal memproses foto', variant: 'error' });
+    }
+  };
+
+  // Debounced description update
+  const handleDescriptionChange = (entryId: string, proofType: 'menu' | 'serah_terima' | 'surat_jalan', value: string) => {
+    const key = `${entryId}_${proofType}`;
+    if (descTimers.current[key]) clearTimeout(descTimers.current[key]);
+    descTimers.current[key] = setTimeout(async () => {
+      try {
+        await updatePhotoDescription(entryId, proofType, value);
+      } catch (err) {
+        console.warn('Failed to save description:', err);
+      }
+    }, 800);
+  };
+
+  // ─── PDF Export ───
+  const handleExportDeliveryPdf = async () => {
+    if (!activeTask || taskEntries.length === 0) return;
+    showToast({ message: 'Menyiapkan PDF Laporan Distribusi...', variant: 'info' });
+
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+
+      // Load MBG logo
+      let logoLoaded = false;
+      const logoImg = new Image();
+      logoImg.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve) => {
+        logoImg.onload = () => { logoLoaded = true; resolve(); };
+        logoImg.onerror = () => resolve();
+        logoImg.src = MBG_LOGO_URL;
+      });
+
+      // ─── Cover Page ───
+      doc.setFillColor(255, 255, 255);
+      doc.rect(0, 0, pageW, pageH, 'F');
+
+      if (logoLoaded) {
+        doc.addImage(logoImg, 'PNG', pageW / 2 - 20, 30, 40, 40);
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(17, 24, 39);
+      doc.text('LAPORAN BUKTI DISTRIBUSI', pageW / 2, 85, { align: 'center' });
+      doc.text('MAKANAN BERGIZI GRATIS (MBG)', pageW / 2, 95, { align: 'center' });
+
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+
+      const batch = batches.find((b) => b.id === selectedBatchId);
+      doc.text(`Tanggal: ${batch?.tanggal || '-'}`, pageW / 2, 110, { align: 'center' });
+      doc.text(`Petugas: ${activeTask.petugasName}`, pageW / 2, 117, { align: 'center' });
+
+      const activeEntries = taskEntries.filter((e) => !e.isSekolahLibur);
+      const totalPorsi = activeEntries.reduce((s, e) => s + (e.jumlah || 0), 0);
+      const completedCount = activeEntries.filter((e) => e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl).length;
+      doc.text(`Total: ${activeEntries.length} Institusi | ${totalPorsi} Porsi | ${completedCount}/${activeEntries.length} Lengkap`, pageW / 2, 124, { align: 'center' });
+
+      doc.setDrawColor(226, 232, 240);
+      doc.line(30, 135, pageW - 30, 135);
+
+      doc.setFontSize(9);
+      doc.setTextColor(148, 163, 184);
+      doc.text('Dokumen ini dihasilkan secara otomatis oleh Sistem MBG Al-Umana', pageW / 2, 145, { align: 'center' });
+
+      // ─── Summary Table Page ───
+      doc.addPage();
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(17, 24, 39);
+      doc.text('RINGKASAN PENGIRIMAN', pageW / 2, 18, { align: 'center' });
+
+      const summaryHeaders = ['No', 'Institusi', 'Porsi', 'Menu ✓', 'Serah Terima ✓', 'Surat Jalan ✓', 'Status'];
+      const summaryRows = activeEntries.map((entry, idx) => [
+        `${idx + 1}`,
+        entry.institutionName,
+        `${entry.jumlah}`,
+        entry.photoMenuUrl ? '✓' : '—',
+        entry.photoSerahTerimaUrl ? '✓' : '—',
+        entry.photoSuratJalanUrl ? '✓' : '—',
+        entry.photoMenuUrl && entry.photoSerahTerimaUrl && entry.photoSuratJalanUrl ? 'LENGKAP' : 'BELUM',
+      ]);
+
+      autoTable(doc, {
+        startY: 24,
+        head: [summaryHeaders],
+        body: summaryRows,
+        theme: 'grid',
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
+        bodyStyles: { fontSize: 7.5, textColor: [15, 23, 42] },
+        styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
+      });
+
+      // ─── Per-Institution Photo Pages ───
+      for (const entry of activeEntries) {
+        doc.addPage();
+
+        doc.setFontSize(13);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(17, 24, 39);
+        doc.text(entry.institutionName, pageW / 2, 16, { align: 'center' });
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Jumlah Porsi: ${entry.jumlah} | Jadwal: ${entry.jadwalPengantaran || '-'}`, pageW / 2, 22, { align: 'center' });
+
+        doc.setDrawColor(226, 232, 240);
+        doc.line(14, 25, pageW - 14, 25);
+
+        // Photo grid: 3 photos horizontally
+        const photoSlots: { label: string; url?: string; desc?: string }[] = [
+          { label: '1. Foto Menu / Box', url: entry.photoMenuUrl, desc: entry.photoMenuDesc },
+          { label: '2. Foto Serah Terima', url: entry.photoSerahTerimaUrl, desc: entry.photoSerahTerimaDesc },
+          { label: '3. Foto Surat Jalan', url: entry.photoSuratJalanUrl, desc: entry.photoSuratJalanDesc },
+        ];
+
+        const slotW = (pageW - 28 - 10) / 3; // 14px margin each side, 5px gap x2
+        let startY = 30;
+
+        for (let i = 0; i < photoSlots.length; i++) {
+          const slot = photoSlots[i];
+          const x = 14 + i * (slotW + 5);
+
+          // Label
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(17, 24, 39);
+          doc.text(slot.label, x, startY);
+
+          // Photo box
+          const photoY = startY + 3;
+          const photoH = 55;
+
+          if (slot.url) {
+            try {
+              const img = new Image();
+              img.crossOrigin = 'anonymous';
+              await new Promise<void>((resolve) => {
+                img.onload = () => resolve();
+                img.onerror = () => resolve();
+                img.src = slot.url!;
+              });
+              if (img.complete && img.naturalWidth > 0) {
+                doc.addImage(img, 'JPEG', x, photoY, slotW, photoH);
+              } else {
+                doc.setDrawColor(203, 213, 225);
+                doc.rect(x, photoY, slotW, photoH);
+                doc.setFontSize(7);
+                doc.setTextColor(148, 163, 184);
+                doc.text('Foto tidak tersedia', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
+              }
+            } catch {
+              doc.setDrawColor(203, 213, 225);
+              doc.rect(x, photoY, slotW, photoH);
+              doc.setFontSize(7);
+              doc.setTextColor(148, 163, 184);
+              doc.text('Foto gagal dimuat', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
+            }
+          } else {
+            doc.setDrawColor(203, 213, 225);
+            doc.rect(x, photoY, slotW, photoH);
+            doc.setFontSize(7);
+            doc.setTextColor(148, 163, 184);
+            doc.text('Belum diambil', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
+          }
+
+          // Description below photo
+          if (slot.desc) {
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(100, 116, 139);
+            const lines = doc.splitTextToSize(slot.desc, slotW);
+            doc.text(lines, x, photoY + photoH + 4);
+          }
+        }
+
+        // Additional info below photos
+        startY = 100;
+        if (entry.photoSerahTerimaTimestamp) {
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(100, 116, 139);
+          doc.text(`Waktu Serah Terima: ${entry.photoSerahTerimaTimestamp}`, 14, startY);
+          startY += 5;
+        }
+        if (entry.photoSerahTerimaLocation) {
+          doc.text(`Lokasi: ${entry.photoSerahTerimaLocation}`, 14, startY);
+        }
+      }
+
+      // Save
+      const fileName = `Laporan_Distribusi_MBG_${activeTask.petugasName.replace(/\s+/g, '_')}_${batch?.tanggal || 'undated'}.pdf`;
+      doc.save(fileName);
+      showToast({ message: 'PDF Laporan Distribusi berhasil diunduh!', variant: 'success' });
+    } catch (err) {
+      console.error('Failed to export delivery PDF:', err);
+      showToast({ message: 'Gagal mengekspor PDF', variant: 'error' });
     }
   };
 
@@ -314,7 +498,7 @@ export function MbgDeliveryPage() {
                 </div>
 
                 {/* Progress actions based on status */}
-                <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
                   {activeTask.status === 'waiting' && (
                     <button
                       onClick={handleStartHandover}
@@ -335,9 +519,17 @@ export function MbgDeliveryPage() {
                   )}
 
                   {activeTask.status === 'delivering' && (
-                    <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-4 py-2.5 rounded-xl">
-                      🚚 Silakan ambil foto bukti di setiap tujuan sekolah/posyandu
-                    </span>
+                    <>
+                      <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-4 py-2.5 rounded-xl">
+                        🚚 Silakan ambil foto bukti di setiap tujuan sekolah/posyandu
+                      </span>
+                      <button
+                        onClick={handleExportDeliveryPdf}
+                        className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-2.5 rounded-xl cursor-pointer shadow-sm"
+                      >
+                        <FileDown className="h-4 w-4 text-[#FBBF24]" /> Export PDF
+                      </button>
+                    </>
                   )}
 
                   {activeTask.status === 'delivered' && (
@@ -345,7 +537,10 @@ export function MbgDeliveryPage() {
                       <span className="text-xs font-extrabold text-green-700 bg-green-50 border border-green-200 px-4 py-2.5 rounded-xl flex items-center gap-1.5">
                         <CheckCircle2 className="h-4 w-4" /> Pengiriman Selesai!
                       </span>
-                      <button className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-2.5 rounded-xl cursor-pointer shadow-sm">
+                      <button
+                        onClick={handleExportDeliveryPdf}
+                        className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-2.5 rounded-xl cursor-pointer shadow-sm"
+                      >
                         <FileDown className="h-4 w-4 text-[#FBBF24]" /> Export PDF
                       </button>
                     </div>
@@ -422,9 +617,9 @@ export function MbgDeliveryPage() {
                               ) : (
                                 <button
                                   onClick={() => handleStartProofCapture(entry, 'menu')}
-                                  className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer"
+                                  className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto"
                                 >
-                                  + Upload
+                                  <Camera className="h-3 w-3" /> Ambil
                                 </button>
                               )}
                             </td>
@@ -458,9 +653,9 @@ export function MbgDeliveryPage() {
                               ) : (
                                 <button
                                   onClick={() => handleStartProofCapture(entry, 'surat_jalan')}
-                                  className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer"
+                                  className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto"
                                 >
-                                  + Upload
+                                  <Camera className="h-3 w-3" /> Ambil
                                 </button>
                               )}
                             </td>
@@ -526,10 +721,10 @@ export function MbgDeliveryPage() {
         </>
       )}
 
-      {/* 3-Proof Management Modal */}
+      {/* 3-Proof Management Modal with LiveCamera & Description */}
       {proofModalEntry && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start border-b border-gray-100 pb-4">
               <div>
                 <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">
@@ -541,135 +736,52 @@ export function MbgDeliveryPage() {
               </div>
               <button
                 onClick={() => setProofModalEntry(null)}
-                className="text-gray-400 hover:text-gray-600 text-lg font-bold p-1"
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-full hover:bg-gray-100 cursor-pointer"
               >
-                ✕
+                <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="space-y-4">
               {/* Slot 1: Foto Menu Makanan */}
-              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  {proofModalEntry.photoMenuUrl ? (
-                    <img
-                      src={proofModalEntry.photoMenuUrl}
-                      alt="Menu"
-                      className="w-14 h-14 object-cover rounded-xl border border-green-400"
-                    />
-                  ) : (
-                    <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center text-xl font-bold">
-                      🍱
-                    </div>
-                  )}
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-900">1. Foto Menu / Box Porsi</h4>
-                    <p className="text-[10px] text-gray-500 mt-0.5">
-                      {proofModalEntry.photoMenuUrl ? '✓ Foto tersimpan' : 'Wadah / box porsi makanan'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <button
-                    onClick={() => handleStartProofCapture(proofModalEntry, 'menu')}
-                    className="px-3 py-1.5 bg-[#111827] text-white hover:bg-black text-[10px] font-bold rounded-xl cursor-pointer"
-                  >
-                    Kamera
-                  </button>
-                  <label className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 text-[10px] font-bold rounded-xl cursor-pointer text-center">
-                    Upload
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => handleFileUploadForProof(proofModalEntry, 'menu', e)}
-                    />
-                  </label>
-                </div>
-              </div>
+              <ProofSlot
+                entry={proofModalEntry}
+                proofType="menu"
+                emoji="🍱"
+                label="Foto Menu / Box Porsi"
+                sublabel="Wadah / box porsi makanan"
+                photoUrl={proofModalEntry.photoMenuUrl}
+                description={proofModalEntry.photoMenuDesc}
+                onCapture={() => handleStartProofCapture(proofModalEntry, 'menu')}
+                onDescChange={(val) => handleDescriptionChange(proofModalEntry.id, 'menu', val)}
+              />
 
               {/* Slot 2: Foto Serah Terima */}
-              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  {proofModalEntry.photoSerahTerimaUrl ? (
-                    <img
-                      src={proofModalEntry.photoSerahTerimaUrl}
-                      alt="Serah Terima"
-                      className="w-14 h-14 object-cover rounded-xl border border-green-400"
-                    />
-                  ) : (
-                    <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center text-xl font-bold">
-                      🤝
-                    </div>
-                  )}
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-900">2. Foto Serah Terima (Geotag)</h4>
-                    <p className="text-[10px] text-gray-500 mt-0.5">
-                      {proofModalEntry.photoSerahTerimaUrl ? '✓ Foto serah terima tersimpan' : 'Penyerahan dengan pihak sekolah'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <button
-                    onClick={() => handleStartProofCapture(proofModalEntry, 'serah_terima')}
-                    className="px-3 py-1.5 bg-[#FBBF24] text-[#111827] hover:bg-[#F59E0B] text-[10px] font-extrabold rounded-xl cursor-pointer flex items-center gap-1"
-                  >
-                    <Camera className="h-3 w-3" /> Geotag
-                  </button>
-                  <label className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 text-[10px] font-bold rounded-xl cursor-pointer text-center">
-                    Upload
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => handleFileUploadForProof(proofModalEntry, 'serah_terima', e)}
-                    />
-                  </label>
-                </div>
-              </div>
+              <ProofSlot
+                entry={proofModalEntry}
+                proofType="serah_terima"
+                emoji="🤝"
+                label="Foto Serah Terima (Geotag)"
+                sublabel="Penyerahan dengan pihak sekolah"
+                photoUrl={proofModalEntry.photoSerahTerimaUrl}
+                description={proofModalEntry.photoSerahTerimaDesc}
+                onCapture={() => handleStartProofCapture(proofModalEntry, 'serah_terima')}
+                onDescChange={(val) => handleDescriptionChange(proofModalEntry.id, 'serah_terima', val)}
+                isGeotag
+              />
 
               {/* Slot 3: Foto Surat Jalan */}
-              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  {proofModalEntry.photoSuratJalanUrl ? (
-                    <img
-                      src={proofModalEntry.photoSuratJalanUrl}
-                      alt="Surat Jalan"
-                      className="w-14 h-14 object-cover rounded-xl border border-green-400"
-                    />
-                  ) : (
-                    <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center text-xl font-bold">
-                      📄
-                    </div>
-                  )}
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-900">3. Foto Surat Jalan / BAST</h4>
-                    <p className="text-[10px] text-gray-500 mt-0.5">
-                      {proofModalEntry.photoSuratJalanUrl ? '✓ Berita acara tersimpan' : 'Sudah TTD & stempel sekolah'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <button
-                    onClick={() => handleStartProofCapture(proofModalEntry, 'surat_jalan')}
-                    className="px-3 py-1.5 bg-[#111827] text-white hover:bg-black text-[10px] font-bold rounded-xl cursor-pointer"
-                  >
-                    Kamera
-                  </button>
-                  <label className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 text-[10px] font-bold rounded-xl cursor-pointer text-center">
-                    Upload
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => handleFileUploadForProof(proofModalEntry, 'surat_jalan', e)}
-                    />
-                  </label>
-                </div>
-              </div>
+              <ProofSlot
+                entry={proofModalEntry}
+                proofType="surat_jalan"
+                emoji="📄"
+                label="Foto Surat Jalan / BAST"
+                sublabel="Sudah TTD & stempel sekolah"
+                photoUrl={proofModalEntry.photoSuratJalanUrl}
+                description={proofModalEntry.photoSuratJalanDesc}
+                onCapture={() => handleStartProofCapture(proofModalEntry, 'surat_jalan')}
+                onDescChange={(val) => handleDescriptionChange(proofModalEntry.id, 'surat_jalan', val)}
+              />
             </div>
 
             <div className="pt-2 flex justify-end">
@@ -696,6 +808,92 @@ export function MbgDeliveryPage() {
           />
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── ProofSlot Component ───
+function ProofSlot({
+  proofType: _proofType,
+  entry: _entry,
+  emoji,
+  label,
+  sublabel,
+  photoUrl,
+  description,
+  onCapture,
+  onDescChange,
+  isGeotag,
+}: {
+  entry: MbgPmEntry;
+  proofType: string;
+  emoji: string;
+  label: string;
+  sublabel: string;
+  photoUrl?: string;
+  description?: string;
+  onCapture: () => void;
+  onDescChange: (val: string) => void;
+  isGeotag?: boolean;
+}) {
+  const [localDesc, setLocalDesc] = useState(description || '');
+
+  // Sync local state when Firestore data updates
+  useEffect(() => {
+    setLocalDesc(description || '');
+  }, [description]);
+
+  return (
+    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          {photoUrl ? (
+            <img
+              src={photoUrl}
+              alt={label}
+              className="w-14 h-14 object-cover rounded-xl border border-green-400"
+            />
+          ) : (
+            <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center text-xl font-bold">
+              {emoji}
+            </div>
+          )}
+          <div>
+            <h4 className="text-xs font-bold text-gray-900">{label}</h4>
+            <p className="text-[10px] text-gray-500 mt-0.5">
+              {photoUrl ? '✓ Foto tersimpan' : sublabel}
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={onCapture}
+          className={`px-3 py-1.5 text-[10px] font-extrabold rounded-xl cursor-pointer flex items-center gap-1 shrink-0 ${
+            isGeotag
+              ? 'bg-[#FBBF24] text-[#111827] hover:bg-[#F59E0B]'
+              : 'bg-[#111827] text-white hover:bg-black'
+          }`}
+        >
+          <Camera className="h-3 w-3" />
+          {photoUrl ? 'Ganti' : isGeotag ? 'Geotag' : 'Kamera'}
+        </button>
+      </div>
+
+      {/* Description input — visible after photo is captured */}
+      {photoUrl && (
+        <div>
+          <input
+            type="text"
+            value={localDesc}
+            onChange={(e) => {
+              setLocalDesc(e.target.value);
+              onDescChange(e.target.value);
+            }}
+            placeholder="Tulis deskripsi foto ini..."
+            className="w-full text-xs rounded-xl border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] transition-all font-semibold text-gray-800 placeholder:text-gray-400"
+          />
+        </div>
+      )}
     </div>
   );
 }

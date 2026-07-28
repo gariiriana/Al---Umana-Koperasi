@@ -223,7 +223,7 @@ export function MbgReportPage() {
           ['2.', 'Lampiran Surat Jalan'],
         ],
         theme: 'grid',
-        headStyles: { fillColor: [243, 244, 246], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 10, halign: 'left' },
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 10, halign: 'left' },
         bodyStyles: { fontSize: 10, textColor: [31, 41, 55] },
         columnStyles: {
           0: { cellWidth: 20, halign: 'center' },
@@ -260,7 +260,7 @@ export function MbgReportPage() {
           head: [['NO', 'SEKOLAH', 'MENU', 'SERAH TERIMA', 'SURAT JALAN']],
           body: tableRows,
           theme: 'grid',
-          headStyles: { fillColor: [243, 244, 246], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 9, halign: 'center' },
+          headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 9, halign: 'center' },
           bodyStyles: { fontSize: 8.5, textColor: [17, 24, 39], minCellHeight: 28 },
           columnStyles: {
             0: { cellWidth: 10, halign: 'center', valign: 'middle' },
@@ -488,8 +488,8 @@ export function MbgReportPage() {
         startY: 59,
         head: [['Nama Penerima Manfaat', 'Jumlah PM', 'Jumlah PIC', 'Keterangan']],
         body: rows,
-        theme: 'striped',
-        headStyles: { fillColor: [243, 244, 246], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8.5 },
+        theme: 'grid',
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8.5 },
         bodyStyles: { fontSize: 8, textColor: [31, 41, 55] },
         columnStyles: {
           0: { cellWidth: 75, fontStyle: 'bold' },
@@ -810,8 +810,8 @@ export function MbgReportPage() {
         startY: 25,
         head: [['No', 'Kabupaten/Kota', 'Nama Sekolah/Sasaran', 'Alamat Lengkap', 'Jumlah Sasaran']],
         body: table1Rows,
-        theme: 'striped',
-        headStyles: { fillColor: [243, 244, 246], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
+        theme: 'grid',
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
         bodyStyles: { fontSize: 7.5, textColor: [31, 41, 55] },
         columnStyles: {
           0: { cellWidth: 10, halign: 'center' },
@@ -868,8 +868,8 @@ export function MbgReportPage() {
         startY: nextY + 3,
         head: [['No', 'Tanggal', 'Nama Sekolah/Sasaran', 'Jenis Menu MBG yang Diberikan', 'Total PM']],
         body: table2Rows,
-        theme: 'striped',
-        headStyles: { fillColor: [243, 244, 246], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
+        theme: 'grid',
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
         bodyStyles: { fontSize: 7.5, textColor: [31, 41, 55] },
         columnStyles: {
           0: { cellWidth: 10, halign: 'center' },
