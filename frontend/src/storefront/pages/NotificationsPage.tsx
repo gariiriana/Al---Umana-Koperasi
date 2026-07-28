@@ -22,10 +22,12 @@ import {
   type FirestoreNotification,
   mapProductToPromoNotification,
   subscribeNotifications,
+  markNotificationAsRead,
   markAllNotificationsAsRead,
   STATIC_PROMO_NOTIFICATIONS,
   STATIC_INFO_NOTIFICATIONS,
 } from "@/services/notificationService";
+import { NotificationDetailModal } from "@/components/delivery/NotificationDetailModal";
 
 function formatTimeAgo(dateInput: unknown, langCode: "id" | "en") {
   try {
@@ -112,7 +114,21 @@ export function NotificationsPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [promos, setPromos] = useState<NotificationItem[]>(STATIC_PROMO_NOTIFICATIONS);
   const [markingRead, setMarkingRead] = useState(false);
+  const [selectedNotif, setSelectedNotif] = useState<FirestoreNotification | NotificationItem | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [, setTick] = useState(0);
+
+  const handleNotificationClick = async (item: FirestoreNotification | NotificationItem) => {
+    if ("read" in item && !item.read) {
+      try {
+        await markNotificationAsRead(item.id);
+      } catch (err) {
+        console.error("Failed to mark notification as read:", err);
+      }
+    }
+    setSelectedNotif(item);
+    setIsDetailModalOpen(true);
+  };
 
   // Force re-render every 30 seconds to keep relative time-ago descriptions updated
   useEffect(() => {
@@ -376,10 +392,11 @@ export function NotificationsPage() {
                   return (
                     <div
                       key={item.id}
-                      className={`bg-white rounded-xl border hover:border-amber-200 p-4 transition-all duration-150 shadow-xs flex gap-3.5 ${
+                      onClick={() => handleNotificationClick(item)}
+                      className={`bg-white rounded-xl border hover:border-amber-300 hover:shadow-md p-4 transition-all duration-150 shadow-xs flex gap-3.5 cursor-pointer ${
                         item.read
-                          ? "border-[#E5E7EB] opacity-75"
-                          : "border-l-[3px] border-l-amber-400 border-t border-r border-b border-t-[#E5E7EB] border-r-[#E5E7EB] border-b-[#E5E7EB]"
+                          ? "border-[#E5E7EB] opacity-80"
+                          : "border-l-[4px] border-l-amber-500 border-t border-r border-b border-t-[#E5E7EB] border-r-[#E5E7EB] border-b-[#E5E7EB] bg-amber-50/10"
                       }`}
                     >
                       {/* Icon type marker */}
@@ -394,7 +411,7 @@ export function NotificationsPage() {
                       {/* Text content block */}
                       <div className="flex-1 space-y-1.5 min-w-0">
                         <div className="flex items-start justify-between gap-4">
-                          <h4 className={`text-xs leading-tight ${item.read ? "font-semibold text-neutral-600" : "font-extrabold text-neutral-800"}`}>
+                          <h4 className={`text-xs leading-tight ${item.read ? "font-semibold text-neutral-700" : "font-extrabold text-neutral-900"}`}>
                             {lang === "id" ? item.title : item.titleEn}
                           </h4>
                           <span className="text-[10px] text-neutral-400 font-semibold shrink-0">
@@ -405,17 +422,20 @@ export function NotificationsPage() {
                           {lang === "id" ? item.message : item.messageEn}
                         </p>
 
-                        {/* Actor role badge */}
-                        <div className="flex items-center gap-2 pt-0.5">
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-500 uppercase tracking-wider">
-                            {item.actorRole}
+                        {/* Actor role badge & detail action */}
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-500 uppercase tracking-wider">
+                              {item.actorRole}
+                            </span>
+                            {!item.read && (
+                              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" title="Belum dibaca" />
+                            )}
+                          </div>
+                          <span className="text-[11px] font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1">
+                            {lang === "id" ? "Lihat Detail Laporan →" : "View Details →"}
                           </span>
-                          {!item.read && (
-                            <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" title="Belum dibaca" />
-                          )}
                         </div>
-
-
                       </div>
                     </div>
                   );
@@ -425,7 +445,8 @@ export function NotificationsPage() {
                 (currentList as NotificationItem[]).map((item) => (
                   <div
                     key={item.id}
-                    className="bg-white rounded-xl border border-[#E5E7EB] hover:border-amber-200 p-4 transition-all duration-150 shadow-xs flex gap-3.5"
+                    onClick={() => handleNotificationClick(item)}
+                    className="bg-white rounded-xl border border-[#E5E7EB] hover:border-amber-300 hover:shadow-md p-4 transition-all duration-150 shadow-xs flex gap-3.5 cursor-pointer"
                   >
                     {/* Icon type marker */}
                     <div className="shrink-0">
@@ -458,7 +479,11 @@ export function NotificationsPage() {
                         {item.message[lang]}
                       </p>
 
-
+                      <div className="flex justify-end pt-1">
+                        <span className="text-[11px] font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1">
+                          {lang === "id" ? "Lihat Detail →" : "View Details →"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -467,6 +492,13 @@ export function NotificationsPage() {
           </main>
         </div>
       </div>
+
+      {/* Detail Laporan Pengiriman & Notifikasi Modal */}
+      <NotificationDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        notification={selectedNotif}
+      />
     </div>
   );
 }

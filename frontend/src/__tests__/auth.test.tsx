@@ -53,6 +53,9 @@ vi.mock("@/contexts/ToastContext", () => ({
 
 vi.mock("firebase/firestore", () => ({
   getFirestore: vi.fn(() => ({})),
+  initializeFirestore: vi.fn(() => ({})),
+  persistentLocalCache: vi.fn(() => ({})),
+  persistentMultipleTabManager: vi.fn(() => ({})),
   doc: vi.fn(() => ({})),
   setDoc: vi.fn(),
   collection: vi.fn(() => ({})),
