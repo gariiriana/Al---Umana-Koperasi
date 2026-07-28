@@ -3,13 +3,14 @@
 // ============================================================================
 
 import {
-  collection, doc, updateDoc,
-  query, where, onSnapshot, type Unsubscribe,
+  collection, doc, updateDoc, addDoc,
+  query, where, orderBy, onSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { MbgDeliveryTask, MbgDeliveryStatus } from '@/types/mbg';
 
 const DELIVERY_COLLECTION = 'mbg_delivery_tasks';
+const DOCUMENTS_COLLECTION = 'mbg_delivery_documents';
 
 export function subscribeKurirTasks(
   petugasId: string,
@@ -180,6 +181,56 @@ export async function updatePhotoDescription(
   await updateDoc(doc(db, 'mbg_pm_entries', entryId), {
     [fieldMap[proofType]]: description,
     updatedAt: new Date().toISOString(),
+  });
+}
+
+// ─── Arsip Dokumen ───
+
+export interface MbgDeliveryDocument {
+  id: string;
+  batchId: string;
+  tanggalBatch: string;
+  petugasName: string;
+  petugasId: string;
+  documentType: 'delivery_report';
+  fileName: string;
+  totalInstitusi: number;
+  totalPorsi: number;
+  completedCount: number;
+  createdAt: string;
+  createdBy: string;
+}
+
+export async function saveDeliveryDocument(
+  data: Omit<MbgDeliveryDocument, 'id'>
+): Promise<string> {
+  const docRef = await addDoc(collection(db, DOCUMENTS_COLLECTION), data);
+  return docRef.id;
+}
+
+export function subscribeDeliveryDocuments(
+  petugasId: string,
+  callback: (docs: MbgDeliveryDocument[]) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, DOCUMENTS_COLLECTION),
+    where('petugasId', '==', petugasId),
+    orderBy('createdAt', 'desc')
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryDocument)));
+  });
+}
+
+export function subscribeAllDeliveryDocuments(
+  callback: (docs: MbgDeliveryDocument[]) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, DOCUMENTS_COLLECTION),
+    orderBy('createdAt', 'desc')
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryDocument)));
   });
 }
 

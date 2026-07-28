@@ -15,6 +15,8 @@ import {
   Building,
   Navigation,
   X,
+  FolderOpen,
+  History,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -30,6 +32,9 @@ import {
   addDeliveryPhoto,
   updateSchoolDeliveryProof,
   updatePhotoDescription,
+  saveDeliveryDocument,
+  subscribeAllDeliveryDocuments,
+  type MbgDeliveryDocument,
 } from '@/services/mbgDeliveryService';
 import { LiveCamera } from '@/components/LiveCamera';
 import { MBG_DELIVERY_STATUS_CONFIG } from '@/constants/mbgConstants';
@@ -46,6 +51,10 @@ export function MbgDeliveryPage() {
   const [tasks, setTasks] = useState<MbgDeliveryTask[]>([]);
   const [entries, setEntries] = useState<MbgPmEntry[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Page tab: tugas aktif vs arsip dokumen
+  const [pageTab, setPageTab] = useState<'active' | 'archive'>('active');
+  const [archiveDocs, setArchiveDocs] = useState<MbgDeliveryDocument[]>([]);
 
   // Fallback selector for testing when user profile is admin or doesn't match a specific kurir
   const [selectedPetugasName, setSelectedPetugasName] = useState<string>('');
@@ -76,6 +85,12 @@ export function MbgDeliveryPage() {
     });
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Subscribe arsip dokumen
+  useEffect(() => {
+    const unsub = subscribeAllDeliveryDocuments(setArchiveDocs);
+    return unsub;
   }, []);
 
   // Determine petugasId/name based on logged in user profile
@@ -411,7 +426,29 @@ export function MbgDeliveryPage() {
       // Save
       const fileName = `Laporan_Distribusi_MBG_${activeTask.petugasName.replace(/\s+/g, '_')}_${batch?.tanggal || 'undated'}.pdf`;
       doc.save(fileName);
-      showToast({ message: 'PDF Laporan Distribusi berhasil diunduh!', variant: 'success' });
+
+      // Save document metadata to Firestore for arsip
+      try {
+        const pName = selectedPetugasName || profile?.displayName || '';
+        const pId = detectedPetugasId || pName.toLowerCase().replace(/\s+/g, '-');
+        await saveDeliveryDocument({
+          batchId: selectedBatchId || '',
+          tanggalBatch: batch?.tanggal || '',
+          petugasName: activeTask.petugasName,
+          petugasId: pId,
+          documentType: 'delivery_report',
+          fileName,
+          totalInstitusi: activeEntries.length,
+          totalPorsi,
+          completedCount,
+          createdAt: new Date().toISOString(),
+          createdBy: user?.uid || '',
+        });
+      } catch (archiveErr) {
+        console.warn('Failed to save document archive:', archiveErr);
+      }
+
+      showToast({ message: 'PDF Laporan Distribusi berhasil diunduh & diarsipkan!', variant: 'success' });
     } catch (err) {
       console.error('Failed to export delivery PDF:', err);
       showToast({ message: 'Gagal mengekspor PDF', variant: 'error' });
@@ -450,8 +487,122 @@ export function MbgDeliveryPage() {
         )}
       </div>
 
-      {/* Batch Selection */}
-      {loading ? (
+      {/* Page Tab: Tugas Aktif / Arsip Dokumen */}
+      <div className="flex gap-1 mb-6 bg-[#F3F4F6] rounded-xl p-1 max-w-md">
+        <button
+          onClick={() => setPageTab('active')}
+          className={`flex-1 py-2.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+            pageTab === 'active'
+              ? 'bg-white text-[#111827] shadow-sm'
+              : 'text-[#6B7280] hover:text-[#111827]'
+          }`}
+        >
+          <ClipboardList className="h-3.5 w-3.5" /> Tugas Aktif
+        </button>
+        <button
+          onClick={() => setPageTab('archive')}
+          className={`flex-1 py-2.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+            pageTab === 'archive'
+              ? 'bg-white text-[#111827] shadow-sm'
+              : 'text-[#6B7280] hover:text-[#111827]'
+          }`}
+        >
+          <FolderOpen className="h-3.5 w-3.5" /> Arsip Dokumen
+          {archiveDocs.length > 0 && (
+            <span className="bg-[#FBBF24] text-[#111827] text-[9px] font-extrabold px-1.5 py-0.5 rounded-full">
+              {archiveDocs.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Archive Tab Content */}
+      {pageTab === 'archive' ? (
+        <div className="space-y-4">
+          {archiveDocs.length === 0 ? (
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-12 text-center">
+              <History className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+              <h3 className="text-lg font-bold text-[#111827]">Belum Ada Arsip Dokumen</h3>
+              <p className="text-sm text-gray-500 mt-1 max-w-sm mx-auto">
+                Arsip dokumen akan muncul setelah Anda mengekspor PDF laporan distribusi.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
+              <div className="px-6 py-4 bg-[#111827] text-white flex items-center justify-between rounded-t-2xl">
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="h-4.5 w-4.5 text-[#FBBF24]" />
+                  <span className="text-sm font-extrabold uppercase tracking-wider">Arsip Laporan Distribusi</span>
+                </div>
+                <span className="text-xs font-bold bg-white/15 px-3 py-1.5 rounded-full">
+                  {archiveDocs.length} Dokumen
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left min-w-[700px]">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-bold uppercase text-[9px] tracking-wider">
+                      <th className="py-3 px-6">Tanggal Batch</th>
+                      <th className="py-3 px-4">Petugas</th>
+                      <th className="py-3 px-4 text-center">Institusi</th>
+                      <th className="py-3 px-4 text-center">Total Porsi</th>
+                      <th className="py-3 px-4 text-center">Kelengkapan</th>
+                      <th className="py-3 px-4">Waktu Dibuat</th>
+                      <th className="py-3 px-6">Nama File</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {archiveDocs.map((d) => (
+                      <tr key={d.id} className="hover:bg-gray-50/50">
+                        <td className="py-3 px-6 font-bold text-[#111827]">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-gray-400 shrink-0" />
+                            {d.tanggalBatch || '-'}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-gray-700">
+                          <div className="flex items-center gap-2">
+                            <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                            {d.petugasName}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full font-extrabold text-[10px]">
+                            {d.totalInstitusi}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="bg-[#FBBF24]/20 text-[#92400E] px-2 py-0.5 rounded-full font-extrabold text-[10px]">
+                            {d.totalPorsi}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`px-2 py-0.5 rounded-full font-extrabold text-[10px] ${
+                            d.completedCount === d.totalInstitusi
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {d.completedCount}/{d.totalInstitusi}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-gray-500 text-[10px]">
+                          {new Date(d.createdAt).toLocaleString('id-ID', {
+                            day: '2-digit', month: 'short', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit',
+                          })}
+                        </td>
+                        <td className="py-3 px-6 text-[10px] text-gray-600 font-mono">
+                          {d.fileName}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-[#FBBF24]" />
         </div>

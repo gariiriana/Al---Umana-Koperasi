@@ -578,6 +578,74 @@ export function MbgDistributionPage() {
     }
   };
 
+  // Export PDF Penerimaan Bahan
+  const handleExportReceivingPdf = () => {
+    if (receivingData.length === 0) {
+      showToast({ message: 'Tidak ada data penerimaan bahan untuk diekspor', variant: 'error' });
+      return;
+    }
+
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const currentBatch = batches.find((b) => b.id === selectedBatchId);
+      const tanggalStr = currentBatch?.tanggal || new Date().toISOString().split('T')[0];
+
+      // Title & Header
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.setTextColor(17, 24, 39);
+      doc.text('LAPORAN PENERIMAAN BAHAN MBG', pageW / 2, 18, { align: 'center' });
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Tanggal Batch: ${tanggalStr} | Total ${receivingData.reduce((sum, s) => sum + s.items.length, 0)} Item (${receivingData.length} Supplier)`, pageW / 2, 25, { align: 'center' });
+
+      doc.setDrawColor(226, 232, 240);
+      doc.line(14, 29, pageW - 14, 29);
+
+      let startY = 34;
+
+      receivingData.forEach((supplier, sIdx) => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(17, 24, 39);
+        doc.text(`${sIdx + 1}. Supplier: ${supplier.supplierName} (${supplier.groupLabel || 'Pesanan'})`, 14, startY);
+
+        const tableHeaders = ['No', 'Nama Bahan', 'Jam Kedatangan', 'Jumlah', 'Satuan', 'Keterangan'];
+        const tableRows = supplier.items.map((item, idx) => [
+          `${idx + 1}`,
+          item.bahanName,
+          item.jamKedatangan || '-',
+          `${item.jumlah}`,
+          item.satuan,
+          item.keterangan || '-',
+        ]);
+
+        autoTable(doc, {
+          startY: startY + 3,
+          head: [tableHeaders],
+          body: tableRows,
+          theme: 'grid',
+          headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
+          bodyStyles: { fontSize: 8, textColor: [31, 41, 55] },
+          styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
+          margin: { left: 14, right: 14 },
+        });
+
+        startY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+      });
+
+      const fileName = `Laporan_Penerimaan_Bahan_MBG_${tanggalStr}.pdf`;
+      doc.save(fileName);
+      showToast({ message: 'Export PDF Penerimaan Bahan berhasil!', variant: 'success' });
+    } catch (err) {
+      console.error('Failed to export receiving PDF:', err);
+      showToast({ message: 'Gagal mengekspor PDF Penerimaan Bahan', variant: 'error' });
+    }
+  };
+
   return (
     <div className="min-h-screen font-['Hanken_Grotesk',system-ui,sans-serif] p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -599,6 +667,15 @@ export function MbgDistributionPage() {
               >
                 <ChefHat className="h-4 w-4 text-[#FBBF24]" />
                 <span>Handover ke Tim Produksi (Siap Masak)</span>
+              </button>
+            )}
+            {activeTab === 'receiving' && (
+              <button
+                onClick={handleExportReceivingPdf}
+                className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-3 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all"
+              >
+                <FileDown className="h-4 w-4 text-[#FBBF24]" />
+                <span>Export PDF Penerimaan</span>
               </button>
             )}
             {activeTab === 'assignment' && (
@@ -721,9 +798,18 @@ export function MbgDistributionPage() {
                             List Pesanan Bahan
                           </span>
                         </div>
-                        <span className="text-xs font-bold bg-white/15 px-3 py-1.5 rounded-full">
-                          {receivingData.reduce((sum, s) => sum + s.items.length, 0)} Item dari {receivingData.length} Supplier
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-bold bg-white/15 px-3 py-1.5 rounded-full">
+                            {receivingData.reduce((sum, s) => sum + s.items.length, 0)} Item dari {receivingData.length} Supplier
+                          </span>
+                          <button
+                            onClick={handleExportReceivingPdf}
+                            className="flex items-center gap-1.5 bg-white text-[#065F46] hover:bg-emerald-50 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer shadow-xs transition-all active:scale-95"
+                          >
+                            <FileDown className="h-3.5 w-3.5" />
+                            <span>Export PDF</span>
+                          </button>
+                        </div>
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs text-left min-w-[700px]">
