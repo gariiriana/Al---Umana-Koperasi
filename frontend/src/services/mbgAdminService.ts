@@ -446,3 +446,36 @@ export async function bulkAddEntriesFromMaster(
   await batch.commit();
 }
 
+/**
+ * Delete all MBG operational data across all MBG roles
+ * (admin_mbg, produksi_mbg, distribusi_mbg, purchasing_mbg, kurir_mbg)
+ */
+export async function deleteAllMbgData(): Promise<void> {
+  const collectionsToClear = [
+    'mbg_pm_batches',
+    'mbg_pm_entries',
+    'mbg_cooking_sessions',
+    'mbg_custom_recipes',
+    'mbg_recipe_adjustments',
+    'mbg_custom_tkpi',
+    'mbg_qc_checks',
+    'mbg_delivery_tasks',
+    'mbg_purchase_orders',
+    'mbg_delivery_documents',
+  ];
+
+  for (const colName of collectionsToClear) {
+    const snap = await getDocs(collection(db, colName));
+    if (!snap.empty) {
+      const docs = snap.docs;
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
+        const chunk = docs.slice(i, i + CHUNK_SIZE);
+        const b = writeBatch(db);
+        chunk.forEach((d) => b.delete(d.ref));
+        await b.commit();
+      }
+    }
+  }
+}
+
