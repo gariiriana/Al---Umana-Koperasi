@@ -369,7 +369,6 @@ export function MbgReportPage() {
 
       // Brand Color Schemes
       const brandAmberDark: [number, number, number] = [146, 64, 14];   // #92400E
-      const brandYellow: [number, number, number] = [251, 191, 36];     // #FBBF24
       const slateDark: [number, number, number] = [17, 24, 39];         // #111827
       const slateLight: [number, number, number] = [107, 114, 128];     // #6B7280
 
@@ -398,8 +397,8 @@ export function MbgReportPage() {
       doc.setDrawColor(229, 231, 235);
       doc.line(14, 44, pageW - 14, 44);
 
-      // Yellow highlights bar for Date
-      doc.setFillColor(...brandYellow);
+      // Title header bar (light gray background)
+      doc.setFillColor(243, 244, 246);
       doc.rect(14, 48, pageW - 28, 7.5, 'F');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9);
@@ -545,12 +544,6 @@ export function MbgReportPage() {
       const pageH = doc.internal.pageSize.getHeight();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
-
-        // Header accent: Solid Amber Gold header band (3mm height) with a dark accent line
-        doc.setFillColor(251, 191, 36); // #FBBF24 (Gold)
-        doc.rect(0, 0, pageW, 3, 'F');
-        doc.setFillColor(180, 83, 9); // #B45309 (Amber Dark)
-        doc.rect(0, 3, pageW, 0.8, 'F');
 
         // Footer accent line
         doc.setDrawColor(229, 231, 235);
@@ -924,12 +917,6 @@ export function MbgReportPage() {
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
-
-        // Header accent: Solid Amber Gold header band (3mm height) with a dark accent line
-        doc.setFillColor(251, 191, 36); // #FBBF24 (Gold)
-        doc.rect(0, 0, pageW, 3, 'F');
-        doc.setFillColor(180, 83, 9); // #B45309 (Amber Dark)
-        doc.rect(0, 3, pageW, 0.8, 'F');
 
         // Footer accent line
         doc.setDrawColor(229, 231, 235);

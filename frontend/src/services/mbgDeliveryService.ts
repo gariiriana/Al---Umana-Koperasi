@@ -13,16 +13,48 @@ const DELIVERY_COLLECTION = 'mbg_delivery_tasks';
 const DOCUMENTS_COLLECTION = 'mbg_delivery_documents';
 
 export function subscribeKurirTasks(
-  petugasId: string,
+  batchId: string,
+  userUid: string,
+  userEmail: string,
+  userDisplayName: string,
   callback: (tasks: MbgDeliveryTask[]) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
   const q = query(
     collection(db, DELIVERY_COLLECTION),
-    where('petugasId', '==', petugasId)
+    where('batchId', '==', batchId)
   );
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryTask)));
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryTask));
+    const uidLower = (userUid || '').toLowerCase();
+    const emailLower = (userEmail || '').toLowerCase();
+    const emailHandle = emailLower ? emailLower.split('@')[0] : '';
+    const nameLower = (userDisplayName || '').toLowerCase();
+
+    const filtered = list.filter((t) => {
+      // If admin or no user identity specified, return all batch tasks
+      if (!userUid && !userEmail && !userDisplayName) return true;
+
+      const tPetugasId = (t.petugasId || '').toLowerCase();
+      const tPetugasName = (t.petugasName || '').toLowerCase();
+      const tKenekId = (t.kenekId || '').toLowerCase();
+      const tKenekName = (t.kenekName || '').toLowerCase();
+
+      const isMatchKurir =
+        (uidLower && tPetugasId === uidLower) ||
+        (nameLower && tPetugasName === nameLower) ||
+        (emailHandle && tPetugasName.includes(emailHandle)) ||
+        (emailHandle && tPetugasId.includes(emailHandle));
+
+      const isMatchKenek =
+        (uidLower && tKenekId === uidLower) ||
+        (nameLower && tKenekName === nameLower) ||
+        (emailHandle && tKenekName.includes(emailHandle)) ||
+        (emailHandle && tKenekId.includes(emailHandle));
+
+      return isMatchKurir || isMatchKenek;
+    });
+    callback(filtered);
   }, onError);
 }
 
@@ -105,7 +137,7 @@ export async function compressImageBase64(
 export async function updateSchoolDeliveryProof(
   entryId: string,
   institutionName: string,
-  proofType: 'menu' | 'serah_terima' | 'surat_jalan',
+  proofType: 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan',
   rawPhotoDataUrl: string,
   taskId?: string,
   extraMeta?: { timestamp?: string; location?: string; description?: string }
@@ -119,6 +151,11 @@ export async function updateSchoolDeliveryProof(
   if (proofType === 'menu') {
     entryUpdates.photoMenuUrl = compressedPhoto;
     if (extraMeta?.description) entryUpdates.photoMenuDesc = extraMeta.description;
+  } else if (proofType === 'penerima') {
+    entryUpdates.photoPenerimaUrl = compressedPhoto;
+    if (extraMeta?.description) entryUpdates.photoPenerimaDesc = extraMeta.description;
+    if (extraMeta?.timestamp) entryUpdates.photoPenerimaTimestamp = extraMeta.timestamp;
+    if (extraMeta?.location) entryUpdates.photoPenerimaLocation = extraMeta.location;
   } else if (proofType === 'serah_terima') {
     entryUpdates.photoSerahTerimaUrl = compressedPhoto;
     if (extraMeta?.description) entryUpdates.photoSerahTerimaDesc = extraMeta.description;
@@ -145,6 +182,11 @@ export async function updateSchoolDeliveryProof(
     if (proofType === 'menu') {
       taskUpdates[`${proofKey}.photoMenuUrl`] = compressedPhoto;
       if (extraMeta?.description) taskUpdates[`${proofKey}.photoMenuDesc`] = extraMeta.description;
+    } else if (proofType === 'penerima') {
+      taskUpdates[`${proofKey}.photoPenerimaUrl`] = compressedPhoto;
+      if (extraMeta?.description) taskUpdates[`${proofKey}.photoPenerimaDesc`] = extraMeta.description;
+      if (extraMeta?.timestamp) taskUpdates[`${proofKey}.photoPenerimaTimestamp`] = extraMeta.timestamp;
+      if (extraMeta?.location) taskUpdates[`${proofKey}.photoPenerimaLocation`] = extraMeta.location;
     } else if (proofType === 'serah_terima') {
       taskUpdates[`${proofKey}.photoSerahTerimaUrl`] = compressedPhoto;
       if (extraMeta?.description) taskUpdates[`${proofKey}.photoSerahTerimaDesc`] = extraMeta.description;
@@ -170,11 +212,12 @@ export async function updateSchoolDeliveryProof(
  */
 export async function updatePhotoDescription(
   entryId: string,
-  proofType: 'menu' | 'serah_terima' | 'surat_jalan',
+  proofType: 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan',
   description: string
 ): Promise<void> {
   const fieldMap: Record<string, string> = {
     menu: 'photoMenuDesc',
+    penerima: 'photoPenerimaDesc',
     serah_terima: 'photoSerahTerimaDesc',
     surat_jalan: 'photoSuratJalanDesc',
   };

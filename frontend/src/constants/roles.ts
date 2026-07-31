@@ -105,6 +105,14 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/mbg/delivery",
     "/mbg/orders",
   ],
+
+  /**
+   * Sub Purchasing MBG: belanja bahan yang ditugaskan oleh Purchasing.
+   */
+  sub_purchasing_mbg: [
+    "/mbg/sub-purchasing",
+    "/mbg/orders",
+  ],
 };
 
 /** Roles that land on the admin AppShell when authenticated. */
@@ -117,6 +125,7 @@ export const ADMIN_SHELL_ROLES = [
   "purchasing_mbg",
   "distribusi_mbg",
   "kurir_mbg",
+  "sub_purchasing_mbg",
 ] as const;
 
 /**
@@ -134,4 +143,5 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   purchasing_mbg: "/mbg/purchasing",
   distribusi_mbg: "/mbg/distribution",
   kurir_mbg: "/mbg/delivery",
+  sub_purchasing_mbg: "/mbg/sub-purchasing",
 };

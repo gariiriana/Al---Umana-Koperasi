@@ -21,6 +21,7 @@ import {
   ShoppingCart,
   Truck,
   History,
+  FolderArchive,
   UtensilsCrossed,
   Warehouse,
   X,
@@ -55,10 +56,12 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/mbg/production", label: "Produksi MBG", icon: UtensilsCrossed },
   { to: "/mbg/cooking", label: "Masak MBG", icon: Factory },
   { to: "/mbg/purchasing", label: "Purchasing MBG", icon: ShoppingBag },
+  { to: "/mbg/purchasing?tab=archive", label: "Arsip Dokumen", icon: FolderArchive },
   { to: "/mbg/purchasing/recap", label: "Laporan Belanja", icon: FileText },
   { to: "/mbg/suppliers", label: "Supplier MBG", icon: Warehouse },
   { to: "/mbg/distribution", label: "Distribusi MBG", icon: ClipboardCheck },
   { to: "/mbg/delivery", label: "Kurir MBG", icon: Truck },
+  { to: "/mbg/sub-purchasing", label: "Sub Purchasing", icon: ShoppingBag },
 ] as const;
 
 const LABELS_DICT = {
@@ -85,6 +88,7 @@ const LABELS_DICT = {
     "/mbg/suppliers": "Supplier MBG",
     "/mbg/distribution": "Distribusi MBG",
     "/mbg/delivery": "Kurir MBG",
+    "/mbg/sub-purchasing": "Sub Purchasing",
   },
   en: {
     "/admin/dashboard": "Dashboard",
@@ -109,6 +113,7 @@ const LABELS_DICT = {
     "/mbg/suppliers": "MBG Suppliers",
     "/mbg/distribution": "MBG Distribution",
     "/mbg/delivery": "MBG Delivery",
+    "/mbg/sub-purchasing": "Sub Purchasing",
   }
 } as const;
 
@@ -147,6 +152,7 @@ const roleBadge: Record<string, string> = {
   purchasing_mbg: "Purchasing MBG",
   distribusi_mbg: "Distribusi MBG",
   kurir_mbg: "Kurir MBG",
+  sub_purchasing_mbg: "Sub Purchasing",
 };
 
 export function Sidebar({
@@ -205,9 +211,9 @@ export function Sidebar({
       <aside
         aria-label="Primary navigation"
         className={`
-          fixed inset-y-0 left-0 z-40 w-60 bg-white border-r border-[#E5E7EB] h-screen flex flex-col shrink-0
+          fixed inset-y-0 left-0 z-40 w-60 bg-white border-r border-[#E5E7EB] flex flex-col shrink-0 h-full min-h-screen
           transition-transform duration-300 ease-in-out
-          md:sticky md:top-0 md:translate-x-0
+          md:translate-x-0
           ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >

@@ -92,6 +92,7 @@ export async function addCookingPhoto(
   currentPhotos: MbgCookingPhoto[],
   newPhoto: MbgCookingPhoto
 ): Promise<void> {
+  // Photos are stored as compressed base64 directly in Firestore (no Storage upload)
   await updateDoc(doc(db, COOKING_COLLECTION, sessionId), {
     photos: [...currentPhotos, newPhoto],
     updatedAt: new Date().toISOString(),
@@ -101,8 +102,12 @@ export async function addCookingPhoto(
 export async function addCookingPhotos(
   sessionId: string,
   currentPhotos: MbgCookingPhoto[],
-  newPhotos: MbgCookingPhoto[]
+  newPhotos: MbgCookingPhoto[],
+  onProgress?: (uploadedCount: number, total: number) => void
 ): Promise<void> {
+  // Photos are stored as compressed base64 directly in Firestore (no Storage upload)
+  // Compression to ~10-15KB ensures well under Firestore's 1MB document limit
+  onProgress?.(newPhotos.length, newPhotos.length);
   await updateDoc(doc(db, COOKING_COLLECTION, sessionId), {
     photos: [...currentPhotos, ...newPhotos],
     updatedAt: new Date().toISOString(),
@@ -180,7 +185,7 @@ const RECIPE_ADJUSTMENTS_COLLECTION = 'mbg_recipe_adjustments';
 
 export function subscribeRecipeAdjustments(
   batchId: string,
-  callback: (adjustments: Record<string, any>[]) => void,
+  callback: (adjustments: Record<string, unknown>[]) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
   const q = query(
@@ -195,7 +200,7 @@ export function subscribeRecipeAdjustments(
 
 export async function saveRecipeAdjustment(
   adjustmentId: string | null,
-  adjustment: Record<string, any>
+  adjustment: Record<string, unknown>
 ): Promise<string> {
   if (adjustmentId) {
     await updateDoc(doc(db, RECIPE_ADJUSTMENTS_COLLECTION, adjustmentId), {

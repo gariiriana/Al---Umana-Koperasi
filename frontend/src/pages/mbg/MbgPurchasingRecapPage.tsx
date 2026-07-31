@@ -129,7 +129,6 @@ export function MbgPurchasingRecapPage() {
       const pageW = doc.internal.pageSize.getWidth();
 
       const brandAmberDark: [number, number, number] = [146, 64, 14];
-      const brandYellow: [number, number, number] = [251, 191, 36];
       const slateDark: [number, number, number] = [17, 24, 39];
       const slateLight: [number, number, number] = [107, 114, 128];
 
@@ -156,7 +155,7 @@ export function MbgPurchasingRecapPage() {
       doc.setDrawColor(229, 231, 235);
       doc.line(14, 44, pageW - 14, 44);
 
-      doc.setFillColor(...brandYellow);
+      doc.setFillColor(243, 244, 246);
       doc.rect(14, 48, pageW - 28, 7.5, 'F');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9);

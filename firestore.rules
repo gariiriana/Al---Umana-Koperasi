@@ -92,8 +92,14 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kurir_mbg';
     }
 
+    function isSubPurchasingMbg() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'sub_purchasing_mbg';
+    }
+
     function isAnyMbg() {
-      return isAdminMbg() || isProduksiMbg() || isPurchasingMbg() || isDistribusiMbg() || isKurirMbg();
+      return isAdminMbg() || isProduksiMbg() || isPurchasingMbg() || isDistribusiMbg() || isKurirMbg() || isSubPurchasingMbg();
     }
 
     // -------------------------------------------------------------------
@@ -382,6 +388,11 @@ service cloud.firestore {
     match /mbg_cooking_sessions/{sessionId} {
       allow read: if request.auth != null;
       allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+
+      match /photos/{photoId} {
+        allow read: if request.auth != null;
+        allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      }
     }
 
     // -------------------------------------------------------------------
@@ -414,6 +425,24 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
       allow update, delete: if request.auth != null && (isAdmin() || isAdminMbg());
+    }
+
+    // -------------------------------------------------------------------
+    // MBG Purchasing Documents (arsip dokumen PDF/Word purchasing)
+    // -------------------------------------------------------------------
+    match /mbg_purchasing_documents/{docId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
+    }
+
+    // -------------------------------------------------------------------
+    // MBG Sub Purchasing Tasks (tugas belanja sub_purchasing)
+    // -------------------------------------------------------------------
+    match /mbg_sub_purchasing_tasks/{taskId} {
+      allow read: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow create: if request.auth != null && (isAdmin() || isPurchasingMbg() || isAdminMbg());
+      allow update: if request.auth != null && (isAdmin() || isPurchasingMbg() || isSubPurchasingMbg() || isAdminMbg());
+      allow delete: if request.auth != null && (isAdmin() || isPurchasingMbg() || isAdminMbg());
     }
   }
 }

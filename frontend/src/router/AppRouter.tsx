@@ -56,6 +56,7 @@ const MbgAdminPage = lazy(() => import("@/pages/mbg/MbgAdminPage").then(module =
 const MbgProductionPage = lazy(() => import("@/pages/mbg/MbgProductionPage").then(module => ({ default: module.MbgProductionPage })));
 const MbgCookingPage = lazy(() => import("@/pages/mbg/MbgCookingPage").then(module => ({ default: module.MbgCookingPage })));
 const MbgPurchasingPage = lazy(() => import("@/pages/mbg/MbgPurchasingPage").then(module => ({ default: module.MbgPurchasingPage })));
+const MbgSubPurchasingPage = lazy(() => import("@/pages/mbg/MbgSubPurchasingPage").then(module => ({ default: module.MbgSubPurchasingPage })));
 const MbgPurchasingRecapPage = lazy(() => import("@/pages/mbg/MbgPurchasingRecapPage").then(module => ({ default: module.MbgPurchasingRecapPage })));
 const MbgSupplierPage = lazy(() => import("@/pages/mbg/MbgSupplierPage").then(module => ({ default: module.MbgSupplierPage })));
 const MbgDistributionPage = lazy(() => import("@/pages/mbg/MbgDistributionPage").then(module => ({ default: module.MbgDistributionPage })));
@@ -629,7 +630,7 @@ function RoutesTree() {
         path="/mbg/orders"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Pesanan MBG" allowedRoles={["admin_mbg", "produksi_mbg", "purchasing_mbg", "distribusi_mbg", "kurir_mbg"]}>
+            <ShelledRoute pageTitle="Pesanan MBG" allowedRoles={["admin_mbg", "produksi_mbg", "purchasing_mbg", "distribusi_mbg", "kurir_mbg", "sub_purchasing_mbg"]}>
               <MbgOrdersPage />
             </ShelledRoute>
           </Protected>
@@ -691,6 +692,16 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute pageTitle="Purchasing MBG" allowedRoles={["purchasing_mbg"]}>
               <MbgPurchasingPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/mbg/sub-purchasing"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Sub Purchasing MBG" allowedRoles={["sub_purchasing_mbg", "purchasing_mbg"]}>
+              <MbgSubPurchasingPage />
             </ShelledRoute>
           </Protected>
         }

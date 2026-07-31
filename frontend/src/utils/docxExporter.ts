@@ -451,8 +451,8 @@ export async function exportDistributionToDocx(data: DistributionDocxData, fileN
         }),
         new TableRow({
           children: [
-            new TableCell({ columnSpan: 2, shading: { fill: 'FEF3C7' }, children: [new Paragraph({ children: [new TextRun({ text: 'TOTAL PORSI TERKIRIM', bold: true, color: '92400E', size: 20 })], alignment: AlignmentType.RIGHT })] }),
-            new TableCell({ shading: { fill: 'FEF3C7' }, children: [new Paragraph({ children: [new TextRun({ text: `${data.totalPortions} Porsi`, bold: true, color: '92400E', size: 20 })], alignment: AlignmentType.RIGHT })] }),
+            new TableCell({ columnSpan: 2, shading: { fill: 'F3F4F6' }, children: [new Paragraph({ children: [new TextRun({ text: 'TOTAL PORSI TERKIRIM', bold: true, color: '111827', size: 20 })], alignment: AlignmentType.RIGHT })] }),
+            new TableCell({ shading: { fill: 'F3F4F6' }, children: [new Paragraph({ children: [new TextRun({ text: `${data.totalPortions} Porsi`, bold: true, color: '111827', size: 20 })], alignment: AlignmentType.RIGHT })] }),
           ],
         }),
       ],

@@ -28,6 +28,7 @@ import {
   isSupported as isAnalyticsSupported,
   type Analytics,
 } from 'firebase/analytics';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -58,6 +59,7 @@ for (const key of requiredKeys) {
 
 export const app: FirebaseApp = initializeApp(firebaseConfig);
 export const auth: Auth = getAuth(app);
+export const storage: FirebaseStorage = getStorage(app);
 
 // Modern Firestore initialization with multi-tab persistent cache
 export const db: Firestore = initializeFirestore(app, {

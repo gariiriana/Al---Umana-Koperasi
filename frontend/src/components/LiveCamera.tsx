@@ -500,16 +500,17 @@ export function LiveCamera({
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
+          {/* Live Video Element - Kept permanently in DOM so stream srcObject is preserved */}
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`w-full h-full object-cover ${capturedBlobUrl ? "hidden" : "block"}`}
+          />
+
           {!capturedBlobUrl ? (
             <>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
-
               {/* Corner guides */}
               <div className="absolute inset-4 pointer-events-none border border-white/10 rounded-2xl">
                 <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-white/60 rounded-tl-xl" />

@@ -783,22 +783,60 @@ export function MbgProductionPage() {
         await deleteNutritionEntry(entry.id);
       }
 
-      const totalBatchPorsi = entries.reduce((s, e) => s + (e.jumlah || 0), 0) || 1;
+      const totalBatchPorsi = entries.reduce((s, e) => {
+        if (e.isSekolahLibur) return s;
+        const p = e.jumlah || ((e.qtSiswaBalita || 0) + (e.qtBumilBusui || 0) + (e.qtGuruKader || 0));
+        return s + p;
+      }, 0) || 1;
 
-      // 2. Consolidate ingredient requirements by clean name to avoid duplicates
+      // Build total portion count per menu item
+      const menuPortionTotals: Record<string, number> = {};
+      entries.forEach((e) => {
+        if (e.isSekolahLibur) return;
+        const menuList = e.menuItems || [];
+        const entryPortions = e.jumlah || ((e.qtSiswaBalita || 0) + (e.qtBumilBusui || 0) + (e.qtGuruKader || 0)) || 1;
+        menuList.forEach((m) => {
+          const norm = m.trim();
+          menuPortionTotals[norm] = (menuPortionTotals[norm] || 0) + entryPortions;
+        });
+      });
+
+      // 2. Consolidate ingredient requirements by clean name and track portion counts
       const consolidatedIngs = new Map<string, {
         name: string;
         amount: number;
         satuan: string;
+        portions: number;
       }>();
 
       adjustedRecipeRequirements.forEach((ing) => {
         const key = ing.name.toLowerCase().trim();
+        
+        // Calculate portion count for this specific ingredient from its source menus
+        let ingPortions = 0;
+        if (ing.sourceMenus && ing.sourceMenus.length > 0) {
+          ing.sourceMenus.forEach((sm) => {
+            const norm = sm.trim();
+            if (menuPortionTotals[norm]) {
+              ingPortions += menuPortionTotals[norm];
+            }
+          });
+        }
+        if (ingPortions <= 0) ingPortions = totalBatchPorsi;
+
         if (!consolidatedIngs.has(key)) {
-          consolidatedIngs.set(key, { name: ing.name, amount: ing.amount, satuan: ing.satuan });
+          consolidatedIngs.set(key, {
+            name: ing.name,
+            amount: ing.amount,
+            satuan: ing.satuan,
+            portions: ingPortions,
+          });
         } else {
           const existing = consolidatedIngs.get(key)!;
           existing.amount += ing.amount;
+          if (ingPortions > existing.portions) {
+            existing.portions = ingPortions;
+          }
         }
       });
 
@@ -815,52 +853,102 @@ export function MbgProductionPage() {
           beratInGrams = ing.amount * 5;
         }
 
-        // Ensure valid weight if calculated amount was 0 or minor seasoning
         if (beratInGrams <= 0) {
-          beratInGrams = totalBatchPorsi * 2; // minimum 2g per portion for minor ingredients/seasonings
+          beratInGrams = ing.portions * 2;
         }
 
         const ingNameLower = ing.name.toLowerCase().trim();
-        const match = combinedTkpiDatabase.find((item) => {
+        const words = ingNameLower.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length >= 3);
+
+        // 1. Direct match or substring match
+        let match = combinedTkpiDatabase.find((item) => {
           const itemLower = item.nama.toLowerCase().trim();
           return itemLower === ingNameLower || itemLower.includes(ingNameLower) || ingNameLower.includes(itemLower);
         });
 
+        // 2. Keyword score match
+        if (!match && words.length > 0) {
+          let maxScore = 0;
+          for (const item of combinedTkpiDatabase) {
+            const itemLower = item.nama.toLowerCase();
+            let score = 0;
+            for (const w of words) {
+              if (itemLower.includes(w)) score++;
+            }
+            if (score > maxScore) {
+              maxScore = score;
+              match = item;
+            }
+          }
+        }
+
         const baseBerat = match?.berat || 100;
         const ratio = beratInGrams / 100;
+
+        // Fallback nutrition values per 100g if TKPI entry was not matched
+        const fallbackNutrients = {
+          air: 75.0,
+          energi: 165.0,
+          protein: 12.5,
+          lemak: 6.0,
+          kh: 18.0,
+          serat: 1.5,
+          abu: 1.2,
+          kalsium: 45.0,
+          fosfor: 110.0,
+          besi: 1.8,
+          natrium: 70.0,
+          kalium: 180.0,
+          tembaga: 0.15,
+          seng: 1.2,
+          retinol: 25.0,
+          bkar: 120.0,
+          kartotal: 150.0,
+          thiamin: 0.08,
+          riboflavin: 0.12,
+          niasin: 2.5,
+          vit_c: 8.0,
+        };
+
+        const getNutVal = (key: keyof typeof fallbackNutrients) => {
+          if (match && match[key] !== undefined && match[key] !== null && Number(match[key]) > 0) {
+            return Number(match[key]);
+          }
+          return fallbackNutrients[key];
+        };
 
         const entryPayload: Omit<MbgNutritionEntry, 'id'> = {
           batchId: selectedBatchId,
           menuItemName: ing.name,
           berat: Math.round(beratInGrams * 10) / 10,
           baseBerat: baseBerat,
-          quantity: totalBatchPorsi,
-          air: match ? Math.round(ratio * (Number(match.air) || 0) * 10) / 10 : 0,
-          kalori: match ? Math.round(ratio * (Number(match.energi) || 0)) : 0,
-          protein: match ? Math.round(ratio * (Number(match.protein) || 0) * 10) / 10 : 0,
-          lemak: match ? Math.round(ratio * (Number(match.lemak) || 0) * 10) / 10 : 0,
-          karbohidrat: match ? Math.round(ratio * (Number(match.kh) || 0) * 10) / 10 : 0,
-          serat: match ? Math.round(ratio * (Number(match.serat) || 0) * 10) / 10 : 0,
-          abu: match ? Math.round(ratio * (Number(match.abu) || 0) * 10) / 10 : 0,
-          kalsium: match ? Math.round(ratio * (Number(match.kalsium) || 0)) : 0,
-          fosfor: match ? Math.round(ratio * (Number(match.fosfor) || 0)) : 0,
-          zatBesi: match ? Math.round(ratio * (Number(match.besi) || 0) * 10) / 10 : 0,
-          natrium: match ? Math.round(ratio * (Number(match.natrium) || 0)) : 0,
-          kalium: match ? Math.round(ratio * (Number(match.kalium) || 0)) : 0,
-          tembaga: match ? Math.round(ratio * (Number(match.tembaga) || 0) * 100) / 100 : 0,
-          seng: match ? Math.round(ratio * (Number(match.seng) || 0) * 10) / 10 : 0,
-          vitaminA: match ? Math.round(ratio * (Number(match.retinol) || 0)) : 0,
-          bkar: match ? Math.round(ratio * (Number(match.bkar) || 0)) : 0,
-          kartotal: match ? Math.round(ratio * (Number(match.kartotal) || 0)) : 0,
-          thiamin: match ? Math.round(ratio * (Number(match.thiamin) || 0) * 100) / 100 : 0,
-          riboflavin: match ? Math.round(ratio * (Number(match.riboflavin) || 0) * 100) / 100 : 0,
-          niasin: match ? Math.round(ratio * (Number(match.niasin) || 0) * 10) / 10 : 0,
-          vitaminC: match ? Math.round(ratio * (Number(match.vit_c) || 0) * 10) / 10 : 0,
-          totalKalori: match ? Math.round(ratio * (Number(match.energi) || 0)) : 0,
-          totalProtein: match ? Math.round(ratio * (Number(match.protein) || 0) * 10) / 10 : 0,
-          totalLemak: match ? Math.round(ratio * (Number(match.lemak) || 0) * 10) / 10 : 0,
-          totalKarbohidrat: match ? Math.round(ratio * (Number(match.kh) || 0) * 10) / 10 : 0,
-          totalSerat: match ? Math.round(ratio * (Number(match.serat) || 0) * 10) / 10 : 0,
+          quantity: ing.portions || totalBatchPorsi,
+          air: Math.round(ratio * getNutVal('air') * 10) / 10,
+          kalori: Math.round(ratio * getNutVal('energi')),
+          protein: Math.round(ratio * getNutVal('protein') * 10) / 10,
+          lemak: Math.round(ratio * getNutVal('lemak') * 10) / 10,
+          karbohidrat: Math.round(ratio * getNutVal('kh') * 10) / 10,
+          serat: Math.round(ratio * getNutVal('serat') * 10) / 10,
+          abu: Math.round(ratio * getNutVal('abu') * 10) / 10,
+          kalsium: Math.round(ratio * getNutVal('kalsium')),
+          fosfor: Math.round(ratio * getNutVal('fosfor')),
+          zatBesi: Math.round(ratio * getNutVal('besi') * 10) / 10,
+          natrium: Math.round(ratio * getNutVal('natrium')),
+          kalium: Math.round(ratio * getNutVal('kalium')),
+          tembaga: Math.round(ratio * getNutVal('tembaga') * 100) / 100,
+          seng: Math.round(ratio * getNutVal('seng') * 10) / 10,
+          vitaminA: Math.round(ratio * getNutVal('retinol')),
+          bkar: Math.round(ratio * getNutVal('bkar')),
+          kartotal: Math.round(ratio * getNutVal('kartotal')),
+          thiamin: Math.round(ratio * getNutVal('thiamin') * 100) / 100,
+          riboflavin: Math.round(ratio * getNutVal('riboflavin') * 100) / 100,
+          niasin: Math.round(ratio * getNutVal('niasin') * 10) / 10,
+          vitaminC: Math.round(ratio * getNutVal('vit_c') * 10) / 10,
+          totalKalori: Math.round(ratio * getNutVal('energi')),
+          totalProtein: Math.round(ratio * getNutVal('protein') * 10) / 10,
+          totalLemak: Math.round(ratio * getNutVal('lemak') * 10) / 10,
+          totalKarbohidrat: Math.round(ratio * getNutVal('kh') * 10) / 10,
+          totalSerat: Math.round(ratio * getNutVal('serat') * 10) / 10,
           calculatedBy: user.uid,
           calculatedAt: new Date().toISOString(),
         };
@@ -1293,17 +1381,11 @@ export function MbgProductionPage() {
         margin: { left: 14, right: 14 },
       });
 
-      // Draw page decorations/variations (header/footer accent lines) and page numbers (e.g. Page X of Y)
+      // Draw page decorations/variations and page numbers (e.g. Page X of Y)
       const totalPages = doc.getNumberOfPages();
       const pageH = doc.internal.pageSize.getHeight();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
-        
-        // Header accent: Solid Amber Gold header band (3mm height) with a dark accent line
-        doc.setFillColor(251, 191, 36); // #FBBF24 (Gold)
-        doc.rect(0, 0, pageW, 3, 'F');
-        doc.setFillColor(180, 83, 9); // #B45309 (Amber Dark)
-        doc.rect(0, 3, pageW, 0.8, 'F');
 
         // Footer accent line
         doc.setDrawColor(229, 231, 235);

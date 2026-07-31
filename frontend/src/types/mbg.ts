@@ -89,6 +89,8 @@ export interface MbgPmEntry {
   assignedPetugasId: string;
   /** Display name kurir */
   assignedPetugasName: string;
+  /** Display name kenek (asisten kurir) — display only, no login */
+  assignedKenekName?: string;
   /** Daftar menu reguler */
   menuItems: string[];
   /** Daftar menu keringan untuk pobia nasi */
@@ -130,6 +132,14 @@ export interface MbgPmEntry {
   photoMenuUrl?: string;
   /** Deskripsi foto menu */
   photoMenuDesc?: string;
+  /** Foto Penyerahan dengan Penanggung Jawab Penerima (PJ Sekolah / Posyandu / Guru / Kader) */
+  photoPenerimaUrl?: string;
+  /** Deskripsi foto penanggung jawab penerima */
+  photoPenerimaDesc?: string;
+  /** Timestamp foto penanggung jawab penerima */
+  photoPenerimaTimestamp?: string;
+  /** Geotag lokasi foto penanggung jawab penerima */
+  photoPenerimaLocation?: string;
   /** Foto Serah Terima di lokasi penerima */
   photoSerahTerimaUrl?: string;
   /** Deskripsi foto serah terima */
@@ -407,6 +417,10 @@ export interface MbgDeliveryTask {
   petugasId: string;
   /** Display name: "Rahmat Dede", "Erik Yusep", "Yendi Firdi" */
   petugasName: string;
+  /** UID kenek (asisten kurir) */
+  kenekId?: string;
+  /** Display name kenek */
+  kenekName?: string;
   /** List PM entry IDs assigned to this petugas */
   entryIds: string[];
   /** Total porsi for this petugas */
@@ -452,5 +466,48 @@ export interface MbgWeeklyScheduleConfig {
   days: MbgDayMenu[];
   updatedAt: string;
   updatedBy: string;
+}
+
+// === SUB PURCHASING ===
+
+/** Satu item belanja dalam tugas sub_purchasing */
+export interface MbgSubPurchasingItem {
+  bahanName: string;
+  jumlah: number;
+  satuan: string;
+  hargaSatuan: number;
+  totalHarga: number;
+  keterangan: string;
+  /** Foto bukti per bahan */
+  photoUrl?: string;
+  /** Status: belum_beli / sudah_beli */
+  status: 'belum_beli' | 'sudah_beli';
+}
+
+/** Tugas belanja yang di-assign purchasing ke sub_purchasing */
+export interface MbgSubPurchasingTask {
+  id: string;
+  batchId: string;
+  /** ID Purchase Order asal */
+  purchaseOrderId: string;
+  /** Nama supplier asal PO */
+  supplierName: string;
+  /** UID sub_purchasing yang ditugaskan */
+  assignedTo: string;
+  /** Display name sub_purchasing */
+  assignedToName: string;
+  /** Daftar bahan yang harus dibelanjakan */
+  items: MbgSubPurchasingItem[];
+  /** Total pengeluaran sub_purchasing */
+  totalPengeluaran: number;
+  /** Status keseluruhan: pending / in_progress / completed */
+  status: 'pending' | 'in_progress' | 'completed';
+  /** Catatan dari purchasing */
+  notes: string;
+  assignedBy: string;
+  assignedAt: string;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 

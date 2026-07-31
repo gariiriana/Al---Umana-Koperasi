@@ -20,6 +20,7 @@ import { subscribePurchaseOrders } from '@/services/mbgPurchasingService';
 import { updateBatchStatus } from '@/services/mbgAdminService';
 import { MBG_COOKING_PHOTO_TEMPLATES, MBG_COOKING_STATUS_CONFIG, NUTRIENTS_LIST } from '@/constants/mbgConstants';
 import { LiveCamera } from '@/components/LiveCamera';
+import { compressBase64Image } from '@/utils/imageCompressor';
 
 export function MbgCookingPage() {
   const { user } = useAuth();
@@ -36,6 +37,7 @@ export function MbgCookingPage() {
   const [selectedDescription, setSelectedDescription] = useState<string>(MBG_COOKING_PHOTO_TEMPLATES[0]);
   const [activeSession, setActiveSession] = useState<MbgCookingSession | null>(null);
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
 
   const selectedBatch = useMemo(() => {
@@ -92,12 +94,17 @@ export function MbgCookingPage() {
     setShowCamera(false);
     let photoUrl = '';
     if (file) {
-      photoUrl = await new Promise<string>((resolve) => {
+      if (file.size > 10 * 1024 * 1024) {
+        showToast({ message: 'Ukuran foto melebihi limit 10MB!', variant: 'error' });
+        return;
+      }
+      const rawUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.onerror = () => resolve('');
         reader.readAsDataURL(file);
       });
+      photoUrl = await compressBase64Image(rawUrl, 600, 600, 0.6);
     }
     const fakeFileId = `photo_${Date.now()}`;
     try {
@@ -107,9 +114,9 @@ export function MbgCookingPage() {
         capturedAt: new Date().toISOString(),
         url: photoUrl || undefined,
       });
-      showToast({ message: 'Foto berhasil ditambahkan!', variant: 'success' });
+      showToast({ message: 'Foto berhasil disimpan ke Firestore!', variant: 'success' });
     } catch {
-      showToast({ message: 'Gagal menambah foto', variant: 'error' });
+      showToast({ message: 'Gagal menyimpan foto', variant: 'error' });
     }
   };
 
@@ -282,17 +289,11 @@ export function MbgCookingPage() {
         margin: { left: 14, right: 14 },
       });
 
-      // Draw page decorations/variations (header/footer accent lines) and page numbers (e.g. Page X of Y)
+      // Draw page decorations and page numbers
       const totalPages = doc.getNumberOfPages();
       const pageH = doc.internal.pageSize.getHeight();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
-        
-        // Header accent: Solid Amber Gold header band (3mm height) with a dark accent line
-        doc.setFillColor(251, 191, 36); // #FBBF24 (Gold)
-        doc.rect(0, 0, pageW, 3, 'F');
-        doc.setFillColor(180, 83, 9); // #B45309 (Amber Dark)
-        doc.rect(0, 3, pageW, 0.8, 'F');
 
         // Footer accent line
         doc.setDrawColor(229, 231, 235);
@@ -404,38 +405,73 @@ export function MbgCookingPage() {
                                 className="hidden"
                                 disabled={isUploadingPhotos}
                                 onChange={async (e) => {
-                                  const files = Array.from(e.target.files || []);
-                                  if (files.length > 0 && activeSession) {
-                                    setIsUploadingPhotos(true);
-                                    try {
-                                      const newPhotos: MbgCookingPhoto[] = [];
-                                      for (let i = 0; i < files.length; i++) {
-                                        const file = files[i];
-                                        const url = await new Promise<string>((resolve) => {
-                                          const reader = new FileReader();
-                                          reader.onload = () => resolve(reader.result as string);
-                                          reader.onerror = () => resolve('');
-                                          reader.readAsDataURL(file);
-                                        });
-                                        newPhotos.push({
+                                  const rawFiles = Array.from(e.target.files || []);
+                                  if (rawFiles.length === 0 || !activeSession) return;
+
+                                  // Validate 10MB limit per file
+                                  const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+                                  const validFiles: File[] = [];
+                                  for (const file of rawFiles) {
+                                    if (file.size > MAX_SIZE) {
+                                      showToast({
+                                        message: `Foto "${file.name}" melebihi limit 10MB!`,
+                                        variant: 'error',
+                                      });
+                                    } else {
+                                      validFiles.push(file);
+                                    }
+                                  }
+
+                                  if (validFiles.length === 0) {
+                                    e.target.value = '';
+                                    return;
+                                  }
+
+                                  setIsUploadingPhotos(true);
+                                  setUploadProgress({ current: 0, total: validFiles.length });
+
+                                  try {
+                                    const compressedPhotos: MbgCookingPhoto[] = [];
+                                    for (let i = 0; i < validFiles.length; i++) {
+                                      const file = validFiles[i];
+                                      setUploadProgress({ current: i + 1, total: validFiles.length });
+
+                                      // Allow UI to repaint
+                                      await new Promise((r) => setTimeout(r, 20));
+
+                                      const rawUrl = await new Promise<string>((resolve) => {
+                                        const reader = new FileReader();
+                                        reader.onload = () => resolve((reader.result as string) || '');
+                                        reader.onerror = () => resolve('');
+                                        reader.readAsDataURL(file);
+                                      });
+
+                                      if (rawUrl) {
+                                        // Compress to clear 600px / 0.6 quality (~30-50KB per image)
+                                        const url = await compressBase64Image(rawUrl, 600, 600, 0.6);
+                                        compressedPhotos.push({
                                           fileId: `photo_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}`,
                                           description: selectedDescription,
                                           capturedAt: new Date().toISOString(),
                                           url: url || undefined,
                                         });
                                       }
-                                      await addCookingPhotos(activeSession.id, activeSession.photos, newPhotos);
+                                    }
+
+                                    if (compressedPhotos.length > 0) {
+                                      await addCookingPhotos(activeSession.id, activeSession.photos, compressedPhotos);
                                       showToast({
-                                        message: `${newPhotos.length} foto dari device berhasil diunggah!`,
+                                        message: `${compressedPhotos.length} foto berhasil disimpan ke Firestore Database!`,
                                         variant: 'success',
                                       });
-                                    } catch (err) {
-                                      console.error('Error uploading photos:', err);
-                                      showToast({ message: 'Gagal mengunggah foto', variant: 'error' });
-                                    } finally {
-                                      setIsUploadingPhotos(false);
-                                      e.target.value = '';
                                     }
+                                  } catch (err) {
+                                    console.error('Error uploading photos to Firestore:', err);
+                                    showToast({ message: 'Gagal mengunggah foto ke Firestore', variant: 'error' });
+                                  } finally {
+                                    setIsUploadingPhotos(false);
+                                    setUploadProgress(null);
+                                    e.target.value = '';
                                   }
                                 }}
                               />
@@ -544,6 +580,67 @@ export function MbgCookingPage() {
               <X className="h-6 w-6" />
             </button>
             <img src={previewPhotoUrl} alt="Preview Foto Dokumentasi" className="w-full h-auto max-h-[85vh] object-contain rounded-xl" />
+          </div>
+        </div>
+      )}
+
+      {/* Upload Progress Modal */}
+      {uploadProgress && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm flex flex-col items-center gap-5">
+            {/* Animated spinner */}
+            <div className="relative flex items-center justify-center w-16 h-16">
+              <div className="absolute inset-0 rounded-full border-4 border-[#FDE68A]" />
+              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-[#F59E0B] animate-spin" />
+              <Upload className="h-6 w-6 text-[#F59E0B]" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#0284C7]">
+                🔥 Firestore Database
+              </p>
+              <p className="text-sm font-bold text-[#111827]">
+                Memproses & Menyimpan Foto
+              </p>
+              <p className="text-2xl font-extrabold text-[#EA580C]">
+                {uploadProgress.current} / {uploadProgress.total}
+              </p>
+              <p className="text-xs text-[#6B7280]">
+                {uploadProgress.current < uploadProgress.total
+                  ? `Memproses foto ${uploadProgress.current} dari ${uploadProgress.total}...`
+                  : 'Menyimpan ke Firestore...'}
+              </p>
+            </div>
+
+            {/* Progress bar */}
+            <div className="w-full bg-[#F3F4F6] rounded-full h-2.5 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-300 bg-gradient-to-r from-[#FBBF24] to-[#EA580C]"
+                style={{
+                  width: `${(uploadProgress.current / uploadProgress.total) * 100}%`,
+                }}
+              />
+            </div>
+
+            {/* Thumbnail indicators */}
+            <div className="flex gap-1.5 flex-wrap justify-center">
+              {Array.from({ length: uploadProgress.total }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-7 h-7 rounded-md flex items-center justify-center text-[9px] font-bold transition-all duration-200 ${
+                    i < uploadProgress.current
+                      ? 'bg-[#059669] text-white scale-110'
+                      : i === uploadProgress.current
+                      ? 'bg-[#F59E0B] text-white animate-pulse'
+                      : 'bg-[#E5E7EB] text-[#9CA3AF]'
+                  }`}
+                >
+                  {i < uploadProgress.current ? '✓' : i + 1}
+                </div>
+              ))}
+            </div>
+
+            <p className="text-[10px] text-[#9CA3AF] text-center">Batas max 10MB / foto • Simpan langsung ke Firestore</p>
           </div>
         </div>
       )}

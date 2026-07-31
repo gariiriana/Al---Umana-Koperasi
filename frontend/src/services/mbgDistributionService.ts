@@ -77,3 +77,40 @@ export async function addDeliveryTask(task: Omit<MbgDeliveryTask, 'id'>): Promis
 export async function updateDeliveryTask(id: string, updates: Partial<MbgDeliveryTask>): Promise<void> {
   await updateDoc(doc(db, DELIVERY_COLLECTION, id), { ...updates, updatedAt: new Date().toISOString() });
 }
+
+// ---- Kurir Users ----
+
+export interface MbgKurirUser {
+  uid: string;
+  name: string;
+  email: string;
+}
+
+export function subscribeKurirUsers(
+  callback: (kurirs: MbgKurirUser[]) => void
+): Unsubscribe {
+  const colRef = collection(db, 'users');
+  const q = query(colRef, where('role', '==', 'kurir_mbg'));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((docSnap) => {
+        const data = docSnap.data();
+        let name = data.displayName || data.fullName || data.name;
+        if (!name && data.email) {
+          name = data.email.split('@')[0];
+        }
+        return {
+          uid: docSnap.id,
+          name: name || 'Kurir MBG',
+          email: data.email || '',
+        };
+      });
+      callback(list);
+    },
+    (err) => {
+      console.error('Failed to subscribe kurir_mbg users:', err);
+      callback([]);
+    }
+  );
+}

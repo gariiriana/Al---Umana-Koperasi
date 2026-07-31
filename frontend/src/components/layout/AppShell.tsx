@@ -85,7 +85,7 @@ export function AppShell({
         onClose={() => setIsMobileSidebarOpen(false)}
       />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 md:pl-60">
         {/* ── Top header ─────────────────────────────────────────── */}
         <header className="sticky top-0 z-30 bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-white shadow-md px-2.5 py-2 md:px-4 md:py-3 flex items-center justify-between gap-1.5 md:gap-4 font-['Hanken_Grotesk',system-ui,sans-serif] inset-x-0">
           {/* Left: Logo & Cooperative Name */}

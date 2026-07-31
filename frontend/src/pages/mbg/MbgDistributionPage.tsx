@@ -1,95 +1,124 @@
-import { useEffect, useState, useMemo, Fragment } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ClipboardCheck,
   Truck,
   Calendar,
-  Check,
-  X,
   Loader2,
-  UserCheck,
   Building2,
-  ChefHat,
   FileDown,
   FileText,
-  Image as ImageIcon,
+  Users,
+  X,
+  Send,
+  Search,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { exportDistributionToDocx } from '@/utils/docxExporter';
-import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type {
   MbgPmBatch,
   MbgPmEntry,
-  MbgPurchaseOrder,
-  MbgQcCheck,
-  MbgQcItemCheck,
   MbgDeliveryTask,
 } from '@/types/mbg';
-import { subscribeBatches, subscribeEntries, updateEntry, updateBatchStatus } from '@/services/mbgAdminService';
-import { subscribePurchaseOrders } from '@/services/mbgPurchasingService';
+import { subscribeBatches, subscribeEntries, updateEntry } from '@/services/mbgAdminService';
 import {
-  subscribeQcChecks,
-  addQcCheck,
-  updateQcCheck,
   subscribeDeliveryTasks,
   addDeliveryTask,
   updateDeliveryTask,
+  subscribeKurirUsers,
+  type MbgKurirUser,
 } from '@/services/mbgDistributionService';
+import { subscribeAllDeliveryDocuments, type MbgDeliveryDocument } from '@/services/mbgDeliveryService';
 import { SearchableBatchSelector } from '@/components/mbg/SearchableBatchSelector';
-import { MBG_SATUAN_OPTIONS } from '@/constants/mbgConstants';
-import porsiStandardData from '@/constants/standarPorsi.json';
-import resepStandardData from '@/constants/standarResep.json';
 
-interface StandarPorsi {
-  kode: number;
-  jenisMenu: string;
-  namaMenu: string;
-  bahanUtama: string;
-  porsiKecil: number;
-  porsiBesar: number;
-}
-
-interface StandarResep {
-  namaMenu: string;
-  jenisMenu: string;
-  mainBahan: string;
-  baseQty: number;
-  satuanMainBahan: string;
-  ingredients: {
-    bahan: string;
-    kebutuhan: number;
-    satuan: string;
-  }[];
-}
-
-const standarPorsi = porsiStandardData as StandarPorsi[];
-const standarResep = resepStandardData as StandarResep[];
+const MBG_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Badan_Gizi_Nasional.svg/1200px-Badan_Gizi_Nasional.svg.png';
 
 export function MbgDistributionPage() {
-  const { user } = useAuth();
   const { showToast } = useToast();
 
   const [batches, setBatches] = useState<MbgPmBatch[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [entries, setEntries] = useState<MbgPmEntry[]>([]);
-  const [orders, setOrders] = useState<MbgPurchaseOrder[]>([]);
-  const [qcChecks, setQcChecks] = useState<MbgQcCheck[]>([]);
   const [deliveryTasks, setDeliveryTasks] = useState<MbgDeliveryTask[]>([]);
+  const [deliveryDocs, setDeliveryDocs] = useState<MbgDeliveryDocument[]>([]);
+  const [kurirUsers, setKurirUsers] = useState<MbgKurirUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'qc' | 'receiving' | 'assignment'>('qc');
+  const [activeTab, setActiveTab] = useState<'assignment' | 'reports'>('assignment');
 
-  // QC modal state
-  const [selectedOrderForQc, setSelectedOrderForQc] = useState<MbgPurchaseOrder | null>(null);
-  const [qcItems, setQcItems] = useState<MbgQcItemCheck[]>([]);
-  const [qcNotes, setQcNotes] = useState('');
-  const [qcOverallStatus, setQcOverallStatus] = useState<'passed' | 'failed'>('passed');
+  // Per-institution assignment modal
+  const [assignModalEntry, setAssignModalEntry] = useState<MbgPmEntry | null>(null);
+  const [assignKurirName, setAssignKurirName] = useState('');
+  const [assignKenekName, setAssignKenekName] = useState('');
 
-  // Edit kurir assignment modal state (per batch group)
-  const [editingGroupKey, setEditingGroupKey] = useState<string | null>(null);
-  const [editingEntriesGroup, setEditingEntriesGroup] = useState<MbgPmEntry[]>([]);
-  const [newPetugasName, setNewPetugasName] = useState('');
+  // Multi-select bulk assignment state
+  const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
+  const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false);
+  const [bulkKurirName, setBulkKurirName] = useState('');
+  const [bulkKenekName, setBulkKenekName] = useState('');
+  const [isSubmittingBulk, setIsSubmittingBulk] = useState(false);
+
+  const toggleSelectEntry = (id: string) => {
+    setSelectedEntryIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllGroup = (groupEntries: MbgPmEntry[]) => {
+    const groupIds = groupEntries.map((e) => e.id);
+    const allSelected = groupIds.every((id) => selectedEntryIds.includes(id));
+
+    if (allSelected) {
+      setSelectedEntryIds((prev) => prev.filter((id) => !groupIds.includes(id)));
+    } else {
+      setSelectedEntryIds((prev) => Array.from(new Set([...prev, ...groupIds])));
+    }
+  };
+
+  const handleBulkAssignSubmit = async () => {
+    if (!bulkKurirName) {
+      showToast({ message: 'Pilih nama Kurir MBG terlebih dahulu', variant: 'info' });
+      return;
+    }
+    if (selectedEntryIds.length === 0) return;
+
+    setIsSubmittingBulk(true);
+    try {
+      await Promise.all(
+        selectedEntryIds.map((id) =>
+          updateEntry(id, {
+            assignedPetugasName: bulkKurirName,
+            assignedKenekName: bulkKenekName,
+          })
+        )
+      );
+      showToast({
+        message: `Penugasan ${selectedEntryIds.length} institusi ke ${bulkKurirName} berhasil!`,
+        variant: 'success',
+      });
+      setSelectedEntryIds([]);
+      setIsBulkAssignOpen(false);
+      setBulkKurirName('');
+      setBulkKenekName('');
+    } catch (err) {
+      console.error('Bulk assign error:', err);
+      showToast({ message: 'Gagal memperbarui penugasan institusi', variant: 'error' });
+    } finally {
+      setIsSubmittingBulk(false);
+    }
+  };
+
+  // Subscribe users with role 'kurir_mbg'
+  useEffect(() => {
+    const unsub = subscribeKurirUsers(setKurirUsers);
+    return unsub;
+  }, []);
+
+  const kurirOptions = useMemo(() => {
+    if (kurirUsers.length > 0) {
+      return kurirUsers.map((u) => u.name);
+    }
+    return ['Dede Kurir', 'Andi Kurir', 'Erik Kurir', 'Yusep Kurir', 'Agus Kurir', 'Firdi Kurir'];
+  }, [kurirUsers]);
 
   // Subscribe batches
   useEffect(() => {
@@ -109,170 +138,39 @@ export function MbgDistributionPage() {
   useEffect(() => {
     if (!selectedBatchId) return;
     const unsub1 = subscribeEntries(selectedBatchId, setEntries);
-    const unsub2 = subscribePurchaseOrders(selectedBatchId, setOrders);
-    const unsub3 = subscribeQcChecks(selectedBatchId, setQcChecks);
-    const unsub4 = subscribeDeliveryTasks(selectedBatchId, setDeliveryTasks);
+    const unsub2 = subscribeDeliveryTasks(selectedBatchId, setDeliveryTasks);
     return () => {
       unsub1();
       unsub2();
-      unsub3();
-      unsub4();
     };
   }, [selectedBatchId]);
 
-  // Fallback calculation for ingredients if orders collection is empty in Firestore
-  const fallbackIngredients = useMemo(() => {
-    if (entries.length === 0) return [];
-    const rawIngredients: Record<
-      string,
-      { name: string; amount: number; satuan: string; sourceMenus: string[] }
-    > = {};
+  // Subscribe delivery documents (for reports tab)
+  useEffect(() => {
+    const unsub = subscribeAllDeliveryDocuments(setDeliveryDocs);
+    return unsub;
+  }, []);
 
-    const menuMainTotals: Record<string, { totalQty: number; countKecil: number; countBesar: number }> = {};
+  // Search & Filter state for Laporan Kurir in Distribusi MBG
+  const [distribSearchQuery, setDistribSearchQuery] = useState('');
 
-    entries.forEach((entry) => {
-      if (entry.isSekolahLibur) return;
-      const qtyKecil = entry.qtSiswaBalita || 0;
-      const qtyBesar = (entry.qtBumilBusui || 0) + (entry.qtGuruKader || 0);
+  // Filter delivery docs for selected batch & search query
+  const batchDeliveryDocs = useMemo(() => {
+    if (!selectedBatchId) return deliveryDocs;
+    return deliveryDocs.filter((d) => d.batchId === selectedBatchId);
+  }, [deliveryDocs, selectedBatchId]);
 
-      const items = [...(entry.menuItems || []), ...(entry.menuKeringanItems || [])];
-
-      items.forEach((menuName) => {
-        const porsiCfg = standarPorsi.find(
-          (p) => p.namaMenu.toLowerCase().trim() === menuName.toLowerCase().trim()
-        );
-        const portionSize = porsiCfg ? (qtyKecil * porsiCfg.porsiKecil + qtyBesar * porsiCfg.porsiBesar) : 0;
-        const weight = portionSize;
-
-        const normName = menuName.trim();
-        if (!menuMainTotals[normName]) {
-          menuMainTotals[normName] = { totalQty: 0, countKecil: 0, countBesar: 0 };
-        }
-        menuMainTotals[normName].totalQty += weight;
-        menuMainTotals[normName].countKecil += qtyKecil;
-        menuMainTotals[normName].countBesar += qtyBesar;
-      });
+  const filteredBatchDeliveryDocs = useMemo(() => {
+    if (!distribSearchQuery.trim()) return batchDeliveryDocs;
+    const q = distribSearchQuery.toLowerCase().trim();
+    return batchDeliveryDocs.filter((d) => {
+      const matchPetugas = d.petugasName?.toLowerCase().includes(q);
+      const matchTanggal = d.tanggalBatch?.toLowerCase().includes(q);
+      const matchFile = d.fileName?.toLowerCase().includes(q);
+      return matchPetugas || matchTanggal || matchFile;
     });
+  }, [batchDeliveryDocs, distribSearchQuery]);
 
-    Object.entries(menuMainTotals).forEach(([menuName, totals]) => {
-      const recipe = standarResep.find(
-        (r) => r.namaMenu.toLowerCase().trim() === menuName.toLowerCase().trim()
-      );
-
-      if (recipe && recipe.baseQty > 0) {
-        const ratio = totals.totalQty / recipe.baseQty;
-        recipe.ingredients.forEach((ing) => {
-          const key = ing.bahan.toLowerCase().trim();
-          if (!rawIngredients[key]) {
-            rawIngredients[key] = { name: ing.bahan, amount: 0, satuan: ing.satuan, sourceMenus: [] };
-          }
-          rawIngredients[key].amount += ing.kebutuhan * ratio;
-          if (!rawIngredients[key].sourceMenus.includes(menuName)) {
-            rawIngredients[key].sourceMenus.push(menuName);
-          }
-        });
-      } else {
-        const porsiCfg = standarPorsi.find(
-          (p) => p.namaMenu.toLowerCase().trim() === menuName.toLowerCase().trim()
-        );
-        const name = porsiCfg ? porsiCfg.bahanUtama : menuName;
-        const key = name.toLowerCase().trim();
-        const totalPortions = totals.countKecil + totals.countBesar;
-
-        if (!rawIngredients[key]) {
-          const isUnitItem = porsiCfg && porsiCfg.porsiKecil === 1;
-          rawIngredients[key] = {
-            name,
-            amount: 0,
-            satuan: isUnitItem ? 'pcs' : 'g',
-            sourceMenus: [],
-          };
-        }
-        rawIngredients[key].amount += totals.totalQty || totalPortions;
-        if (!rawIngredients[key].sourceMenus.includes(menuName)) {
-          rawIngredients[key].sourceMenus.push(menuName);
-        }
-      }
-    });
-
-    return Object.values(rawIngredients).map((r) => {
-      let qty = r.amount;
-      let unit = 'Kg';
-
-      const sLower = r.satuan.toLowerCase();
-      if (sLower === 'g') {
-        if (r.amount >= 1000) {
-          qty = r.amount / 1000;
-          unit = 'Kg';
-        } else {
-          qty = r.amount;
-          unit = 'g';
-        }
-      } else if (sLower === 'ml') {
-        if (r.amount >= 1000) {
-          qty = r.amount / 1000;
-          unit = 'Liter';
-        } else {
-          qty = r.amount;
-          unit = 'ml';
-        }
-      } else if (sLower === 'pcs') {
-        unit = 'Pcs';
-      } else if (sLower === 'ikat') {
-        unit = 'Ikat';
-      } else if (sLower === 'siung' || sLower === 'lembar') {
-        unit = 'Pcs';
-      } else {
-        const matched = MBG_SATUAN_OPTIONS.find((opt) => opt.toLowerCase() === sLower);
-        unit = matched || 'Kg';
-      }
-
-      qty = Math.round(qty * 100) / 100;
-
-      return {
-        bahanName: r.name,
-        jamKedatangan: '08:00',
-        jumlah: qty,
-        satuan: unit,
-        hargaSatuan: 0,
-        totalHarga: 0,
-        keterangan: `Resep: ${r.sourceMenus.slice(0, 2).join(', ')}`,
-      };
-    });
-  }, [entries]);
-
-  const effectiveOrders = useMemo(() => {
-    if (orders.length > 0) return orders;
-    if (fallbackIngredients.length === 0) return [];
-    const fallbackPo: MbgPurchaseOrder = {
-      id: `fallback_${selectedBatchId}`,
-      batchId: selectedBatchId || '',
-      supplierId: 'pasar_utama',
-      supplierName: 'PASAR / SUPPLIER UTAMA',
-      type: 'harian',
-      targetDate: new Date().toISOString().split('T')[0],
-      groupLabel: 'Pesanan A',
-      items: fallbackIngredients,
-      totalPengeluaran: 0,
-      status: 'ordered',
-      orderedBy: 'system',
-      orderedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    return [fallbackPo];
-  }, [orders, fallbackIngredients, selectedBatchId]);
-
-  // Group PO items by supplier for receiving tab
-  const receivingData = useMemo(() => {
-    return effectiveOrders.map((order) => ({
-      supplierName: order.supplierName,
-      status: order.status,
-      groupLabel: order.groupLabel,
-      items: order.items,
-    }));
-  }, [effectiveOrders]);
-  
   // Group PM entries by petugas
   const groupedEntries = useMemo(() => {
     const groups: Record<string, MbgPmEntry[]> = {};
@@ -289,237 +187,46 @@ export function MbgDistributionPage() {
     return entries.some((e) => e.menuKeringanItems && e.menuKeringanItems.length > 0);
   }, [entries]);
 
-  // Handle open QC modal
-  const handleOpenQc = (order: MbgPurchaseOrder) => {
-    const existingCheck = qcChecks.find((c) => c.purchaseOrderId === order.id);
-    setSelectedOrderForQc(order);
-    setQcNotes(existingCheck?.notes || '');
-    setQcOverallStatus(existingCheck?.overallStatus === 'failed' ? 'failed' : 'passed');
-
-    if (existingCheck) {
-      setQcItems(existingCheck.items);
-    } else {
-      // Build initial checklist
-      const initialItems = order.items.map((item) => ({
-        bahanName: item.bahanName,
-        jumlahOrdered: item.jumlah,
-        jumlahReceived: item.jumlah,
-        satuanOrdered: item.satuan,
-        isJumlahOk: true,
-        isKualitasOk: true,
-        isQuantityOk: true,
-        isKesesuaianOk: true,
-        isFreshOk: true,
-        isPackagingOk: true,
-        failReason: '',
-        status: 'ok' as const,
-      }));
-      setQcItems(initialItems);
-    }
+  // Open assign modal for a specific institution entry
+  const handleOpenAssign = (entry: MbgPmEntry) => {
+    setAssignModalEntry(entry);
+    setAssignKurirName(entry.assignedPetugasName || '');
+    setAssignKenekName(entry.assignedKenekName || '');
   };
 
-  const handleToggleItemCheck = (index: number, field: keyof Omit<MbgQcItemCheck, 'bahanName' | 'satuanOrdered' | 'failReason' | 'status'>) => {
-    setQcItems((prev) =>
-      prev.map((item, idx) => {
-        if (idx !== index) return item;
-        const updated = { ...item, [field]: !item[field] };
-        
-        // Auto update status based on check flags
-        const isOk =
-          updated.isJumlahOk &&
-          updated.isKualitasOk &&
-          updated.isQuantityOk &&
-          updated.isKesesuaianOk &&
-          updated.isFreshOk &&
-          updated.isPackagingOk;
-        updated.status = isOk ? 'ok' : 'rejected';
-        
-        return updated;
-      })
-    );
-  };
-
-  const handleItemReasonChange = (index: number, reason: string) => {
-    setQcItems((prev) =>
-      prev.map((item, idx) => (idx === index ? { ...item, failReason: reason } : item))
-    );
-  };
-
-  const handleItemQtyReceivedChange = (index: number, val: number) => {
-    setQcItems((prev) =>
-      prev.map((item, idx) => (idx === index ? { ...item, jumlahReceived: val } : item))
-    );
-  };
-
-  const handleSubmitQc = async () => {
-    if (!selectedOrderForQc || !selectedBatchId || !user) return;
+  const handleSaveAssignment = async () => {
+    if (!assignModalEntry || !assignKurirName.trim()) return;
+    const cleanKurir = assignKurirName.trim();
+    const cleanKenek = assignKenekName.trim();
+    const kurirId = cleanKurir.toLowerCase().replace(/\s+/g, '-');
 
     try {
-      const existingCheck = qcChecks.find((c) => c.purchaseOrderId === selectedOrderForQc.id);
-      
-      const payload = {
-        batchId: selectedBatchId,
-        purchaseOrderId: selectedOrderForQc.id,
-        supplierName: selectedOrderForQc.supplierName,
-        items: qcItems,
-        overallStatus: qcOverallStatus,
-        notes: qcNotes,
-        photoFileIds: [],
-        checkedBy: user.uid,
-        checkedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      if (existingCheck) {
-        await updateQcCheck(existingCheck.id, payload);
-      } else {
-        await addQcCheck({
-          ...payload,
-          createdAt: new Date().toISOString(),
-        });
-      }
-
-      // Update PO status to received
-      // If overall QC passed, set to 'received'.
-      showToast({ message: 'QC check berhasil disimpan', variant: 'success' });
-      setSelectedOrderForQc(null);
-
-      // Check if all POs are now checked and passed
-      // If so, update batch status to QC_PASSED
-      const updatedChecks = existingCheck
-        ? qcChecks.map((c) => (c.id === existingCheck.id ? { ...c, overallStatus: qcOverallStatus } : c))
-        : [...qcChecks, { ...payload, id: 'temp' }];
-
-      const allChecked = orders.every((o) => updatedChecks.some((c) => c.purchaseOrderId === o.id));
-      const allPassed = updatedChecks.every((c) => c.overallStatus === 'passed');
-
-      if (allChecked) {
-        await updateBatchStatus(selectedBatchId, allPassed ? 'QC_PASSED' : 'QC_FAILED');
-      }
-    } catch {
-      showToast({ message: 'Gagal memproses QC', variant: 'error' });
-    }
-  };
-
-  const handleExportPdfForQc = (poOrder: MbgPurchaseOrder) => {
-    try {
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageW = doc.internal.pageSize.getWidth();
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(16);
-      doc.setTextColor(17, 24, 39);
-      doc.text('LAPORAN HASIL CHECKLIST QC BAHAN MBG', pageW / 2, 18, { align: 'center' });
-
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(100, 116, 139);
-      doc.text(`Supplier: ${poOrder.supplierName} | Tanggal: ${poOrder.targetDate}`, pageW / 2, 25, { align: 'center' });
-
-      doc.setDrawColor(226, 232, 240);
-      doc.line(14, 29, pageW - 14, 29);
-
-      const tableHeaders = ['No', 'Nama Bahan', 'Qty Dipesan', 'Qty Diterima', 'Status QC', 'Catatan'];
-      const tableRows = qcItems.map((item, idx) => [
-        `${idx + 1}`,
-        item.bahanName,
-        `${item.jumlahOrdered} ${item.satuanOrdered}`,
-        `${item.jumlahReceived} ${item.satuanOrdered}`,
-        item.status === 'ok' ? 'LULUS (OK)' : 'REJECTED',
-        item.failReason || 'Sesuai Spesifikasi',
-      ]);
-
-      autoTable(doc, {
-        startY: 34,
-        head: [tableHeaders],
-        body: tableRows,
-        theme: 'grid',
-        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 9 },
-        bodyStyles: { fontSize: 8, textColor: [15, 23, 42] },
-        styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
+      await updateEntry(assignModalEntry.id, {
+        assignedPetugasName: cleanKurir,
+        assignedPetugasId: kurirId,
+        assignedKenekName: cleanKenek || undefined,
       });
-
-      doc.save(`Laporan_QC_${poOrder.supplierName.replace(/\s+/g, '_')}_${poOrder.targetDate}.pdf`);
-      showToast({ message: 'Export PDF QC berhasil!', variant: 'success' });
-    } catch (err) {
-      console.error('Failed to export PDF QC:', err);
-      showToast({ message: 'Gagal mengekspor PDF QC', variant: 'error' });
-    }
-  };
-
-  const handleExportDocxForQc = async (poOrder: MbgPurchaseOrder) => {
-    try {
-      showToast({ message: 'Menyiapkan file Word QC (.docx)...', variant: 'info' });
-      const purchasingPhotos = poOrder.items.map((i) => i.photoUrl).filter(Boolean) as string[];
-
-      await exportDistributionToDocx(
-        {
-          title: `Laporan QC & Delivery ${poOrder.supplierName}`,
-          deliveryDate: poOrder.targetDate,
-          institutionName: poOrder.supplierName,
-          institutionType: 'sekolah',
-          driverName: 'Tim Transportasi MBG',
-          vehicleNumber: 'B 1234 MBG',
-          qtPorsiBesar: 0,
-          qtPorsiKecil: 0,
-          qtPorsiBalita: 0,
-          qtPorsiBumilBusui: 0,
-          qtGuruKader: 0,
-          totalPortions: poOrder.items.length,
-          qcStatus: qcOverallStatus === 'passed' ? 'PASS' : 'FAIL',
-          qcNotes: qcNotes,
-          photos: purchasingPhotos,
-        },
-        `QC_Report_${poOrder.supplierName.replace(/\s+/g, '_')}_${poOrder.targetDate}`
-      );
-      showToast({ message: 'Export DOCX QC berhasil!', variant: 'success' });
-    } catch (err) {
-      console.error('Failed to export DOCX QC:', err);
-      showToast({ message: 'Gagal mengekspor DOCX QC', variant: 'error' });
-    }
-  };
-
-  // Assign kurir per batch group
-  const handleOpenAssignGroup = (petugasName: string, groupEntries: MbgPmEntry[]) => {
-    setEditingGroupKey(petugasName);
-    setEditingEntriesGroup(groupEntries);
-    setNewPetugasName(petugasName === 'Belum Ditugaskan' ? '' : petugasName);
-  };
-
-  const handleSaveGroupAssignment = async () => {
-    if (!editingGroupKey || editingEntriesGroup.length === 0 || !newPetugasName.trim()) return;
-    const cleanName = newPetugasName.trim();
-    const petugasId = cleanName.toLowerCase().replace(/\s+/g, '-');
-
-    try {
-      await Promise.all(
-        editingEntriesGroup.map((entry) =>
-          updateEntry(entry.id, {
-            assignedPetugasName: cleanName,
-            assignedPetugasId: petugasId,
-          })
-        )
-      );
-
       showToast({
-        message: `${editingEntriesGroup.length} institusi berhasil ditugaskan ke ${cleanName}`,
+        message: `${assignModalEntry.institutionName} ditugaskan ke ${cleanKurir}${cleanKenek ? ` + ${cleanKenek}` : ''}`,
         variant: 'success',
       });
-      setEditingGroupKey(null);
-      setEditingEntriesGroup([]);
+      setAssignModalEntry(null);
     } catch {
       showToast({ message: 'Gagal menugaskan petugas', variant: 'error' });
     }
   };
 
   // Generate / Sync Delivery Tasks
-  const handleSyncDeliveryTasks = async () => {
+  const handleSyncDeliveryTasks = async (targetKurirName?: string) => {
     if (!selectedBatchId) return;
     try {
-      // Find all unique kurir assigned in entries
-      const kurirs = Array.from(new Set(entries.map((e) => e.assignedPetugasName).filter(Boolean)));
+      let kurirs = Array.from(new Set(entries.map((e) => e.assignedPetugasName).filter(Boolean)));
+      if (targetKurirName) {
+        kurirs = kurirs.filter((k) => k === targetKurirName);
+      }
+
       if (kurirs.length === 0) {
-        showToast({ message: 'Tidak ada petugas yang ditugaskan di data PM', variant: 'info' });
+        showToast({ message: 'Belum ada institusi yang ditugaskan ke Kurir', variant: 'info' });
         return;
       }
 
@@ -530,21 +237,50 @@ export function MbgDistributionPage() {
         const kEntries = entries.filter((e) => e.assignedPetugasName === kName && !e.isSekolahLibur);
         const totalPorsi = kEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
         const entryIds = kEntries.map((e) => e.id);
-        const kId = kName.toLowerCase().replace(/\s+/g, '-');
 
-        const existingTask = deliveryTasks.find((t) => t.petugasName === kName);
+        // Find matching kurir user profile from kurirUsers list for accurate UID
+        const matchedKurir = kurirUsers.find(
+          (u) =>
+            u.name.toLowerCase() === kName.toLowerCase() ||
+            u.email.toLowerCase().includes(kName.toLowerCase()) ||
+            u.email.split('@')[0].toLowerCase() === kName.toLowerCase()
+        );
+
+        const kId = matchedKurir ? matchedKurir.uid : kName.toLowerCase().replace(/\s+/g, '-');
+        const finalPetugasName = matchedKurir ? matchedKurir.name : kName;
+
+        // Collect kenek info from entries (use the first non-empty kenek name)
+        const kenekName = kEntries.find((e) => e.assignedKenekName)?.assignedKenekName || '';
+        const matchedKenek = kurirUsers.find(
+          (u) =>
+            u.name.toLowerCase() === kenekName.toLowerCase() ||
+            u.email.toLowerCase().includes(kenekName.toLowerCase()) ||
+            u.email.split('@')[0].toLowerCase() === kenekName.toLowerCase()
+        );
+        const kenekId = matchedKenek ? matchedKenek.uid : (kenekName ? kenekName.toLowerCase().replace(/\s+/g, '-') : '');
+        const finalKenekName = matchedKenek ? matchedKenek.name : kenekName;
+
+        const existingTask = deliveryTasks.find(
+          (t) => t.petugasName === kName || t.petugasId === kId || t.petugasName.toLowerCase() === kName.toLowerCase()
+        );
 
         if (existingTask) {
           await updateDeliveryTask(existingTask.id, {
+            petugasId: kId,
+            petugasName: finalPetugasName,
             entryIds,
             totalPorsi,
+            kenekName: finalKenekName || undefined,
+            kenekId: kenekId || undefined,
           });
           updated++;
         } else {
           await addDeliveryTask({
             batchId: selectedBatchId,
             petugasId: kId,
-            petugasName: kName,
+            petugasName: finalPetugasName,
+            kenekId: kenekId || undefined,
+            kenekName: finalKenekName || undefined,
             entryIds,
             totalPorsi,
             handoverPhotoId: '',
@@ -560,89 +296,178 @@ export function MbgDistributionPage() {
       }
 
       showToast({
-        message: `Tugas Pengiriman sinkron: ${created} baru, ${updated} diperbarui`,
+        message: `Tugas Pengiriman berhasil dikirim ke akun Kurir! (${created} tugas baru, ${updated} diperbarui)`,
         variant: 'success',
       });
-    } catch {
-      showToast({ message: 'Gagal melakukan sinkronisasi kurir', variant: 'error' });
+    } catch (err) {
+      console.error('Sync error:', err);
+      showToast({ message: 'Gagal mengirim tugas ke akun kurir', variant: 'error' });
     }
   };
 
-  const handleHandoverToCooking = async () => {
-    if (!selectedBatchId) return;
-    try {
-      await updateBatchStatus(selectedBatchId, 'COOKING');
-      showToast({ message: 'Bahan makanan telah lolos QC & diserahkan ke Tim Produksi untuk dimasak!', variant: 'success' });
-    } catch {
-      showToast({ message: 'Gagal melakukan handover ke tim produksi', variant: 'error' });
-    }
-  };
-
-  // Export PDF Penerimaan Bahan
-  const handleExportReceivingPdf = () => {
-    if (receivingData.length === 0) {
-      showToast({ message: 'Tidak ada data penerimaan bahan untuk diekspor', variant: 'error' });
-      return;
-    }
+  // Re-generate PDF from kurir report data
+  const handleViewKurirReport = async (docMeta: MbgDeliveryDocument) => {
+    showToast({ message: 'Menyiapkan PDF Laporan Distribusi...', variant: 'info' });
 
     try {
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageW = doc.internal.pageSize.getWidth();
-      const currentBatch = batches.find((b) => b.id === selectedBatchId);
-      const tanggalStr = currentBatch?.tanggal || new Date().toISOString().split('T')[0];
+      const pageH = doc.internal.pageSize.getHeight();
 
-      // Title & Header
+      // Load logo
+      let logoLoaded = false;
+      const logoImg = new Image();
+      logoImg.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve) => {
+        logoImg.onload = () => { logoLoaded = true; resolve(); };
+        logoImg.onerror = () => resolve();
+        logoImg.src = MBG_LOGO_URL;
+      });
+
+      // Cover
+      doc.setFillColor(255, 255, 255);
+      doc.rect(0, 0, pageW, pageH, 'F');
+      if (logoLoaded) doc.addImage(logoImg, 'PNG', pageW / 2 - 20, 30, 40, 40);
+
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(16);
+      doc.setFontSize(18);
       doc.setTextColor(17, 24, 39);
-      doc.text('LAPORAN PENERIMAAN BAHAN MBG', pageW / 2, 18, { align: 'center' });
+      doc.text('LAPORAN BUKTI DISTRIBUSI', pageW / 2, 85, { align: 'center' });
+      doc.text('MAKANAN BERGIZI GRATIS (MBG)', pageW / 2, 95, { align: 'center' });
 
-      doc.setFontSize(10);
+      doc.setFontSize(11);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(100, 116, 139);
-      doc.text(`Tanggal Batch: ${tanggalStr} | Total ${receivingData.reduce((sum, s) => sum + s.items.length, 0)} Item (${receivingData.length} Supplier)`, pageW / 2, 25, { align: 'center' });
+      doc.text(`Tanggal: ${docMeta.tanggalBatch || '-'}`, pageW / 2, 110, { align: 'center' });
+      doc.text(`Petugas: ${docMeta.petugasName}`, pageW / 2, 117, { align: 'center' });
+      doc.text(`Total: ${docMeta.totalInstitusi} Institusi | ${docMeta.totalPorsi} Porsi | ${docMeta.completedCount}/${docMeta.totalInstitusi} Lengkap`, pageW / 2, 124, { align: 'center' });
 
       doc.setDrawColor(226, 232, 240);
-      doc.line(14, 29, pageW - 14, 29);
+      doc.line(30, 135, pageW - 30, 135);
 
-      let startY = 34;
+      doc.setFontSize(9);
+      doc.setTextColor(148, 163, 184);
+      doc.text('Dokumen ini dihasilkan secara otomatis oleh Sistem MBG Al-Umana', pageW / 2, 145, { align: 'center' });
 
-      receivingData.forEach((supplier, sIdx) => {
+      // Get related entries for this petugas
+      const relatedEntries = entries.filter((e) => e.assignedPetugasName === docMeta.petugasName && !e.isSekolahLibur);
+
+      if (relatedEntries.length > 0) {
+        // Summary Page
+        doc.addPage();
+        doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
         doc.setTextColor(17, 24, 39);
-        doc.text(`${sIdx + 1}. Supplier: ${supplier.supplierName} (${supplier.groupLabel || 'Pesanan'})`, 14, startY);
+        doc.text('RINGKASAN PENGIRIMAN', pageW / 2, 18, { align: 'center' });
 
-        const tableHeaders = ['No', 'Nama Bahan', 'Jam Kedatangan', 'Jumlah', 'Satuan', 'Keterangan'];
-        const tableRows = supplier.items.map((item, idx) => [
+        const summaryHeaders = ['No', 'Institusi', 'Porsi', 'Menu ✓', 'Serah Terima ✓', 'Surat Jalan ✓', 'Status'];
+        const summaryRows = relatedEntries.map((entry, idx) => [
           `${idx + 1}`,
-          item.bahanName,
-          item.jamKedatangan || '-',
-          `${item.jumlah}`,
-          item.satuan,
-          item.keterangan || '-',
+          entry.institutionName,
+          `${entry.jumlah}`,
+          entry.photoMenuUrl ? '✓' : '—',
+          entry.photoSerahTerimaUrl ? '✓' : '—',
+          entry.photoSuratJalanUrl ? '✓' : '—',
+          entry.photoMenuUrl && entry.photoSerahTerimaUrl && entry.photoSuratJalanUrl ? 'LENGKAP' : 'BELUM',
         ]);
 
         autoTable(doc, {
-          startY: startY + 3,
-          head: [tableHeaders],
-          body: tableRows,
+          startY: 24,
+          head: [summaryHeaders],
+          body: summaryRows,
           theme: 'grid',
           headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
-          bodyStyles: { fontSize: 8, textColor: [31, 41, 55] },
+          bodyStyles: { fontSize: 7.5, textColor: [15, 23, 42] },
           styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
-          margin: { left: 14, right: 14 },
         });
 
-        startY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
-      });
+        // Per-institution photo pages
+        for (const entry of relatedEntries) {
+          doc.addPage();
+          doc.setFontSize(13);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(17, 24, 39);
+          doc.text(entry.institutionName, pageW / 2, 16, { align: 'center' });
 
-      const fileName = `Laporan_Penerimaan_Bahan_MBG_${tanggalStr}.pdf`;
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(100, 116, 139);
+          doc.text(`Jumlah Porsi: ${entry.jumlah} | Jadwal: ${entry.jadwalPengantaran || '-'}`, pageW / 2, 22, { align: 'center' });
+
+          doc.setDrawColor(226, 232, 240);
+          doc.line(14, 25, pageW - 14, 25);
+
+          const photoSlots = [
+            { label: '1. Foto Menu / Box', url: entry.photoMenuUrl, desc: entry.photoMenuDesc },
+            { label: '2. Foto Serah Terima', url: entry.photoSerahTerimaUrl, desc: entry.photoSerahTerimaDesc },
+            { label: '3. Foto Surat Jalan', url: entry.photoSuratJalanUrl, desc: entry.photoSuratJalanDesc },
+          ];
+
+          const slotW = (pageW - 28 - 10) / 3;
+          const startY = 30;
+
+          for (let i = 0; i < photoSlots.length; i++) {
+            const slot = photoSlots[i];
+            const x = 14 + i * (slotW + 5);
+
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(17, 24, 39);
+            doc.text(slot.label, x, startY);
+
+            const photoY = startY + 3;
+            const photoH = 55;
+
+            if (slot.url) {
+              try {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                await new Promise<void>((resolve) => {
+                  img.onload = () => resolve();
+                  img.onerror = () => resolve();
+                  img.src = slot.url!;
+                });
+                if (img.complete && img.naturalWidth > 0) {
+                  doc.addImage(img, 'JPEG', x, photoY, slotW, photoH);
+                } else {
+                  doc.setDrawColor(203, 213, 225);
+                  doc.rect(x, photoY, slotW, photoH);
+                  doc.setFontSize(7);
+                  doc.setTextColor(148, 163, 184);
+                  doc.text('Foto tidak tersedia', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
+                }
+              } catch {
+                doc.setDrawColor(203, 213, 225);
+                doc.rect(x, photoY, slotW, photoH);
+                doc.setFontSize(7);
+                doc.setTextColor(148, 163, 184);
+                doc.text('Foto gagal dimuat', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
+              }
+            } else {
+              doc.setDrawColor(203, 213, 225);
+              doc.rect(x, photoY, slotW, photoH);
+              doc.setFontSize(7);
+              doc.setTextColor(148, 163, 184);
+              doc.text('Belum diambil', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
+            }
+
+            if (slot.desc) {
+              doc.setFontSize(7);
+              doc.setFont('helvetica', 'italic');
+              doc.setTextColor(100, 116, 139);
+              const lines = doc.splitTextToSize(slot.desc, slotW);
+              doc.text(lines, x, photoY + photoH + 4);
+            }
+          }
+        }
+      }
+
+      const fileName = `Laporan_Distribusi_MBG_${docMeta.petugasName.replace(/\s+/g, '_')}_${docMeta.tanggalBatch || 'undated'}.pdf`;
       doc.save(fileName);
-      showToast({ message: 'Export PDF Penerimaan Bahan berhasil!', variant: 'success' });
+      showToast({ message: 'PDF Laporan Distribusi berhasil diunduh!', variant: 'success' });
     } catch (err) {
-      console.error('Failed to export receiving PDF:', err);
-      showToast({ message: 'Gagal mengekspor PDF Penerimaan Bahan', variant: 'error' });
+      console.error('Failed to export delivery report PDF:', err);
+      showToast({ message: 'Gagal mengekspor PDF laporan', variant: 'error' });
     }
   };
 
@@ -653,38 +478,19 @@ export function MbgDistributionPage() {
         <div>
           <h1 className="text-2xl font-extrabold text-[#111827] tracking-tight">Distribusi MBG</h1>
           <p className="text-sm text-[#6B7280] mt-1">
-            Lakukan Quality Control (QC) bahan masuk dan atur penugasan kurir pengantaran
+            Atur penugasan kurir + kenek per institusi dan lihat laporan pengiriman
           </p>
         </div>
 
         {selectedBatchId && (
           <div className="flex items-center gap-2">
-            {activeTab === 'qc' && (
-              <button
-                onClick={handleHandoverToCooking}
-                className="flex items-center gap-2 bg-[#0284C7] hover:bg-[#0369A1] text-white font-extrabold text-xs px-4 py-3 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all"
-                title="Handover bahan yang telah di-QC ke Tim Produksi untuk proses masak"
-              >
-                <ChefHat className="h-4 w-4 text-[#FBBF24]" />
-                <span>Handover ke Tim Produksi (Siap Masak)</span>
-              </button>
-            )}
-            {activeTab === 'receiving' && (
-              <button
-                onClick={handleExportReceivingPdf}
-                className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-3 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all"
-              >
-                <FileDown className="h-4 w-4 text-[#FBBF24]" />
-                <span>Export PDF Penerimaan</span>
-              </button>
-            )}
             {activeTab === 'assignment' && (
               <button
-                onClick={handleSyncDeliveryTasks}
-                className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-3 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all"
+                onClick={() => handleSyncDeliveryTasks()}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-3 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all"
               >
-                <UserCheck className="h-4 w-4 text-[#FBBF24]" />
-                <span>Sinkron Tugas Kurir</span>
+                <Send className="h-4 w-4 text-white" />
+                <span>🚀 Submit & Kirim Tugas Kurir</span>
               </button>
             )}
           </div>
@@ -710,7 +516,7 @@ export function MbgDistributionPage() {
             <>
               {/* Tab Controller */}
               <div className="flex gap-1 mb-6 bg-[#F3F4F6] rounded-xl p-1 max-w-xl">
-                {(['qc', 'receiving', 'assignment'] as const).map((tab) => (
+                {(['assignment', 'reports'] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -720,159 +526,27 @@ export function MbgDistributionPage() {
                         : 'text-[#6B7280] hover:text-[#111827]'
                     }`}
                   >
-                    {tab === 'qc' ? '📋 QC Bahan' : tab === 'receiving' ? '📦 Penerimaan Bahan' : '🚚 Penugasan Kurir'}
+                    {tab === 'assignment' ? '🚚 Penugasan Kurir' : '📄 Laporan Kurir'}
                   </button>
                 ))}
               </div>
 
-              {/* QC Tab */}
-              {activeTab === 'qc' ? (
-                <div className="space-y-4">
-                  {effectiveOrders.map((order) => {
-                    const check = qcChecks.find((c) => c.purchaseOrderId === order.id);
-                    return (
-                      <div
-                        key={order.id}
-                        className="bg-white rounded-2xl border border-[#E5E7EB] p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:border-gray-300 transition-all shadow-sm"
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-extrabold text-sm text-[#111827]">
-                              Supplier: {order.supplierName}
-                            </h3>
-                            <span className="text-[9px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                              {order.groupLabel}
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-500">
-                            Bahan: {order.items.length} item • Total Belanja: Rp{' '}
-                            {order.totalPengeluaran.toLocaleString('id-ID')}
-                          </p>
-                          <div className="flex items-center gap-2 pt-1.5">
-                            {check ? (
-                              check.overallStatus === 'passed' ? (
-                                <span className="text-[10px] font-extrabold text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                  <Check className="h-3 w-3" /> QC Passed
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                  <X className="h-3 w-3" /> QC Failed
-                                </span>
-                              )
-                            ) : (
-                              <span className="text-[10px] font-extrabold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                ⏳ Belum Di-QC
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => handleOpenQc(order)}
-                          className="shrink-0 flex items-center gap-1.5 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-2.5 rounded-xl cursor-pointer shadow-sm"
-                        >
-                          <ClipboardCheck className="h-4 w-4 text-[#FBBF24]" />
-                          {check ? 'Lihat/Edit QC' : 'Lakukan QC'}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : activeTab === 'receiving' ? (
-                /* Penerimaan Bahan Tab - Format matching Foto 1 (green table) */
-                <div className="space-y-5">
-                  {receivingData.length === 0 ? (
-                    <div className="bg-white border border-[#E5E7EB] rounded-2xl p-12 text-center">
-                      <ClipboardCheck className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-                      <h3 className="text-lg font-bold text-[#111827]">Belum Ada Data Bahan</h3>
-                      <p className="text-sm text-gray-500 mt-1 max-w-sm mx-auto">
-                        Data pesanan bahan akan muncul setelah tim Purchasing menginput Purchase Order.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
-                      <div className="px-6 py-4 bg-[#065F46] text-white flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <ClipboardCheck className="h-4.5 w-4.5 text-[#6EE7B7]" />
-                          <span className="text-sm font-extrabold uppercase tracking-wider">
-                            List Pesanan Bahan
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs font-bold bg-white/15 px-3 py-1.5 rounded-full">
-                            {receivingData.reduce((sum, s) => sum + s.items.length, 0)} Item dari {receivingData.length} Supplier
-                          </span>
-                          <button
-                            onClick={handleExportReceivingPdf}
-                            className="flex items-center gap-1.5 bg-white text-[#065F46] hover:bg-emerald-50 font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer shadow-xs transition-all active:scale-95"
-                          >
-                            <FileDown className="h-3.5 w-3.5" />
-                            <span>Export PDF</span>
-                          </button>
-                        </div>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs text-left min-w-[700px]">
-                          <thead>
-                            <tr className="bg-[#ECFDF5] text-[#065F46] text-[9px] font-extrabold uppercase tracking-wider border-b border-[#A7F3D0]">
-                              <th className="py-3 px-6">List Pesanan Bahan</th>
-                              <th className="py-3 px-6 text-center">Jam Kedatangan</th>
-                              <th className="py-3 px-6 text-center">Jumlah</th>
-                              <th className="py-3 px-6 text-center">Item</th>
-                              <th className="py-3 px-6">Keterangan</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {receivingData.map((supplier) => (
-                              <Fragment key={supplier.supplierName}>
-                                {/* Supplier Header Row */}
-                                <tr key={`header-${supplier.supplierName}`} className="bg-[#F0FDF4] border-t-2 border-[#BBF7D0]">
-                                  <td colSpan={5} className="py-2.5 px-6">
-                                    <div className="flex items-center justify-between">
-                                      <span className="font-extrabold text-[#065F46] text-xs uppercase tracking-wider">
-                                        {supplier.supplierName}
-                                      </span>
-                                      <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
-                                        supplier.status === 'received'
-                                          ? 'text-green-700 bg-green-100'
-                                          : supplier.status === 'shipped'
-                                          ? 'text-blue-700 bg-blue-100'
-                                          : supplier.status === 'ordered'
-                                          ? 'text-amber-700 bg-amber-100'
-                                          : 'text-gray-500 bg-gray-100'
-                                      }`}>
-                                        {supplier.status === 'received' ? '✅ Sudah Diterima'
-                                          : supplier.status === 'shipped' ? '🚛 Dalam Perjalanan'
-                                          : supplier.status === 'ordered' ? '📝 Sudah Dipesan'
-                                          : '⏳ Pending'}
-                                      </span>
-                                    </div>
-                                  </td>
-                                </tr>
-                                {/* Items */}
-                                {supplier.items.map((item, idx) => (
-                                  <tr key={`${supplier.supplierName}-${idx}`} className="border-b border-gray-100 hover:bg-gray-50/50">
-                                    <td className="py-2.5 px-6 font-semibold text-[#111827]">{item.bahanName}</td>
-                                    <td className="py-2.5 px-6 text-center font-bold text-gray-600">{item.jamKedatangan || '-'}</td>
-                                    <td className="py-2.5 px-6 text-center font-bold text-[#111827]">{item.jumlah}</td>
-                                    <td className="py-2.5 px-6 text-center font-semibold text-gray-600">{item.satuan}</td>
-                                    <td className="py-2.5 px-6 text-gray-500">{item.keterangan || '-'}</td>
-                                  </tr>
-                                ))}
-                              </Fragment>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* Kurir Assignment Tab - Petugas format matching Foto 2 */
+              {activeTab === 'assignment' ? (
+                /* Kurir Assignment Tab - Per institution with Kurir + Kenek */
                 <div className="space-y-6">
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs font-bold text-amber-900 flex items-center gap-2 shadow-xs">
-                    <Truck className="h-4 w-4 text-amber-600 shrink-0" />
-                    <span>💡 Penugasan Kurir dapat dilakukan langsung setelah Data PM disubmit oleh Admin MBG, tanpa perlu menunggu proses masak selesai.</span>
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs font-bold text-amber-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-center gap-2">
+                      <Truck className="h-4.5 w-4.5 text-amber-600 shrink-0" />
+                      <span>💡 Klik <strong>"Tugaskan"</strong> untuk memilih Kurir & Kenek, lalu klik <strong>"Submit & Kirim Tugas Kurir"</strong> agar tugas masuk ke akun Kurir MBG.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSyncDeliveryTasks()}
+                      className="shrink-0 flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-lg cursor-pointer shadow-xs active:scale-95 transition-all"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      <span>Submit Semua Tugas</span>
+                    </button>
                   </div>
 
                   {/* GANTI MENU KERINGAN label */}
@@ -901,18 +575,24 @@ export function MbgDistributionPage() {
                             <span className="text-sm font-extrabold uppercase tracking-wider">
                               PETUGAS: {petugasName}
                             </span>
-                            <button
-                              onClick={() => handleOpenAssignGroup(petugasName, entriesList)}
-                              className="px-3.5 py-1.5 bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] font-extrabold text-xs rounded-xl cursor-pointer transition-all shadow-xs flex items-center gap-1.5 active:scale-95 ml-2"
-                            >
-                              <UserCheck className="h-4 w-4 text-[#111827]" />
-                              {petugasName === 'Belum Ditugaskan' ? 'Tugaskan Kurir Batch' : 'Ubah Kurir Batch'}
-                            </button>
                           </div>
-                          <div className="flex gap-3 text-xs font-bold text-white bg-white/10 px-3.5 py-1.5 rounded-full">
-                            <span>{entriesList.length} Institusi</span>
-                            <span>•</span>
-                            <span>{totalPorsi} Porsi</span>
+                          <div className="flex items-center gap-3">
+                            <div className="flex gap-3 text-xs font-bold text-white bg-white/10 px-3.5 py-1.5 rounded-full">
+                              <span>{entriesList.length} Institusi</span>
+                              <span>•</span>
+                              <span>{totalPorsi} Porsi</span>
+                            </div>
+                            {petugasName !== 'Belum Ditugaskan' && (
+                              <button
+                                type="button"
+                                onClick={() => handleSyncDeliveryTasks(petugasName)}
+                                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg cursor-pointer shadow-xs active:scale-95 transition-all"
+                                title={`Kirim tugas pengiriman ke akun ${petugasName}`}
+                              >
+                                <Send className="h-3.5 w-3.5" />
+                                <span>Kirim Tugas {petugasName}</span>
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -925,16 +605,31 @@ export function MbgDistributionPage() {
 
                         {/* Table of deliveries for this petugas */}
                         <div className="overflow-x-auto">
-                          <table className="w-full text-xs text-left min-w-[700px]">
+                          <table className="w-full text-xs text-left min-w-[800px]">
                             <thead>
                               <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-bold uppercase text-[9px] tracking-wider">
+                                <th className="py-3 px-3 text-center w-10">
+                                  <input
+                                    type="checkbox"
+                                    title="Pilih Semua Institusi di Grup Ini"
+                                    checked={
+                                      entriesList.length > 0 &&
+                                      entriesList.every((e) => selectedEntryIds.includes(e.id))
+                                    }
+                                    onChange={() => toggleSelectAllGroup(entriesList)}
+                                    className="h-4 w-4 rounded border-gray-300 text-[#FBBF24] focus:ring-[#FBBF24] cursor-pointer"
+                                  />
+                                </th>
                                 <th className="py-3 px-6">Institusi</th>
-                                <th className="py-3 px-6 text-center">QT Siswa/Balita</th>
-                                <th className="py-3 px-6 text-center">QT Bumil/Busui</th>
-                                <th className="py-3 px-6 text-center">QT Guru/Kader</th>
-                                <th className="py-3 px-6 text-center">Pobia Nasi</th>
-                                <th className="py-3 px-6 text-center">Jumlah</th>
-                                <th className="py-3 px-6">Jadwal Pengantaran</th>
+                                <th className="py-3 px-4 text-center">QT Siswa/Balita</th>
+                                <th className="py-3 px-4 text-center">QT Bumil/Busui</th>
+                                <th className="py-3 px-4 text-center">QT Guru/Kader</th>
+                                <th className="py-3 px-4 text-center">Pobia Nasi</th>
+                                <th className="py-3 px-4 text-center">Jumlah</th>
+                                <th className="py-3 px-4">Jadwal</th>
+                                <th className="py-3 px-4">Kurir</th>
+                                <th className="py-3 px-4">Kenek</th>
+                                <th className="py-3 px-4 text-center">Aksi</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -942,9 +637,20 @@ export function MbgDistributionPage() {
                                 <tr
                                   key={entry.id}
                                   className={`hover:bg-gray-50/50 ${
+                                    selectedEntryIds.includes(entry.id) ? 'bg-amber-50/60' : ''
+                                  } ${
                                     entry.isSekolahLibur ? 'bg-red-50/40 text-red-500 line-through' : ''
                                   }`}
                                 >
+                                  <td className="py-3 px-3 text-center w-10">
+                                    <input
+                                      type="checkbox"
+                                      title={`Pilih ${entry.institutionName}`}
+                                      checked={selectedEntryIds.includes(entry.id)}
+                                      onChange={() => toggleSelectEntry(entry.id)}
+                                      className="h-4 w-4 rounded border-gray-300 text-[#FBBF24] focus:ring-[#FBBF24] cursor-pointer"
+                                    />
+                                  </td>
                                   <td className="py-3 px-6 font-bold flex items-center gap-2">
                                     <Building2 className="h-4 w-4 text-gray-400" />
                                     <div>
@@ -956,41 +662,69 @@ export function MbgDistributionPage() {
                                       )}
                                     </div>
                                   </td>
-                                  <td className="py-3 px-6 text-center font-bold">
+                                  <td className="py-3 px-4 text-center font-bold">
                                     {entry.qtSiswaBalita}
                                   </td>
-                                  <td className="py-3 px-6 text-center font-bold">
+                                  <td className="py-3 px-4 text-center font-bold">
                                     {entry.qtBumilBusui}
                                   </td>
-                                  <td className="py-3 px-6 text-center font-bold">
+                                  <td className="py-3 px-4 text-center font-bold">
                                     {entry.qtGuruKader}
                                   </td>
-                                  <td className="py-3 px-6 text-center font-bold text-amber-600">
+                                  <td className="py-3 px-4 text-center font-bold text-amber-600">
                                     {entry.qtPobiaNasi}
                                   </td>
-                                  <td className="py-3 px-6 text-center">
+                                  <td className="py-3 px-4 text-center">
                                     <span className="px-2 py-0.5 bg-[#FBBF24]/20 text-[#92400E] rounded-full font-extrabold text-[10px]">
                                       {entry.jumlah}
                                     </span>
                                   </td>
-                                  <td className="py-3 px-6 font-bold text-gray-700">
+                                  <td className="py-3 px-4 font-bold text-gray-700">
                                     {entry.jadwalPengantaran || '-'}
+                                  </td>
+                                  <td className="py-3 px-4">
+                                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                      entry.assignedPetugasName
+                                        ? 'bg-emerald-50 text-emerald-700'
+                                        : 'bg-gray-100 text-gray-500'
+                                    }`}>
+                                      {entry.assignedPetugasName || '-'}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-4">
+                                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                      entry.assignedKenekName
+                                        ? 'bg-blue-50 text-blue-700'
+                                        : 'bg-gray-100 text-gray-400'
+                                    }`}>
+                                      {entry.assignedKenekName || '-'}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    <button
+                                      onClick={() => handleOpenAssign(entry)}
+                                      disabled={entry.isSekolahLibur}
+                                      className="px-3 py-1.5 bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] font-extrabold text-[10px] rounded-lg cursor-pointer transition-all shadow-xs active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1"
+                                    >
+                                      <Users className="h-3 w-3" />
+                                      Tugaskan
+                                    </button>
                                   </td>
                                 </tr>
                               ))}
                               {/* Total Row */}
                               <tr className="bg-[#111827] text-white font-extrabold text-xs">
                                 <td className="py-3 px-6" colSpan={1}>TOTAL</td>
-                                <td className="py-3 px-6 text-center">{totalSiswa}</td>
-                                <td className="py-3 px-6 text-center">{totalBumil}</td>
-                                <td className="py-3 px-6 text-center">{totalGuru}</td>
-                                <td className="py-3 px-6 text-center">{totalPobia}</td>
-                                <td className="py-3 px-6 text-center">
+                                <td className="py-3 px-4 text-center">{totalSiswa}</td>
+                                <td className="py-3 px-4 text-center">{totalBumil}</td>
+                                <td className="py-3 px-4 text-center">{totalGuru}</td>
+                                <td className="py-3 px-4 text-center">{totalPobia}</td>
+                                <td className="py-3 px-4 text-center">
                                   <span className="px-2.5 py-0.5 bg-[#FBBF24] text-[#111827] rounded-full font-extrabold">
                                     {totalPorsi}
                                   </span>
                                 </td>
-                                <td className="py-3 px-6" colSpan={1}></td>
+                                <td className="py-3 px-4" colSpan={4}></td>
                               </tr>
                             </tbody>
                           </table>
@@ -999,6 +733,120 @@ export function MbgDistributionPage() {
                     );
                   })}
                 </div>
+              ) : (
+                /* Laporan Kurir Tab */
+                <div className="space-y-4 font-['Hanken_Grotesk']">
+                  {batchDeliveryDocs.length === 0 ? (
+                    <div className="bg-white border border-[#E5E7EB] rounded-2xl p-12 text-center">
+                      <FileText className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                      <h3 className="text-lg font-bold text-[#111827]">Belum Ada Laporan</h3>
+                      <p className="text-sm text-gray-500 mt-1 max-w-sm mx-auto">
+                        Laporan kurir akan muncul setelah kurir MBG atau kenek melakukan export PDF dari halaman delivery mereka.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Search & Filter Bar */}
+                      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between bg-white p-4 rounded-2xl border border-[#E5E7EB] shadow-xs">
+                        <div className="relative flex-1">
+                          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <input
+                            type="text"
+                            value={distribSearchQuery}
+                            onChange={(e) => setDistribSearchQuery(e.target.value)}
+                            placeholder="Cari nama petugas, tanggal batch, atau nama file PDF..."
+                            className="w-full pl-10 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:bg-white transition-all"
+                          />
+                          {distribSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setDistribSearchQuery('')}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3.5 py-2 rounded-xl">
+                            Menampilkan {filteredBatchDeliveryDocs.length} dari {batchDeliveryDocs.length} Laporan
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Table Container */}
+                      <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
+                        <div className="px-6 py-4 bg-[#111827] text-white flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            <FileDown className="h-4.5 w-4.5 text-[#FBBF24]" />
+                            <span className="text-sm font-extrabold uppercase tracking-wider">
+                              Arsip Laporan Kurir
+                            </span>
+                          </div>
+                          <span className="text-xs font-bold bg-white/15 px-3 py-1.5 rounded-full">
+                            {filteredBatchDeliveryDocs.length} Laporan
+                          </span>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs text-left min-w-[700px]">
+                            <thead>
+                              <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-bold uppercase text-[9px] tracking-wider">
+                                <th className="py-3 px-6">Petugas</th>
+                                <th className="py-3 px-6 text-center">Tanggal Batch</th>
+                                <th className="py-3 px-6 text-center">Institusi</th>
+                                <th className="py-3 px-6 text-center">Porsi</th>
+                                <th className="py-3 px-6 text-center">Kelengkapan</th>
+                                <th className="py-3 px-6 text-center">Dibuat</th>
+                                <th className="py-3 px-6 text-center">Aksi</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {filteredBatchDeliveryDocs.length === 0 ? (
+                                <tr>
+                                  <td colSpan={7} className="py-8 text-center text-gray-400 font-bold">
+                                    Tidak ada laporan yang cocok dengan pencarian "{distribSearchQuery}"
+                                  </td>
+                                </tr>
+                              ) : (
+                                filteredBatchDeliveryDocs.map((docItem) => (
+                                  <tr key={docItem.id} className="hover:bg-gray-50/50">
+                                    <td className="py-3 px-6 font-bold text-[#111827]">{docItem.petugasName}</td>
+                                    <td className="py-3 px-6 text-center font-semibold text-gray-600">{docItem.tanggalBatch}</td>
+                                    <td className="py-3 px-6 text-center font-bold">{docItem.totalInstitusi}</td>
+                                    <td className="py-3 px-6 text-center font-bold">{docItem.totalPorsi}</td>
+                                    <td className="py-3 px-6 text-center">
+                                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                        docItem.completedCount === docItem.totalInstitusi
+                                          ? 'bg-emerald-50 text-emerald-700'
+                                          : 'bg-amber-50 text-amber-700'
+                                      }`}>
+                                        {docItem.completedCount}/{docItem.totalInstitusi} Lengkap
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-6 text-center text-gray-500">
+                                      {new Date(docItem.createdAt).toLocaleDateString('id-ID')}
+                                    </td>
+                                    <td className="py-3 px-6 text-center">
+                                      <button
+                                        onClick={() => handleViewKurirReport(docItem)}
+                                        className="inline-flex items-center gap-1 px-3.5 py-1.5 bg-[#111827] text-white hover:bg-black font-extrabold text-[10px] rounded-lg cursor-pointer shadow-xs transition-all active:scale-95"
+                                        title="Unduh / Lihat PDF Laporan"
+                                      >
+                                        <FileDown className="h-3 w-3 text-[#FBBF24]" />
+                                        <span>Unduh PDF</span>
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </>
           ) : (
@@ -1006,228 +854,16 @@ export function MbgDistributionPage() {
               <Calendar className="mx-auto h-12 w-12 text-gray-300 mb-3" />
               <h3 className="text-lg font-bold text-[#111827]">Pilih batch pengiriman</h3>
               <p className="text-sm text-gray-500 mt-1 max-w-sm mx-auto">
-                Silakan pilih batch pengiriman di atas untuk melihat data QC dan Penugasan Kurir.
+                Silakan pilih batch pengiriman di atas untuk melihat data Penugasan Kurir dan Laporan.
               </p>
             </div>
           )}
         </>
       )}
 
-      {/* QC Dialog */}
+      {/* Assign Kurir + Kenek Modal (Per Institution) */}
       <AnimatePresence>
-        {selectedOrderForQc && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col justify-between font-['Hanken_Grotesk',system-ui,sans-serif]"
-            >
-              {/* Header */}
-              <div className="p-6 border-b border-[#E5E7EB] flex justify-between items-center">
-                <div>
-                  <h3 className="text-lg font-extrabold text-[#111827]">
-                    QC Checklist: {selectedOrderForQc.supplierName}
-                  </h3>
-                  <p className="text-xs text-gray-500">
-                    Lakukan pemeriksaan 6 poin kualitas pada masing-masing barang yang datang
-                  </p>
-                </div>
-                <button
-                  onClick={() => setSelectedOrderForQc(null)}
-                  title="Tutup Modal QC"
-                  aria-label="Tutup Modal QC"
-                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              {/* Body */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left min-w-[800px]">
-                    <thead>
-                      <tr className="bg-gray-50 text-gray-500 font-bold border-b border-gray-100 uppercase text-[9px] tracking-wider">
-                        <th className="py-2.5 px-3 w-1/4">Nama Bahan</th>
-                        <th className="py-2.5 px-3 text-center">Dipesan</th>
-                        <th className="py-2.5 px-3 text-center">Diterima</th>
-                        <th className="py-2.5 px-3 text-center">Jumlah Ok</th>
-                        <th className="py-2.5 px-3 text-center">Kualitas Ok</th>
-                        <th className="py-2.5 px-3 text-center">Qty Ok</th>
-                        <th className="py-2.5 px-3 text-center">Kesesuaian Ok</th>
-                        <th className="py-2.5 px-3 text-center">Kesegaran Ok</th>
-                        <th className="py-2.5 px-3 text-center">Kemasan Ok</th>
-                        <th className="py-2.5 px-3">Alasan Reject</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {qcItems.map((item, idx) => (
-                        <tr key={idx} className={item.status === 'rejected' ? 'bg-red-50/20' : ''}>
-                          <td className="py-3 px-3 font-bold text-[#111827]">{item.bahanName}</td>
-                          <td className="py-3 px-3 text-center font-semibold text-gray-600">
-                            {item.jumlahOrdered} {item.satuanOrdered}
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            <input
-                              type="number"
-                              title="Jumlah Diterima"
-                              placeholder="Qty"
-                              value={item.jumlahReceived}
-                              onChange={(e) =>
-                                handleItemQtyReceivedChange(idx, Number(e.target.value))
-                              }
-                              className="w-16 border rounded px-1.5 py-1 text-center focus:outline-none focus:ring-1 focus:ring-[#FBBF24]"
-                            />
-                          </td>
-                          {(
-                            [
-                              'isJumlahOk',
-                              'isKualitasOk',
-                              'isQuantityOk',
-                              'isKesesuaianOk',
-                              'isFreshOk',
-                              'isPackagingOk',
-                            ] as const
-                          ).map((f) => (
-                            <td key={f} className="py-3 px-3 text-center">
-                              <button
-                                onClick={() => handleToggleItemCheck(idx, f)}
-                                className={`w-6 h-6 rounded-md flex items-center justify-center cursor-pointer transition-all ${
-                                  item[f]
-                                    ? 'bg-green-100 text-green-700'
-                                    : 'bg-red-100 text-red-700'
-                                }`}
-                              >
-                                {item[f] ? '✓' : '✗'}
-                              </button>
-                            </td>
-                          ))}
-                          <td className="py-3 px-3">
-                            <input
-                              type="text"
-                              value={item.failReason}
-                              onChange={(e) => handleItemReasonChange(idx, e.target.value)}
-                              placeholder="Alasan reject..."
-                              disabled={item.status === 'ok'}
-                              className={`w-full text-xs rounded border px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#FBBF24] ${
-                                item.status === 'ok'
-                                  ? 'bg-gray-50 border-gray-200 cursor-not-allowed'
-                                  : 'border-red-300 focus:ring-red-400'
-                              }`}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Purchasing Photos Preview Section */}
-                {selectedOrderForQc.items.some((i) => i.photoUrl) && (
-                  <div className="p-4 bg-amber-50/50 rounded-xl border border-amber-200">
-                    <p className="text-xs font-bold text-amber-900 mb-2 flex items-center gap-1.5">
-                      <ImageIcon className="h-4 w-4 text-amber-600" />
-                      Foto Bukti Belanjaan dari Tim Purchasing ({selectedOrderForQc.items.filter((i) => i.photoUrl).length} Foto)
-                    </p>
-                    <div className="flex gap-3 overflow-x-auto pb-1">
-                      {selectedOrderForQc.items
-                        .filter((i) => i.photoUrl)
-                        .map((it, idx) => (
-                          <div key={idx} className="shrink-0 bg-white p-2 rounded-lg border border-amber-200 text-center shadow-xs">
-                            <img src={it.photoUrl} alt={it.bahanName} className="h-16 w-20 object-cover rounded-md mb-1" />
-                            <p className="text-[10px] font-bold text-slate-800 truncate max-w-[80px]">{it.bahanName}</p>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Overall status & Notes */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100">
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-gray-700">Status QC Hasil Akhir</label>
-                    <div className="flex bg-[#F3F4F6] rounded-xl p-1 max-w-xs">
-                      <button
-                        type="button"
-                        onClick={() => setQcOverallStatus('passed')}
-                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                          qcOverallStatus === 'passed'
-                            ? 'bg-[#059669] text-white shadow'
-                            : 'text-[#6B7280]'
-                        }`}
-                      >
-                        ✓ PASS
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setQcOverallStatus('failed')}
-                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                          qcOverallStatus === 'failed'
-                            ? 'bg-red-600 text-white shadow'
-                            : 'text-[#6B7280]'
-                        }`}
-                      >
-                        ✗ FAIL
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5">Catatan Distribusi</label>
-                    <textarea
-                      rows={2}
-                      value={qcNotes}
-                      onChange={(e) => setQcNotes(e.target.value)}
-                      placeholder="Catatan tambahan mengenai kedatangan barang..."
-                      className="w-full text-xs border rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] resize-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="p-6 border-t border-[#E5E7EB] bg-gray-50 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleExportPdfForQc(selectedOrderForQc)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#1E293B] hover:bg-[#0F172A] text-white text-xs font-extrabold rounded-xl shadow-xs cursor-pointer transition-colors"
-                  >
-                    <FileDown className="h-4 w-4" /> Export PDF QC
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleExportDocxForQc(selectedOrderForQc)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-extrabold rounded-xl shadow-xs cursor-pointer transition-colors"
-                  >
-                    <FileText className="h-4 w-4" /> Export DOCX QC
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setSelectedOrderForQc(null)}
-                    className="px-5 py-2.5 border border-gray-300 rounded-xl hover:bg-gray-100 text-xs font-bold text-gray-700 cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    onClick={handleSubmitQc}
-                    className="px-5 py-2.5 bg-[#111827] text-white hover:bg-black rounded-xl cursor-pointer text-xs font-bold"
-                  >
-                    Simpan Hasil QC
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Reassign Kurir Batch Modal */}
-      <AnimatePresence>
-        {editingGroupKey && editingEntriesGroup.length > 0 && (
+        {assignModalEntry && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -1238,14 +874,17 @@ export function MbgDistributionPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider block">
-                    Penugasan Kurir Batch
+                    Penugasan Per Institusi
                   </span>
                   <h3 className="text-lg font-extrabold text-[#111827]">
-                    {editingGroupKey === 'Belum Ditugaskan' ? 'Tugaskan Kurir Baru' : `Ubah Kurir (${editingGroupKey})`}
+                    {assignModalEntry.institutionName}
                   </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {assignModalEntry.jumlah} Porsi • Jadwal: {assignModalEntry.jadwalPengantaran || '-'}
+                  </p>
                 </div>
                 <button
-                  onClick={() => setEditingGroupKey(null)}
+                  onClick={() => setAssignModalEntry(null)}
                   title="Tutup Modal"
                   className="p-1.5 rounded-full hover:bg-gray-100 cursor-pointer"
                 >
@@ -1254,30 +893,17 @@ export function MbgDistributionPage() {
               </div>
 
               <div className="space-y-4">
-                {/* Batch Stats */}
-                <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 flex justify-between items-center text-xs font-bold text-amber-900">
-                  <span>Target Penugasan:</span>
-                  <div className="flex gap-2">
-                    <span className="bg-white px-2 py-0.5 rounded border border-amber-300">
-                      {editingEntriesGroup.length} Institusi
-                    </span>
-                    <span className="bg-amber-600 text-white px-2 py-0.5 rounded">
-                      {editingEntriesGroup.reduce((s, e) => s + (e.jumlah || 0), 0)} Porsi
-                    </span>
-                  </div>
-                </div>
-
-                {/* Quick Presets */}
+                {/* Kurir Selection */}
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5">Pilih Petugas / Preset</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['Rahmat Dede', 'Erik Yusep', 'Yendi Firdi', 'Hilman'].map((name) => (
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5">Kurir MBG (Wajib)</label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {kurirOptions.map((name) => (
                       <button
                         key={name}
                         type="button"
-                        onClick={() => setNewPetugasName(name)}
+                        onClick={() => setAssignKurirName(name)}
                         className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                          newPetugasName === name
+                          assignKurirName === name
                             ? 'bg-[#111827] text-white border-[#111827]'
                             : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-400'
                         }`}
@@ -1286,36 +912,239 @@ export function MbgDistributionPage() {
                       </button>
                     ))}
                   </div>
-                </div>
-
-                <div>
-                  <label htmlFor="kurir-name" className="block text-xs font-bold text-gray-700 mb-1.5">Nama Petugas / Kurir</label>
                   <input
-                    id="kurir-name"
                     type="text"
                     required
-                    title="Nama Petugas / Kurir"
-                    value={newPetugasName}
-                    onChange={(e) => setNewPetugasName(e.target.value)}
-                    placeholder="Ketik atau pilih nama petugas..."
+                    title="Nama Kurir MBG"
+                    value={assignKurirName}
+                    onChange={(e) => setAssignKurirName(e.target.value)}
+                    placeholder="Ketik atau pilih nama kurir..."
                     className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FBBF24] transition-all font-bold text-gray-900"
+                  />
+                </div>
+
+                {/* Kenek Selection */}
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5">Kenek / Asisten (Opsional)</label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {kurirOptions.filter((n) => n !== assignKurirName).map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setAssignKenekName(name)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                          assignKenekName === name
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    title="Nama Kenek (Asisten)"
+                    value={assignKenekName}
+                    onChange={(e) => setAssignKenekName(e.target.value)}
+                    placeholder="Nama kenek / asisten (opsional)..."
+                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all font-bold text-gray-900"
                   />
                 </div>
 
                 <div className="pt-4 border-t border-gray-100 flex gap-3">
                   <button
                     type="button"
-                    onClick={() => setEditingGroupKey(null)}
+                    onClick={() => setAssignModalEntry(null)}
                     className="flex-1 py-2.5 border border-gray-300 rounded-xl hover:bg-gray-100 text-xs font-bold text-gray-700 cursor-pointer text-center"
                   >
                     Batal
                   </button>
                   <button
-                    onClick={handleSaveGroupAssignment}
-                    disabled={!newPetugasName.trim()}
+                    onClick={handleSaveAssignment}
+                    disabled={!assignKurirName.trim()}
                     className="flex-1 py-2.5 bg-[#111827] text-white hover:bg-black rounded-xl cursor-pointer text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Simpan Penugasan Batch
+                    Simpan Penugasan
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Bulk Action Bar */}
+      <AnimatePresence>
+        {selectedEntryIds.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#111827] text-white px-6 py-3.5 rounded-2xl shadow-2xl flex items-center gap-6 border border-gray-800 font-['Hanken_Grotesk']"
+          >
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-extrabold">
+                {selectedEntryIds.length} Institusi Terpilih
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkKurirName('');
+                  setBulkKenekName('');
+                  setIsBulkAssignOpen(true);
+                }}
+                className="flex items-center gap-2 bg-[#FBBF24] hover:bg-amber-400 text-[#111827] font-extrabold text-xs px-4 py-2 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all"
+              >
+                <Users className="h-4 w-4" />
+                <span>Tugaskan Kurir & Kenek Sekaligus ({selectedEntryIds.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedEntryIds([])}
+                className="text-xs font-bold text-gray-400 hover:text-white cursor-pointer px-2 py-1"
+              >
+                Batal
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bulk Assign Modal */}
+      <AnimatePresence>
+        {isBulkAssignOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 font-['Hanken_Grotesk',system-ui,sans-serif]"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider block">
+                    Penugasan Massal (Bulk Assign)
+                  </span>
+                  <h3 className="text-lg font-extrabold text-[#111827]">
+                    Tugaskan {selectedEntryIds.length} Institusi Terpilih
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Pilihan Kurir & Kenek akan diterapkan langsung ke {selectedEntryIds.length} institusi terpilih.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsBulkAssignOpen(false)}
+                  title="Tutup Modal"
+                  className="p-1.5 rounded-full hover:bg-gray-100 cursor-pointer"
+                >
+                  <X className="h-5 w-5 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Selected items summary */}
+                <div className="bg-gray-50 p-3 rounded-xl max-h-32 overflow-y-auto space-y-1 border border-gray-100">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase block mb-1">
+                    Daftar Institusi Terpilih ({selectedEntryIds.length}):
+                  </span>
+                  {entries
+                    .filter((e) => selectedEntryIds.includes(e.id))
+                    .map((e) => (
+                      <div key={e.id} className="text-xs font-bold text-gray-700 flex justify-between">
+                        <span>• {e.institutionName}</span>
+                        <span className="text-gray-400 font-normal">{e.jumlah} Porsi</span>
+                      </div>
+                    ))}
+                </div>
+
+                {/* Kurir Selection */}
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5">
+                    Pilih Kurir MBG (Wajib)
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {kurirOptions.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setBulkKurirName(name)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                          bulkKurirName === name
+                            ? 'bg-[#111827] text-white border-[#111827]'
+                            : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    title="Nama Kurir MBG"
+                    value={bulkKurirName}
+                    onChange={(e) => setBulkKurirName(e.target.value)}
+                    placeholder="Ketik atau pilih nama kurir..."
+                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FBBF24] transition-all font-bold text-gray-900"
+                  />
+                </div>
+
+                {/* Kenek Selection */}
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5">
+                    Pilih Kenek / Asisten (Opsional)
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {kurirOptions.filter((n) => n !== bulkKurirName).map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setBulkKenekName(name)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                          bulkKenekName === name
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    title="Nama Kenek (Asisten)"
+                    value={bulkKenekName}
+                    onChange={(e) => setBulkKenekName(e.target.value)}
+                    placeholder="Nama kenek / asisten (opsional)..."
+                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all font-bold text-gray-900"
+                  />
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsBulkAssignOpen(false)}
+                    className="flex-1 py-2.5 border border-gray-300 rounded-xl hover:bg-gray-100 text-xs font-bold text-gray-700 cursor-pointer text-center"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSubmittingBulk || !bulkKurirName.trim()}
+                    onClick={handleBulkAssignSubmit}
+                    className="flex-1 py-2.5 bg-[#111827] hover:bg-black text-white disabled:bg-gray-300 rounded-xl cursor-pointer text-xs font-bold text-center shadow-md flex items-center justify-center gap-2"
+                  >
+                    {isSubmittingBulk ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-[#FBBF24]" />
+                    ) : (
+                      <Send className="h-4 w-4 text-[#FBBF24]" />
+                    )}
+                    <span>Simpan Penugasan ({selectedEntryIds.length})</span>
                   </button>
                 </div>
               </div>

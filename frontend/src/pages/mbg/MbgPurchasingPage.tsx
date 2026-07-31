@@ -17,14 +17,22 @@ import {
   List,
   Send,
   ShoppingCart,
+  ShoppingBag,
+  CheckCircle2,
   Wand2,
   FileDown,
   FileText,
   Camera,
+  Upload,
+  FolderArchive,
+  Download,
+  Search,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { exportPurchasingToDocx } from '@/utils/docxExporter';
+import { LiveCamera } from '@/components/LiveCamera';
+import { compressBase64Image } from '@/utils/imageCompressor';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { MbgPmBatch, MbgPurchaseOrder, MbgPurchaseItem, MbgPurchaseStatus, MbgPmEntry, MbgNutritionEntry } from '@/types/mbg';
@@ -34,7 +42,15 @@ import {
   addPurchaseOrder,
   updatePurchaseOrder,
   deletePurchaseOrder,
+  subscribeArchivedPurchasingDocs,
+  addArchivedPurchasingDoc,
+  updateArchivedPurchasingDoc,
+  deleteArchivedPurchasingDoc,
+  type MbgPurchasingDocArchive,
 } from '@/services/mbgPurchasingService';
+import { subscribeQcChecks, addQcCheck, updateQcCheck } from '@/services/mbgDistributionService';
+import { subscribeSubPurchasingTasks, addSubPurchasingTask } from '@/services/mbgSubPurchasingService';
+import type { MbgQcCheck, MbgSubPurchasingTask } from '@/types/mbg';
 import { subscribeCustomRecipes, subscribeRecipeAdjustments, subscribeNutrition } from '@/services/mbgProductionService';
 import { SearchableBatchSelector } from '@/components/mbg/SearchableBatchSelector';
 import {
@@ -129,6 +145,52 @@ export function MbgPurchasingPage() {
     return unsub;
   }, []);
 
+  const [mainTab, setMainTab] = useState<'orders' | 'qc' | 'sub_purchasing' | 'archive'>(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('tab=archive')) {
+      return 'archive';
+    }
+    return 'orders';
+  });
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      if (window.location.search.includes('tab=archive')) {
+        setMainTab('archive');
+      }
+    };
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
+  }, []);
+
+  const [archivedDocs, setArchivedDocs] = useState<MbgPurchasingDocArchive[]>([]);
+  const [docSearchQuery, setDocSearchQuery] = useState('');
+
+  // QC Checks state
+  const [qcChecks, setQcChecks] = useState<MbgQcCheck[]>([]);
+
+  // Sub Purchasing Tasks state
+  const [subPurchasingTasks, setSubPurchasingTasks] = useState<MbgSubPurchasingTask[]>([]);
+  const [handoverModalOrder, setHandoverModalOrder] = useState<MbgPurchaseOrder | null>(null);
+  const [subPurchasingStaffName, setSubPurchasingStaffName] = useState('Sub Purchasing 1');
+
+  // Live Camera State
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraActiveOrderId, setCameraActiveOrderId] = useState<string>('');
+  const [cameraActiveItemIndex, setCameraActiveItemIndex] = useState<number | null>(null);
+
+  // Subscribe archived purchasing documents, QC checks, and sub-purchasing tasks
+  useEffect(() => {
+    if (!selectedBatchId) return;
+    const unsub1 = subscribeArchivedPurchasingDocs(selectedBatchId, setArchivedDocs);
+    const unsub2 = subscribeQcChecks(selectedBatchId, setQcChecks);
+    const unsub3 = subscribeSubPurchasingTasks(selectedBatchId, setSubPurchasingTasks);
+    return () => {
+      unsub1();
+      unsub2();
+      unsub3();
+    };
+  }, [selectedBatchId]);
+
   // Subscribe PO and calculation data when batch changes
   useEffect(() => {
     if (!selectedBatchId) return;
@@ -173,43 +235,89 @@ export function MbgPurchasingPage() {
     return [...standarPorsi, ...customPorsi];
   }, [customRecipes]);
 
-  // 2. Base Requirements
+  // 2. Base Requirements (Synced with Tim Produksi Kadar Gizi + Flexible Recipe Scaling)
   const recipeRequirements = useMemo(() => {
     const rawIngredients: Record<
       string,
       { name: string; amount: number; satuan: string; sourceMenus: string[] }
     > = {};
 
+    // 1. If Tim Produksi has already calculated Kadar Gizi for this batch, load ingredients directly from nutritionData
+    if (nutritionData.length > 0) {
+      nutritionData.forEach((nut) => {
+        const key = nut.menuItemName.toLowerCase().trim();
+        if (!rawIngredients[key]) {
+          rawIngredients[key] = {
+            name: nut.menuItemName,
+            amount: nut.berat || 0,
+            satuan: 'g',
+            sourceMenus: ['Kadar Gizi Produksi'],
+          };
+        } else {
+          rawIngredients[key].amount += nut.berat || 0;
+        }
+      });
+      return Object.values(rawIngredients).sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    // 2. Fallback: Calculate from PM entries + standard recipes with smart flexible matching
     const menuMainTotals: Record<string, { totalQty: number; countKecil: number; countBesar: number }> = {};
 
     entries.forEach((entry) => {
       if (entry.isSekolahLibur) return;
       const qtyKecil = entry.qtSiswaBalita || 0;
       const qtyBesar = (entry.qtBumilBusui || 0) + (entry.qtGuruKader || 0);
+      const entryPorsiTotal = entry.jumlah || (qtyKecil + qtyBesar) || 1;
 
       const items = [...(entry.menuItems || []), ...(entry.menuKeringanItems || [])];
 
       items.forEach((menuName) => {
-        const porsiCfg = combinedPorsi.find(
-          (p) => p.namaMenu.toLowerCase().trim() === menuName.toLowerCase().trim()
-        );
-        const portionSize = porsiCfg ? (qtyKecil * porsiCfg.porsiKecil + qtyBesar * porsiCfg.porsiBesar) : 0;
-        const weight = portionSize;
-
         const normName = menuName.trim();
+        const normLower = normName.toLowerCase();
+
+        // Flexible porsi matching
+        let porsiCfg = combinedPorsi.find((p) => p.namaMenu.toLowerCase().trim() === normLower);
+        if (!porsiCfg) {
+          porsiCfg = combinedPorsi.find((p) => {
+            const pName = p.namaMenu.toLowerCase().trim();
+            return pName.includes(normLower) || normLower.includes(pName);
+          });
+        }
+
+        const smallWeight = (porsiCfg && porsiCfg.porsiKecil > 0) ? porsiCfg.porsiKecil : 100;
+        const largeWeight = (porsiCfg && porsiCfg.porsiBesar > 0) ? porsiCfg.porsiBesar : 150;
+        let weight = (qtyKecil * smallWeight) + (qtyBesar * largeWeight);
+        if (weight === 0) {
+          weight = entryPorsiTotal * 100;
+        }
+
         if (!menuMainTotals[normName]) {
           menuMainTotals[normName] = { totalQty: 0, countKecil: 0, countBesar: 0 };
         }
         menuMainTotals[normName].totalQty += weight;
-        menuMainTotals[normName].countKecil += qtyKecil;
+        menuMainTotals[normName].countKecil += qtyKecil || entryPorsiTotal;
         menuMainTotals[normName].countBesar += qtyBesar;
       });
     });
 
     Object.entries(menuMainTotals).forEach(([menuName, totals]) => {
-      const recipe = combinedRecipes.find(
-        (r) => r.namaMenu.toLowerCase().trim() === menuName.toLowerCase().trim()
-      );
+      const normMenu = menuName.toLowerCase().trim();
+      let recipe = combinedRecipes.find((r) => r.namaMenu.toLowerCase().trim() === normMenu);
+      if (!recipe) {
+        recipe = combinedRecipes.find((r) => {
+          const rName = r.namaMenu.toLowerCase().trim();
+          return rName.includes(normMenu) || normMenu.includes(rName);
+        });
+      }
+      if (!recipe) {
+        const words = normMenu.split(/\s+/).filter((w) => w.length > 2);
+        if (words.length > 0) {
+          recipe = combinedRecipes.find((r) => {
+            const rName = r.namaMenu.toLowerCase().trim();
+            return words.some((w) => rName.includes(w));
+          });
+        }
+      }
 
       if (recipe && recipe.baseQty > 0) {
         const ratio = totals.totalQty / recipe.baseQty;
@@ -218,15 +326,14 @@ export function MbgPurchasingPage() {
           if (!rawIngredients[key]) {
             rawIngredients[key] = { name: ing.bahan, amount: 0, satuan: ing.satuan, sourceMenus: [] };
           }
-          rawIngredients[key].amount += ing.kebutuhan * ratio;
+          const baseKebutuhan = ing.kebutuhan > 0 ? ing.kebutuhan : (recipe.baseQty / 100);
+          rawIngredients[key].amount += baseKebutuhan * ratio;
           if (!rawIngredients[key].sourceMenus.includes(menuName)) {
             rawIngredients[key].sourceMenus.push(menuName);
           }
         });
       } else {
-        const porsiCfg = combinedPorsi.find(
-          (p) => p.namaMenu.toLowerCase().trim() === menuName.toLowerCase().trim()
-        );
+        const porsiCfg = combinedPorsi.find((p) => p.namaMenu.toLowerCase().trim() === normMenu);
         const name = porsiCfg ? porsiCfg.bahanUtama : menuName;
         const key = name.toLowerCase().trim();
         const totalPortions = totals.countKecil + totals.countBesar;
@@ -240,7 +347,7 @@ export function MbgPurchasingPage() {
             sourceMenus: [],
           };
         }
-        rawIngredients[key].amount += totals.totalQty || totalPortions;
+        rawIngredients[key].amount += totals.totalQty || (totalPortions * 100);
         if (!rawIngredients[key].sourceMenus.includes(menuName)) {
           rawIngredients[key].sourceMenus.push(menuName);
         }
@@ -248,7 +355,7 @@ export function MbgPurchasingPage() {
     });
 
     return Object.values(rawIngredients).sort((a, b) => a.name.localeCompare(b.name));
-  }, [entries, combinedPorsi, combinedRecipes]);
+  }, [entries, combinedPorsi, combinedRecipes, nutritionData]);
 
   // 3. Adjusted Requirements
   const adjustedRecipeRequirements = useMemo(() => {
@@ -448,18 +555,21 @@ export function MbgPurchasingPage() {
         };
       });
 
-      // Merge logic
-      const newItems = [...order.items];
-      loadedItems.forEach((loaded) => {
-        const existingIdx = newItems.findIndex((ex) => ex.bahanName.toLowerCase().trim() === loaded.bahanName.toLowerCase().trim());
-        if (existingIdx >= 0) {
-          newItems[existingIdx].jumlah = loaded.jumlah;
-          newItems[existingIdx].satuan = loaded.satuan;
-          newItems[existingIdx].keterangan = loaded.keterangan;
-          newItems[existingIdx].totalHarga = newItems[existingIdx].jumlah * newItems[existingIdx].hargaSatuan;
-        } else {
-          newItems.push(loaded);
+      // Clean replacement: overwrite generic menu items with loadedItems (real ingredients)
+      const newItems: MbgPurchaseItem[] = loadedItems.map((loaded) => {
+        const existing = order.items.find(
+          (ex) => ex.bahanName.toLowerCase().trim() === loaded.bahanName.toLowerCase().trim()
+        );
+        if (existing) {
+          const price = existing.hargaSatuan || 0;
+          return {
+            ...loaded,
+            hargaSatuan: price,
+            totalHarga: loaded.jumlah * price,
+            photoUrl: existing.photoUrl || loaded.photoUrl,
+          };
         }
+        return loaded;
       });
 
       const totalPengeluaran = newItems.reduce((sum, item) => sum + (item.totalHarga || 0), 0);
@@ -487,6 +597,65 @@ export function MbgPurchasingPage() {
       });
     } else {
       proceedAutoLoad();
+    }
+  };
+
+  const handleUpdateOrderPhoto = async (orderId: string, photoUrl: string) => {
+    try {
+      const compressed = photoUrl ? await compressBase64Image(photoUrl, 1000, 1000, 0.7) : '';
+      const photos = compressed ? [compressed] : [];
+      await updatePurchaseOrder(orderId, { photos });
+      showToast({
+        message: photoUrl ? 'Foto bukti pembelanjaan berhasil disimpan!' : 'Foto bukti pembelanjaan dihapus',
+        variant: 'success',
+      });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: 'Gagal memperbarui foto bukti', variant: 'error' });
+    }
+  };
+
+  const handleCreateSubPurchasingTask = async () => {
+    if (!handoverModalOrder || !selectedBatchId || !user) return;
+    const staffName = subPurchasingStaffName.trim();
+    if (!staffName) {
+      showToast({ message: 'Pilih / ketik nama petugas Sub-Purchasing', variant: 'error' });
+      return;
+    }
+
+    try {
+      const itemsToBelanja = handoverModalOrder.items.map((it) => ({
+        bahanName: it.bahanName,
+        jumlah: it.jumlah,
+        satuan: it.satuan,
+        hargaSatuan: it.hargaSatuan || 0,
+        totalHarga: it.totalHarga || 0,
+        keterangan: it.keterangan || '',
+        photoUrl: it.photoUrl || '',
+        status: 'belum_beli' as const,
+      }));
+
+      await addSubPurchasingTask({
+        batchId: selectedBatchId,
+        purchaseOrderId: handoverModalOrder.id,
+        supplierName: handoverModalOrder.supplierName,
+        assignedTo: staffName.toLowerCase().replace(/\s+/g, '_'),
+        assignedToName: staffName,
+        items: itemsToBelanja,
+        totalPengeluaran: handoverModalOrder.totalPengeluaran || 0,
+        status: 'pending',
+        notes: `Tugas belanja dari Purchasing (${user.displayName || 'Purchasing'})`,
+        assignedBy: user.uid,
+        assignedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      showToast({ message: `Tugas belanja diserahkan ke ${staffName}!`, variant: 'success' });
+      setHandoverModalOrder(null);
+    } catch (err) {
+      console.error(err);
+      showToast({ message: 'Gagal membuat tugas Sub-Purchasing', variant: 'error' });
     }
   };
 
@@ -709,11 +878,79 @@ export function MbgPurchasingPage() {
     }
   };
 
-  const handleExportPdfForOrder = async (order: MbgPurchaseOrder) => {
+  const resolveEffectiveOrderItems = useCallback((order: MbgPurchaseOrder): MbgPurchaseItem[] => {
+    const isGenericMenuList = order.items.length > 0 && order.items.every((it) => 
+      ['ikan goreng', 'kue bojo', 'nasi putih', 'sayur bening', 'semangka', 'tempe bacem'].some((m) => it.bahanName.toLowerCase().includes(m))
+    );
+
+    if (order.items.length > 0 && !isGenericMenuList) {
+      return order.items;
+    }
+
+    if (adjustedRecipeRequirements.length > 0) {
+      return adjustedRecipeRequirements.map((r) => {
+        let qty = r.amount;
+        let unit = 'Kg';
+        const sLower = r.satuan.toLowerCase();
+        if (sLower === 'g') {
+          if (r.amount >= 1000) {
+            qty = r.amount / 1000;
+            unit = 'Kg';
+          } else {
+            qty = r.amount;
+            unit = 'g';
+          }
+        } else if (sLower === 'ml') {
+          if (r.amount >= 1000) {
+            qty = r.amount / 1000;
+            unit = 'Liter';
+          } else {
+            qty = r.amount;
+            unit = 'ml';
+          }
+        } else if (sLower === 'pcs') {
+          unit = 'Pcs';
+        } else if (sLower === 'ikat') {
+          unit = 'Ikat';
+        } else if (sLower === 'siung' || sLower === 'lembar') {
+          unit = 'Pcs';
+        } else {
+          const matched = MBG_SATUAN_OPTIONS.find((opt) => opt.toLowerCase() === sLower);
+          unit = matched || 'Kg';
+        }
+
+        qty = Math.round(qty * 100) / 100;
+
+        let remark = '';
+        if (r.isCustom) {
+          remark = 'Tambahan Manual Produksi';
+        } else if (r.adjustmentId) {
+          remark = 'Koreksi Kuantitas Produksi';
+        } else {
+          remark = `Resep: ${r.sourceMenus.slice(0, 2).join(', ')}`;
+        }
+
+        return {
+          bahanName: r.name,
+          jamKedatangan: '08:00',
+          jumlah: qty,
+          satuan: unit,
+          hargaSatuan: 0,
+          totalHarga: 0,
+          keterangan: remark,
+        };
+      });
+    }
+
+    return order.items;
+  }, [adjustedRecipeRequirements]);
+
+  const handleExportPdfForOrder = async (order: MbgPurchaseOrder, saveArchive = true) => {
     try {
       showToast({ message: 'Menyiapkan Form Pemeriksaan PDF...', variant: 'info' });
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageW = doc.internal.pageSize.getWidth();
+      const itemsToExport = resolveEffectiveOrderItems(order);
 
       // 1. Logo BADAN GIZI NASIONAL
       const logoBase64 = await getBase64ImageFromUrl('/logo_badan_gizi.png');
@@ -763,12 +1000,15 @@ export function MbgPurchasingPage() {
       doc.text(`Waktu    : ${formattedDate}`, 14, 44);
 
       // 3. Pre-load item photo base64 strings
+      const globalProofPhoto = order.photos && order.photos.length > 0 ? order.photos[0] : null;
+      const globalProofBase64 = globalProofPhoto ? await getBase64ImageFromUrl(globalProofPhoto) : null;
+
       const itemPhotosBase64: (string | null)[] = await Promise.all(
-        order.items.map(async (item) => {
+        itemsToExport.map(async (item) => {
           if (item.photoUrl) {
             return await getBase64ImageFromUrl(item.photoUrl);
           }
-          return null;
+          return globalProofBase64;
         })
       );
 
@@ -791,7 +1031,7 @@ export function MbgPurchasingPage() {
         ],
       ];
 
-      const tableBody = order.items.map((item, idx) => [
+      const tableBody = itemsToExport.map((item, idx) => [
         `${idx + 1}`,
         item.bahanName,
         `${item.jumlah}`,
@@ -865,18 +1105,48 @@ export function MbgPurchasingPage() {
       doc.setFont('helvetica', 'bold');
       doc.text('Ragha Eskha Utama, S. Hum.', signX, finalY + 24, { align: 'center' });
 
-      doc.save(`Form_Pemeriksaan_Bahan_${order.supplierName.replace(/\s+/g, '_')}_${order.targetDate}.pdf`);
-      showToast({ message: 'Export PDF Form Pemeriksaan berhasil!', variant: 'success' });
+      const fileNamePdf = `Form_Pemeriksaan_Bahan_${(order.supplierName || 'Supplier').replace(/\s+/g, '_')}_${order.targetDate}.pdf`;
+      doc.save(fileNamePdf);
+
+      // Save / update document archive in Firestore
+      if (saveArchive) {
+        try {
+          const existing = archivedDocs.find((d) => d.orderId === order.id && d.docType === 'pdf');
+          const archivePayload = {
+            batchId: selectedBatchId || '',
+            orderId: order.id,
+            supplierName: order.supplierName || 'SPPG Sukabumi Gunungguruh Kebonmanggu',
+            formNo: formNoStr,
+            docType: 'pdf' as const,
+            fileName: fileNamePdf,
+            exportedAt: new Date().toISOString(),
+            itemCount: itemsToExport.length,
+            itemsSummary: itemsToExport.map((i) => i.bahanName).slice(0, 5).join(', '),
+            targetDate: order.targetDate,
+          };
+
+          if (existing?.id) {
+            await updateArchivedPurchasingDoc(existing.id, archivePayload);
+          } else {
+            await addArchivedPurchasingDoc(archivePayload);
+          }
+        } catch (archErr) {
+          console.error('Failed to save document archive:', archErr);
+        }
+      }
+
+      showToast({ message: 'Export & Arsip PDF Form Pemeriksaan berhasil!', variant: 'success' });
     } catch (err) {
       console.error('Failed to export PDF:', err);
       showToast({ message: 'Gagal mengekspor PDF Form Pemeriksaan', variant: 'error' });
     }
   };
 
-  const handleExportDocxForOrder = async (order: MbgPurchaseOrder) => {
+  const handleExportDocxForOrder = async (order: MbgPurchaseOrder, saveArchive = true) => {
     try {
       showToast({ message: 'Menyiapkan Form Pemeriksaan Word (.docx)...', variant: 'info' });
       const logoBase64 = await getBase64ImageFromUrl('/logo_badan_gizi.png');
+      const itemsToExport = resolveEffectiveOrderItems(order);
 
       const targetDateObj = new Date(order.targetDate || Date.now());
       const romanMonths = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
@@ -891,6 +1161,8 @@ export function MbgPurchasingPage() {
         year: 'numeric',
       });
 
+      const fileNameDocx = `Form_Pemeriksaan_Bahan_${(order.supplierName || 'Supplier').replace(/\s+/g, '_')}_${order.targetDate}.docx`;
+
       await exportPurchasingToDocx(
         {
           title: 'FORM PEMERIKSAAN BAHAN MAKANAN',
@@ -899,10 +1171,10 @@ export function MbgPurchasingPage() {
           kepada: order.supplierName || 'SPPG Sukabumi Gunungguruh Kebonmanggu',
           waktu: formattedDate,
           batchDate: order.targetDate,
-          totalItems: order.items.length,
+          totalItems: itemsToExport.length,
           logoBase64: logoBase64 || undefined,
           officerName: 'Ragha Eskha Utama, S. Hum.',
-          items: order.items.map((it) => ({
+          items: itemsToExport.map((it) => ({
             name: it.bahanName,
             category: order.groupLabel,
             qty: it.jumlah,
@@ -910,19 +1182,107 @@ export function MbgPurchasingPage() {
             pricePerUnit: it.hargaSatuan,
             totalPrice: it.totalHarga,
             supplierName: order.supplierName,
-            photoUrl: it.photoUrl,
+            photoUrl: it.photoUrl || (order.photos && order.photos.length > 0 ? order.photos[0] : undefined),
             jamKedatangan: it.jamKedatangan,
             keterangan: it.keterangan,
           })),
         },
-        `Form_Pemeriksaan_Bahan_${order.supplierName.replace(/\s+/g, '_')}_${order.targetDate}`
+        fileNameDocx.replace('.docx', '')
       );
-      showToast({ message: 'Export DOCX Form Pemeriksaan berhasil!', variant: 'success' });
+
+      // Save / update document archive in Firestore
+      if (saveArchive) {
+        try {
+          const existing = archivedDocs.find((d) => d.orderId === order.id && d.docType === 'docx');
+          const archivePayload = {
+            batchId: selectedBatchId || '',
+            orderId: order.id,
+            supplierName: order.supplierName || 'SPPG Sukabumi Gunungguruh Kebonmanggu',
+            formNo: formNoStr,
+            docType: 'docx' as const,
+            fileName: fileNameDocx,
+            exportedAt: new Date().toISOString(),
+            itemCount: itemsToExport.length,
+            itemsSummary: itemsToExport.map((i) => i.bahanName).slice(0, 5).join(', '),
+            targetDate: order.targetDate,
+          };
+
+          if (existing?.id) {
+            await updateArchivedPurchasingDoc(existing.id, archivePayload);
+          } else {
+            await addArchivedPurchasingDoc(archivePayload);
+          }
+        } catch (archErr) {
+          console.error('Failed to save document archive:', archErr);
+        }
+      }
+
+      showToast({ message: 'Export & Arsip DOCX Form Pemeriksaan berhasil!', variant: 'success' });
     } catch (err) {
       console.error('Failed to export DOCX:', err);
       showToast({ message: 'Gagal mengekspor DOCX Form Pemeriksaan', variant: 'error' });
     }
   };
+
+  const handleCameraPhotoCapture = (file: File) => {
+    if (!cameraActiveOrderId) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result as string;
+      if (cameraActiveItemIndex !== null) {
+        const compressed = await compressBase64Image(base64, 800, 800, 0.75);
+        await handleUpdateItem(cameraActiveOrderId, cameraActiveItemIndex, 'photoUrl', compressed);
+        showToast({ message: 'Foto bahan berhasil disimpan!', variant: 'success' });
+        setCameraActiveItemIndex(null);
+      } else {
+        await handleUpdateOrderPhoto(cameraActiveOrderId, base64);
+      }
+      setShowCamera(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDeleteArchivedDoc = (docId: string) => {
+    setConfirmState({
+      title: 'Hapus Arsip Dokumen',
+      message: 'Apakah Anda yakin ingin menghapus arsip dokumen ini?',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          await deleteArchivedPurchasingDoc(docId);
+          showToast({ message: 'Arsip dokumen berhasil dihapus', variant: 'success' });
+        } catch {
+          showToast({ message: 'Gagal menghapus arsip dokumen', variant: 'error' });
+        } finally {
+          setConfirmState(null);
+        }
+      },
+    });
+  };
+
+  const handleReExportArchivedDoc = async (archDoc: MbgPurchasingDocArchive) => {
+    const matchedOrder = orders.find((o) => o.id === archDoc.orderId);
+    if (!matchedOrder) {
+      showToast({ message: 'Purchase Order terkait tidak ditemukan', variant: 'info' });
+      return;
+    }
+    if (archDoc.docType === 'pdf') {
+      await handleExportPdfForOrder(matchedOrder, false);
+    } else {
+      await handleExportDocxForOrder(matchedOrder, false);
+    }
+  };
+
+  const filteredArchivedDocs = useMemo(() => {
+    if (!docSearchQuery.trim()) return archivedDocs;
+    const q = docSearchQuery.toLowerCase();
+    return archivedDocs.filter(
+      (d) =>
+        d.formNo.toLowerCase().includes(q) ||
+        d.supplierName.toLowerCase().includes(q) ||
+        d.fileName.toLowerCase().includes(q)
+    );
+  }, [archivedDocs, docSearchQuery]);
 
   const totalItemCount = useMemo(() => {
     return orders.reduce((sum, o) => sum + (o.items?.length || 0), 0);
@@ -981,9 +1341,70 @@ export function MbgPurchasingPage() {
             />
           </div>
 
+          {/* Main Sub-Nav Tabs */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6 border-b border-gray-200 pb-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setMainTab('orders')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-extrabold text-xs cursor-pointer transition-all ${
+                  mainTab === 'orders'
+                    ? 'bg-[#111827] text-white shadow-sm'
+                    : 'bg-white text-gray-600 hover:text-gray-900 border border-gray-200'
+                }`}
+              >
+                <ShoppingCart className="h-4 w-4" />
+                Daftar Pesanan Belanja (PO)
+              </button>
+              <button
+                onClick={() => setMainTab('qc')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-extrabold text-xs cursor-pointer transition-all ${
+                  mainTab === 'qc'
+                    ? 'bg-[#111827] text-white shadow-sm'
+                    : 'bg-white text-gray-600 hover:text-gray-900 border border-gray-200'
+                }`}
+              >
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                Quality Control (QC)
+              </button>
+              <button
+                onClick={() => setMainTab('sub_purchasing')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-extrabold text-xs cursor-pointer transition-all ${
+                  mainTab === 'sub_purchasing'
+                    ? 'bg-[#111827] text-white shadow-sm'
+                    : 'bg-white text-gray-600 hover:text-gray-900 border border-gray-200'
+                }`}
+              >
+                <ShoppingBag className="h-4 w-4 text-blue-500" />
+                Handover Sub-Purchasing
+                {subPurchasingTasks.length > 0 && (
+                  <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-blue-600 text-white font-extrabold">
+                    {subPurchasingTasks.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setMainTab('archive')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-extrabold text-xs cursor-pointer transition-all ${
+                  mainTab === 'archive'
+                    ? 'bg-[#111827] text-white shadow-sm'
+                    : 'bg-white text-gray-600 hover:text-gray-900 border border-gray-200'
+                }`}
+              >
+                <FolderArchive className="h-4 w-4 text-amber-500" />
+                Arsip Dokumen PDF & Word
+                {archivedDocs.length > 0 && (
+                  <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-amber-500 text-white font-extrabold">
+                    {archivedDocs.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+
           {selectedBatchId ? (
-            <>
-              {/* Batch Metadata / Summary Info */}
+            mainTab === 'orders' ? (
+              <>
+                {/* Batch Metadata / Summary Info */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 flex items-center gap-4 shadow-sm">
                   <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
@@ -1312,6 +1733,13 @@ export function MbgPurchasingPage() {
 
                           <div className="flex items-center gap-1.5 border-l border-gray-200 pl-2">
                             <button
+                              onClick={() => setHandoverModalOrder(order)}
+                              title="Handover tugas belanja ini ke Sub-Purchasing"
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-extrabold rounded-lg shadow-xs cursor-pointer transition-colors"
+                            >
+                              <ShoppingBag className="h-3.5 w-3.5" /> Handover
+                            </button>
+                            <button
                               onClick={() => handleExportPdfForOrder(order)}
                               title="Export PO ini ke PDF"
                               className="flex items-center gap-1 px-2.5 py-1.5 bg-[#1E293B] hover:bg-[#0F172A] text-white text-[11px] font-extrabold rounded-lg shadow-xs cursor-pointer transition-colors"
@@ -1335,17 +1763,18 @@ export function MbgPurchasingPage() {
                             </button>
                           </div>
                         </div>
-                      </div>                      {/* Items Table */}
+                      </div>
+                      {/* Items Table */}
                       <div className="overflow-x-auto">
-                        <table className="w-full text-xs min-w-[700px]">
+                        <table className="w-full text-xs min-w-[750px]">
                           <thead>
                             <tr className="bg-gray-50 border-b border-gray-100 text-left font-bold text-gray-500 uppercase tracking-wider text-[10px]">
-                              <th className="py-3 px-4 w-1/3">List Pesanan Bahan</th>
-                              <th className="py-3 px-4 text-center">Foto Bahan</th>
+                              <th className="py-3 px-4 w-1/4">List Pesanan Bahan</th>
                               <th className="py-3 px-4">Jam Kedatangan</th>
                               <th className="py-3 px-4">Jumlah</th>
                               <th className="py-3 px-4">Satuan</th>
                               <th className="py-3 px-4">Keterangan</th>
+                              <th className="py-3 px-4 text-center">Foto Bukti</th>
                               <th className="py-3 px-4 text-center">Aksi</th>
                             </tr>
                           </thead>
@@ -1365,57 +1794,6 @@ export function MbgPurchasingPage() {
                                     className="w-full bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[#FBBF24] focus:outline-none py-1 font-bold text-[#111827] disabled:opacity-60"
                                   />
                                 </td>
-                                <td className="py-2.5 px-4 text-center">
-                                  {item.photoUrl ? (
-                                    <div className="relative group inline-block">
-                                      <img
-                                        src={item.photoUrl}
-                                        alt={item.bahanName}
-                                        className="h-10 w-10 object-cover rounded-lg border border-gray-200 shadow-xs"
-                                      />
-                                      <label className="absolute inset-0 bg-black/50 text-white rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-[9px] font-bold">
-                                        Ganti
-                                        <input
-                                          type="file"
-                                          accept="image/*"
-                                          className="hidden"
-                                          disabled={order.submittedToRecap === true}
-                                          onChange={(e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) {
-                                              const reader = new FileReader();
-                                              reader.onload = () => {
-                                                handleUpdateItem(order.id, idx, 'photoUrl', reader.result as string);
-                                              };
-                                              reader.readAsDataURL(file);
-                                            }
-                                          }}
-                                        />
-                                      </label>
-                                    </div>
-                                  ) : (
-                                    <label className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-[10px] font-bold cursor-pointer transition-colors">
-                                      <Camera className="h-3 w-3 text-gray-500" />
-                                      Foto
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        disabled={order.submittedToRecap === true}
-                                        onChange={(e) => {
-                                          const file = e.target.files?.[0];
-                                          if (file) {
-                                            const reader = new FileReader();
-                                            reader.onload = () => {
-                                              handleUpdateItem(order.id, idx, 'photoUrl', reader.result as string);
-                                            };
-                                            reader.readAsDataURL(file);
-                                          }
-                                        }}
-                                      />
-                                    </label>
-                                  )}
-                                </td>
                                 <td className="py-2.5 px-4">
                                   <input
                                     type="time"
@@ -1432,14 +1810,19 @@ export function MbgPurchasingPage() {
                                 <td className="py-2.5 px-4">
                                   <input
                                     type="number"
-                                    value={item.jumlah || ''}
+                                    value={item.jumlah}
                                     title="Jumlah"
+                                    placeholder="0"
                                     disabled={order.submittedToRecap === true}
                                     onChange={(e) =>
-                                      handleUpdateItem(order.id, idx, 'jumlah', Number(e.target.value))
+                                      handleUpdateItem(
+                                        order.id,
+                                        idx,
+                                        'jumlah',
+                                        parseFloat(e.target.value) || 0
+                                      )
                                     }
-                                    placeholder="0"
-                                    className="w-20 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[#FBBF24] focus:outline-none py-1 font-bold disabled:opacity-60"
+                                    className="w-20 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[#FBBF24] focus:outline-none py-1 font-extrabold text-[#111827] disabled:opacity-60"
                                   />
                                 </td>
                                 <td className="py-2.5 px-4">
@@ -1450,7 +1833,7 @@ export function MbgPurchasingPage() {
                                     onChange={(e) =>
                                       handleUpdateItem(order.id, idx, 'satuan', e.target.value)
                                     }
-                                    className="bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[#FBBF24] focus:outline-none py-1 cursor-pointer font-bold text-gray-700 disabled:opacity-60"
+                                    className="bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[#FBBF24] focus:outline-none py-1 cursor-pointer font-semibold text-gray-700 disabled:opacity-60"
                                   >
                                     {MBG_SATUAN_OPTIONS.map((opt) => (
                                       <option key={opt} value={opt}>
@@ -1473,6 +1856,36 @@ export function MbgPurchasingPage() {
                                   />
                                 </td>
                                 <td className="py-2.5 px-4 text-center">
+                                  {item.photoUrl ? (
+                                    <div className="relative group inline-block">
+                                      <img
+                                        src={item.photoUrl}
+                                        alt={item.bahanName}
+                                        className="h-8 w-8 rounded-lg object-cover border border-gray-300 cursor-pointer hover:opacity-80"
+                                        onClick={() => {
+                                          setCameraActiveOrderId(order.id);
+                                          setCameraActiveItemIndex(idx);
+                                          setShowCamera(true);
+                                        }}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCameraActiveOrderId(order.id);
+                                        setCameraActiveItemIndex(idx);
+                                        setShowCamera(true);
+                                      }}
+                                      disabled={order.submittedToRecap === true}
+                                      className="p-1.5 rounded-lg bg-gray-100 hover:bg-amber-100 text-gray-500 hover:text-amber-900 cursor-pointer transition-colors disabled:opacity-50"
+                                      title="Foto Bukti Bahan Ini"
+                                    >
+                                      <Camera className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-4 text-center">
                                   {!(order.submittedToRecap === true) ? (
                                     <button
                                       onClick={() => handleDeleteItem(order.id, idx)}
@@ -1490,6 +1903,106 @@ export function MbgPurchasingPage() {
                             ))}
                           </tbody>
                         </table>
+                      </div>
+
+                      {/* Single Proof Photo Section for Entire Purchased Batch */}
+                      <div className="mx-6 my-4 p-4 bg-gray-50/80 border border-gray-200/80 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-2xs">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-amber-100/80 flex items-center justify-center text-amber-700 font-bold shrink-0">
+                            <Camera className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-extrabold text-[#111827]">Bukti Foto Pembelian Bahan</h4>
+                            <p className="text-[11px] text-gray-500 font-medium">
+                              Foto bukti fisik 1x saat semua bahan baku sudah dibeli untuk disertakan ke PDF & Word.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          {order.photos && order.photos.length > 0 ? (
+                            <div className="flex items-center gap-3">
+                              <div className="relative group">
+                                <img
+                                  src={order.photos[0]}
+                                  alt="Bukti Pembelian Bahan"
+                                  className="h-12 w-16 object-cover rounded-xl border border-gray-300 shadow-xs"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateOrderPhoto(order.id, '')}
+                                  className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-md hover:bg-red-700 cursor-pointer"
+                                  title="Hapus Foto Bukti"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCameraActiveOrderId(order.id);
+                                    setShowCamera(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-xs cursor-pointer transition-colors"
+                                >
+                                  <Camera className="h-3.5 w-3.5" /> Kamera
+                                </button>
+                                <label className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 font-extrabold text-xs rounded-xl shadow-xs cursor-pointer transition-colors">
+                                  <Upload className="h-3.5 w-3.5 text-gray-600" /> Upload
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = () => {
+                                          handleUpdateOrderPhoto(order.id, reader.result as string);
+                                        };
+                                        reader.readAsDataURL(file);
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCameraActiveOrderId(order.id);
+                                  setShowCamera(true);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-xs cursor-pointer transition-all active:scale-95"
+                              >
+                                <Camera className="h-4 w-4 text-white" />
+                                Kamera Live
+                              </button>
+                              <label className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 font-extrabold text-xs rounded-xl shadow-xs cursor-pointer transition-all active:scale-95">
+                                <Upload className="h-4 w-4 text-gray-600" />
+                                Upload Foto
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      const reader = new FileReader();
+                                      reader.onload = () => {
+                                        handleUpdateOrderPhoto(order.id, reader.result as string);
+                                      };
+                                      reader.readAsDataURL(file);
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Footer Section / Action Row */}
@@ -1651,7 +2164,363 @@ export function MbgPurchasingPage() {
                   })}
                 </div>
               )}
-            </>
+              </>
+            ) : mainTab === 'qc' ? (
+              /* QC Tab Content */
+              <div className="space-y-6 animate-in fade-in duration-200">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center justify-between text-xs font-bold text-emerald-900">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                    <span>Pemeriksaan Kualitas (QC) Bahan Baku Masuk dari Supplier oleh Purchasing MBG</span>
+                  </div>
+                  <span className="bg-emerald-200 text-emerald-950 px-3 py-1 rounded-full text-[10px] font-extrabold">
+                    {qcChecks.length} Item Diperiksa
+                  </span>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs">
+                  <div className="px-6 py-4 bg-[#111827] text-white flex justify-between items-center">
+                    <h3 className="font-extrabold text-sm uppercase tracking-wider">Form QC Bahan Baku (Cheklist Kuantitas & Kualitas)</h3>
+                  </div>
+                  <div className="p-6">
+                    {orders.length === 0 ? (
+                      <p className="text-xs text-gray-500 text-center py-8">Belum ada PO / daftar belanjaan di batch ini.</p>
+                    ) : (
+                      <div className="space-y-6">
+                        {orders.map((po) => (
+                          <div key={po.id} className="border border-gray-200 rounded-xl p-4">
+                            <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-3">
+                              <div>
+                                <h4 className="font-extrabold text-xs text-[#111827]">{po.supplierName}</h4>
+                                <p className="text-[10px] text-gray-500">{po.items.length} jenis bahan baku</p>
+                              </div>
+                              <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase ${
+                                po.status === 'received' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {po.status}
+                              </span>
+                            </div>
+
+                            <div className="space-y-2">
+                              {po.items.map((it, idx) => {
+                                const existingCheck = qcChecks.find((c) => c.purchaseOrderId === po.id);
+                                const itemCheck = existingCheck?.items?.[idx];
+                                const checkStatus = itemCheck?.status === 'rejected' ? 'TOLAK' : 'LULUS';
+                                return (
+                                  <div key={idx} className="flex flex-wrap items-center justify-between gap-3 bg-gray-50 p-2.5 rounded-lg text-xs">
+                                    <div className="flex items-center gap-3">
+                                      {it.photoUrl ? (
+                                        <img src={it.photoUrl} alt={it.bahanName} className="h-8 w-8 rounded object-cover border" />
+                                      ) : (
+                                        <div className="h-8 w-8 bg-gray-200 rounded flex items-center justify-center text-[9px] font-bold text-gray-500">
+                                          No pic
+                                        </div>
+                                      )}
+                                      <div>
+                                        <span className="font-bold text-gray-900 block">{it.bahanName}</span>
+                                        <span className="text-[10px] text-gray-500">{it.jumlah} {it.satuan}</span>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                      {(['LULUS', 'TOLAK'] as const).map((st) => (
+                                        <button
+                                          key={st}
+                                          type="button"
+                                          onClick={async () => {
+                                            const updatedItems = po.items.map((pi, pIdx) => {
+                                              const existingItem = existingCheck?.items?.[pIdx];
+                                              const itemSt = pIdx === idx ? (st === 'TOLAK' ? ('rejected' as const) : ('ok' as const)) : (existingItem?.status || ('ok' as const));
+                                              return {
+                                                bahanName: pi.bahanName,
+                                                jumlahOrdered: pi.jumlah,
+                                                jumlahReceived: pi.jumlah,
+                                                satuanOrdered: pi.satuan,
+                                                isJumlahOk: true,
+                                                isKualitasOk: true,
+                                                isQuantityOk: true,
+                                                isKesesuaianOk: true,
+                                                isFreshOk: true,
+                                                isPackagingOk: true,
+                                                failReason: '',
+                                                status: itemSt,
+                                              };
+                                            });
+
+                                            const overallStatus = updatedItems.every((i) => i.status === 'ok') ? ('passed' as const) : ('failed' as const);
+
+                                            if (existingCheck?.id) {
+                                              await updateQcCheck(existingCheck.id, {
+                                                items: updatedItems,
+                                                overallStatus,
+                                              });
+                                            } else if (selectedBatchId && user) {
+                                              await addQcCheck({
+                                                batchId: selectedBatchId,
+                                                purchaseOrderId: po.id,
+                                                supplierName: po.supplierName,
+                                                items: updatedItems,
+                                                overallStatus,
+                                                notes: '',
+                                                photoFileIds: [],
+                                                checkedBy: user.uid,
+                                                checkedAt: new Date().toISOString(),
+                                                createdAt: new Date().toISOString(),
+                                                updatedAt: new Date().toISOString(),
+                                              });
+                                            }
+                                            showToast({ message: `QC ${it.bahanName}: ${st}`, variant: 'success' });
+                                          }}
+                                          className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold cursor-pointer transition-all ${
+                                            checkStatus === st
+                                              ? st === 'LULUS'
+                                                ? 'bg-emerald-600 text-white'
+                                                : 'bg-red-600 text-white'
+                                              : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                                          }`}
+                                        >
+                                          {st}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : mainTab === 'sub_purchasing' ? (
+              /* Sub Purchasing Tab Content */
+              <div className="space-y-6 animate-in fade-in duration-200">
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center justify-between text-xs font-bold text-blue-900">
+                  <div className="flex items-center gap-2">
+                    <ShoppingBag className="h-5 w-5 text-blue-600 shrink-0" />
+                    <span>Kelola & Pantau Handover Belanja ke Sub-Purchasing</span>
+                  </div>
+                  <span className="bg-blue-200 text-blue-950 px-3 py-1 rounded-full text-[10px] font-extrabold">
+                    {subPurchasingTasks.length} Tugas Belanja
+                  </span>
+                </div>
+
+                {subPurchasingTasks.length === 0 ? (
+                  <div className="bg-white border border-[#E5E7EB] rounded-2xl p-12 text-center">
+                    <ShoppingBag className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                    <h3 className="text-base font-bold text-[#111827]">Belum Ada Handover Belanja</h3>
+                    <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
+                      Klik tombol "Handover" pada salah satu Purchase Order (PO) di tab "Daftar Pesanan Belanja" untuk menugaskan Sub-Purchasing.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {subPurchasingTasks.map((task) => {
+                      const boughtCount = task.items.filter((i) => i.status === 'sudah_beli').length;
+                      return (
+                        <div key={task.id} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs">
+                          <div className="flex justify-between items-start mb-3 border-b border-gray-100 pb-3">
+                            <div>
+                              <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider block">
+                                {task.supplierName}
+                              </span>
+                              <h4 className="font-extrabold text-sm text-[#111827]">
+                                Petugas: {task.assignedToName}
+                              </h4>
+                            </div>
+                            <span className={`text-[9px] font-extrabold px-2.5 py-1 rounded-full ${
+                              task.status === 'completed'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : task.status === 'in_progress'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {task.status.toUpperCase()}
+                            </span>
+                          </div>
+
+                          <div className="space-y-2 mb-4">
+                            {task.items.map((it, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-xs bg-gray-50 p-2 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                  {it.photoUrl ? (
+                                    <img src={it.photoUrl} alt={it.bahanName} className="h-7 w-7 rounded object-cover border" />
+                                  ) : (
+                                    <div className="h-7 w-7 bg-gray-200 rounded flex items-center justify-center text-[8px] font-bold text-gray-500">
+                                      No pic
+                                    </div>
+                                  )}
+                                  <span className="font-bold text-gray-800">{it.bahanName}</span>
+                                </div>
+                                <div className="text-right">
+                                  <span className="font-semibold text-gray-600 block text-[10px]">{it.jumlah} {it.satuan}</span>
+                                  <span className="font-extrabold text-amber-600 text-[10px]">
+                                    Rp {(it.totalHarga || 0).toLocaleString('id-ID')}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="flex justify-between items-center text-xs pt-3 border-t border-gray-100">
+                            <span className="text-gray-500 font-bold">
+                              Progress: {boughtCount}/{task.items.length} dibeli
+                            </span>
+                            <span className="font-extrabold text-[#111827]">
+                              Total: Rp {(task.totalPengeluaran || 0).toLocaleString('id-ID')}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Archive Dokumen View */
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* Archive Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-amber-50 text-amber-600">
+                      <FolderArchive className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 font-bold">Total Dokumen Diarsip</p>
+                      <h3 className="text-xl font-extrabold text-[#111827]">{archivedDocs.length} Dokumen</h3>
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-slate-100 text-slate-700">
+                      <FileDown className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 font-bold">Format PDF Final</p>
+                      <h3 className="text-xl font-extrabold text-[#111827]">
+                        {archivedDocs.filter((d) => d.docType === 'pdf').length} Berkas
+                      </h3>
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-blue-50 text-blue-600">
+                      <FileText className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 font-bold">Format Word (.docx)</p>
+                      <h3 className="text-xl font-extrabold text-[#111827]">
+                        {archivedDocs.filter((d) => d.docType === 'docx').length} Berkas
+                      </h3>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Search & Filter */}
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs flex flex-wrap items-center justify-between gap-4">
+                  <div className="relative flex-1 min-w-[240px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={docSearchQuery}
+                      onChange={(e) => setDocSearchQuery(e.target.value)}
+                      placeholder="Cari nomor form atau nama supplier..."
+                      className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-[#111827] focus:outline-none focus:border-[#FBBF24]"
+                    />
+                  </div>
+                  <div className="text-xs text-gray-500 font-bold">
+                    Menampilkan {filteredArchivedDocs.length} dari {archivedDocs.length} arsip
+                  </div>
+                </div>
+
+                {/* Archive Table */}
+                {filteredArchivedDocs.length === 0 ? (
+                  <div className="bg-white p-12 rounded-2xl border border-gray-100 text-center">
+                    <FolderArchive className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                    <h4 className="font-extrabold text-sm text-[#111827] mb-1">Belum Ada Dokumen Diarsip</h4>
+                    <p className="text-xs text-gray-500 max-w-md mx-auto">
+                      Dokumen Form Pemeriksaan PDF atau Word yang bro export akan otomatis tersimpan di sini.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left">
+                        <thead>
+                          <tr className="bg-gray-50 text-gray-500 font-extrabold border-b border-gray-100 text-[11px] uppercase tracking-wider">
+                            <th className="py-3 px-4">No</th>
+                            <th className="py-3 px-4">Nomor Form / Berkas</th>
+                            <th className="py-3 px-4 text-center">Format</th>
+                            <th className="py-3 px-4">Supplier / Tujuan</th>
+                            <th className="py-3 px-4">Waktu Export</th>
+                            <th className="py-3 px-4">Jumlah Bahan</th>
+                            <th className="py-3 px-4 text-center">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {filteredArchivedDocs.map((docItem, idx) => (
+                            <tr key={docItem.id || idx} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="py-3 px-4 font-bold text-gray-500">{idx + 1}</td>
+                              <td className="py-3 px-4">
+                                <p className="font-extrabold text-[#111827]">{docItem.formNo}</p>
+                                <p className="text-[10px] text-gray-400">{docItem.fileName}</p>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
+                                    docItem.docType === 'pdf'
+                                      ? 'bg-slate-900 text-white'
+                                      : 'bg-blue-600 text-white'
+                                  }`}
+                                >
+                                  {docItem.docType === 'pdf' ? <FileDown className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
+                                  {docItem.docType.toUpperCase()}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 font-bold text-gray-800">{docItem.supplierName}</td>
+                              <td className="py-3 px-4 text-gray-600 font-semibold">
+                                {new Date(docItem.exportedAt).toLocaleDateString('id-ID', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </td>
+                              <td className="py-3 px-4">
+                                <p className="font-extrabold text-amber-700">{docItem.itemCount} Bahan</p>
+                                <p className="text-[10px] text-gray-400 truncate max-w-[200px]" title={docItem.itemsSummary}>
+                                  {docItem.itemsSummary}
+                                </p>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => handleReExportArchivedDoc(docItem)}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#111827] hover:bg-gray-800 text-white text-[11px] font-extrabold rounded-lg cursor-pointer transition-colors shadow-xs"
+                                    title="Unduh / Re-export File"
+                                  >
+                                    <Download className="h-3.5 w-3.5" />
+                                    Unduh
+                                  </button>
+                                  <button
+                                    onClick={() => docItem.id && handleDeleteArchivedDoc(docItem.id)}
+                                    className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 cursor-pointer transition-all"
+                                    title="Hapus Arsip"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
           ) : (
             <div className="bg-white border border-[#E5E7EB] rounded-2xl p-12 text-center">
               <Calendar className="mx-auto h-12 w-12 text-gray-300 mb-3" />
@@ -1769,6 +2638,84 @@ export function MbgPurchasingPage() {
         )}
       </AnimatePresence>
 
+      {/* Sub-Purchasing Handover Modal */}
+      <AnimatePresence>
+        {handoverModalOrder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 font-['Hanken_Grotesk',system-ui,sans-serif]"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">
+                    Handover Belanja
+                  </span>
+                  <h3 className="text-lg font-extrabold text-[#111827]">
+                    {handoverModalOrder.supplierName}
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {handoverModalOrder.items.length} item bahan baku
+                  </p>
+                </div>
+                <button
+                  onClick={() => setHandoverModalOrder(null)}
+                  title="Tutup Modal"
+                  className="p-1.5 rounded-full hover:bg-gray-100 cursor-pointer"
+                >
+                  <X className="h-5 w-5 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5">
+                    Tugaskan Ke Petugas Sub-Purchasing
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    title="Nama Petugas Sub Purchasing"
+                    value={subPurchasingStaffName}
+                    onChange={(e) => setSubPurchasingStaffName(e.target.value)}
+                    placeholder="Nama petugas sub-purchasing..."
+                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all font-bold text-gray-900"
+                  />
+                </div>
+
+                <div className="bg-gray-50 p-3 rounded-xl max-h-40 overflow-y-auto space-y-1">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Daftar Bahan Handover:</span>
+                  {handoverModalOrder.items.map((it, idx) => (
+                    <div key={idx} className="text-xs flex justify-between font-semibold text-gray-700">
+                      <span>• {it.bahanName}</span>
+                      <span>{it.jumlah} {it.satuan}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setHandoverModalOrder(null)}
+                    className="flex-1 py-2.5 border border-gray-300 rounded-xl hover:bg-gray-100 text-xs font-bold text-gray-700 cursor-pointer text-center"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={handleCreateSubPurchasingTask}
+                    className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl cursor-pointer text-xs font-bold text-center"
+                  >
+                    Kirim Tugas Belanja
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {confirmState && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl animate-in scale-in duration-200 font-['Hanken_Grotesk']">
@@ -1790,6 +2737,7 @@ export function MbgPurchasingPage() {
                 type="button"
                 onClick={() => {
                   confirmState.onConfirm();
+                  setConfirmState(null);
                 }}
                 className={`px-4 py-2.5 rounded-xl text-white cursor-pointer shadow-md transition-all active:scale-95 bg-[#111827] hover:bg-black`}
               >
@@ -1799,6 +2747,15 @@ export function MbgPurchasingPage() {
           </div>
         </div>
       )}
+
+      {/* Live Camera Modal */}
+      <LiveCamera
+        isOpen={showCamera}
+        onClose={() => setShowCamera(false)}
+        onCapture={handleCameraPhotoCapture}
+        activityType="PRODUKSI"
+        orderId={cameraActiveOrderId || selectedBatchId || ''}
+      />
     </div>
   );
 }

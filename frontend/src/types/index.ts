@@ -23,4 +23,6 @@ export type {
   MbgCookingPhoto,
   MbgCookingSession,
   MbgDeliveryTask,
+  MbgSubPurchasingItem,
+  MbgSubPurchasingTask,
 } from './mbg';

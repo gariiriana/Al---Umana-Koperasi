@@ -67,3 +67,47 @@ export async function updateSupplier(id: string, updates: Partial<MbgSupplier>):
 export async function deleteSupplier(id: string): Promise<void> {
   await deleteDoc(doc(db, SUPPLIER_COLLECTION, id));
 }
+
+// ---- Archived Purchasing Documents ----
+export interface MbgPurchasingDocArchive {
+  id?: string;
+  batchId: string;
+  orderId: string;
+  supplierName: string;
+  formNo: string;
+  docType: 'pdf' | 'docx';
+  fileName: string;
+  exportedAt: string;
+  itemCount: number;
+  itemsSummary: string;
+  targetDate?: string;
+}
+
+const DOC_ARCHIVE_COLLECTION = 'mbg_purchasing_documents';
+
+export function subscribeArchivedPurchasingDocs(
+  batchId: string | null,
+  callback: (docs: MbgPurchasingDocArchive[]) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  const colRef = collection(db, DOC_ARCHIVE_COLLECTION);
+  const q = batchId ? query(colRef, where('batchId', '==', batchId)) : query(colRef);
+  return onSnapshot(q, (snap) => {
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgPurchasingDocArchive));
+    list.sort((a, b) => (b.exportedAt || '').localeCompare(a.exportedAt || ''));
+    callback(list);
+  }, onError);
+}
+
+export async function addArchivedPurchasingDoc(docArchive: Omit<MbgPurchasingDocArchive, 'id'>): Promise<string> {
+  const ref = await addDoc(collection(db, DOC_ARCHIVE_COLLECTION), docArchive);
+  return ref.id;
+}
+
+export async function updateArchivedPurchasingDoc(id: string, updates: Partial<MbgPurchasingDocArchive>): Promise<void> {
+  await updateDoc(doc(db, DOC_ARCHIVE_COLLECTION, id), updates);
+}
+
+export async function deleteArchivedPurchasingDoc(id: string): Promise<void> {
+  await deleteDoc(doc(db, DOC_ARCHIVE_COLLECTION, id));
+}

@@ -17,6 +17,7 @@ import {
   X,
   FolderOpen,
   History,
+  Search,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -39,8 +40,8 @@ import {
 import { LiveCamera } from '@/components/LiveCamera';
 import { MBG_DELIVERY_STATUS_CONFIG } from '@/constants/mbgConstants';
 
-// MBG Logo base64 (small placeholder — replaced by real logo at runtime)
-const MBG_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Badan_Gizi_Nasional.svg/1200px-Badan_Gizi_Nasional.svg.png';
+// MBG Logo local asset
+const MBG_LOGO_URL = '/logo_badan_gizi.png';
 
 export function MbgDeliveryPage() {
   const { user, profile } = useAuth();
@@ -66,9 +67,9 @@ export function MbgDeliveryPage() {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [selectedEntryForDeliveryPhoto, setSelectedEntryForDeliveryPhoto] = useState<MbgPmEntry | null>(null);
 
-  // 3-Proof Modal state
+  // 4-Proof Modal state
   const [proofModalEntry, setProofModalEntry] = useState<MbgPmEntry | null>(null);
-  const [targetProofType, setTargetProofType] = useState<'menu' | 'serah_terima' | 'surat_jalan'>('serah_terima');
+  const [targetProofType, setTargetProofType] = useState<'menu' | 'penerima' | 'serah_terima' | 'surat_jalan'>('penerima');
 
   // Description edit state (per entry per proof type)
   const descTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -108,13 +109,21 @@ export function MbgDeliveryPage() {
 
   // Subscribe to tasks for the selected petugas
   useEffect(() => {
-    const pName = selectedPetugasName || profile?.displayName || '';
-    const pId = detectedPetugasId || pName.toLowerCase().replace(/\s+/g, '-');
-    if (!selectedBatchId || !pId) return;
+    if (!selectedBatchId) return;
 
-    const unsubTasks = subscribeKurirTasks(pId, (data) => {
-      setTasks(data.filter((t) => t.batchId === selectedBatchId));
-    });
+    const uUid = user?.uid || '';
+    const uEmail = user?.email || '';
+    const uName = selectedPetugasName || profile?.displayName || '';
+
+    const unsubTasks = subscribeKurirTasks(
+      selectedBatchId,
+      uUid,
+      uEmail,
+      uName,
+      (data) => {
+        setTasks(data);
+      }
+    );
 
     const unsubEntries = subscribeEntries(selectedBatchId, setEntries);
 
@@ -122,7 +131,7 @@ export function MbgDeliveryPage() {
       unsubTasks();
       unsubEntries();
     };
-  }, [selectedBatchId, selectedPetugasName, detectedPetugasId, profile?.displayName]);
+  }, [selectedBatchId, selectedPetugasName, profile?.displayName, user]);
 
   const uniqueKurirNames = useMemo(() => {
     return Array.from(new Set(entries.map((e) => e.assignedPetugasName).filter(Boolean)));
@@ -138,6 +147,21 @@ export function MbgDeliveryPage() {
     if (!activeTask) return [];
     return entries.filter((e) => e.assignedPetugasName === activeTask.petugasName);
   }, [activeTask, entries]);
+
+  const activeNonLiburEntries = useMemo(() => {
+    return taskEntries.filter((e) => !e.isSekolahLibur);
+  }, [taskEntries]);
+
+  const completedInstitutionsCount = useMemo(() => {
+    return activeNonLiburEntries.filter(
+      (e) => e.photoMenuUrl && e.photoPenerimaUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl
+    ).length;
+  }, [activeNonLiburEntries]);
+
+  const isAllInstitutionsComplete = useMemo(() => {
+    if (activeNonLiburEntries.length === 0) return false;
+    return completedInstitutionsCount === activeNonLiburEntries.length;
+  }, [activeNonLiburEntries, completedInstitutionsCount]);
 
   // Real-time GPS tracking when activeTask is in 'delivering' status
   useEffect(() => {
@@ -164,6 +188,13 @@ export function MbgDeliveryPage() {
 
   const handleStartHandover = () => {
     if (!activeTask) return;
+    if (!isAllInstitutionsComplete) {
+      showToast({
+        message: `Belum dapat konfirmasi serah terima! Lengkapi foto bukti (3/3) pada seluruh institusi terlebih dahulu (${completedInstitutionsCount}/${activeNonLiburEntries.length} selesai).`,
+        variant: 'error',
+      });
+      return;
+    }
     setCameraMode('handover');
     setActiveTaskId(activeTask.id);
     setShowCamera(true);
@@ -179,7 +210,7 @@ export function MbgDeliveryPage() {
     }
   };
 
-  const handleStartProofCapture = (entry: MbgPmEntry, type: 'menu' | 'serah_terima' | 'surat_jalan') => {
+  const handleStartProofCapture = (entry: MbgPmEntry, type: 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan') => {
     if (!activeTask) return;
     setCameraMode('delivery');
     setTargetProofType(type);
@@ -231,7 +262,7 @@ export function MbgDeliveryPage() {
   };
 
   // Debounced description update
-  const handleDescriptionChange = (entryId: string, proofType: 'menu' | 'serah_terima' | 'surat_jalan', value: string) => {
+  const handleDescriptionChange = (entryId: string, proofType: 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan', value: string) => {
     const key = `${entryId}_${proofType}`;
     if (descTimers.current[key]) clearTimeout(descTimers.current[key]);
     descTimers.current[key] = setTimeout(async () => {
@@ -304,7 +335,7 @@ export function MbgDeliveryPage() {
       doc.setTextColor(17, 24, 39);
       doc.text('RINGKASAN PENGIRIMAN', pageW / 2, 18, { align: 'center' });
 
-      const summaryHeaders = ['No', 'Institusi', 'Porsi', 'Menu ✓', 'Serah Terima ✓', 'Surat Jalan ✓', 'Status'];
+      const summaryHeaders = ['No', 'Institusi', 'Porsi', 'Menu ✓', 'Serah Terima ✓', 'Surat Jalan ✓', 'Penerima/PJ ✓', 'Status'];
       const summaryRows = activeEntries.map((entry, idx) => [
         `${idx + 1}`,
         entry.institutionName,
@@ -312,7 +343,8 @@ export function MbgDeliveryPage() {
         entry.photoMenuUrl ? '✓' : '—',
         entry.photoSerahTerimaUrl ? '✓' : '—',
         entry.photoSuratJalanUrl ? '✓' : '—',
-        entry.photoMenuUrl && entry.photoSerahTerimaUrl && entry.photoSuratJalanUrl ? 'LENGKAP' : 'BELUM',
+        entry.photoPenerimaUrl ? '✓' : '—',
+        entry.photoMenuUrl && entry.photoSerahTerimaUrl && entry.photoSuratJalanUrl && entry.photoPenerimaUrl ? 'LENGKAP' : 'BELUM',
       ]);
 
       autoTable(doc, {
@@ -325,9 +357,15 @@ export function MbgDeliveryPage() {
         styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
       });
 
-      // ─── Per-Institution Photo Pages ───
+      // ─── Per-Institution Photo Pages (2x2 Grid) ───
       for (const entry of activeEntries) {
         doc.addPage();
+
+        if (logoLoaded) {
+          try {
+            doc.addImage(logoImg, 'PNG', 14, 8, 12, 12);
+          } catch { /* ignore */ }
+        }
 
         doc.setFontSize(13);
         doc.setFont('helvetica', 'bold');
@@ -342,29 +380,32 @@ export function MbgDeliveryPage() {
         doc.setDrawColor(226, 232, 240);
         doc.line(14, 25, pageW - 14, 25);
 
-        // Photo grid: 3 photos horizontally
+        // Photo grid: 4 photos (2 rows x 2 columns)
         const photoSlots: { label: string; url?: string; desc?: string }[] = [
-          { label: '1. Foto Menu / Box', url: entry.photoMenuUrl, desc: entry.photoMenuDesc },
+          { label: '1. Foto Menu / Box Makanan', url: entry.photoMenuUrl, desc: entry.photoMenuDesc },
           { label: '2. Foto Serah Terima', url: entry.photoSerahTerimaUrl, desc: entry.photoSerahTerimaDesc },
-          { label: '3. Foto Surat Jalan', url: entry.photoSuratJalanUrl, desc: entry.photoSuratJalanDesc },
+          { label: '3. Foto Surat Jalan / BAST', url: entry.photoSuratJalanUrl, desc: entry.photoSuratJalanDesc },
+          { label: '4. Foto Penanggung Jawab Penerima', url: entry.photoPenerimaUrl, desc: entry.photoPenerimaDesc },
         ];
 
-        const slotW = (pageW - 28 - 10) / 3; // 14px margin each side, 5px gap x2
-        let startY = 30;
+        const slotW = 86; // 86mm width
+        const photoH = 55; // 55mm height
 
         for (let i = 0; i < photoSlots.length; i++) {
           const slot = photoSlots[i];
-          const x = 14 + i * (slotW + 5);
+          const col = i % 2;
+          const row = Math.floor(i / 2);
+          const x = 14 + col * (slotW + 10);
+          const y = 30 + row * (photoH + 25);
 
           // Label
           doc.setFontSize(8);
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(17, 24, 39);
-          doc.text(slot.label, x, startY);
+          doc.text(slot.label, x, y);
 
           // Photo box
-          const photoY = startY + 3;
-          const photoH = 55;
+          const photoY = y + 3;
 
           if (slot.url) {
             try {
@@ -410,16 +451,15 @@ export function MbgDeliveryPage() {
         }
 
         // Additional info below photos
-        startY = 100;
-        if (entry.photoSerahTerimaTimestamp) {
+        const extraY = 195;
+        if (entry.photoPenerimaTimestamp || entry.photoSerahTerimaTimestamp) {
           doc.setFontSize(7);
           doc.setFont('helvetica', 'normal');
           doc.setTextColor(100, 116, 139);
-          doc.text(`Waktu Serah Terima: ${entry.photoSerahTerimaTimestamp}`, 14, startY);
-          startY += 5;
+          doc.text(`Waktu Penyerahan: ${entry.photoPenerimaTimestamp || entry.photoSerahTerimaTimestamp}`, 14, extraY);
         }
-        if (entry.photoSerahTerimaLocation) {
-          doc.text(`Lokasi: ${entry.photoSerahTerimaLocation}`, 14, startY);
+        if (entry.photoPenerimaLocation || entry.photoSerahTerimaLocation) {
+          doc.text(`Lokasi: ${entry.photoPenerimaLocation || entry.photoSerahTerimaLocation}`, 14, extraY + 4);
         }
       }
 
@@ -452,6 +492,200 @@ export function MbgDeliveryPage() {
     } catch (err) {
       console.error('Failed to export delivery PDF:', err);
       showToast({ message: 'Gagal mengekspor PDF', variant: 'error' });
+    }
+  };
+
+  // Search & Filter state for Archive Documents
+  const [archiveSearchQuery, setArchiveSearchQuery] = useState('');
+
+  const filteredArchiveDocs = useMemo(() => {
+    if (!archiveSearchQuery.trim()) return archiveDocs;
+    const q = archiveSearchQuery.toLowerCase().trim();
+    return archiveDocs.filter((d) => {
+      const matchPetugas = d.petugasName?.toLowerCase().includes(q);
+      const matchTanggal = d.tanggalBatch?.toLowerCase().includes(q);
+      const matchFile = d.fileName?.toLowerCase().includes(q);
+      return matchPetugas || matchTanggal || matchFile;
+    });
+  }, [archiveDocs, archiveSearchQuery]);
+
+  // Re-export PDF for an archived document in MbgDeliveryPage
+  const handleReExportArchivedDoc = async (docMeta: MbgDeliveryDocument) => {
+    showToast({ message: 'Menyiapkan unduhan PDF Laporan...', variant: 'info' });
+
+    try {
+      // Find entries matching docMeta.petugasName & docMeta.batchId
+      const targetEntries = entries.filter(
+        (e) => e.assignedPetugasName === docMeta.petugasName || (docMeta.batchId && e.batchId === docMeta.batchId)
+      );
+
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+
+      // Load logo
+      let logoLoaded = false;
+      const logoImg = new Image();
+      logoImg.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve) => {
+        logoImg.onload = () => { logoLoaded = true; resolve(); };
+        logoImg.onerror = () => resolve();
+        logoImg.src = MBG_LOGO_URL;
+      });
+
+      // Cover Page
+      doc.setFillColor(255, 255, 255);
+      doc.rect(0, 0, pageW, pageH, 'F');
+      if (logoLoaded) doc.addImage(logoImg, 'PNG', pageW / 2 - 20, 30, 40, 40);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(17, 24, 39);
+      doc.text('LAPORAN BUKTI DISTRIBUSI', pageW / 2, 85, { align: 'center' });
+      doc.text('MAKANAN BERGIZI GRATIS (MBG)', pageW / 2, 95, { align: 'center' });
+
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Tanggal: ${docMeta.tanggalBatch || '-'}`, pageW / 2, 110, { align: 'center' });
+      doc.text(`Petugas: ${docMeta.petugasName}`, pageW / 2, 117, { align: 'center' });
+      doc.text(`Total: ${docMeta.totalInstitusi} Institusi | ${docMeta.totalPorsi} Porsi | ${docMeta.completedCount}/${docMeta.totalInstitusi} Lengkap`, pageW / 2, 124, { align: 'center' });
+
+      doc.setDrawColor(226, 232, 240);
+      doc.line(30, 135, pageW - 30, 135);
+
+      // Summary table page if entries found
+      const activeEntries = targetEntries.filter((e) => !e.isSekolahLibur);
+      if (activeEntries.length > 0) {
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(17, 24, 39);
+        doc.text('RINGKASAN PENGIRIMAN', pageW / 2, 18, { align: 'center' });
+
+        const summaryHeaders = ['No', 'Institusi', 'Porsi', 'Menu ✓', 'Penerima/PJ ✓', 'Serah Terima ✓', 'Surat Jalan ✓', 'Status'];
+        const summaryRows = activeEntries.map((entry, idx) => [
+          `${idx + 1}`,
+          entry.institutionName,
+          `${entry.jumlah}`,
+          entry.photoMenuUrl ? '✓' : '—',
+          entry.photoPenerimaUrl ? '✓' : '—',
+          entry.photoSerahTerimaUrl ? '✓' : '—',
+          entry.photoSuratJalanUrl ? '✓' : '—',
+          entry.photoMenuUrl && entry.photoPenerimaUrl && entry.photoSerahTerimaUrl && entry.photoSuratJalanUrl ? 'LENGKAP' : 'BELUM',
+        ]);
+
+        autoTable(doc, {
+          startY: 24,
+          head: [summaryHeaders],
+          body: summaryRows,
+          theme: 'grid',
+          headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
+          bodyStyles: { fontSize: 7.5, textColor: [15, 23, 42] },
+          styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
+        });
+
+        // Per-institution photo pages (2x2 Grid)
+        for (const entry of activeEntries) {
+          doc.addPage();
+          doc.setFontSize(13);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(17, 24, 39);
+          doc.text(entry.institutionName, pageW / 2, 16, { align: 'center' });
+
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(100, 116, 139);
+          doc.text(`Jumlah Porsi: ${entry.jumlah} | Jadwal: ${entry.jadwalPengantaran || '-'}`, pageW / 2, 22, { align: 'center' });
+
+          doc.setDrawColor(226, 232, 240);
+          doc.line(14, 25, pageW - 14, 25);
+
+          const photoSlots: { label: string; url?: string; desc?: string }[] = [
+            { label: '1. Foto Menu / Box Makanan', url: entry.photoMenuUrl, desc: entry.photoMenuDesc },
+            { label: '2. Foto Penerima / Penanggung Jawab', url: entry.photoPenerimaUrl, desc: entry.photoPenerimaDesc },
+            { label: '3. Foto Serah Terima', url: entry.photoSerahTerimaUrl, desc: entry.photoSerahTerimaDesc },
+            { label: '4. Foto Surat Jalan / BAST', url: entry.photoSuratJalanUrl, desc: entry.photoSuratJalanDesc },
+          ];
+
+          const slotW = 86;
+          const photoH = 55;
+
+          for (let i = 0; i < photoSlots.length; i++) {
+            const slot = photoSlots[i];
+            const col = i % 2;
+            const row = Math.floor(i / 2);
+            const x = 14 + col * (slotW + 10);
+            const y = 30 + row * (photoH + 25);
+
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(17, 24, 39);
+            doc.text(slot.label, x, y);
+
+            const photoY = y + 3;
+
+            if (slot.url) {
+              try {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                await new Promise<void>((r) => {
+                  img.onload = () => r();
+                  img.onerror = () => r();
+                  img.src = slot.url!;
+                });
+                if (img.complete && img.naturalWidth > 0) {
+                  doc.addImage(img, 'JPEG', x, photoY, slotW, photoH);
+                } else {
+                  doc.setDrawColor(203, 213, 225);
+                  doc.rect(x, photoY, slotW, photoH);
+                  doc.setFontSize(7);
+                  doc.setTextColor(148, 163, 184);
+                  doc.text('Foto tidak tersedia', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
+                }
+              } catch {
+                doc.setDrawColor(203, 213, 225);
+                doc.rect(x, photoY, slotW, photoH);
+                doc.setFontSize(7);
+                doc.setTextColor(148, 163, 184);
+                doc.text('Foto gagal dimuat', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
+              }
+            } else {
+              doc.setDrawColor(203, 213, 225);
+              doc.rect(x, photoY, slotW, photoH);
+              doc.setFontSize(7);
+              doc.setTextColor(148, 163, 184);
+              doc.text('Belum diambil', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
+            }
+
+            if (slot.desc) {
+              doc.setFontSize(7);
+              doc.setFont('helvetica', 'italic');
+              doc.setTextColor(100, 116, 139);
+              const lines = doc.splitTextToSize(slot.desc, slotW);
+              doc.text(lines, x, photoY + photoH + 4);
+            }
+          }
+
+          const extraY = 195;
+          if (entry.photoPenerimaTimestamp || entry.photoSerahTerimaTimestamp) {
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 116, 139);
+            doc.text(`Waktu Penyerahan: ${entry.photoPenerimaTimestamp || entry.photoSerahTerimaTimestamp}`, 14, extraY);
+          }
+          if (entry.photoPenerimaLocation || entry.photoSerahTerimaLocation) {
+            doc.text(`Lokasi: ${entry.photoPenerimaLocation || entry.photoSerahTerimaLocation}`, 14, extraY + 4);
+          }
+        }
+      }
+
+      const fileName = docMeta.fileName || `Laporan_Distribusi_MBG_${docMeta.petugasName.replace(/\s+/g, '_')}_${docMeta.tanggalBatch || 'undated'}.pdf`;
+      doc.save(fileName);
+      showToast({ message: `PDF Laporan ${fileName} berhasil diunduh!`, variant: 'success' });
+    } catch (err) {
+      console.error('Failed to re-export PDF:', err);
+      showToast({ message: 'Gagal mengunduh ulang PDF', variant: 'error' });
     }
   };
 
@@ -528,76 +762,128 @@ export function MbgDeliveryPage() {
               </p>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
-              <div className="px-6 py-4 bg-[#111827] text-white flex items-center justify-between rounded-t-2xl">
-                <div className="flex items-center gap-2">
-                  <FolderOpen className="h-4.5 w-4.5 text-[#FBBF24]" />
-                  <span className="text-sm font-extrabold uppercase tracking-wider">Arsip Laporan Distribusi</span>
+            <div className="space-y-4">
+              {/* Search & Filter Bar */}
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between bg-white p-4 rounded-2xl border border-[#E5E7EB] shadow-xs">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={archiveSearchQuery}
+                    onChange={(e) => setArchiveSearchQuery(e.target.value)}
+                    placeholder="Cari nama petugas, tanggal batch, atau nama file PDF..."
+                    className="w-full pl-10 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:bg-white transition-all"
+                  />
+                  {archiveSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setArchiveSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
-                <span className="text-xs font-bold bg-white/15 px-3 py-1.5 rounded-full">
-                  {archiveDocs.length} Dokumen
-                </span>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3.5 py-2 rounded-xl">
+                    Menampilkan {filteredArchiveDocs.length} dari {archiveDocs.length} Dokumen
+                  </span>
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs text-left min-w-[700px]">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-bold uppercase text-[9px] tracking-wider">
-                      <th className="py-3 px-6">Tanggal Batch</th>
-                      <th className="py-3 px-4">Petugas</th>
-                      <th className="py-3 px-4 text-center">Institusi</th>
-                      <th className="py-3 px-4 text-center">Total Porsi</th>
-                      <th className="py-3 px-4 text-center">Kelengkapan</th>
-                      <th className="py-3 px-4">Waktu Dibuat</th>
-                      <th className="py-3 px-6">Nama File</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {archiveDocs.map((d) => (
-                      <tr key={d.id} className="hover:bg-gray-50/50">
-                        <td className="py-3 px-6 font-bold text-[#111827]">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-gray-400 shrink-0" />
-                            {d.tanggalBatch || '-'}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 font-semibold text-gray-700">
-                          <div className="flex items-center gap-2">
-                            <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                            {d.petugasName}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full font-extrabold text-[10px]">
-                            {d.totalInstitusi}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className="bg-[#FBBF24]/20 text-[#92400E] px-2 py-0.5 rounded-full font-extrabold text-[10px]">
-                            {d.totalPorsi}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className={`px-2 py-0.5 rounded-full font-extrabold text-[10px] ${
-                            d.completedCount === d.totalInstitusi
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-amber-100 text-amber-700'
-                          }`}>
-                            {d.completedCount}/{d.totalInstitusi}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-gray-500 text-[10px]">
-                          {new Date(d.createdAt).toLocaleString('id-ID', {
-                            day: '2-digit', month: 'short', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit',
-                          })}
-                        </td>
-                        <td className="py-3 px-6 text-[10px] text-gray-600 font-mono">
-                          {d.fileName}
-                        </td>
+
+              {/* Table Container */}
+              <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
+                <div className="px-6 py-4 bg-[#111827] text-white flex items-center justify-between rounded-t-2xl">
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="h-4.5 w-4.5 text-[#FBBF24]" />
+                    <span className="text-sm font-extrabold uppercase tracking-wider">Arsip Laporan Distribusi</span>
+                  </div>
+                  <span className="text-xs font-bold bg-white/15 px-3 py-1.5 rounded-full">
+                    {filteredArchiveDocs.length} Dokumen
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left min-w-[800px]">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-bold uppercase text-[9px] tracking-wider">
+                        <th className="py-3 px-6">Tanggal Batch</th>
+                        <th className="py-3 px-4">Petugas</th>
+                        <th className="py-3 px-4 text-center">Institusi</th>
+                        <th className="py-3 px-4 text-center">Total Porsi</th>
+                        <th className="py-3 px-4 text-center">Kelengkapan</th>
+                        <th className="py-3 px-4">Waktu Dibuat</th>
+                        <th className="py-3 px-6">Nama File</th>
+                        <th className="py-3 px-6 text-center">Aksi</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredArchiveDocs.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-8 text-center text-gray-400 font-bold">
+                            Tidak ada arsip yang cocok dengan pencarian "{archiveSearchQuery}"
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredArchiveDocs.map((d) => (
+                          <tr key={d.id} className="hover:bg-gray-50/50">
+                            <td className="py-3 px-6 font-bold text-[#111827]">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-gray-400 shrink-0" />
+                                {d.tanggalBatch || '-'}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 font-semibold text-gray-700">
+                              <div className="flex items-center gap-2">
+                                <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                                {d.petugasName}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full font-extrabold text-[10px]">
+                                {d.totalInstitusi}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="bg-[#FBBF24]/20 text-[#92400E] px-2 py-0.5 rounded-full font-extrabold text-[10px]">
+                                {d.totalPorsi}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-0.5 rounded-full font-extrabold text-[10px] ${
+                                d.completedCount === d.totalInstitusi
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-amber-100 text-amber-700'
+                              }`}>
+                                {d.completedCount}/{d.totalInstitusi}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-gray-500 text-[10px]">
+                              {new Date(d.createdAt).toLocaleString('id-ID', {
+                                day: '2-digit', month: 'short', year: 'numeric',
+                                hour: '2-digit', minute: '2-digit',
+                              })}
+                            </td>
+                            <td className="py-3 px-6 text-[10px] text-gray-600 font-mono">
+                              {d.fileName}
+                            </td>
+                            <td className="py-3 px-6 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleReExportArchivedDoc(d)}
+                                className="inline-flex items-center gap-1.5 bg-[#111827] hover:bg-black text-white text-[11px] font-extrabold px-3 py-1.5 rounded-xl shadow-xs cursor-pointer transition-all active:scale-95"
+                                title="Unduh ulang file PDF laporan ini"
+                              >
+                                <FileDown className="h-3.5 w-3.5 text-[#FBBF24]" />
+                                <span>Unduh PDF</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -641,6 +927,11 @@ export function MbgDeliveryPage() {
                     </span>
                     <h3 className="text-base font-extrabold text-[#111827]">
                       {activeTask.petugasName}
+                      {activeTask.kenekName && (
+                        <span className="ml-2 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                          Kenek: {activeTask.kenekName}
+                        </span>
+                      )}
                     </h3>
                     <p className="text-xs text-gray-500 mt-0.5">
                       Status Tugas: {MBG_DELIVERY_STATUS_CONFIG[activeTask.status]?.label}
@@ -651,12 +942,29 @@ export function MbgDeliveryPage() {
                 {/* Progress actions based on status */}
                 <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
                   {activeTask.status === 'waiting' && (
-                    <button
-                      onClick={handleStartHandover}
-                      className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] font-extrabold text-xs px-5 py-3 rounded-xl cursor-pointer transition-all shadow-sm active:scale-95"
-                    >
-                      🤝 Konfirmasi Serah Terima
-                    </button>
+                    <div className="flex flex-col items-end gap-1">
+                      <button
+                        onClick={handleStartHandover}
+                        disabled={!isAllInstitutionsComplete}
+                        className={`flex-1 md:flex-initial flex items-center justify-center gap-2 font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-sm ${
+                          isAllInstitutionsComplete
+                            ? 'bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] cursor-pointer active:scale-95'
+                            : 'bg-gray-200 text-gray-400 border border-gray-300 cursor-not-allowed'
+                        }`}
+                        title={
+                          isAllInstitutionsComplete
+                            ? 'Klik untuk konfirmasi serah terima'
+                            : `Lengkapi foto bukti (3/3) pada seluruh institusi terlebih dahulu (${completedInstitutionsCount}/${activeNonLiburEntries.length} selesai)`
+                        }
+                      >
+                        🤝 Konfirmasi Serah Terima
+                      </button>
+                      {!isAllInstitutionsComplete && (
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                          ⚠️ Kelola bukti {completedInstitutionsCount}/{activeNonLiburEntries.length} institusi selesai
+                        </span>
+                      )}
+                    </div>
                   )}
 
                   {activeTask.status === 'handover_done' && (
@@ -717,6 +1025,7 @@ export function MbgDeliveryPage() {
                         <th className="py-3 px-4 text-center">🍱 Foto Menu</th>
                         <th className="py-3 px-4 text-center">🤝 Foto Serah Terima</th>
                         <th className="py-3 px-4 text-center">📄 Foto Surat Jalan</th>
+                        <th className="py-3 px-4 text-center">🧑‍💼 Foto Penerima/PJ</th>
                         <th className="py-3 px-6 text-center">Kelola Bukti</th>
                       </tr>
                     </thead>
@@ -725,7 +1034,8 @@ export function MbgDeliveryPage() {
                         const hasMenu = !!entry.photoMenuUrl;
                         const hasSerahTerima = !!entry.photoSerahTerimaUrl;
                         const hasSuratJalan = !!entry.photoSuratJalanUrl;
-                        const proofCount = (hasMenu ? 1 : 0) + (hasSerahTerima ? 1 : 0) + (hasSuratJalan ? 1 : 0);
+                        const hasPenerima = !!entry.photoPenerimaUrl;
+                        const proofCount = (hasMenu ? 1 : 0) + (hasSerahTerima ? 1 : 0) + (hasSuratJalan ? 1 : 0) + (hasPenerima ? 1 : 0);
 
                         return (
                           <tr
@@ -811,6 +1121,24 @@ export function MbgDeliveryPage() {
                               )}
                             </td>
 
+                            {/* Foto Penerima / PJ */}
+                            <td className="py-3 px-4 text-center">
+                              {hasPenerima ? (
+                                <img
+                                  src={entry.photoPenerimaUrl}
+                                  alt="Penerima/PJ"
+                                  className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs"
+                                />
+                              ) : (
+                                <button
+                                  onClick={() => handleStartProofCapture(entry, 'penerima')}
+                                  className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto"
+                                >
+                                  <Camera className="h-3 w-3" /> Geotag
+                                </button>
+                              )}
+                            </td>
+
                             {/* Kelola Bukti Button */}
                             <td className="py-3 px-6 text-center">
                               {entry.isSekolahLibur ? (
@@ -819,12 +1147,12 @@ export function MbgDeliveryPage() {
                                 <button
                                   onClick={() => setProofModalEntry(entry)}
                                   className={`py-1.5 px-3 rounded-xl text-[10px] font-extrabold transition-all cursor-pointer shadow-xs ${
-                                    proofCount === 3
+                                    proofCount === 4
                                       ? 'bg-green-600 text-white hover:bg-green-700'
                                       : 'bg-[#111827] text-white hover:bg-black'
                                   }`}
                                 >
-                                  {proofCount === 3 ? '✓ Complete (3/3)' : `Kelola (${proofCount}/3)`}
+                                  {proofCount === 4 ? '✓ Complete (4/4)' : `Kelola (${proofCount}/4)`}
                                 </button>
                               )}
                             </td>
@@ -872,14 +1200,14 @@ export function MbgDeliveryPage() {
         </>
       )}
 
-      {/* 3-Proof Management Modal with LiveCamera & Description */}
+      {/* 4-Proof Management Modal with LiveCamera & Description */}
       {proofModalEntry && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start border-b border-gray-100 pb-4">
               <div>
                 <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">
-                  Kelola Bukti Pengiriman
+                  Kelola 4 Bukti Pengiriman
                 </span>
                 <h3 className="text-lg font-extrabold text-gray-900">
                   {proofModalEntry.institutionName}
@@ -913,7 +1241,7 @@ export function MbgDeliveryPage() {
                 proofType="serah_terima"
                 emoji="🤝"
                 label="Foto Serah Terima (Geotag)"
-                sublabel="Penyerahan dengan pihak sekolah"
+                sublabel="Penyerahan fisik makanan di lokasi"
                 photoUrl={proofModalEntry.photoSerahTerimaUrl}
                 description={proofModalEntry.photoSerahTerimaDesc}
                 onCapture={() => handleStartProofCapture(proofModalEntry, 'serah_terima')}
@@ -927,11 +1255,25 @@ export function MbgDeliveryPage() {
                 proofType="surat_jalan"
                 emoji="📄"
                 label="Foto Surat Jalan / BAST"
-                sublabel="Sudah TTD & stempel sekolah"
+                sublabel="Sudah TTD & stempel resmi"
                 photoUrl={proofModalEntry.photoSuratJalanUrl}
                 description={proofModalEntry.photoSuratJalanDesc}
                 onCapture={() => handleStartProofCapture(proofModalEntry, 'surat_jalan')}
                 onDescChange={(val) => handleDescriptionChange(proofModalEntry.id, 'surat_jalan', val)}
+              />
+
+              {/* Slot 4: Foto Penerima / Penanggung Jawab */}
+              <ProofSlot
+                entry={proofModalEntry}
+                proofType="penerima"
+                emoji="🧑‍💼"
+                label="Foto Penanggung Jawab Penerima"
+                sublabel="Serah terima bersama Penanggung Jawab (PJ Sekolah / Posyandu / Guru / Kader)"
+                photoUrl={proofModalEntry.photoPenerimaUrl}
+                description={proofModalEntry.photoPenerimaDesc}
+                onCapture={() => handleStartProofCapture(proofModalEntry, 'penerima')}
+                onDescChange={(val) => handleDescriptionChange(proofModalEntry.id, 'penerima', val)}
+                isGeotag
               />
             </div>
 
@@ -965,8 +1307,6 @@ export function MbgDeliveryPage() {
 
 // ─── ProofSlot Component ───
 function ProofSlot({
-  proofType: _proofType,
-  entry: _entry,
   emoji,
   label,
   sublabel,
