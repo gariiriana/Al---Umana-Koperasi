@@ -53,7 +53,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   // ==========================================================================
 
   /**
-   * Administrasi MBG: input data PM, kelola institusi, assign petugas.
+   * Administrasi MBG: Akses penuh ke seluruh fitur MBG.
    */
   admin_mbg: [
     "/mbg/admin",
@@ -63,38 +63,60 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/mbg/cooking",
     "/mbg/reports",
     "/mbg/orders",
+    "/mbg/purchasing",
     "/mbg/purchasing/recap",
+    "/mbg/purchasing/archive",
+    "/mbg/suppliers",
+    "/mbg/distribution",
+    "/mbg/delivery",
+    "/mbg/sub-purchasing",
   ],
 
   /**
-   * Tim Produksi MBG: kelola menu MBG, hitung kadar gizi, proses masak,
-   * dokumentasi foto, export PDF, serta akses admin.
+   * Tim Produksi MBG: Akses penuh ke seluruh fitur MBG.
    */
   produksi_mbg: [
-    "/mbg/production",
-    "/mbg/cooking",
     "/mbg/admin",
     "/mbg/admin/batch/new",
     "/mbg/archive",
+    "/mbg/production",
+    "/mbg/cooking",
     "/mbg/reports",
+    "/mbg/orders",
+    "/mbg/purchasing",
+    "/mbg/purchasing/recap",
+    "/mbg/purchasing/archive",
+    "/mbg/suppliers",
+    "/mbg/distribution",
+    "/mbg/delivery",
+    "/mbg/sub-purchasing",
+  ],
+
+  /**
+   * Sub Akun Dokumentasi Memasak MBG: dokumentasi foto & status masak.
+   */
+  dokumentasi_produksiMBG: [
+    "/mbg/cooking",
     "/mbg/orders",
   ],
 
   /**
-   * Purchasing MBG: belanja bahan, kelola supplier, grouping pesanan.
+   * Purchasing MBG: belanja bahan, kelola supplier, grouping pesanan, arsip purchasing.
    */
   purchasing_mbg: [
     "/mbg/purchasing",
     "/mbg/purchasing/recap",
+    "/mbg/purchasing/archive",
     "/mbg/suppliers",
     "/mbg/orders",
   ],
 
   /**
-   * Distribusi MBG: QC barang masuk, assign tugas kurir.
+   * Distribusi MBG: QC barang masuk, assign tugas kurir, serta akses & edit fitur kurir.
    */
   distribusi_mbg: [
     "/mbg/distribution",
+    "/mbg/delivery",
     "/mbg/orders",
   ],
 
@@ -122,6 +144,7 @@ export const ADMIN_SHELL_ROLES = [
   "kurir",
   "admin_mbg",
   "produksi_mbg",
+  "dokumentasi_produksiMBG",
   "purchasing_mbg",
   "distribusi_mbg",
   "kurir_mbg",
@@ -140,6 +163,7 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   kurir: "/distribusi/delivery",
   admin_mbg: "/mbg/admin",
   produksi_mbg: "/mbg/production",
+  dokumentasi_produksiMBG: "/mbg/cooking",
   purchasing_mbg: "/mbg/purchasing",
   distribusi_mbg: "/mbg/distribution",
   kurir_mbg: "/mbg/delivery",

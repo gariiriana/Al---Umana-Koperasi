@@ -21,7 +21,7 @@ import { reverseGeocode } from "@/services/geocodingService";
 export interface LiveCameraProps {
   isOpen: boolean;
   onClose: () => void;
-  onCapture: (file: File) => void;
+  onCapture: (file: File, fileClean?: File) => void;
   activityType: "PRODUKSI" | "PENGIRIMAN" | "START_OTW" | "HANDOVER";
   orderId: string;
 }
@@ -47,6 +47,7 @@ export function LiveCamera({
   const [isCapturing, setIsCapturing] = useState(false);
   const [capturedBlobUrl, setCapturedBlobUrl] = useState<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
+  const [capturedCleanFile, setCapturedCleanFile] = useState<File | null>(null);
   const [gpsCheck, setGpsCheck] = useState<{ isValid: boolean; reason?: string }>({ isValid: true });
   const [timeCheck, setTimeCheck] = useState<boolean>(true);
 
@@ -289,9 +290,20 @@ export function LiveCamera({
     setIsCapturing(true);
 
     const video = videoRef.current;
-    const canvas = document.createElement("canvas");
     const w = video.videoWidth || 1280;
     const h = video.videoHeight || 720;
+
+    // Canvas 1: Clean photo (without watermark)
+    const cleanCanvas = document.createElement("canvas");
+    cleanCanvas.width = w;
+    cleanCanvas.height = h;
+    const cleanCtx = cleanCanvas.getContext("2d");
+    if (cleanCtx) {
+      cleanCtx.drawImage(video, 0, 0, w, h);
+    }
+
+    // Canvas 2: Photo with watermark & logo
+    const canvas = document.createElement("canvas");
     canvas.width = w;
     canvas.height = h;
 
@@ -321,7 +333,6 @@ export function LiveCamera({
       ctx.globalAlpha = alpha;
       ctx.font = font;
       ctx.fillStyle = color;
-      // Text shadow for contrast
       ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
       ctx.shadowBlur = 6 * scale;
       ctx.shadowOffsetX = 1 * scale;
@@ -329,6 +340,23 @@ export function LiveCamera({
       ctx.fillText(text, x, y);
       ctx.restore();
     };
+
+    // Try drawing MBG Logo top-left or top-right
+    try {
+      const logoImg = new Image();
+      logoImg.crossOrigin = "anonymous";
+      await new Promise<void>((resolve) => {
+        logoImg.onload = () => {
+          const logoSize = 60 * scale;
+          ctx.drawImage(logoImg, margin, margin, logoSize, logoSize);
+          resolve();
+        };
+        logoImg.onerror = () => resolve();
+        logoImg.src = "/logo_badan_gizi.png";
+      });
+    } catch (e) {
+      console.warn("Logo draw failed", e);
+    }
 
     // Bottom-left watermark — draw from BOTTOM UP so text is flush to edge
     const x = margin;
@@ -346,9 +374,9 @@ export function LiveCamera({
 
     // Brand name
     drawWatermarkText(
-      "KOPERASI AL-UMANAA",
+      "SPPG Sukabumi Gunungguruh Kebonmanggu",
       x, yBrand,
-      `bold ${Math.round(20 * scale)}px 'Manrope', system-ui, sans-serif`,
+      `bold ${Math.round(18 * scale)}px 'Manrope', system-ui, sans-serif`,
       "#fbbf24",
       0.95
     );
@@ -397,31 +425,42 @@ export function LiveCamera({
 
     // Top-right: verified badge text (transparent)
     drawWatermarkText(
-      "✓ TERVERIFIKASI",
-      w - margin - 160 * scale,
+      "✓ TERVERIFIKASI MBG",
+      w - margin - 180 * scale,
       margin + 20 * scale,
       `bold ${Math.round(13 * scale)}px 'Manrope', system-ui, sans-serif`,
       "#34d399",
       0.85
     );
 
-    // 3. Output image blob
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          const file = new File([blob], `live_proof_${orderId}_${Date.now()}.jpg`, {
-            type: "image/jpeg",
-            lastModified: Date.now(),
-          });
-          const url = URL.createObjectURL(blob);
-          setCapturedBlobUrl(url);
-          setCapturedFile(file);
-        }
-        setIsCapturing(false);
-      },
-      "image/jpeg",
-      0.90
-    );
+    // 3. Generate both clean file and watermark file
+    cleanCanvas.toBlob((cleanBlob) => {
+      let fileCleanObj: File | null = null;
+      if (cleanBlob) {
+        fileCleanObj = new File([cleanBlob], `clean_proof_${orderId}_${Date.now()}.jpg`, {
+          type: "image/jpeg",
+          lastModified: Date.now(),
+        });
+        setCapturedCleanFile(fileCleanObj);
+      }
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const file = new File([blob], `live_proof_${orderId}_${Date.now()}.jpg`, {
+              type: "image/jpeg",
+              lastModified: Date.now(),
+            });
+            const url = URL.createObjectURL(blob);
+            setCapturedBlobUrl(url);
+            setCapturedFile(file);
+          }
+          setIsCapturing(false);
+        },
+        "image/jpeg",
+        0.90
+      );
+    }, "image/jpeg", 0.90);
   };
 
   // ─── Retake / Download / Confirm ───
@@ -429,6 +468,7 @@ export function LiveCamera({
     if (capturedBlobUrl) URL.revokeObjectURL(capturedBlobUrl);
     setCapturedBlobUrl(null);
     setCapturedFile(null);
+    setCapturedCleanFile(null);
   };
 
   const downloadPhoto = () => {
@@ -444,7 +484,7 @@ export function LiveCamera({
 
   const confirmPhoto = () => {
     if (capturedFile) {
-      onCapture(capturedFile);
+      onCapture(capturedFile, capturedCleanFile || undefined);
       onClose();
       retakePhoto();
     }
@@ -524,7 +564,7 @@ export function LiveCamera({
                 <div className="absolute bottom-3 left-3 right-3 pointer-events-none select-none">
                   <div className="space-y-0.5 text-[10px] drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
                     <p className="font-extrabold text-[#fbbf24] text-[12px] tracking-wide font-['Manrope',system-ui]">
-                      KOPERASI AL-UMANAA
+                      SPPG Sukabumi Gunungguruh Kebonmanggu
                     </p>
                     <p className="font-bold text-white text-[10px]">
                       KEGIATAN: {getActivityLabel()}

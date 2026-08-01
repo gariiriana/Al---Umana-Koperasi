@@ -2,7 +2,7 @@
 // MBG Production Page — Kadar Gizi + Export PDF #1
 // ============================================================================
 
-import { useEffect, useMemo, useState, Fragment } from 'react';
+import { useEffect, useMemo, useState, useCallback, Fragment } from 'react';
 import {
   Plus, Trash2, FileDown, Calendar, Loader2, CheckCircle2, Search, X, Folder, Send, ChefHat,
 } from 'lucide-react';
@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { MbgPmBatch, MbgPmEntry, MbgNutritionEntry, MbgDayMenu } from '@/types/mbg';
 import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
-import { subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule, saveWeeklySchedule } from '@/services/mbgAdminService';
+import { subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule, saveWeeklySchedule, type MbgPortionClassification } from '@/services/mbgAdminService';
 import {
   subscribeNutrition, addNutritionEntry, updateNutritionEntry, deleteNutritionEntry,
   subscribeCustomTkpiEntries, addCustomTkpiEntry, updateCustomTkpiEntry, deleteCustomTkpiEntry,
@@ -173,17 +173,20 @@ export function MbgProductionPage() {
   const [weeklySchedule, setWeeklySchedule] = useState<MbgDayMenu[]>(DEFAULT_WEEKLY_SCHEDULE);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
-  useEffect(() => {
-    const unsub = subscribeWeeklySchedule(setWeeklySchedule);
-    return unsub;
-  }, []);
+  const [selectedPortionClassification, setSelectedPortionClassification] = useState<MbgPortionClassification>('porsi_besar');
 
-  const handleSaveWeeklySchedule = async (updatedDays: MbgDayMenu[]) => {
+  useEffect(() => {
+    const unsub = subscribeWeeklySchedule(setWeeklySchedule, selectedPortionClassification);
+    return unsub;
+  }, [selectedPortionClassification]);
+
+  const handleSaveWeeklySchedule = async (updatedDays: MbgDayMenu[], portion?: MbgPortionClassification) => {
     if (!user) return;
+    const targetPortion = portion || selectedPortionClassification;
     try {
-      await saveWeeklySchedule(updatedDays, user.uid);
+      await saveWeeklySchedule(updatedDays, user.uid, targetPortion);
       setWeeklySchedule(updatedDays);
-      showToast({ message: 'Master Jadwal Menu Mingguan berhasil disimpan!', variant: 'success' });
+      showToast({ message: `Master Jadwal Menu Mingguan (${targetPortion}) berhasil disimpan!`, variant: 'success' });
     } catch (err) {
       console.error(err);
       showToast({ message: 'Gagal menyimpan jadwal menu mingguan', variant: 'error' });
@@ -765,7 +768,7 @@ export function MbgProductionPage() {
     }
   };
 
-  const handleSyncNutritionFromIngredients = async () => {
+  const handleSyncNutritionFromIngredients = useCallback(async () => {
     if (!selectedBatchId || !user) {
       showToast({ message: 'Silakan pilih tanggal batch terlebih dahulu!', variant: 'error' });
       return;
@@ -966,7 +969,7 @@ export function MbgProductionPage() {
     } finally {
       setIsInitializing(false);
     }
-  };
+  }, [selectedBatchId, user, adjustedRecipeRequirements, nutritionData, entries, combinedTkpiDatabase, showToast]);
 
   // Auto-populate nutrition entries from raw ingredients (Standar Resep + TKPI)
   useEffect(() => {
@@ -3811,6 +3814,8 @@ export function MbgProductionPage() {
         isOpen={showScheduleModal}
         onClose={() => setShowScheduleModal(false)}
         scheduleDays={weeklySchedule}
+        selectedPortion={selectedPortionClassification}
+        onPortionChange={(p) => setSelectedPortionClassification(p)}
         onSave={handleSaveWeeklySchedule}
       />
     </div>

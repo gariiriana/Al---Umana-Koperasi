@@ -208,6 +208,47 @@ export async function updateSchoolDeliveryProof(
 }
 
 /**
+ * Delete / Reset delivery proof foto untuk 1 sekolah/entry
+ */
+export async function deleteSchoolDeliveryProof(
+  entryId: string,
+  proofType: 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan',
+  taskId?: string
+): Promise<void> {
+  const fieldMap: Record<string, string> = {
+    menu: 'photoMenuUrl',
+    penerima: 'photoPenerimaUrl',
+    serah_terima: 'photoSerahTerimaUrl',
+    surat_jalan: 'photoSuratJalanUrl',
+  };
+  const descMap: Record<string, string> = {
+    menu: 'photoMenuDesc',
+    penerima: 'photoPenerimaDesc',
+    serah_terima: 'photoSerahTerimaDesc',
+    surat_jalan: 'photoSuratJalanDesc',
+  };
+
+  await updateDoc(doc(db, 'mbg_pm_entries', entryId), {
+    [fieldMap[proofType]]: null,
+    [descMap[proofType]]: null,
+    updatedAt: new Date().toISOString(),
+  });
+
+  if (taskId) {
+    const proofKey = `schoolProofs.${entryId}`;
+    try {
+      await updateDoc(doc(db, DELIVERY_COLLECTION, taskId), {
+        [`${proofKey}.${fieldMap[proofType]}`]: null,
+        [`${proofKey}.${descMap[proofType]}`]: null,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.warn('Failed syncing photo deletion to delivery task:', err);
+    }
+  }
+}
+
+/**
  * Update deskripsi foto tanpa mengubah foto itu sendiri
  */
 export async function updatePhotoDescription(

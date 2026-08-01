@@ -14,9 +14,11 @@ import {
   X,
   AlertTriangle,
   ChefHat,
+  Upload,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
+import * as XLSX from 'xlsx';
 import type { MbgPmBatch, MbgPmEntry, MbgInstitutionType, MbgClassBreakdown, MbgDayMenu } from '@/types/mbg';
 import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
 import {
@@ -35,6 +37,7 @@ import {
   getMenuForDate,
   bulkAddEntriesFromMaster,
   deleteAllMbgData,
+  type MbgPortionClassification,
 } from '@/services/mbgAdminService';
 import { subscribeCustomRecipes } from '@/services/mbgProductionService';
 import resepStandardData from '@/constants/standarResep.json';
@@ -626,7 +629,7 @@ function PmEntryRow({
           <input
             type="number"
             min={0}
-            value={entry.qtBumil ?? ''}
+            value={entry.qtBumil ?? (entry.institutionName.toLowerCase().includes('bumil') ? entry.qtBumilBusui || '' : '')}
             onChange={(e) => handleFieldChange('qtBumil', parseInt(e.target.value) || 0)}
             placeholder="Bumil"
             title="Porsi Ibu Hamil (Bumil)"
@@ -643,7 +646,7 @@ function PmEntryRow({
           <input
             type="number"
             min={0}
-            value={entry.qtBusui ?? ''}
+            value={entry.qtBusui ?? (entry.institutionName.toLowerCase().includes('busui') ? entry.qtBumilBusui || '' : '')}
             onChange={(e) => handleFieldChange('qtBusui', parseInt(e.target.value) || 0)}
             placeholder="Busui"
             title="Porsi Ibu Menyusui (Busui)"
@@ -840,13 +843,200 @@ export function MbgAdminPage() {
     variant?: 'danger' | 'warning' | 'info';
   } | null>(null);
 
-  const isAutoPopulatingRef = useRef<Record<string, boolean>>({});
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [selectedPortionClassification, setSelectedPortionClassification] = useState<MbgPortionClassification>('porsi_besar');
+
+  const handleImportExcelPm = (file: File) => {
+    if (!selectedBatchId) {
+      showToast({ message: 'Pilih atau buat Batch Pengiriman terlebih dahulu sebelum import!', variant: 'error' });
+      return;
+    }
+    if (!user) return;
+
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+      try {
+        let rows: Array<Array<string | number | undefined | null>> = [];
+        const isBinary = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
+        if (isBinary) {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          rows = XLSX.utils.sheet_to_json<Array<string | number | undefined | null>>(worksheet, { header: 1 });
+        } else {
+          const text = e.target?.result as string;
+          const lines = text.split(/\r?\n/).filter((l) => l.trim());
+          rows = lines.map((line) => {
+            const delimiter = line.includes(';') ? ';' : line.includes('\t') ? '\t' : ',';
+            return line.split(delimiter).map((c) => c.trim().replace(/^["']|["']$/g, ''));
+          });
+        }
+
+        if (!rows || rows.length < 1) {
+          showToast({ message: 'File Excel / CSV kosong atau format salah', variant: 'error' });
+          return;
+        }
+
+        const num = (val: unknown): number => {
+          if (val === null || val === undefined) return 0;
+          if (typeof val === 'number') return isNaN(val) ? 0 : val;
+          if (typeof val === 'string') {
+            const cleaned = val.replace(/[^0-9.-]/g, '');
+            return parseInt(cleaned, 10) || 0;
+          }
+          return 0;
+        };
+
+        let importedCount = 0;
+        for (let i = 0; i < rows.length; i++) {
+          const cols = rows[i] || [];
+          const rawInst = cols[0];
+          if (rawInst === undefined || rawInst === null) continue;
+
+          const instName = String(rawInst).trim();
+          if (!instName) continue;
+
+          const firstColUpper = instName.toUpperCase();
+          if (
+            firstColUpper === 'SEKOLAH' ||
+            firstColUpper === 'TOTAL' ||
+            firstColUpper.includes('REKAPITULASI') ||
+            firstColUpper.includes('PERIODE') ||
+            firstColUpper.includes('NAMA') ||
+            firstColUpper === 'L' ||
+            firstColUpper === 'P'
+          ) {
+            continue;
+          }
+
+          const lowerName = instName.toLowerCase();
+
+          // Only classify as posyandu if explicitly balita/bumil/busui/posyandu (SPS and TK are PAUD/TK Schools with Porsi Kecil)
+          const isPosyandu =
+            lowerName.includes('posyandu') ||
+            lowerName.startsWith('balita') ||
+            lowerName.startsWith('bumil') ||
+            lowerName.startsWith('busui') ||
+            (lowerName.includes('balita') && !lowerName.includes('tk') && !lowerName.includes('sps') && !lowerName.includes('sd') && !lowerName.includes('smp')) ||
+            (lowerName.includes('bumil') && !lowerName.includes('sd') && !lowerName.includes('smp')) ||
+            (lowerName.includes('busui') && !lowerName.includes('sd') && !lowerName.includes('smp'));
+
+          const instType: MbgInstitutionType = isPosyandu ? 'posyandu' : 'sekolah';
+
+          // Direct mapping from Excel Rekapitulasi photo:
+          // Col 0: SEKOLAH
+          // Col 1: Porsi Kecil L, Col 2: Porsi Kecil P
+          // Col 3: Porsi Besar L, Col 4: Porsi Besar P
+          // Col 5: TOTAL L, Col 6: TOTAL P, Col 7: JML Siswa
+          // Col 8: GURU L, Col 9: GURU P
+          // Col 10: TENDIK L, Col 11: TENDIK P
+          // Col 12: JML Staf, Col 13: TOTAL KESELURUHAN
+          const qtPorsiKecilL = num(cols[1]);
+          const qtPorsiKecilP = num(cols[2]);
+          const qtPorsiBesarL = num(cols[3]);
+          let qtPorsiBesarP = num(cols[4]);
+
+          let guruL = num(cols[8]);
+          let guruP = num(cols[9]);
+          let tendikL = num(cols[10]);
+          const tendikP = num(cols[11]);
+
+          // Fallback if simplified table (without total columns)
+          if (guruL === 0 && guruP === 0 && tendikL === 0 && tendikP === 0 && cols.length >= 6 && cols.length < 10) {
+            guruL = num(cols[5]);
+            guruP = num(cols[6]);
+            tendikL = num(cols[7]);
+          }
+
+          const qtGuruKader = guruL + guruP + tendikL + tendikP || num(cols[12]);
+          let qtSiswaBalita = qtPorsiKecilL + qtPorsiKecilP + qtPorsiBesarL + qtPorsiBesarP || num(cols[7]);
+          let qtBumilBusui = 0;
+          let qtBumil = 0;
+          let qtBusui = 0;
+          const qtPobiaNasi = 0;
+
+          if (lowerName.includes('bumil')) {
+            const val = num(cols[4]) || num(cols[6]) || qtSiswaBalita || num(cols[13]);
+            qtBumil = val;
+            qtBumilBusui = val;
+            qtSiswaBalita = 0;
+            qtPorsiBesarP = 0;
+          } else if (lowerName.includes('busui')) {
+            const val = num(cols[4]) || num(cols[6]) || qtSiswaBalita || num(cols[13]);
+            qtBusui = val;
+            qtBumilBusui = val;
+            qtSiswaBalita = 0;
+            qtPorsiBesarP = 0;
+          }
+
+          const jumlah = num(cols[13]) || (qtSiswaBalita + qtBumilBusui + qtGuruKader);
+
+          const { menuItems, menuKeringanItems } = selectedBatch
+            ? getMenuForDate(selectedBatch.tanggal, weeklySchedule)
+            : { menuItems: [], menuKeringanItems: [] };
+
+          await addEntry({
+            batchId: selectedBatchId,
+            institutionName: instName,
+            institutionType: instType,
+            qtSiswaBalita,
+            qtBumilBusui,
+            qtBumil: qtBumil || undefined,
+            qtBusui: qtBusui || undefined,
+            qtGuruKader,
+            qtPobiaNasi,
+            qtPorsiKecilL: qtPorsiKecilL || undefined,
+            qtPorsiKecilP: qtPorsiKecilP || undefined,
+            qtPorsiBesarL: qtPorsiBesarL || undefined,
+            qtPorsiBesarP: qtPorsiBesarP || undefined,
+            qtGuruL: guruL || undefined,
+            qtGuruP: guruP || undefined,
+            qtTendikL: tendikL || undefined,
+            qtTendikP: tendikP || undefined,
+            jumlah,
+            jadwalPengantaran: '',
+            assignedPetugasId: '',
+            assignedPetugasName: '',
+            isSekolahLibur: false,
+            sortOrder: entries.length + importedCount,
+            notes: '',
+            menuItems: [...menuItems],
+            menuKeringanItems: [...menuKeringanItems],
+            createdBy: user.uid,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+          importedCount++;
+        }
+
+        await recalculateBatchTotals(selectedBatchId);
+        const dayInfo = selectedBatch ? getMenuForDate(selectedBatch.tanggal, weeklySchedule).dayMenu.dayName : '';
+        showToast({
+          message: `Berhasil mengimpor ${importedCount} data PM & meng-generate Menu (${dayInfo}) untuk ${selectedBatch?.tanggal}!`,
+          variant: 'success',
+        });
+      } catch (err) {
+        console.error('Excel / CSV import error:', err);
+        showToast({ message: 'Gagal mengimpor file Excel / CSV', variant: 'error' });
+      }
+    };
+
+    if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
+  };
 
   // Subscribe to weekly menu schedule
   useEffect(() => {
-    const unsub = subscribeWeeklySchedule(setWeeklySchedule);
+    const unsub = subscribeWeeklySchedule(setWeeklySchedule, selectedPortionClassification);
     return unsub;
-  }, []);
+  }, [selectedPortionClassification]);
 
   // Subscribe to batches and auto-create today's batch
   useEffect(() => {
@@ -867,7 +1057,7 @@ export function MbgAdminPage() {
           const anyTodayBatch = b.find((batch) => batch.tanggal === todayStr);
           if (!anyTodayBatch) {
             try {
-              const newId = await createBatch(todayStr, user.uid, true, weeklySchedule);
+              const newId = await createBatch(todayStr, user.uid, false, weeklySchedule);
               setSelectedBatchId(newId);
             } catch (err) {
               console.error('Failed to auto-create batch for today:', err);
@@ -908,32 +1098,6 @@ export function MbgAdminPage() {
 
   const selectedBatch = batches.find((b) => b.id === selectedBatchId);
 
-  // Auto-generate 27 Master Institutions if selected batch is DRAFT and has 0 entries
-  useEffect(() => {
-    if (!selectedBatchId || !selectedBatch || loadingEntries) return;
-
-    if (entries.length === 0 && selectedBatch.status === 'DRAFT') {
-      const batchKey = `${selectedBatchId}_${selectedBatch.tanggal}`;
-      if (isAutoPopulatingRef.current[batchKey]) return;
-
-      isAutoPopulatingRef.current[batchKey] = true;
-      (async () => {
-        try {
-          await bulkAddEntriesFromMaster(selectedBatchId, user?.uid || '', selectedBatch.tanggal, weeklySchedule);
-          await recalculateBatchTotals(selectedBatchId);
-          const { dayMenu } = getMenuForDate(selectedBatch.tanggal, weeklySchedule);
-          showToast({
-            message: `Otomatis meng-generate 27 Institusi Master & Menu (${dayMenu.dayName}) untuk ${selectedBatch.tanggal}`,
-            variant: 'success',
-          });
-        } catch (err) {
-          console.error('Failed to auto-generate batch entries:', err);
-          delete isAutoPopulatingRef.current[batchKey];
-        }
-      })();
-    }
-  }, [selectedBatchId, selectedBatch, entries.length, loadingEntries, user, weeklySchedule, showToast]);
-
   const handleSelectOrPickDate = async (newDateStr: string) => {
     if (!newDateStr || !user) return;
 
@@ -945,11 +1109,10 @@ export function MbgAdminPage() {
 
     try {
       setSaving(true);
-      const newId = await createBatch(newDateStr, user.uid, true, weeklySchedule);
+      const newId = await createBatch(newDateStr, user.uid, false, weeklySchedule);
       setSelectedBatchId(newId);
-      const { dayMenu } = getMenuForDate(newDateStr, weeklySchedule);
       showToast({
-        message: `Otomatis membuat batch ${newDateStr} (${dayMenu.dayName}) dengan 27 Institusi & Menu Jadwal!`,
+        message: `Berhasil membuat batch ${newDateStr}. Silakan klik "Import Excel / CSV PM" untuk mengisi data penerima manfaat!`,
         variant: 'success',
       });
     } catch (err) {
@@ -1031,12 +1194,13 @@ export function MbgAdminPage() {
     }
   };
 
-  const handleSaveWeeklySchedule = async (updatedDays: MbgDayMenu[]) => {
+  const handleSaveWeeklySchedule = async (updatedDays: MbgDayMenu[], portion?: MbgPortionClassification) => {
     if (!user) return;
+    const targetPortion = portion || selectedPortionClassification;
     try {
-      await saveWeeklySchedule(updatedDays, user.uid);
+      await saveWeeklySchedule(updatedDays, user.uid, targetPortion);
       setWeeklySchedule(updatedDays);
-      showToast({ message: 'Master Jadwal Menu Mingguan berhasil disimpan!', variant: 'success' });
+      showToast({ message: `Master Jadwal Menu Mingguan (${targetPortion}) berhasil disimpan!`, variant: 'success' });
     } catch (err) {
       console.error(err);
       showToast({ message: 'Gagal menyimpan jadwal menu mingguan', variant: 'error' });
@@ -1046,12 +1210,12 @@ export function MbgAdminPage() {
   const handleCreateBatch = async (tanggal: string, copyFromId?: string) => {
     if (!user) return;
     try {
-      const newId = await createBatch(tanggal, user.uid, true, weeklySchedule);
+      const newId = await createBatch(tanggal, user.uid, false, weeklySchedule);
       if (copyFromId) {
         await copyFromBatch(copyFromId, newId, user.uid);
       }
       setSelectedBatchId(newId);
-      showToast({ message: 'Batch baru berhasil dibuat dengan menu jadwal otomatis!', variant: 'success' });
+      showToast({ message: 'Batch baru berhasil dibuat! Silakan klik "Import Excel / CSV PM" untuk mengisi data PM.', variant: 'success' });
     } catch (err) {
       console.error(err);
       showToast({ message: 'Gagal membuat batch', variant: 'error' });
@@ -1337,6 +1501,31 @@ export function MbgAdminPage() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              <input
+                type="file"
+                ref={csvFileInputRef}
+                accept=".xlsx,.xls,.csv,.txt"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleImportExcelPm(file);
+                    e.target.value = '';
+                  }
+                }}
+              />
+
+              <button
+                type="button"
+                onClick={() => csvFileInputRef.current?.click()}
+                disabled={!selectedBatchId}
+                title="Import data PM langsung dari file Excel (.xlsx, .xls) atau CSV"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-extrabold hover:bg-blue-100 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Upload className="h-4 w-4 text-blue-600" />
+                Import Excel / CSV PM
+              </button>
+
               <button
                 onClick={() => setShowScheduleModal(true)}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
@@ -1530,6 +1719,8 @@ export function MbgAdminPage() {
           isOpen={showScheduleModal}
           onClose={() => setShowScheduleModal(false)}
           scheduleDays={weeklySchedule}
+          selectedPortion={selectedPortionClassification}
+          onPortionChange={(p) => setSelectedPortionClassification(p)}
           onSave={handleSaveWeeklySchedule}
         />
       </AnimatePresence>

@@ -58,6 +58,7 @@ const MbgCookingPage = lazy(() => import("@/pages/mbg/MbgCookingPage").then(modu
 const MbgPurchasingPage = lazy(() => import("@/pages/mbg/MbgPurchasingPage").then(module => ({ default: module.MbgPurchasingPage })));
 const MbgSubPurchasingPage = lazy(() => import("@/pages/mbg/MbgSubPurchasingPage").then(module => ({ default: module.MbgSubPurchasingPage })));
 const MbgPurchasingRecapPage = lazy(() => import("@/pages/mbg/MbgPurchasingRecapPage").then(module => ({ default: module.MbgPurchasingRecapPage })));
+const MbgPurchasingArchivePage = lazy(() => import("@/pages/mbg/MbgPurchasingArchivePage").then(module => ({ default: module.MbgPurchasingArchivePage })));
 const MbgSupplierPage = lazy(() => import("@/pages/mbg/MbgSupplierPage").then(module => ({ default: module.MbgSupplierPage })));
 const MbgDistributionPage = lazy(() => import("@/pages/mbg/MbgDistributionPage").then(module => ({ default: module.MbgDistributionPage })));
 const MbgDeliveryPage = lazy(() => import("@/pages/mbg/MbgDeliveryPage").then(module => ({ default: module.MbgDeliveryPage })));
@@ -680,7 +681,7 @@ function RoutesTree() {
         path="/mbg/cooking"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Masak MBG" allowedRoles={["produksi_mbg", "admin_mbg"]}>
+            <ShelledRoute pageTitle="Masak MBG" allowedRoles={["produksi_mbg", "admin_mbg", "dokumentasi_produksiMBG"]}>
               <MbgCookingPage />
             </ShelledRoute>
           </Protected>
@@ -690,7 +691,7 @@ function RoutesTree() {
         path="/mbg/purchasing"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Purchasing MBG" allowedRoles={["purchasing_mbg"]}>
+            <ShelledRoute pageTitle="Purchasing MBG" allowedRoles={["purchasing_mbg", "admin_mbg", "produksi_mbg"]}>
               <MbgPurchasingPage />
             </ShelledRoute>
           </Protected>
@@ -700,7 +701,7 @@ function RoutesTree() {
         path="/mbg/sub-purchasing"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Sub Purchasing MBG" allowedRoles={["sub_purchasing_mbg", "purchasing_mbg"]}>
+            <ShelledRoute pageTitle="Sub Purchasing MBG" allowedRoles={["sub_purchasing_mbg", "purchasing_mbg", "admin_mbg", "produksi_mbg"]}>
               <MbgSubPurchasingPage />
             </ShelledRoute>
           </Protected>
@@ -710,8 +711,18 @@ function RoutesTree() {
         path="/mbg/purchasing/recap"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Laporan Belanja" allowedRoles={["purchasing_mbg", "admin_mbg"]}>
+            <ShelledRoute pageTitle="Laporan Belanja" allowedRoles={["purchasing_mbg", "admin_mbg", "produksi_mbg"]}>
               <MbgPurchasingRecapPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/mbg/purchasing/archive"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Arsip Purchasing" allowedRoles={["purchasing_mbg", "admin_mbg", "produksi_mbg"]}>
+              <MbgPurchasingArchivePage />
             </ShelledRoute>
           </Protected>
         }
@@ -720,7 +731,7 @@ function RoutesTree() {
         path="/mbg/suppliers"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Supplier MBG" allowedRoles={["purchasing_mbg"]}>
+            <ShelledRoute pageTitle="Supplier MBG" allowedRoles={["purchasing_mbg", "admin_mbg", "produksi_mbg"]}>
               <MbgSupplierPage />
             </ShelledRoute>
           </Protected>
@@ -730,7 +741,7 @@ function RoutesTree() {
         path="/mbg/distribution"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Distribusi MBG" allowedRoles={["distribusi_mbg"]}>
+            <ShelledRoute pageTitle="Distribusi MBG" allowedRoles={["distribusi_mbg", "admin_mbg", "produksi_mbg"]}>
               <MbgDistributionPage />
             </ShelledRoute>
           </Protected>
@@ -740,7 +751,7 @@ function RoutesTree() {
         path="/mbg/delivery"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Kurir MBG" allowedRoles={["kurir_mbg"]}>
+            <ShelledRoute pageTitle="Kurir MBG" allowedRoles={["kurir_mbg", "distribusi_mbg", "admin_mbg", "produksi_mbg"]}>
               <MbgDeliveryPage />
             </ShelledRoute>
           </Protected>

@@ -459,7 +459,7 @@ export function MbgPurchasingPage() {
         await addPurchaseOrder({
           batchId: targetBatchId,
           supplierId: 'pasar_utama',
-          supplierName: 'PASAR / SUPPLIER UTAMA',
+          supplierName: 'SPPG Sukabumi Gunungguruh Kebonmanggu',
           type: 'harian',
           targetDate: batchObj?.tanggal || new Date().toISOString().split('T')[0],
           groupLabel: 'Pesanan A',
@@ -1375,7 +1375,7 @@ export function MbgPurchasingPage() {
                 }`}
               >
                 <ShoppingBag className="h-4 w-4 text-blue-500" />
-                Handover Sub-Purchasing
+                Handover Tim Produksi Memasak
                 {subPurchasingTasks.length > 0 && (
                   <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-blue-600 text-white font-extrabold">
                     {subPurchasingTasks.length}
@@ -1734,10 +1734,10 @@ export function MbgPurchasingPage() {
                           <div className="flex items-center gap-1.5 border-l border-gray-200 pl-2">
                             <button
                               onClick={() => setHandoverModalOrder(order)}
-                              title="Handover tugas belanja ini ke Sub-Purchasing"
-                              className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-extrabold rounded-lg shadow-xs cursor-pointer transition-colors"
+                              title="Handover tugas ini ke Tim Produksi Memasak"
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold rounded-lg shadow-xs cursor-pointer transition-colors"
                             >
-                              <ShoppingBag className="h-3.5 w-3.5" /> Handover
+                              <ShoppingBag className="h-3.5 w-3.5" /> Handover Tim Produksi Memasak
                             </button>
                             <button
                               onClick={() => handleExportPdfForOrder(order)}
@@ -1773,6 +1773,8 @@ export function MbgPurchasingPage() {
                               <th className="py-3 px-4">Jam Kedatangan</th>
                               <th className="py-3 px-4">Jumlah</th>
                               <th className="py-3 px-4">Satuan</th>
+                              <th className="py-3 px-4">Harga Satuan (Rp)</th>
+                              <th className="py-3 px-4">Total Price</th>
                               <th className="py-3 px-4">Keterangan</th>
                               <th className="py-3 px-4 text-center">Foto Bukti</th>
                               <th className="py-3 px-4 text-center">Aksi</th>
@@ -1814,14 +1816,13 @@ export function MbgPurchasingPage() {
                                     title="Jumlah"
                                     placeholder="0"
                                     disabled={order.submittedToRecap === true}
-                                    onChange={(e) =>
-                                      handleUpdateItem(
-                                        order.id,
-                                        idx,
-                                        'jumlah',
-                                        parseFloat(e.target.value) || 0
-                                      )
-                                    }
+                                    onChange={(e) => {
+                                      const j = parseFloat(e.target.value) || 0;
+                                      handleUpdateItem(order.id, idx, 'jumlah', j);
+                                      if (item.hargaSatuan) {
+                                        handleUpdateItem(order.id, idx, 'totalHarga', Math.round(j * item.hargaSatuan * 100) / 100);
+                                      }
+                                    }}
                                     className="w-20 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[#FBBF24] focus:outline-none py-1 font-extrabold text-[#111827] disabled:opacity-60"
                                   />
                                 </td>
@@ -1841,6 +1842,24 @@ export function MbgPurchasingPage() {
                                       </option>
                                     ))}
                                   </select>
+                                </td>
+                                <td className="py-2.5 px-4">
+                                  <input
+                                    type="number"
+                                    value={item.hargaSatuan || ''}
+                                    title="Harga Satuan (Rp)"
+                                    placeholder="0"
+                                    disabled={order.submittedToRecap === true}
+                                    onChange={(e) => {
+                                      const h = parseFloat(e.target.value) || 0;
+                                      handleUpdateItem(order.id, idx, 'hargaSatuan', h);
+                                      handleUpdateItem(order.id, idx, 'totalHarga', Math.round(h * item.jumlah * 100) / 100);
+                                    }}
+                                    className="w-24 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[#059669] focus:outline-none py-1 font-bold text-[#059669] disabled:opacity-60"
+                                  />
+                                </td>
+                                <td className="py-2.5 px-4 font-bold text-gray-900 whitespace-nowrap">
+                                  Rp {((item.hargaSatuan || 0) * item.jumlah).toLocaleString('id-ID')}
                                 </td>
                                 <td className="py-2.5 px-4">
                                   <input
@@ -2650,8 +2669,8 @@ export function MbgPurchasingPage() {
             >
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">
-                    Handover Belanja
+                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">
+                    Handover Tim Produksi Memasak
                   </span>
                   <h3 className="text-lg font-extrabold text-[#111827]">
                     {handoverModalOrder.supplierName}
@@ -2672,7 +2691,7 @@ export function MbgPurchasingPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5">
-                    Tugaskan Ke Petugas Sub-Purchasing
+                    Tugaskan Ke Tim Produksi Memasak
                   </label>
                   <input
                     type="text"
@@ -2686,7 +2705,7 @@ export function MbgPurchasingPage() {
                 </div>
 
                 <div className="bg-gray-50 p-3 rounded-xl max-h-40 overflow-y-auto space-y-1">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Daftar Bahan Handover:</span>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Daftar Bahan untuk Tim Produksi:</span>
                   {handoverModalOrder.items.map((it, idx) => (
                     <div key={idx} className="text-xs flex justify-between font-semibold text-gray-700">
                       <span>• {it.bahanName}</span>
@@ -2705,9 +2724,9 @@ export function MbgPurchasingPage() {
                   </button>
                   <button
                     onClick={handleCreateSubPurchasingTask}
-                    className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl cursor-pointer text-xs font-bold text-center"
+                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl cursor-pointer text-xs font-bold text-center"
                   >
-                    Kirim Tugas Belanja
+                    Handover ke Tim Produksi Memasak
                   </button>
                 </div>
               </div>

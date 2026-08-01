@@ -400,6 +400,9 @@ export interface MbgSchoolProof {
   photoSerahTerimaTimestamp?: string;
   photoSerahTerimaLocation?: string;
   photoSuratJalanUrl?: string;
+  photoPenerimaUrl?: string;
+  photoPenerimaTimestamp?: string;
+  photoPenerimaLocation?: string;
   updatedAt?: string;
 }
 
@@ -429,6 +432,8 @@ export interface MbgDeliveryTask {
   handoverPhotoId: string;
   handoverAt: string;
   status: MbgDeliveryStatus;
+  /** Target deadline pengantaran (ISO Datetime) */
+  deadlineAt?: string;
   /** Bukti foto per delivery stop */
   deliveryPhotos: { fileId: string; description: string; institutionName: string }[];
   /** Bukti foto 3-kategori (Menu, Serah Terima, Surat Jalan) per ID institusi */

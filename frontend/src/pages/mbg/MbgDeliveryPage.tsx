@@ -18,6 +18,9 @@ import {
   FolderOpen,
   History,
   Search,
+  Download,
+  Trash2,
+  Upload,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -32,6 +35,7 @@ import {
   setHandoverPhoto,
   addDeliveryPhoto,
   updateSchoolDeliveryProof,
+  deleteSchoolDeliveryProof,
   updatePhotoDescription,
   saveDeliveryDocument,
   subscribeAllDeliveryDocuments,
@@ -48,7 +52,9 @@ export function MbgDeliveryPage() {
   const { showToast } = useToast();
 
   const [batches, setBatches] = useState<MbgPmBatch[]>([]);
-  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(() => {
+    return sessionStorage.getItem('mbg_delivery_selected_batch') || null;
+  });
   const [tasks, setTasks] = useState<MbgDeliveryTask[]>([]);
   const [entries, setEntries] = useState<MbgPmEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,13 +85,16 @@ export function MbgDeliveryPage() {
     const unsub = subscribeBatches((data) => {
       const activeBatches = data.filter((b) => b.status !== 'DRAFT');
       setBatches(activeBatches);
-      if (activeBatches.length > 0 && !selectedBatchId) {
+      const savedBatchId = sessionStorage.getItem('mbg_delivery_selected_batch');
+      if (savedBatchId && activeBatches.some((b) => b.id === savedBatchId)) {
+        setSelectedBatchId(savedBatchId);
+      } else if (activeBatches.length > 0) {
         setSelectedBatchId(activeBatches[0].id);
+        sessionStorage.setItem('mbg_delivery_selected_batch', activeBatches[0].id);
       }
       setLoading(false);
     });
     return unsub;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Subscribe arsip dokumen
@@ -272,6 +281,59 @@ export function MbgDeliveryPage() {
         console.warn('Failed to save description:', err);
       }
     }, 800);
+  };
+
+  const handleDeviceFileUpload = async (
+    file: File,
+    entry: MbgPmEntry,
+    proofType: 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan'
+  ) => {
+    if (!activeTask) return;
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result as string;
+        const timestampStr = new Date().toLocaleString('id-ID');
+        await updateSchoolDeliveryProof(
+          entry.id,
+          entry.institutionName,
+          proofType,
+          dataUrl,
+          activeTask.id,
+          { timestamp: timestampStr, location: 'Upload Device' }
+        );
+        showToast({
+          message: `Foto ${proofType.replace('_', ' ')} untuk ${entry.institutionName} berhasil diunggah`,
+          variant: 'success',
+        });
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      showToast({ message: 'Gagal mengunggah foto', variant: 'error' });
+    }
+  };
+
+  const handleDeleteProofPhoto = async (
+    entryId: string,
+    proofType: 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan'
+  ) => {
+    if (!activeTask) return;
+    try {
+      await deleteSchoolDeliveryProof(entryId, proofType, activeTask.id);
+      showToast({ message: 'Foto berhasil dihapus', variant: 'success' });
+    } catch {
+      showToast({ message: 'Gagal menghapus foto', variant: 'error' });
+    }
+  };
+
+  const handleDownloadProofPhoto = (url?: string, filename?: string) => {
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'bukti_foto.jpg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   // ─── PDF Export ───
@@ -936,6 +998,23 @@ export function MbgDeliveryPage() {
                     <p className="text-xs text-gray-500 mt-0.5">
                       Status Tugas: {MBG_DELIVERY_STATUS_CONFIG[activeTask.status]?.label}
                     </p>
+                    {activeTask.deadlineAt && (() => {
+                      const isOverdue = new Date().getTime() > new Date(activeTask.deadlineAt).getTime() && activeTask.status !== 'delivered';
+                      return (
+                        <div className={`mt-2 px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 ${
+                          isOverdue
+                            ? 'bg-red-600 text-white animate-bounce shadow-md'
+                            : 'bg-amber-100 text-amber-900 border border-amber-300'
+                        }`}>
+                          <span>⚠️</span>
+                          <span>
+                            {isOverdue
+                              ? `MELEWATI DEADLINE! (Harus Sampai: ${new Date(activeTask.deadlineAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB)`
+                              : `Deadline Pengantaran: ${new Date(activeTask.deadlineAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB`}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -1022,10 +1101,10 @@ export function MbgDeliveryPage() {
                       <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-bold uppercase text-[9px] tracking-wider">
                         <th className="py-3 px-6">Institusi</th>
                         <th className="py-3 px-4 text-center">Porsi</th>
-                        <th className="py-3 px-4 text-center">🍱 Foto Menu</th>
-                        <th className="py-3 px-4 text-center">🤝 Foto Serah Terima</th>
+                        <th className="py-3 px-4 text-center">🚐 Kedatangan Ompreng</th>
+                        <th className="py-3 px-4 text-center">🤝 Serah Terima PJ Sekolah</th>
                         <th className="py-3 px-4 text-center">📄 Foto Surat Jalan</th>
-                        <th className="py-3 px-4 text-center">🧑‍💼 Foto Penerima/PJ</th>
+                        <th className="py-3 px-4 text-center">📦 Pengambilan Ompreng Kosong</th>
                         <th className="py-3 px-6 text-center">Kelola Bukti</th>
                       </tr>
                     </thead>
@@ -1067,12 +1146,12 @@ export function MbgDeliveryPage() {
                               </span>
                             </td>
 
-                            {/* Foto Menu */}
+                            {/* Foto Kedatangan Ompreng */}
                             <td className="py-3 px-4 text-center">
                               {hasMenu ? (
                                 <img
                                   src={entry.photoMenuUrl}
-                                  alt="Menu"
+                                  alt="Kedatangan Ompreng"
                                   className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs"
                                 />
                               ) : (
@@ -1085,7 +1164,7 @@ export function MbgDeliveryPage() {
                               )}
                             </td>
 
-                            {/* Foto Serah Terima */}
+                            {/* Foto Serah Terima PJ Sekolah */}
                             <td className="py-3 px-4 text-center">
                               {hasSerahTerima ? (
                                 <img
@@ -1121,12 +1200,12 @@ export function MbgDeliveryPage() {
                               )}
                             </td>
 
-                            {/* Foto Penerima / PJ */}
+                            {/* Foto Pengambilan Ompreng Kosong */}
                             <td className="py-3 px-4 text-center">
                               {hasPenerima ? (
                                 <img
                                   src={entry.photoPenerimaUrl}
-                                  alt="Penerima/PJ"
+                                  alt="Pengambilan Ompreng Kosong"
                                   className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs"
                                 />
                               ) : (
@@ -1222,29 +1301,35 @@ export function MbgDeliveryPage() {
             </div>
 
             <div className="space-y-4">
-              {/* Slot 1: Foto Menu Makanan */}
+              {/* Slot 1: Foto Kedatangan Ompreng */}
               <ProofSlot
                 entry={proofModalEntry}
                 proofType="menu"
-                emoji="🍱"
-                label="Foto Menu / Box Porsi"
-                sublabel="Wadah / box porsi makanan"
+                emoji="🚐"
+                label="Foto Kedatangan Ompreng di Sekolah"
+                sublabel="Kedatangan kendaraan / ompreng di sekolah"
                 photoUrl={proofModalEntry.photoMenuUrl}
                 description={proofModalEntry.photoMenuDesc}
                 onCapture={() => handleStartProofCapture(proofModalEntry, 'menu')}
+                onDeviceUpload={(file) => handleDeviceFileUpload(file, proofModalEntry, 'menu')}
+                onDownload={() => handleDownloadProofPhoto(proofModalEntry.photoMenuUrl, `ompreng_${proofModalEntry.institutionName}.jpg`)}
+                onDelete={() => handleDeleteProofPhoto(proofModalEntry.id, 'menu')}
                 onDescChange={(val) => handleDescriptionChange(proofModalEntry.id, 'menu', val)}
               />
 
-              {/* Slot 2: Foto Serah Terima */}
+              {/* Slot 2: Foto Serah Terima PJ Sekolah */}
               <ProofSlot
                 entry={proofModalEntry}
                 proofType="serah_terima"
                 emoji="🤝"
-                label="Foto Serah Terima (Geotag)"
-                sublabel="Penyerahan fisik makanan di lokasi"
+                label="Foto Serah Terima dengan PJ Sekolah (Geotag)"
+                sublabel="Penyerahan fisik makanan bersama PJ Sekolah"
                 photoUrl={proofModalEntry.photoSerahTerimaUrl}
                 description={proofModalEntry.photoSerahTerimaDesc}
                 onCapture={() => handleStartProofCapture(proofModalEntry, 'serah_terima')}
+                onDeviceUpload={(file) => handleDeviceFileUpload(file, proofModalEntry, 'serah_terima')}
+                onDownload={() => handleDownloadProofPhoto(proofModalEntry.photoSerahTerimaUrl, `serah_terima_${proofModalEntry.institutionName}.jpg`)}
+                onDelete={() => handleDeleteProofPhoto(proofModalEntry.id, 'serah_terima')}
                 onDescChange={(val) => handleDescriptionChange(proofModalEntry.id, 'serah_terima', val)}
                 isGeotag
               />
@@ -1255,23 +1340,29 @@ export function MbgDeliveryPage() {
                 proofType="surat_jalan"
                 emoji="📄"
                 label="Foto Surat Jalan / BAST"
-                sublabel="Sudah TTD & stempel resmi"
+                sublabel="Sudah TTD & stempel resmi (Kamera Live / Device)"
                 photoUrl={proofModalEntry.photoSuratJalanUrl}
                 description={proofModalEntry.photoSuratJalanDesc}
                 onCapture={() => handleStartProofCapture(proofModalEntry, 'surat_jalan')}
+                onDeviceUpload={(file) => handleDeviceFileUpload(file, proofModalEntry, 'surat_jalan')}
+                onDownload={() => handleDownloadProofPhoto(proofModalEntry.photoSuratJalanUrl, `surat_jalan_${proofModalEntry.institutionName}.jpg`)}
+                onDelete={() => handleDeleteProofPhoto(proofModalEntry.id, 'surat_jalan')}
                 onDescChange={(val) => handleDescriptionChange(proofModalEntry.id, 'surat_jalan', val)}
               />
 
-              {/* Slot 4: Foto Penerima / Penanggung Jawab */}
+              {/* Slot 4: Foto Pengambilan Ompreng Kosong */}
               <ProofSlot
                 entry={proofModalEntry}
                 proofType="penerima"
-                emoji="🧑‍💼"
-                label="Foto Penanggung Jawab Penerima"
-                sublabel="Serah terima bersama Penanggung Jawab (PJ Sekolah / Posyandu / Guru / Kader)"
+                emoji="📦"
+                label="Foto Pengambilan Ompreng Kosong"
+                sublabel="Dokumentasi penarikan ompreng kosong dari sekolah"
                 photoUrl={proofModalEntry.photoPenerimaUrl}
                 description={proofModalEntry.photoPenerimaDesc}
                 onCapture={() => handleStartProofCapture(proofModalEntry, 'penerima')}
+                onDeviceUpload={(file) => handleDeviceFileUpload(file, proofModalEntry, 'penerima')}
+                onDownload={() => handleDownloadProofPhoto(proofModalEntry.photoPenerimaUrl, `ompreng_kosong_${proofModalEntry.institutionName}.jpg`)}
+                onDelete={() => handleDeleteProofPhoto(proofModalEntry.id, 'penerima')}
                 onDescChange={(val) => handleDescriptionChange(proofModalEntry.id, 'penerima', val)}
                 isGeotag
               />
@@ -1313,21 +1404,28 @@ function ProofSlot({
   photoUrl,
   description,
   onCapture,
+  onDeviceUpload,
+  onDownload,
+  onDelete,
   onDescChange,
   isGeotag,
 }: {
   entry: MbgPmEntry;
-  proofType: string;
+  proofType: 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan';
   emoji: string;
   label: string;
   sublabel: string;
   photoUrl?: string;
   description?: string;
   onCapture: () => void;
+  onDeviceUpload: (file: File) => void;
+  onDownload?: () => void;
+  onDelete?: () => void;
   onDescChange: (val: string) => void;
   isGeotag?: boolean;
 }) {
   const [localDesc, setLocalDesc] = useState(description || '');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync local state when Firestore data updates
   useEffect(() => {
@@ -1336,13 +1434,29 @@ function ProofSlot({
 
   return (
     <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            onDeviceUpload(file);
+            e.target.value = '';
+          }
+        }}
+      />
+
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           {photoUrl ? (
             <img
               src={photoUrl}
               alt={label}
-              className="w-14 h-14 object-cover rounded-xl border border-green-400"
+              className="w-14 h-14 object-cover rounded-xl border border-green-400 cursor-pointer shadow-xs hover:opacity-90"
+              onClick={onDownload}
+              title="Klik untuk lihat / download"
             />
           ) : (
             <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center text-xl font-bold">
@@ -1357,17 +1471,59 @@ function ProofSlot({
           </div>
         </div>
 
-        <button
-          onClick={onCapture}
-          className={`px-3 py-1.5 text-[10px] font-extrabold rounded-xl cursor-pointer flex items-center gap-1 shrink-0 ${
-            isGeotag
-              ? 'bg-[#FBBF24] text-[#111827] hover:bg-[#F59E0B]'
-              : 'bg-[#111827] text-white hover:bg-black'
-          }`}
-        >
-          <Camera className="h-3 w-3" />
-          {photoUrl ? 'Ganti' : isGeotag ? 'Geotag' : 'Kamera'}
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Camera live button */}
+          <button
+            type="button"
+            onClick={onCapture}
+            title="Ambil foto dengan Kamera Live"
+            className={`px-2.5 py-1.5 text-[10px] font-extrabold rounded-xl cursor-pointer flex items-center gap-1 ${
+              isGeotag
+                ? 'bg-[#FBBF24] text-[#111827] hover:bg-[#F59E0B]'
+                : 'bg-[#111827] text-white hover:bg-black'
+            }`}
+          >
+            <Camera className="h-3 w-3" />
+            {photoUrl ? 'Kamera' : isGeotag ? 'Geotag' : 'Kamera'}
+          </button>
+
+          {/* Upload device button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Upload foto dari Device"
+            className="px-2.5 py-1.5 text-[10px] font-extrabold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-xl cursor-pointer flex items-center gap-1"
+          >
+            <Upload className="h-3 w-3" />
+            Upload
+          </button>
+
+          {/* Action buttons when photo exists */}
+          {photoUrl && (
+            <>
+              {onDownload && (
+                <button
+                  type="button"
+                  onClick={onDownload}
+                  title="Download foto"
+                  className="p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl cursor-pointer transition-colors"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  title="Hapus foto ini"
+                  className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl cursor-pointer transition-colors"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Description input — visible after photo is captured */}

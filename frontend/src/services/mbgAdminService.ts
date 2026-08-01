@@ -24,7 +24,6 @@ import { MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mb
 
 const BATCHES_COLLECTION = 'mbg_pm_batches';
 const ENTRIES_COLLECTION = 'mbg_pm_entries';
-const SCHEDULE_DOC_REF = doc(db, 'mbg_settings', 'weekly_schedule');
 
 export function parseCategoryItems(input?: string | string[]): string[] {
   if (Array.isArray(input)) {
@@ -62,19 +61,33 @@ export function getMenuForDate(dateStr: string, scheduleDays?: MbgDayMenu[]) {
   return { dayMenu: found, menuItems, menuKeringanItems };
 }
 
+export type MbgPortionClassification =
+  | 'porsi_besar'
+  | 'porsi_kecil'
+  | 'bumil_busui'
+  | 'balita'
+  | 'alergi';
+
+export function getScheduleDocRef(portion: MbgPortionClassification = 'porsi_besar') {
+  return doc(db, 'mbg_weekly_schedules', portion);
+}
+
 export function subscribeWeeklySchedule(
   callback: (days: MbgDayMenu[]) => void,
+  portion: MbgPortionClassification = 'porsi_besar',
   onError?: (error: Error) => void
 ): Unsubscribe {
+  const docRef = getScheduleDocRef(portion);
   return onSnapshot(
-    SCHEDULE_DOC_REF,
+    docRef,
     (snapshot) => {
       if (snapshot.exists() && snapshot.data().days) {
         callback(snapshot.data().days as MbgDayMenu[]);
       } else {
-        setDoc(SCHEDULE_DOC_REF, {
-          id: 'weekly_schedule',
-          title: 'Master Jadwal Menu Mingguan MBG',
+        setDoc(docRef, {
+          id: portion,
+          portionClassification: portion,
+          title: `Master Jadwal Menu Mingguan MBG (${portion})`,
           days: DEFAULT_WEEKLY_SCHEDULE,
           updatedAt: new Date().toISOString(),
           updatedBy: 'system',
@@ -88,13 +101,16 @@ export function subscribeWeeklySchedule(
 
 export async function saveWeeklySchedule(
   days: MbgDayMenu[],
-  updatedBy: string
+  updatedBy: string,
+  portion: MbgPortionClassification = 'porsi_besar'
 ): Promise<void> {
+  const docRef = getScheduleDocRef(portion);
   await setDoc(
-    SCHEDULE_DOC_REF,
+    docRef,
     {
-      id: 'weekly_schedule',
-      title: 'Master Jadwal Menu Mingguan MBG',
+      id: portion,
+      portionClassification: portion,
+      title: `Master Jadwal Menu Mingguan MBG (${portion})`,
       days,
       updatedAt: new Date().toISOString(),
       updatedBy,
@@ -129,7 +145,7 @@ export function subscribeBatches(
 export async function createBatch(
   tanggal: string,
   createdBy: string,
-  autoPopulate = true,
+  autoPopulate = false,
   scheduleDays?: MbgDayMenu[]
 ): Promise<string> {
   const batch: Omit<MbgPmBatch, 'id'> = {

@@ -265,29 +265,59 @@ export function MbgCookingPage() {
 
       nextY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
 
-      // Section 3: Dokumentasi Memasak
+      // Section 3: Dokumentasi Memasak (Foto Embedded)
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
       doc.setTextColor(...slateDark);
-      doc.text("3. DOKUMENTASI PROSES MEMASAK", 14, nextY);
+      doc.text("3. DOKUMENTASI PROSES MEMASAK (FOTO ATTACHED)", 14, nextY);
 
-      const photoRows = (activeSession?.photos || []).map((p, i) => [
-        i + 1,
-        new Date(p.capturedAt).toLocaleTimeString('id-ID'),
-        p.description,
-        'Terlampir di Sistem',
-      ]);
+      const photos = activeSession?.photos || [];
+      if (photos.length > 0) {
+        let photoY = nextY + 6;
+        let photoX = 14;
+        const photoWidth = 55;
+        const photoHeight = 40;
+        const pageH = doc.internal.pageSize.getHeight();
 
-      autoTable(doc, {
-        startY: nextY + 3,
-        head: [['No', 'Waktu', 'Keterangan Aktivitas', 'Status Foto']],
-        body: photoRows.length > 0 ? photoRows : [['-', '-', 'Belum ada dokumentasi foto', '-']],
-        theme: 'grid',
-        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
-        bodyStyles: { fontSize: 8 },
-        styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
-        margin: { left: 14, right: 14 },
-      });
+        for (let i = 0; i < photos.length; i++) {
+          const p = photos[i];
+          const imgBase64 = p.url ? await getBase64ImageFromUrl(p.url) : null;
+          if (imgBase64) {
+            if (photoY + photoHeight + 15 > pageH - 20) {
+              doc.addPage();
+              photoY = 20;
+              photoX = 14;
+            }
+
+            doc.addImage(imgBase64, "JPEG", photoX, photoY, photoWidth, photoHeight);
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(7);
+            doc.setTextColor(...slateDark);
+            doc.text(`${i + 1}. ${p.description}`, photoX, photoY + photoHeight + 4);
+
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(6.5);
+            doc.setTextColor(...slateLight);
+            doc.text(
+              `${new Date(p.capturedAt).toLocaleTimeString('id-ID')} WIB`,
+              photoX,
+              photoY + photoHeight + 7.5
+            );
+
+            photoX += photoWidth + 8;
+            if (photoX + photoWidth > pageW - 14) {
+              photoX = 14;
+              photoY += photoHeight + 14;
+            }
+          }
+        }
+      } else {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8);
+        doc.setTextColor(...slateLight);
+        doc.text("Belum ada foto dokumentasi proses memasak.", 14, nextY + 6);
+      }
 
       // Draw page decorations and page numbers
       const totalPages = doc.getNumberOfPages();

@@ -11,6 +11,12 @@ import {
   X,
   Send,
   Search,
+  Edit3,
+  Camera,
+  Upload,
+  Trash2,
+  Download,
+  Save,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -19,6 +25,7 @@ import type {
   MbgPmBatch,
   MbgPmEntry,
   MbgDeliveryTask,
+  MbgSchoolProof,
 } from '@/types/mbg';
 import { subscribeBatches, subscribeEntries, updateEntry } from '@/services/mbgAdminService';
 import {
@@ -28,7 +35,13 @@ import {
   subscribeKurirUsers,
   type MbgKurirUser,
 } from '@/services/mbgDistributionService';
-import { subscribeAllDeliveryDocuments, type MbgDeliveryDocument } from '@/services/mbgDeliveryService';
+import {
+  subscribeAllDeliveryDocuments,
+  updateSchoolDeliveryProof,
+  deleteSchoolDeliveryProof,
+  type MbgDeliveryDocument,
+} from '@/services/mbgDeliveryService';
+import { LiveCamera } from '@/components/LiveCamera';
 import { SearchableBatchSelector } from '@/components/mbg/SearchableBatchSelector';
 
 const MBG_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Badan_Gizi_Nasional.svg/1200px-Badan_Gizi_Nasional.svg.png';
@@ -45,10 +58,126 @@ export function MbgDistributionPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'assignment' | 'reports'>('assignment');
 
+  const selectedBatch = useMemo(
+    () => batches.find((b) => b.id === selectedBatchId),
+    [batches, selectedBatchId]
+  );
+
   // Per-institution assignment modal
   const [assignModalEntry, setAssignModalEntry] = useState<MbgPmEntry | null>(null);
   const [assignKurirName, setAssignKurirName] = useState('');
   const [assignKenekName, setAssignKenekName] = useState('');
+  const [deadlines, setDeadlines] = useState<Record<string, string>>({});
+
+  // Correction & Editing Modal state for Laporan Kurir
+  const [editingReportDoc, setEditingReportDoc] = useState<MbgDeliveryDocument | null>(null);
+  const [activeCorrectionSlot, setActiveCorrectionSlot] = useState<{
+    entryId: string;
+    institutionName: string;
+    proofType: 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan';
+  } | null>(null);
+  const [isLiveCameraOpen, setIsLiveCameraOpen] = useState(false);
+  const [isUploadingCorrectionPhoto, setIsUploadingCorrectionPhoto] = useState(false);
+
+  const handleEditKurirReport = (docItem: MbgDeliveryDocument) => {
+    setEditingReportDoc(docItem);
+  };
+
+  const handleFileUploadCorrection = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    entryId: string,
+    institutionName: string,
+    proofType: 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan'
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingReportDoc) return;
+
+    setIsUploadingCorrectionPhoto(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result as string;
+        const matchedTask = deliveryTasks.find(
+          (t) => (t.petugasName === editingReportDoc.petugasName || t.petugasId === editingReportDoc.petugasId) && t.batchId === editingReportDoc.batchId
+        );
+
+        await updateSchoolDeliveryProof(
+          entryId,
+          institutionName,
+          proofType,
+          dataUrl,
+          matchedTask?.id,
+          {
+            description: `Dikoreksi oleh Tim Distribusi MBG (${new Date().toLocaleTimeString('id-ID')})`,
+            timestamp: new Date().toISOString(),
+          }
+        );
+
+        showToast({ message: 'Bukti foto berhasil dikoreksi & diperbarui!', variant: 'success' });
+        setIsUploadingCorrectionPhoto(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error uploading correction photo:', err);
+      showToast({ message: 'Gagal memperbarui bukti foto', variant: 'error' });
+      setIsUploadingCorrectionPhoto(false);
+    }
+  };
+
+  const handleLiveCameraCaptureCorrection = async (file: File) => {
+    if (!activeCorrectionSlot || !editingReportDoc) return;
+    setIsUploadingCorrectionPhoto(true);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result as string;
+        const matchedTask = deliveryTasks.find(
+          (t) => (t.petugasName === editingReportDoc.petugasName || t.petugasId === editingReportDoc.petugasId) && t.batchId === editingReportDoc.batchId
+        );
+
+        await updateSchoolDeliveryProof(
+          activeCorrectionSlot.entryId,
+          activeCorrectionSlot.institutionName,
+          activeCorrectionSlot.proofType,
+          dataUrl,
+          matchedTask?.id,
+          {
+            description: `Dikoreksi via Kamera Live oleh Tim Distribusi (${new Date().toLocaleTimeString('id-ID')})`,
+            timestamp: new Date().toISOString(),
+          }
+        );
+
+        showToast({ message: 'Bukti foto Kamera Live berhasil dikoreksi!', variant: 'success' });
+        setIsLiveCameraOpen(false);
+        setActiveCorrectionSlot(null);
+        setIsUploadingCorrectionPhoto(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error live camera capture correction:', err);
+      showToast({ message: 'Gagal mengunggah foto kamera live', variant: 'error' });
+      setIsUploadingCorrectionPhoto(false);
+    }
+  };
+
+  const handleDeleteCorrectionPhoto = async (
+    entryId: string,
+    proofType: 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan'
+  ) => {
+    if (!editingReportDoc) return;
+    try {
+      const matchedTask = deliveryTasks.find(
+        (t) => (t.petugasName === editingReportDoc.petugasName || t.petugasId === editingReportDoc.petugasId) && t.batchId === editingReportDoc.batchId
+      );
+
+      await deleteSchoolDeliveryProof(entryId, proofType, matchedTask?.id);
+      showToast({ message: 'Bukti foto berhasil dihapus/direset!', variant: 'info' });
+    } catch (err) {
+      console.error('Error deleting correction photo:', err);
+      showToast({ message: 'Gagal menghapus bukti foto', variant: 'error' });
+    }
+  };
 
   // Multi-select bulk assignment state
   const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
@@ -264,6 +393,8 @@ export function MbgDistributionPage() {
           (t) => t.petugasName === kName || t.petugasId === kId || t.petugasName.toLowerCase() === kName.toLowerCase()
         );
 
+        const taskDeadline = deadlines[kName] || existingTask?.deadlineAt || (selectedBatch ? `${selectedBatch.tanggal}T11:00` : undefined);
+
         if (existingTask) {
           await updateDeliveryTask(existingTask.id, {
             petugasId: kId,
@@ -272,6 +403,7 @@ export function MbgDistributionPage() {
             totalPorsi,
             kenekName: finalKenekName || undefined,
             kenekId: kenekId || undefined,
+            deadlineAt: taskDeadline,
           });
           updated++;
         } else {
@@ -283,6 +415,7 @@ export function MbgDistributionPage() {
             kenekName: finalKenekName || undefined,
             entryIds,
             totalPorsi,
+            deadlineAt: taskDeadline,
             handoverPhotoId: '',
             handoverAt: '',
             status: 'waiting',
@@ -577,21 +710,43 @@ export function MbgDistributionPage() {
                             </span>
                           </div>
                           <div className="flex items-center gap-3">
-                            <div className="flex gap-3 text-xs font-bold text-white bg-white/10 px-3.5 py-1.5 rounded-full">
+                            <div className="flex gap-3 text-xs font-bold text-white bg-white/10 px-3.5 py-1.5 rounded-full items-center">
                               <span>{entriesList.length} Institusi</span>
                               <span>•</span>
                               <span>{totalPorsi} Porsi</span>
                             </div>
                             {petugasName !== 'Belum Ditugaskan' && (
-                              <button
-                                type="button"
-                                onClick={() => handleSyncDeliveryTasks(petugasName)}
-                                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg cursor-pointer shadow-xs active:scale-95 transition-all"
-                                title={`Kirim tugas pengiriman ke akun ${petugasName}`}
-                              >
-                                <Send className="h-3.5 w-3.5" />
-                                <span>Kirim Tugas {petugasName}</span>
-                              </button>
+                              <>
+                                <div className="flex items-center gap-1 bg-white/10 px-2.5 py-1 rounded-lg">
+                                  <span className="text-[10px] font-bold text-amber-400 uppercase">Deadline:</span>
+                                  <input
+                                    type="datetime-local"
+                                    value={
+                                      deadlines[petugasName] ||
+                                      deliveryTasks.find((t) => t.petugasName === petugasName)?.deadlineAt ||
+                                      (selectedBatch ? `${selectedBatch.tanggal}T11:00` : '')
+                                    }
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setDeadlines((prev) => ({ ...prev, [petugasName]: val }));
+                                      const task = deliveryTasks.find((t) => t.petugasName === petugasName);
+                                      if (task) {
+                                        updateDeliveryTask(task.id, { deadlineAt: val });
+                                      }
+                                    }}
+                                    className="bg-transparent text-white text-[11px] font-bold focus:outline-none cursor-pointer"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSyncDeliveryTasks(petugasName)}
+                                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg cursor-pointer shadow-xs active:scale-95 transition-all"
+                                  title={`Kirim tugas pengiriman ke akun ${petugasName}`}
+                                >
+                                  <Send className="h-3.5 w-3.5" />
+                                  <span>Kirim Tugas {petugasName}</span>
+                                </button>
+                              </>
                             )}
                           </div>
                         </div>
@@ -827,15 +982,25 @@ export function MbgDistributionPage() {
                                     <td className="py-3 px-6 text-center text-gray-500">
                                       {new Date(docItem.createdAt).toLocaleDateString('id-ID')}
                                     </td>
-                                    <td className="py-3 px-6 text-center">
-                                      <button
-                                        onClick={() => handleViewKurirReport(docItem)}
-                                        className="inline-flex items-center gap-1 px-3.5 py-1.5 bg-[#111827] text-white hover:bg-black font-extrabold text-[10px] rounded-lg cursor-pointer shadow-xs transition-all active:scale-95"
-                                        title="Unduh / Lihat PDF Laporan"
-                                      >
-                                        <FileDown className="h-3 w-3 text-[#FBBF24]" />
-                                        <span>Unduh PDF</span>
-                                      </button>
+                                    <td className="py-3 px-6 text-center whitespace-nowrap">
+                                      <div className="flex items-center justify-center gap-2">
+                                        <button
+                                          onClick={() => handleViewKurirReport(docItem)}
+                                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#111827] text-white hover:bg-black font-extrabold text-[10px] rounded-lg cursor-pointer shadow-xs transition-all active:scale-95"
+                                          title="Unduh / Lihat PDF Laporan"
+                                        >
+                                          <FileDown className="h-3 w-3 text-[#FBBF24]" />
+                                          <span>Unduh PDF</span>
+                                        </button>
+                                        <button
+                                          onClick={() => handleEditKurirReport(docItem)}
+                                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 font-extrabold text-[10px] rounded-lg cursor-pointer shadow-xs transition-all active:scale-95"
+                                          title="Edit & Koreksi Data / Foto Laporan Kurir"
+                                        >
+                                          <Edit3 className="h-3 w-3 text-amber-700" />
+                                          <span>Edit & Koreksi</span>
+                                        </button>
+                                      </div>
                                     </td>
                                   </tr>
                                 ))
@@ -1152,6 +1317,202 @@ export function MbgDistributionPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Modal Koreksi & Edit Laporan Kurir oleh Distribusi MBG */}
+      <AnimatePresence>
+        {editingReportDoc && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl p-6 max-w-4xl w-full shadow-2xl space-y-6 my-8 max-h-[90vh] overflow-y-auto font-['Hanken_Grotesk']"
+            >
+              <div className="flex justify-between items-center pb-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-900 font-bold">
+                    <Edit3 className="h-5 w-5 text-amber-700" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-extrabold text-[#111827]">
+                      Koreksi & Edit Laporan Kurir: {editingReportDoc.petugasName}
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      Batch Tanggal: {editingReportDoc.tanggalBatch} | Total: {editingReportDoc.totalInstitusi} Institusi ({editingReportDoc.totalPorsi} Porsi)
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingReportDoc(null)}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer hover:bg-gray-100 transition-all"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {(() => {
+                  const matchedTask = deliveryTasks.find(
+                    (t) => (t.petugasName === editingReportDoc.petugasName || t.petugasId === editingReportDoc.petugasId) && t.batchId === editingReportDoc.batchId
+                  );
+                  const activeTaskEntries = entries.filter(
+                    (e) => (matchedTask?.entryIds || []).includes(e.id) || (e.assignedPetugasName === editingReportDoc.petugasName && !e.isSekolahLibur)
+                  );
+
+                  if (activeTaskEntries.length === 0) {
+                    return (
+                      <div className="py-8 text-center text-gray-400 font-bold text-sm">
+                        Tidak ada institusi yang ditemukan untuk tugas ini.
+                      </div>
+                    );
+                  }
+
+                  return activeTaskEntries.map((entry, idx) => {
+                    const proof = (matchedTask?.schoolProofs?.[entry.id] || {}) as Partial<MbgSchoolProof>;
+                    const proofTypes = [
+                      { id: 'menu', title: '1. Kedatangan Ompreng', url: entry.photoMenuUrl || proof.photoMenuUrl },
+                      { id: 'serah_terima', title: '2. Serah Terima PJ Sekolah', url: entry.photoSerahTerimaUrl || proof.photoSerahTerimaUrl },
+                      { id: 'surat_jalan', title: '3. Foto Surat Jalan', url: entry.photoSuratJalanUrl || proof.photoSuratJalanUrl },
+                      { id: 'penerima', title: '4. Pengambilan Ompreng Kosong', url: entry.photoPenerimaUrl || proof.photoPenerimaUrl },
+                    ] as const;
+
+                    return (
+                      <div key={entry.id} className="bg-gray-50 border border-gray-200 rounded-2xl p-5 space-y-4 shadow-xs">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-gray-200">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-[#111827] text-white font-bold text-xs flex items-center justify-center">
+                              {idx + 1}
+                            </span>
+                            <h4 className="text-sm font-extrabold text-gray-900">{entry.institutionName}</h4>
+                            <span className="text-xs font-bold text-gray-500">({entry.jumlah} Porsi)</span>
+                          </div>
+                          <span className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+                            {entry.institutionType === 'posyandu' ? '👶 Posyandu' : '🏫 Sekolah'}
+                          </span>
+                        </div>
+
+                        {/* 4 Proof Slots */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                          {proofTypes.map((pt) => (
+                            <div key={pt.id} className="bg-white border border-gray-200 rounded-xl p-3 flex flex-col justify-between gap-3 shadow-2xs">
+                              <div>
+                                <span className="text-[10px] font-extrabold text-gray-500 uppercase block mb-1">
+                                  {pt.title}
+                                </span>
+                                {pt.url ? (
+                                  <div className="relative group rounded-lg overflow-hidden border border-gray-200 bg-gray-100 aspect-4/3">
+                                    <img src={pt.url} alt={pt.title} className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                      <a
+                                        href={pt.url}
+                                        download={`bukti_${pt.id}_${entry.institutionName}.jpg`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="p-1.5 bg-white text-gray-900 rounded-lg hover:bg-gray-100 cursor-pointer"
+                                        title="Unduh Foto"
+                                      >
+                                        <Download className="h-4 w-4" />
+                                      </a>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteCorrectionPhoto(entry.id, pt.id)}
+                                        className="p-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 cursor-pointer"
+                                        title="Hapus Foto"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center bg-gray-50 aspect-4/3 flex flex-col items-center justify-center">
+                                    <Camera className="h-6 w-6 text-gray-400 mb-1" />
+                                    <span className="text-[10px] font-bold text-gray-400">Belum Ada Foto</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Control Buttons */}
+                              <div className="flex gap-1.5 pt-1">
+                                <label className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-extrabold rounded-lg border border-blue-200 cursor-pointer">
+                                  <Upload className="h-3 w-3" />
+                                  <span>Upload</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    disabled={isUploadingCorrectionPhoto}
+                                    onChange={(e) => handleFileUploadCorrection(e, entry.id, entry.institutionName, pt.id)}
+                                  />
+                                </label>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveCorrectionSlot({
+                                      entryId: entry.id,
+                                      institutionName: entry.institutionName,
+                                      proofType: pt.id,
+                                    });
+                                    setIsLiveCameraOpen(true);
+                                  }}
+                                  className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-2 bg-amber-50 hover:bg-amber-100 text-amber-900 text-[10px] font-extrabold rounded-lg border border-amber-300 cursor-pointer"
+                                >
+                                  <Camera className="h-3 w-3 text-amber-700" />
+                                  <span>Camera</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="pt-4 border-t border-gray-100 flex flex-col sm:flex-row gap-3 justify-end sticky bottom-0 bg-white z-10">
+                <button
+                  type="button"
+                  onClick={() => setEditingReportDoc(null)}
+                  className="px-5 py-2.5 border border-gray-300 rounded-xl hover:bg-gray-100 text-xs font-bold text-gray-700 cursor-pointer text-center"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (editingReportDoc) {
+                      await handleViewKurirReport(editingReportDoc);
+                      showToast({ message: 'Laporan berhasil diperbarui & PDF di-export ulang!', variant: 'success' });
+                      setEditingReportDoc(null);
+                    }
+                  }}
+                  className="px-6 py-2.5 bg-[#111827] hover:bg-black text-white rounded-xl cursor-pointer text-xs font-extrabold shadow-md flex items-center justify-center gap-2"
+                >
+                  <Save className="h-4 w-4 text-[#FBBF24]" />
+                  <span>Simpan & Export Ulang PDF</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Live Camera for Correction */}
+      {isLiveCameraOpen && activeCorrectionSlot && (
+        <LiveCamera
+          isOpen={isLiveCameraOpen}
+          onClose={() => {
+            setIsLiveCameraOpen(false);
+            setActiveCorrectionSlot(null);
+          }}
+          onCapture={handleLiveCameraCaptureCorrection}
+          activityType="PENGIRIMAN"
+          orderId={selectedBatchId || 'DISTRIB'}
+        />
+      )}
     </div>
   );
 }

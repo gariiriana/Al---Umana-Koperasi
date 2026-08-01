@@ -104,16 +104,27 @@ function CleanTagInput({
   );
 }
 
+export type MbgPortionClassification =
+  | 'porsi_besar'
+  | 'porsi_kecil'
+  | 'bumil_busui'
+  | 'balita'
+  | 'alergi';
+
 export function WeeklyScheduleModal({
   isOpen,
   onClose,
   scheduleDays,
+  selectedPortion = 'porsi_besar',
+  onPortionChange,
   onSave,
 }: {
   isOpen: boolean;
   onClose: () => void;
   scheduleDays: MbgDayMenu[];
-  onSave: (updatedDays: MbgDayMenu[]) => Promise<void>;
+  selectedPortion?: MbgPortionClassification;
+  onPortionChange?: (portion: MbgPortionClassification) => void;
+  onSave: (updatedDays: MbgDayMenu[], portion: MbgPortionClassification) => Promise<void>;
 }) {
   const [days, setDays] = useState<MbgDayMenu[]>(scheduleDays);
   const [isSaving, setIsSaving] = useState(false);
@@ -124,6 +135,14 @@ export function WeeklyScheduleModal({
   }, [scheduleDays]);
 
   if (!isOpen) return null;
+
+  const PORTION_TABS: { id: MbgPortionClassification; label: string; icon: string }[] = [
+    { id: 'porsi_besar', label: 'Porsi Besar', icon: '🍲' },
+    { id: 'porsi_kecil', label: 'Porsi Kecil', icon: '🍱' },
+    { id: 'bumil_busui', label: 'Bumil & Busui', icon: '🤰' },
+    { id: 'balita', label: 'Balita', icon: '👶' },
+    { id: 'alergi', label: 'Alergi', icon: '⚠️' },
+  ];
 
   const updateCategory = (
     dayIdx: number,
@@ -145,7 +164,7 @@ export function WeeklyScheduleModal({
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await onSave(days);
+      await onSave(days, selectedPortion);
       onClose();
     } finally {
       setIsSaving(false);
@@ -169,10 +188,10 @@ export function WeeklyScheduleModal({
               </div>
               <div>
                 <h3 className="text-lg font-extrabold text-[#111827] tracking-tight">
-                  Master Jadwal Menu Mingguan
+                  Master Jadwal Menu Mingguan MBG
                 </h3>
                 <p className="text-xs text-[#6B7280]">
-                  Atur klasifikasi menu (Hewani, Sayur, Buah, Nabati, Karbo, Keringan) per hari.
+                  Atur menu mingguan terpisah untuk 5 klasifikasi porsi (Besar, Kecil, Bumil/Busui, Balita, Alergi).
                 </p>
               </div>
             </div>
@@ -185,6 +204,31 @@ export function WeeklyScheduleModal({
           >
             <X className="h-5 w-5" />
           </button>
+        </div>
+
+        {/* Portion Classification Bar (5 Klasifikasi Porsi) */}
+        <div className="px-6 py-2.5 bg-slate-900 text-white border-b border-slate-800 flex items-center gap-2 overflow-x-auto">
+          <span className="text-[11px] font-extrabold uppercase text-amber-400 tracking-wider shrink-0 mr-1">
+            Porsi:
+          </span>
+          {PORTION_TABS.map((tab) => {
+            const isSelected = selectedPortion === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onPortionChange?.(tab.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer transition-all flex items-center gap-1.5 ${
+                  isSelected
+                    ? 'bg-[#FBBF24] text-slate-950 shadow-md scale-105'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Clean Day Tabs Navigation */}
