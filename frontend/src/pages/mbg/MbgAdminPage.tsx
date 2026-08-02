@@ -1445,119 +1445,127 @@ export function MbgAdminPage() {
       ) : (
         <>
           {/* Dropdown Selector Card */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="p-3 bg-amber-500/10 rounded-xl text-amber-600 flex items-center justify-center">
-                <Calendar className="h-5 w-5" />
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-6 shadow-xs flex flex-col gap-3">
+            {/* Top Row: Left Info + Right Primary Actions */}
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-3 border-b border-slate-100">
+              {/* Left Info: Calendar Icon + Date Picker + Batch Select + Status */}
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500/10 rounded-xl text-amber-600 flex items-center justify-center shrink-0">
+                  <Calendar className="h-5 w-5" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Tanggal Pengiriman</span>
+                    {selectedBatch && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200">
+                        {MBG_BATCH_STATUS_CONFIG[selectedBatch.status]?.label || selectedBatch.status}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <input
+                      type="date"
+                      title="Pilih Tanggal Pengiriman"
+                      value={selectedBatch ? selectedBatch.tanggal : new Date().toISOString().split('T')[0]}
+                      onChange={(e) => handleSelectOrPickDate(e.target.value)}
+                      className="text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/30 rounded-lg border border-slate-300 px-2.5 py-1.5 bg-slate-50 cursor-pointer"
+                    />
+
+                    {batches.length > 1 && (
+                      <select
+                        value={selectedBatchId || ''}
+                        onChange={(e) => setSelectedBatchId(e.target.value)}
+                        title="Pilih Batch Terdaftar"
+                        aria-label="Pilih Batch Terdaftar"
+                        className="text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/30 rounded-lg border border-slate-300 px-2.5 py-1.5 bg-white cursor-pointer"
+                      >
+                        {batches.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            Batch {b.tanggal}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {selectedBatch && (
+                      <div className="text-xs text-slate-600 font-medium pl-2.5 border-l border-slate-200 flex items-center gap-1.5">
+                        <span className="font-extrabold text-slate-800">
+                          {getMenuForDate(selectedBatch.tanggal, weeklySchedule).dayMenu.dayName}
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <span className="text-slate-500 text-xs truncate max-w-[280px]">
+                          {getMenuForDate(selectedBatch.tanggal, weeklySchedule).menuItems.join(', ') || 'Tanpa Menu'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Tanggal Pengiriman</span>
-                  {selectedBatch && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200">
-                      {MBG_BATCH_STATUS_CONFIG[selectedBatch.status]?.label || selectedBatch.status}
-                    </span>
-                  )}
-                </div>
 
-                <div className="flex items-center gap-3 flex-wrap">
-                  <input
-                    type="date"
-                    title="Pilih Tanggal Pengiriman"
-                    value={selectedBatch ? selectedBatch.tanggal : new Date().toISOString().split('T')[0]}
-                    onChange={(e) => handleSelectOrPickDate(e.target.value)}
-                    className="text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/30 rounded-lg border border-slate-300 px-3 py-1.5 bg-slate-50 cursor-pointer"
-                  />
+              {/* Right Primary Action Buttons */}
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
+                <input
+                  type="file"
+                  ref={csvFileInputRef}
+                  accept=".xlsx,.xls,.csv,.txt"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleImportExcelPm(file);
+                      e.target.value = '';
+                    }
+                  }}
+                />
 
-                  {batches.length > 1 && (
-                    <select
-                      value={selectedBatchId || ''}
-                      onChange={(e) => setSelectedBatchId(e.target.value)}
-                      title="Pilih Batch Terdaftar"
-                      aria-label="Pilih Batch Terdaftar"
-                      className="text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/30 rounded-lg border border-slate-300 px-3 py-1.5 bg-white cursor-pointer"
-                    >
-                      {batches.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          Batch {b.tanggal}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                <button
+                  type="button"
+                  onClick={() => csvFileInputRef.current?.click()}
+                  disabled={!selectedBatchId}
+                  title="Import data PM langsung dari file Excel (.xlsx, .xls) atau CSV"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-extrabold hover:bg-blue-100 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
+                >
+                  <Upload className="h-3.5 w-3.5 text-blue-600" />
+                  Import Excel / CSV PM
+                </button>
 
-                  {selectedBatch && (
-                    <div className="text-xs text-slate-600 font-medium pl-2 border-l-2 border-slate-200 flex items-center gap-1.5">
-                      <span className="font-extrabold text-slate-800">
-                        {getMenuForDate(selectedBatch.tanggal, weeklySchedule).dayMenu.dayName}
-                      </span>
-                      <span className="text-slate-300">•</span>
-                      <span className="text-slate-500 text-[11px]">
-                        {getMenuForDate(selectedBatch.tanggal, weeklySchedule).menuItems.join(', ') || 'Tanpa Menu'}
-                      </span>
-                    </div>
-                  )}
-                </div>
+                <button
+                  onClick={() => setShowScheduleModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <ChefHat className="h-3.5 w-3.5 text-slate-600" />
+                  Master Jadwal Menu
+                </button>
+
+                <button
+                  onClick={() => setShowNewBatchModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#FBBF24] hover:bg-[#F59E0B] text-slate-900 text-xs font-extrabold transition-colors cursor-pointer shadow-2xs"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Batch Baru
+                </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <input
-                type="file"
-                ref={csvFileInputRef}
-                accept=".xlsx,.xls,.csv,.txt"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    handleImportExcelPm(file);
-                    e.target.value = '';
-                  }
-                }}
-              />
-
-              <button
-                type="button"
-                onClick={() => csvFileInputRef.current?.click()}
-                disabled={!selectedBatchId}
-                title="Import data PM langsung dari file Excel (.xlsx, .xls) atau CSV"
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-extrabold hover:bg-blue-100 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                <Upload className="h-4 w-4 text-blue-600" />
-                Import Excel / CSV PM
-              </button>
-
-              <button
-                onClick={() => setShowScheduleModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
-              >
-                <ChefHat className="h-4 w-4 text-slate-600" />
-                Master Jadwal Menu
-              </button>
-
-              <button
-                onClick={() => setShowNewBatchModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#FBBF24] hover:bg-[#F59E0B] text-slate-900 text-xs font-extrabold transition-colors cursor-pointer shadow-xs"
-              >
-                <Plus className="h-4 w-4" />
-                Batch Baru
-              </button>
-
+            {/* Bottom Row: Secondary / Danger Actions */}
+            <div className="flex items-center justify-end gap-2 pt-0.5">
               {selectedBatchId && (
                 <button
                   onClick={handleDeleteBatch}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-red-200 hover:border-red-300 text-red-600 text-xs font-bold hover:bg-red-50 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-red-200 hover:border-red-300 text-red-600 text-[11px] font-bold hover:bg-red-50 transition-colors cursor-pointer"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3.5 w-3.5" />
                   Hapus Batch
                 </button>
               )}
 
               <button
                 onClick={() => setShowDeleteAllModal(true)}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold transition-colors cursor-pointer shadow-xs"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[11px] font-extrabold transition-colors cursor-pointer shadow-2xs"
                 title="Hapus seluruh data operasional MBG (Admin, Produksi, Distribusi, Purchasing, Kurir)"
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-3.5 w-3.5" />
                 Hapus Semua Data MBG
               </button>
             </div>
