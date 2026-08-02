@@ -518,7 +518,7 @@ function PmEntryRow({
       </td>
 
       {/* 2. PORSI BESAR L (Sekolah) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {!isPosyandu ? (
           <input
             type="number"
@@ -528,7 +528,7 @@ function PmEntryRow({
             onChange={(e) => handleFieldChange('qtPorsiBesarL', parseInt(e.target.value) || 0)}
             placeholder="0"
             title="Porsi Besar (Laki-laki)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -536,7 +536,7 @@ function PmEntryRow({
       </td>
 
       {/* 3. PORSI BESAR P (Sekolah) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {!isPosyandu ? (
           <input
             type="number"
@@ -546,7 +546,7 @@ function PmEntryRow({
             onChange={(e) => handleFieldChange('qtPorsiBesarP', parseInt(e.target.value) || 0)}
             placeholder="0"
             title="Porsi Besar (Perempuan)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -554,7 +554,7 @@ function PmEntryRow({
       </td>
 
       {/* 4. PORSI KECIL L (Sekolah) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {!isPosyandu ? (
           <input
             type="number"
@@ -564,7 +564,7 @@ function PmEntryRow({
             onChange={(e) => handleFieldChange('qtPorsiKecilL', parseInt(e.target.value) || 0)}
             placeholder="0"
             title="Porsi Kecil (Laki-laki)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -572,7 +572,7 @@ function PmEntryRow({
       </td>
 
       {/* 5. PORSI KECIL P (Sekolah) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {!isPosyandu ? (
           <input
             type="number"
@@ -582,7 +582,7 @@ function PmEntryRow({
             onChange={(e) => handleFieldChange('qtPorsiKecilP', parseInt(e.target.value) || 0)}
             placeholder="0"
             title="Porsi Kecil (Perempuan)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -590,16 +590,16 @@ function PmEntryRow({
       </td>
 
       {/* 6. PORSI BALITA L (Posyandu) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {isPosyandu ? (
           <input
             type="number"
             min={0}
             value={entry.qtPorsiKecilL || ''}
             onChange={(e) => handleFieldChange('qtPorsiKecilL', parseInt(e.target.value) || 0)}
-            placeholder="Balita L"
+            placeholder="0"
             title="Porsi Balita (Laki-laki)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -607,16 +607,16 @@ function PmEntryRow({
       </td>
 
       {/* 7. PORSI BALITA P (Posyandu) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {isPosyandu ? (
           <input
             type="number"
             min={0}
             value={entry.qtPorsiKecilP || ''}
             onChange={(e) => handleFieldChange('qtPorsiKecilP', parseInt(e.target.value) || 0)}
-            placeholder="Balita P"
+            placeholder="0"
             title="Porsi Balita (Perempuan)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -624,16 +624,16 @@ function PmEntryRow({
       </td>
 
       {/* 8. PORSI BUMIL & BUSUI L (BUMIL - Posyandu) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {isPosyandu ? (
           <input
             type="number"
             min={0}
             value={entry.qtBumil ?? (entry.institutionName.toLowerCase().includes('bumil') ? entry.qtBumilBusui || '' : '')}
             onChange={(e) => handleFieldChange('qtBumil', parseInt(e.target.value) || 0)}
-            placeholder="Bumil"
+            placeholder="0"
             title="Porsi Ibu Hamil (Bumil)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -641,16 +641,16 @@ function PmEntryRow({
       </td>
 
       {/* 9. PORSI BUMIL & BUSUI P (BUSUI - Posyandu) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {isPosyandu ? (
           <input
             type="number"
             min={0}
             value={entry.qtBusui ?? (entry.institutionName.toLowerCase().includes('busui') ? entry.qtBumilBusui || '' : '')}
             onChange={(e) => handleFieldChange('qtBusui', parseInt(e.target.value) || 0)}
-            placeholder="Busui"
+            placeholder="0"
             title="Porsi Ibu Menyusui (Busui)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -658,31 +658,31 @@ function PmEntryRow({
       </td>
 
       {/* 10. TOTAL L */}
-      <td className="px-2 py-2 border-r border-slate-200 text-center bg-slate-50 font-bold text-slate-700">
+      <td className="px-1 py-1 border-r border-slate-200 text-center bg-slate-50 font-bold text-slate-700">
         {totalSiswaL || '—'}
       </td>
 
       {/* 11. TOTAL P */}
-      <td className="px-2 py-2 border-r border-slate-200 text-center bg-slate-100/70 font-bold text-slate-700">
+      <td className="px-1 py-1 border-r border-slate-200 text-center bg-slate-100/70 font-bold text-slate-700">
         {totalSiswaP || '—'}
       </td>
 
       {/* 12. TOTAL JML */}
-      <td className="px-2.5 py-2 border-r border-slate-300 text-center bg-slate-200 font-extrabold text-slate-900">
+      <td className="px-1.5 py-1 border-r border-slate-300 text-center bg-slate-200 font-extrabold text-slate-900">
         {totalSiswaJml}
       </td>
 
       {/* 13. PIC / GURU L (Sekolah) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {!isPosyandu ? (
           <input
             type="number"
             min={0}
             value={entry.qtGuruL || ''}
             onChange={(e) => handleFieldChange('qtGuruL', parseInt(e.target.value) || 0)}
-            placeholder="Guru L"
+            placeholder="0"
             title="PIC / Guru Sekolah (Laki-laki)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -690,16 +690,16 @@ function PmEntryRow({
       </td>
 
       {/* 14. PIC / GURU P (Sekolah) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {!isPosyandu ? (
           <input
             type="number"
             min={0}
             value={entry.qtGuruP || ''}
             onChange={(e) => handleFieldChange('qtGuruP', parseInt(e.target.value) || 0)}
-            placeholder="Guru P"
+            placeholder="0"
             title="PIC / Guru Sekolah (Perempuan)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -707,16 +707,16 @@ function PmEntryRow({
       </td>
 
       {/* 15. KADER L (Posyandu) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {isPosyandu ? (
           <input
             type="number"
             min={0}
             value={entry.qtGuruL || ''}
             onChange={(e) => handleFieldChange('qtGuruL', parseInt(e.target.value) || 0)}
-            placeholder="Kader L"
+            placeholder="0"
             title="Kader Posyandu (Laki-laki)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -724,16 +724,16 @@ function PmEntryRow({
       </td>
 
       {/* 16. KADER P (Posyandu) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {isPosyandu ? (
           <input
             type="number"
             min={0}
             value={entry.qtGuruP || ''}
             onChange={(e) => handleFieldChange('qtGuruP', parseInt(e.target.value) || 0)}
-            placeholder="Kader P"
+            placeholder="0"
             title="Kader Posyandu (Perempuan)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -741,16 +741,16 @@ function PmEntryRow({
       </td>
 
       {/* 17. TENDIK L (Sekolah) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {!isPosyandu ? (
           <input
             type="number"
             min={0}
             value={entry.qtTendikL || ''}
             onChange={(e) => handleFieldChange('qtTendikL', parseInt(e.target.value) || 0)}
-            placeholder="Tendik L"
+            placeholder="0"
             title="Tendik / Staf Sekolah (Laki-laki)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -758,16 +758,16 @@ function PmEntryRow({
       </td>
 
       {/* 18. TENDIK P (Sekolah) */}
-      <td className="px-1.5 py-2 border-r border-slate-200 text-center">
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
         {!isPosyandu ? (
           <input
             type="number"
             min={0}
             value={entry.qtTendikP || ''}
             onChange={(e) => handleFieldChange('qtTendikP', parseInt(e.target.value) || 0)}
-            placeholder="Tendik P"
+            placeholder="0"
             title="Tendik / Staf Sekolah (Perempuan)"
-            className="w-11 rounded border border-slate-300 px-1 py-0.5 text-xs text-center font-semibold focus:ring-1 focus:ring-slate-500 bg-white text-slate-800"
+            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
           />
         ) : (
           <span className="text-slate-300 text-xs">—</span>
@@ -775,12 +775,12 @@ function PmEntryRow({
       </td>
 
       {/* 19. JML STAF / KADER */}
-      <td className="px-2.5 py-2 border-r border-slate-300 text-center bg-slate-200/80 font-extrabold text-slate-900">
+      <td className="px-1.5 py-1 border-r border-slate-300 text-center bg-slate-200/80 font-extrabold text-slate-900">
         {entry.qtGuruKader || 0}
       </td>
 
       {/* 20. TOTAL KESELURUHAN */}
-      <td className="px-3 py-2 border-r border-slate-300 text-center bg-[#FEF3C7] font-black text-[#92400E] text-sm">
+      <td className="px-2 py-1 border-r border-slate-300 text-center bg-[#FEF3C7] font-black text-[#92400E] text-xs">
         {entry.jumlah}
       </td>
 
@@ -1599,46 +1599,46 @@ export function MbgAdminPage() {
               ) : (
                 <>
                   <div className="overflow-x-auto border border-slate-300 rounded-xl bg-white shadow-xs">
-                    <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] min-w-[980px] border-collapse border border-slate-300">
+                    <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] border-collapse border border-slate-300">
                       <thead>
-                        <tr className="bg-slate-200 text-[10px] font-extrabold text-slate-800 uppercase tracking-wider text-center border-b border-slate-300">
-                          <th rowSpan={2} className="px-3 py-2 border-r border-slate-300 text-left min-w-[180px]">SEKOLAH / POSYANDU</th>
-                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">PORSI BESAR</th>
-                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">PORSI KECIL</th>
-                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">PORSI BALITA</th>
-                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">PORSI BUMIL & BUSUI</th>
-                          <th colSpan={3} className="px-2 py-1.5 border-r border-slate-300 bg-slate-300/60 font-black">TOTAL SISWA / PENERIMA</th>
-                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">PIC / GURU</th>
-                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">KADER</th>
-                          <th colSpan={2} className="px-2 py-1.5 border-r border-slate-300">TENDIK</th>
-                          <th rowSpan={2} className="px-2 py-2 border-r border-slate-300 bg-slate-300/50 font-extrabold">JML STAF / KADER</th>
-                          <th rowSpan={2} className="px-3 py-2 border-r border-slate-300 bg-amber-100/80 text-amber-900 font-extrabold">TOTAL KESELURUHAN</th>
-                          <th rowSpan={2} className="px-2 py-2">AKSI</th>
+                        <tr className="bg-slate-200 text-[9px] font-extrabold text-slate-800 uppercase tracking-tight text-center border-b border-slate-300">
+                          <th rowSpan={2} className="px-2 py-1.5 border-r border-slate-300 text-left min-w-[140px] max-w-[170px]">SEKOLAH / POSYANDU</th>
+                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI BESAR</th>
+                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI KECIL</th>
+                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI BALITA</th>
+                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI BUMIL & BUSUI</th>
+                          <th colSpan={3} className="px-1 py-1 border-r border-slate-300 bg-slate-300/60 font-black">TOTAL SISWA</th>
+                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">GURU</th>
+                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">KADER</th>
+                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">TENDIK</th>
+                          <th rowSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/50 font-extrabold text-[8.5px]">STAF / KADER</th>
+                          <th rowSpan={2} className="px-1.5 py-1 border-r border-slate-300 bg-amber-100/80 text-amber-900 font-black text-[9px]">TOTAL KESELURUHAN</th>
+                          <th rowSpan={2} className="px-1 py-1">AKSI</th>
                         </tr>
-                        <tr className="bg-slate-100 text-[9px] font-bold text-slate-700 uppercase tracking-wider text-center border-b border-slate-300">
+                        <tr className="bg-slate-100 text-[8.5px] font-bold text-slate-700 uppercase tracking-tight text-center border-b border-slate-300">
                           {/* Porsi Besar (1) */}
-                          <th className="px-2 py-1 border-r border-slate-300">L</th>
-                          <th className="px-2 py-1 border-r border-slate-300">P</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
                           {/* Porsi Kecil (2) */}
-                          <th className="px-2 py-1 border-r border-slate-300">L</th>
-                          <th className="px-2 py-1 border-r border-slate-300">P</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
                           {/* Porsi Balita (3) */}
-                          <th className="px-2 py-1 border-r border-slate-300">L</th>
-                          <th className="px-2 py-1 border-r border-slate-300">P</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
                           {/* Porsi Bumil & Busui (4) */}
-                          <th className="px-2 py-1 border-r border-slate-300">L</th>
-                          <th className="px-2 py-1 border-r border-slate-300">P</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
                           {/* Total Siswa */}
-                          <th className="px-2 py-1 border-r border-slate-300 bg-slate-200/50">L</th>
-                          <th className="px-2 py-1 border-r border-slate-300 bg-slate-200/50">P</th>
-                          <th className="px-2 py-1 border-r border-slate-300 bg-slate-300/70 font-extrabold text-slate-900">JML</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">L</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">P</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-300/70 font-extrabold text-slate-900 w-9">JML</th>
                           {/* Officers */}
-                          <th className="px-2 py-1 border-r border-slate-300">L</th>
-                          <th className="px-2 py-1 border-r border-slate-300">P</th>
-                          <th className="px-2 py-1 border-r border-slate-300">L</th>
-                          <th className="px-2 py-1 border-r border-slate-300">P</th>
-                          <th className="px-2 py-1 border-r border-slate-300">L</th>
-                          <th className="px-2 py-1 border-r border-slate-300">P</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
                         </tr>
                       </thead>
                       <tbody>
