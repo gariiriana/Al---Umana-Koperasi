@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import autoTable, { type RowInput } from 'jspdf-autotable';
 import type { MbgProductionDailyReport, MbgPmBatch } from '@/types/mbg';
 
 const getBase64ImageFromUrl = async (url: string): Promise<string> => {
@@ -102,7 +102,7 @@ export async function export8PageDailyReportPdf(
     doc.text('KANDUNGAN GIZI', 12, currentY);
     currentY += 2;
 
-    const giziRows: unknown[][] = [];
+    const giziRows: RowInput[] = [];
     portionData.nutritionItems.forEach((item) => {
       giziRows.push([
         item.menuName || '-',
@@ -162,7 +162,7 @@ export async function export8PageDailyReportPdf(
     doc.text('PESANAN BAHAN MAKANAN', 12, currentY);
     currentY += 2;
 
-    const bahanRows: unknown[][] = [];
+    const bahanRows: RowInput[] = [];
     portionData.bahanItems.forEach((b) => {
       bahanRows.push([
         b.rincianBahan,
@@ -206,7 +206,7 @@ export async function export8PageDailyReportPdf(
     doc.text('PESANAN BUMBU', 12, currentY);
     currentY += 2;
 
-    const bumbuRows: unknown[][] = [];
+    const bumbuRows: RowInput[] = [];
     portionData.bumbuItems.forEach((bm) => {
       bumbuRows.push([
         bm.namaMenu || '',
@@ -270,7 +270,7 @@ export async function export8PageDailyReportPdf(
   drawSectionBanner(doc, 'PAKET SEHAT 3B', 32);
 
   const p5Y = 40;
-  const paketRows: unknown[][] = [];
+  const paketRows: RowInput[] = [];
   report.paketSehat3b?.keringanItems?.forEach((item) => {
     paketRows.push([item.item, item.qtyPcs, item.qty, item.satuan, formatRupiah(item.hargaSatuan), formatRupiah(item.totalHarga)]);
   });
@@ -291,7 +291,7 @@ export async function export8PageDailyReportPdf(
   drawSectionBanner(doc, 'PURCHASE ORDER (PO) BAHAN BAKU', 32);
 
   let p6Y = 40;
-  const poTableRows: unknown[][] = [];
+  const poTableRows: RowInput[] = [];
   report.poRows?.forEach((p) => {
     poTableRows.push([p.supplier, p.item, p.jamKedatangan || '-', p.jumlah, p.satuan, p.keterangan || '-']);
   });
@@ -310,7 +310,7 @@ export async function export8PageDailyReportPdf(
   drawSectionBanner(doc, 'REALISASI PEMBELIAN BAHAN BAKU', p6Y);
   p6Y += 8;
 
-  const realisasiRows: unknown[][] = [];
+  const realisasiRows: RowInput[] = [];
   report.realisasiPembelianRows?.forEach((r) => {
     realisasiRows.push([r.tanggal, r.namaBahan, r.kuantitas, r.satuan, formatRupiah(r.hargaPerUnit), formatRupiah(r.totalHarga)]);
   });
@@ -357,7 +357,7 @@ export async function export8PageDailyReportPdf(
 
   p7Y += 12;
 
-  const qcRows: unknown[][] = [];
+  const qcRows: RowInput[] = [];
   report.inspectionForm?.rows?.forEach((qc) => {
     qcRows.push([
       qc.jenisBahan,
@@ -410,7 +410,7 @@ export async function export8PageDailyReportPdf(
   drawSectionBanner(doc, 'REKAPAN LIMBAH SISA MAKANAN', 32);
 
   const p8Y = 40;
-  const wasteRows: unknown[][] = [];
+  const wasteRows: RowInput[] = [];
   report.wasteLogs?.forEach((w, idx) => {
     wasteRows.push([w.no || idx + 1, w.namaMakanan, w.kuantitas, w.satuan, w.dokumentasi || '-']);
   });
