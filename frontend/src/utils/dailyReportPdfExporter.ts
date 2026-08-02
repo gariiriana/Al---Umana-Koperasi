@@ -102,7 +102,7 @@ export async function export8PageDailyReportPdf(
     doc.text('KANDUNGAN GIZI', 12, currentY);
     currentY += 2;
 
-    const giziRows: any[][] = [];
+    const giziRows: unknown[][] = [];
     portionData.nutritionItems.forEach((item) => {
       giziRows.push([
         item.menuName || '-',
@@ -153,7 +153,7 @@ export async function export8PageDailyReportPdf(
       margin: { left: 12, right: 12 },
     });
 
-    currentY = (doc as any).lastAutoTable.finalY + 4;
+    currentY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
 
     // --- 2. PESANAN BAHAN MAKANAN ---
     doc.setFont('helvetica', 'bold');
@@ -162,7 +162,7 @@ export async function export8PageDailyReportPdf(
     doc.text('PESANAN BAHAN MAKANAN', 12, currentY);
     currentY += 2;
 
-    const bahanRows: any[][] = [];
+    const bahanRows: unknown[][] = [];
     portionData.bahanItems.forEach((b) => {
       bahanRows.push([
         b.rincianBahan,
@@ -197,7 +197,7 @@ export async function export8PageDailyReportPdf(
       margin: { left: 12, right: 12 },
     });
 
-    currentY = (doc as any).lastAutoTable.finalY + 4;
+    currentY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
 
     // --- 3. PESANAN BUMBU ---
     doc.setFont('helvetica', 'bold');
@@ -206,7 +206,7 @@ export async function export8PageDailyReportPdf(
     doc.text('PESANAN BUMBU', 12, currentY);
     currentY += 2;
 
-    const bumbuRows: any[][] = [];
+    const bumbuRows: unknown[][] = [];
     portionData.bumbuItems.forEach((bm) => {
       bumbuRows.push([
         bm.namaMenu || '',
@@ -269,8 +269,8 @@ export async function export8PageDailyReportPdf(
   await drawPageHeader(doc, 'PAKET SEHAT 3B', tanggalStr, logoAlUmanaa, logoBadanGizi);
   drawSectionBanner(doc, 'PAKET SEHAT 3B', 32);
 
-  let p5Y = 40;
-  const paketRows: any[][] = [];
+  const p5Y = 40;
+  const paketRows: unknown[][] = [];
   report.paketSehat3b?.keringanItems?.forEach((item) => {
     paketRows.push([item.item, item.qtyPcs, item.qty, item.satuan, formatRupiah(item.hargaSatuan), formatRupiah(item.totalHarga)]);
   });
@@ -291,7 +291,7 @@ export async function export8PageDailyReportPdf(
   drawSectionBanner(doc, 'PURCHASE ORDER (PO) BAHAN BAKU', 32);
 
   let p6Y = 40;
-  const poTableRows: any[][] = [];
+  const poTableRows: unknown[][] = [];
   report.poRows?.forEach((p) => {
     poTableRows.push([p.supplier, p.item, p.jamKedatangan || '-', p.jumlah, p.satuan, p.keterangan || '-']);
   });
@@ -306,11 +306,11 @@ export async function export8PageDailyReportPdf(
     margin: { left: 12, right: 12 },
   });
 
-  p6Y = (doc as any).lastAutoTable.finalY + 6;
+  p6Y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
   drawSectionBanner(doc, 'REALISASI PEMBELIAN BAHAN BAKU', p6Y);
   p6Y += 8;
 
-  const realisasiRows: any[][] = [];
+  const realisasiRows: unknown[][] = [];
   report.realisasiPembelianRows?.forEach((r) => {
     realisasiRows.push([r.tanggal, r.namaBahan, r.kuantitas, r.satuan, formatRupiah(r.hargaPerUnit), formatRupiah(r.totalHarga)]);
   });
@@ -357,7 +357,7 @@ export async function export8PageDailyReportPdf(
 
   p7Y += 12;
 
-  const qcRows: any[][] = [];
+  const qcRows: unknown[][] = [];
   report.inspectionForm?.rows?.forEach((qc) => {
     qcRows.push([
       qc.jenisBahan,
@@ -391,7 +391,7 @@ export async function export8PageDailyReportPdf(
     margin: { left: 12, right: 12 },
   });
 
-  const finalQcY = (doc as any).lastAutoTable.finalY + 12;
+  const finalQcY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 12;
 
   // Signature Block
   const pageW = doc.internal.pageSize.getWidth();
@@ -409,8 +409,8 @@ export async function export8PageDailyReportPdf(
   await drawPageHeader(doc, 'REKAPAN LIMBAH SISA MAKANAN', tanggalStr, logoAlUmanaa, logoBadanGizi);
   drawSectionBanner(doc, 'REKAPAN LIMBAH SISA MAKANAN', 32);
 
-  let p8Y = 40;
-  const wasteRows: any[][] = [];
+  const p8Y = 40;
+  const wasteRows: unknown[][] = [];
   report.wasteLogs?.forEach((w, idx) => {
     wasteRows.push([w.no || idx + 1, w.namaMakanan, w.kuantitas, w.satuan, w.dokumentasi || '-']);
   });
