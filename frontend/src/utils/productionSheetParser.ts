@@ -1,18 +1,5 @@
 import type { MbgProductionDailyReport, MbgPortionDailyData } from '@/types/mbg';
 
-const num = (v: any): number => {
-  if (typeof v === 'number') return isNaN(v) ? 0 : v;
-  if (!v) return 0;
-  const str = String(v).replace(/[^0-9.-]/g, '');
-  const parsed = parseFloat(str);
-  return isNaN(parsed) ? 0 : parsed;
-};
-
-const str = (v: any): string => {
-  if (!v) return '';
-  return String(v).trim();
-};
-
 export function createEmptyPortionData(portionType: 'kecil' | 'besar' | 'balita' | 'bumil_busui', portionTitle: string): MbgPortionDailyData {
   return {
     portionType,
@@ -72,7 +59,7 @@ export function createEmptyPortionData(portionType: 'kecil' | 'besar' | 'balita'
 }
 
 export function parseProductionSheetRows(
-  rows: any[][],
+  _rows: any[][],
   batchId: string,
   tanggal: string,
   sheetDayName: string

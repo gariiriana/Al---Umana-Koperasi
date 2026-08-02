@@ -22,7 +22,7 @@ import {
   subscribeDailyReport, saveDailyReport,
 } from '@/services/mbgProductionService';
 import { export8PageDailyReportPdf } from '@/utils/dailyReportPdfExporter';
-import { parseProductionSheetRows, createEmptyPortionData } from '@/utils/productionSheetParser';
+import { parseProductionSheetRows } from '@/utils/productionSheetParser';
 import { updateBatchStatus } from '@/services/mbgAdminService';
 import {
   MBG_BATCH_STATUS_CONFIG,
@@ -1489,7 +1489,7 @@ export function MbgProductionPage() {
 
   const handleFetchGoogleSheets = async () => {
     if (!sheetsUrlInput.trim()) {
-      showToast({ message: 'Masukkan URL Google Sheets terlebih dahulu!', variant: 'warning' });
+      showToast({ message: 'Masukkan URL Google Sheets terlebih dahulu!', variant: 'info' });
       return;
     }
 
@@ -1517,9 +1517,10 @@ export function MbgProductionPage() {
       setAvailableSheetNames(sheetNames.length > 0 ? sheetNames : wb.SheetNames);
 
       showToast({ message: `Spreadsheet berhasil dibaca! Ditemukan ${wb.SheetNames.length} sheet/tab. Silakan pilih sheet hari yang ingin di-import.`, variant: 'success' });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      showToast({ message: err.message || 'Gagal membaca link Google Sheets', variant: 'error' });
+      const errMsg = err instanceof Error ? err.message : 'Gagal membaca link Google Sheets';
+      showToast({ message: errMsg, variant: 'error' });
     } finally {
       setImportingSheets(false);
     }
@@ -1539,7 +1540,7 @@ export function MbgProductionPage() {
       setAvailableSheetNames(sheetNames.length > 0 ? sheetNames : wb.SheetNames);
 
       showToast({ message: `File Excel berhasil dibaca! Ditemukan ${wb.SheetNames.length} sheet/tab. Silakan pilih sheet hari.`, variant: 'success' });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       showToast({ message: 'Gagal membaca file Excel', variant: 'error' });
     } finally {
@@ -1553,7 +1554,7 @@ export function MbgProductionPage() {
     try {
       setImportingSheets(true);
       const ws = sheetWorkbook.Sheets[sheetName];
-      const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
       const parsedReport = parseProductionSheetRows(rows, selectedBatchId, selectedBatch.tanggal, sheetName);
       
@@ -1565,7 +1566,7 @@ export function MbgProductionPage() {
       setShowSheetsImportModal(false);
       setActiveTab('daily-report');
       showToast({ message: `Berhasil meng-import data Laporan Harian (${sheetName}) ke website!`, variant: 'success' });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Parse Sheet error:', err);
       showToast({ message: 'Gagal memproses sheet ter-pilih', variant: 'error' });
     } finally {
@@ -1575,7 +1576,7 @@ export function MbgProductionPage() {
 
   const handleTriggerExport8PagePdf = async () => {
     if (!selectedBatch) {
-      showToast({ message: 'Pilih batch terlebih dahulu!', variant: 'warning' });
+      showToast({ message: 'Pilih batch terlebih dahulu!', variant: 'info' });
       return;
     }
     const reportToExport = dailyReport || parseProductionSheetRows([], selectedBatch.id, selectedBatch.tanggal, 'HARI 3');
@@ -1901,7 +1902,7 @@ export function MbgProductionPage() {
               ].map((st) => (
                 <button
                   key={st.key}
-                  onClick={() => setDailyReportSubTab(st.key as any)}
+                  onClick={() => setDailyReportSubTab(st.key as 'kecil' | 'besar' | 'balita' | 'bumil' | 'paket3b' | 'po' | 'qc' | 'waste')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                     dailyReportSubTab === st.key
                       ? 'bg-slate-900 text-white shadow-sm'

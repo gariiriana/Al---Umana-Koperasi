@@ -7,7 +7,7 @@ import {
   query, where, onSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { MbgNutritionEntry, MbgCookingSession, MbgCookingPhoto } from '@/types/mbg';
+import type { MbgNutritionEntry, MbgCookingSession, MbgCookingPhoto, MbgProductionDailyReport } from '@/types/mbg';
 
 const NUTRITION_COLLECTION = 'mbg_nutrition';
 const COOKING_COLLECTION = 'mbg_cooking_sessions';

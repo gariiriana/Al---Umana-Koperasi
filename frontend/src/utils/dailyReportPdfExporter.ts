@@ -25,7 +25,7 @@ const formatRupiah = (val: number | undefined): string => {
 
 const drawPageHeader = async (
   doc: jsPDF,
-  title: string,
+  _title: string,
   tanggal: string,
   logoAlUmanaa: string,
   logoBadanGizi: string
@@ -148,7 +148,7 @@ export async function export8PageDailyReportPdf(
       head: [['Menu', 'Rincian Bahan', 'Berat Bersih', 'Energi (kkal)', 'Protein (g)', 'Lemak (g)', 'Karbohidrat (g)', 'Serat (g)']],
       body: giziRows,
       theme: 'grid',
-      styles: { fontSize: 7, cellPadding: 1, alignment: 'center' },
+      styles: { fontSize: 7, cellPadding: 1, halign: 'center' },
       headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
       margin: { left: 12, right: 12 },
     });
@@ -192,7 +192,7 @@ export async function export8PageDailyReportPdf(
       head: [['Rincian Bahan', 'Harga Bahan', '%BDD', 'Berat Kotor', 'Total (g/ml)', 'Spare %', 'Kebutuhan (Per Unit)', 'Satuan', 'Harga']],
       body: bahanRows,
       theme: 'grid',
-      styles: { fontSize: 7, cellPadding: 1, alignment: 'center' },
+      styles: { fontSize: 7, cellPadding: 1, halign: 'center' },
       headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
       margin: { left: 12, right: 12 },
     });
@@ -234,7 +234,7 @@ export async function export8PageDailyReportPdf(
       head: [['Nama Menu', 'Nama Bumbu', 'Harga Bumbu', 'Kebutuhan (Per Unit)', 'Satuan', 'Harga']],
       body: bumbuRows,
       theme: 'grid',
-      styles: { fontSize: 7, cellPadding: 1, alignment: 'center' },
+      styles: { fontSize: 7, cellPadding: 1, halign: 'center' },
       headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
       margin: { left: 12, right: 12 },
     });
@@ -280,7 +280,7 @@ export async function export8PageDailyReportPdf(
     head: [['List Bahan Keringan', 'Qty (Pcs)', 'Qty', 'Satuan', 'Harga Satuan', 'Total Harga']],
     body: paketRows,
     theme: 'grid',
-    styles: { fontSize: 8, cellPadding: 2, alignment: 'center' },
+    styles: { fontSize: 8, cellPadding: 2, halign: 'center' },
     headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
     margin: { left: 12, right: 12 },
   });
@@ -301,7 +301,7 @@ export async function export8PageDailyReportPdf(
     head: [['Supplier', 'List Pesanan Bahan', 'Jam Kedatangan', 'Jumlah', 'Item', 'Keterangan']],
     body: poTableRows,
     theme: 'grid',
-    styles: { fontSize: 7.5, cellPadding: 1.5, alignment: 'center' },
+    styles: { fontSize: 7.5, cellPadding: 1.5, halign: 'center' },
     headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
     margin: { left: 12, right: 12 },
   });
@@ -333,7 +333,7 @@ export async function export8PageDailyReportPdf(
     head: [['TANGGAL', 'NAMA BAHAN', 'KUANTITAS', 'SATUAN', 'HARGA PER UNIT', 'TOTAL HARGA']],
     body: realisasiRows,
     theme: 'grid',
-    styles: { fontSize: 7.5, cellPadding: 1.5, alignment: 'center' },
+    styles: { fontSize: 7.5, cellPadding: 1.5, halign: 'center' },
     headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
     margin: { left: 12, right: 12 },
   });
@@ -386,7 +386,7 @@ export async function export8PageDailyReportPdf(
     ],
     body: qcRows,
     theme: 'grid',
-    styles: { fontSize: 7.5, cellPadding: 1.5, alignment: 'center' },
+    styles: { fontSize: 7.5, cellPadding: 1.5, halign: 'center' },
     headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
     margin: { left: 12, right: 12 },
   });
@@ -420,7 +420,7 @@ export async function export8PageDailyReportPdf(
     head: [['No', 'Nama Makanan', 'Kuantitas', 'Satuan', 'Dokumentasi']],
     body: wasteRows,
     theme: 'grid',
-    styles: { fontSize: 8, cellPadding: 2, alignment: 'center' },
+    styles: { fontSize: 8, cellPadding: 2, halign: 'center' },
     headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
     margin: { left: 12, right: 12 },
   });
