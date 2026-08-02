@@ -20,51 +20,72 @@ import { StorefrontLayout } from "@/storefront/layouts/StorefrontLayout";
 import { HomePage } from "@/storefront/pages/HomePage";
 import { subscribeNotifications } from "@/services/notificationService";
 
-const LoginPage = lazy(() => import("@/pages/LoginPage").then(module => ({ default: module.LoginPage })));
-const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage").then(module => ({ default: module.ForgotPasswordPage })));
-const DashboardPage = lazy(() => import("@/pages/DashboardPage").then(module => ({ default: module.DashboardPage })));
-const OrdersPage = lazy(() => import("@/pages/OrdersPage").then(module => ({ default: module.OrdersPage })));
-const ProductionPage = lazy(() => import("@/pages/ProductionPage").then(module => ({ default: module.ProductionPage })));
-const ProductionHistoryPage = lazy(() => import("@/pages/ProductionHistoryPage").then(module => ({ default: module.ProductionHistoryPage })));
-const HandoverPage = lazy(() => import("@/pages/HandoverPage").then(module => ({ default: module.HandoverPage })));
-const DeliveryPage = lazy(() => import("@/pages/DeliveryPage").then(module => ({ default: module.DeliveryPage })));
-const TrackingPage = lazy(() => import("@/pages/TrackingPage").then(module => ({ default: module.TrackingPage })));
-const SettingsPage = lazy(() => import("@/pages/SettingsPage").then(module => ({ default: module.SettingsPage })));
-const ProductsPage = lazy(() => import("@/admin/pages/ProductsPage").then(module => ({ default: module.ProductsPage })));
-const ProductFormPage = lazy(() => import("@/admin/pages/ProductFormPage").then(module => ({ default: module.ProductFormPage })));
-const OrderInputPage = lazy(() => import("@/admin/pages/OrderInputPage").then(module => ({ default: module.OrderInputPage })));
-const CategoriesPage = lazy(() => import("@/admin/pages/CategoriesPage").then(module => ({ default: module.CategoriesPage })));
-const InvoicesPage = lazy(() => import("@/admin/pages/InvoicesPage").then(module => ({ default: module.InvoicesPage })));
-const FoodSchedulePage = lazy(() => import("@/admin/pages/FoodSchedulePage").then(module => ({ default: module.FoodSchedulePage })));
-const DeliverySchedulerPage = lazy(() => import("@/pages/DeliverySchedulerPage").then(module => ({ default: module.DeliverySchedulerPage })));
-const InvoicePage = lazy(() => import("@/pages/InvoicePage").then(module => ({ default: module.InvoicePage })));
-const ProductDetailPage = lazy(() => import("@/storefront/pages/ProductDetailPage").then(module => ({ default: module.ProductDetailPage })));
-const HelpCenterPage = lazy(() => import("@/storefront/pages/HelpCenterPage").then(module => ({ default: module.HelpCenterPage })));
-const CategoryPage = lazy(() => import("@/storefront/pages/CategoryPage").then(module => ({ default: module.CategoryPage })));
-const CartPage = lazy(() => import("@/storefront/pages/CartPage").then(module => ({ default: module.CartPage })));
-const CheckoutWizard = lazy(() => import("@/storefront/pages/checkout/CheckoutWizard").then(module => ({ default: module.CheckoutWizard })));
-const OrderConfirmationPage = lazy(() => import("@/storefront/pages/checkout/OrderConfirmationPage").then(module => ({ default: module.OrderConfirmationPage })));
-const NotificationsPage = lazy(() => import("@/storefront/pages/NotificationsPage").then(module => ({ default: module.NotificationsPage })));
-const ProfilePage = lazy(() => import("@/storefront/pages/ProfilePage").then(module => ({ default: module.ProfilePage })));
-const TestimoniPage = lazy(() => import("@/storefront/pages/TestimoniPage").then(module => ({ default: module.TestimoniPage })));
-const NotFoundPage = lazy(() => import("@/pages/NotFoundPage").then(module => ({ default: module.NotFoundPage })));
-const PromosPage = lazy(() => import("@/admin/pages/PromosPage").then(module => ({ default: module.PromosPage })));
-const SchedulesPage = lazy(() => import("@/pages/SchedulesPage").then(module => ({ default: module.SchedulesPage })));
+// Helper function to auto-retry and auto-reload on dynamic import chunk loading failures (e.g. after new deployments)
+function safeLazy<T extends React.ComponentType<any>>(
+  importFn: () => Promise<any>
+) {
+  return lazy(async () => {
+    const pageHasBeenReloaded = sessionStorage.getItem('chunk_reload_' + window.location.pathname);
+    try {
+      const module = await importFn();
+      sessionStorage.removeItem('chunk_reload_' + window.location.pathname);
+      return module.default ? module : { default: Object.values(module)[0] as T };
+    } catch (error) {
+      if (!pageHasBeenReloaded) {
+        sessionStorage.setItem('chunk_reload_' + window.location.pathname, 'true');
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw error;
+    }
+  });
+}
+
+const LoginPage = safeLazy(() => import("@/pages/LoginPage").then(module => ({ default: module.LoginPage })));
+const ForgotPasswordPage = safeLazy(() => import("@/pages/ForgotPasswordPage").then(module => ({ default: module.ForgotPasswordPage })));
+const DashboardPage = safeLazy(() => import("@/pages/DashboardPage").then(module => ({ default: module.DashboardPage })));
+const OrdersPage = safeLazy(() => import("@/pages/OrdersPage").then(module => ({ default: module.OrdersPage })));
+const ProductionPage = safeLazy(() => import("@/pages/ProductionPage").then(module => ({ default: module.ProductionPage })));
+const ProductionHistoryPage = safeLazy(() => import("@/pages/ProductionHistoryPage").then(module => ({ default: module.ProductionHistoryPage })));
+const HandoverPage = safeLazy(() => import("@/pages/HandoverPage").then(module => ({ default: module.HandoverPage })));
+const DeliveryPage = safeLazy(() => import("@/pages/DeliveryPage").then(module => ({ default: module.DeliveryPage })));
+const TrackingPage = safeLazy(() => import("@/pages/TrackingPage").then(module => ({ default: module.TrackingPage })));
+const SettingsPage = safeLazy(() => import("@/pages/SettingsPage").then(module => ({ default: module.SettingsPage })));
+const ProductsPage = safeLazy(() => import("@/admin/pages/ProductsPage").then(module => ({ default: module.ProductsPage })));
+const ProductFormPage = safeLazy(() => import("@/admin/pages/ProductFormPage").then(module => ({ default: module.ProductFormPage })));
+const OrderInputPage = safeLazy(() => import("@/admin/pages/OrderInputPage").then(module => ({ default: module.OrderInputPage })));
+const CategoriesPage = safeLazy(() => import("@/admin/pages/CategoriesPage").then(module => ({ default: module.CategoriesPage })));
+const InvoicesPage = safeLazy(() => import("@/admin/pages/InvoicesPage").then(module => ({ default: module.InvoicesPage })));
+const FoodSchedulePage = safeLazy(() => import("@/admin/pages/FoodSchedulePage").then(module => ({ default: module.FoodSchedulePage })));
+const DeliverySchedulerPage = safeLazy(() => import("@/pages/DeliverySchedulerPage").then(module => ({ default: module.DeliverySchedulerPage })));
+const InvoicePage = safeLazy(() => import("@/pages/InvoicePage").then(module => ({ default: module.InvoicePage })));
+const ProductDetailPage = safeLazy(() => import("@/storefront/pages/ProductDetailPage").then(module => ({ default: module.ProductDetailPage })));
+const HelpCenterPage = safeLazy(() => import("@/storefront/pages/HelpCenterPage").then(module => ({ default: module.HelpCenterPage })));
+const CategoryPage = safeLazy(() => import("@/storefront/pages/CategoryPage").then(module => ({ default: module.CategoryPage })));
+const CartPage = safeLazy(() => import("@/storefront/pages/CartPage").then(module => ({ default: module.CartPage })));
+const CheckoutWizard = safeLazy(() => import("@/storefront/pages/checkout/CheckoutWizard").then(module => ({ default: module.CheckoutWizard })));
+const OrderConfirmationPage = safeLazy(() => import("@/storefront/pages/checkout/OrderConfirmationPage").then(module => ({ default: module.OrderConfirmationPage })));
+const NotificationsPage = safeLazy(() => import("@/storefront/pages/NotificationsPage").then(module => ({ default: module.NotificationsPage })));
+const ProfilePage = safeLazy(() => import("@/storefront/pages/ProfilePage").then(module => ({ default: module.ProfilePage })));
+const TestimoniPage = safeLazy(() => import("@/storefront/pages/TestimoniPage").then(module => ({ default: module.TestimoniPage })));
+const NotFoundPage = safeLazy(() => import("@/pages/NotFoundPage").then(module => ({ default: module.NotFoundPage })));
+const PromosPage = safeLazy(() => import("@/admin/pages/PromosPage").then(module => ({ default: module.PromosPage })));
+const SchedulesPage = safeLazy(() => import("@/pages/SchedulesPage").then(module => ({ default: module.SchedulesPage })));
 
 // --- MBG (Makan Bergizi Gratis) Pages ---
-const MbgAdminPage = lazy(() => import("@/pages/mbg/MbgAdminPage").then(module => ({ default: module.MbgAdminPage })));
-const MbgProductionPage = lazy(() => import("@/pages/mbg/MbgProductionPage").then(module => ({ default: module.MbgProductionPage })));
-const MbgCookingPage = lazy(() => import("@/pages/mbg/MbgCookingPage").then(module => ({ default: module.MbgCookingPage })));
-const MbgPurchasingPage = lazy(() => import("@/pages/mbg/MbgPurchasingPage").then(module => ({ default: module.MbgPurchasingPage })));
-const MbgSubPurchasingPage = lazy(() => import("@/pages/mbg/MbgSubPurchasingPage").then(module => ({ default: module.MbgSubPurchasingPage })));
-const MbgPurchasingRecapPage = lazy(() => import("@/pages/mbg/MbgPurchasingRecapPage").then(module => ({ default: module.MbgPurchasingRecapPage })));
-const MbgPurchasingArchivePage = lazy(() => import("@/pages/mbg/MbgPurchasingArchivePage").then(module => ({ default: module.MbgPurchasingArchivePage })));
-const MbgSupplierPage = lazy(() => import("@/pages/mbg/MbgSupplierPage").then(module => ({ default: module.MbgSupplierPage })));
-const MbgDistributionPage = lazy(() => import("@/pages/mbg/MbgDistributionPage").then(module => ({ default: module.MbgDistributionPage })));
-const MbgDeliveryPage = lazy(() => import("@/pages/mbg/MbgDeliveryPage").then(module => ({ default: module.MbgDeliveryPage })));
-const MbgArchivePage = lazy(() => import("@/pages/mbg/MbgArchivePage").then(module => ({ default: module.MbgArchivePage })));
-const MbgReportPage = lazy(() => import("@/pages/mbg/MbgReportPage").then(module => ({ default: module.MbgReportPage })));
-const MbgOrdersPage = lazy(() => import("@/pages/mbg/MbgOrdersPage").then(module => ({ default: module.MbgOrdersPage })));
+const MbgAdminPage = safeLazy(() => import("@/pages/mbg/MbgAdminPage").then(module => ({ default: module.MbgAdminPage })));
+const MbgProductionPage = safeLazy(() => import("@/pages/mbg/MbgProductionPage").then(module => ({ default: module.MbgProductionPage })));
+const MbgCookingPage = safeLazy(() => import("@/pages/mbg/MbgCookingPage").then(module => ({ default: module.MbgCookingPage })));
+const MbgPurchasingPage = safeLazy(() => import("@/pages/mbg/MbgPurchasingPage").then(module => ({ default: module.MbgPurchasingPage })));
+const MbgSubPurchasingPage = safeLazy(() => import("@/pages/mbg/MbgSubPurchasingPage").then(module => ({ default: module.MbgSubPurchasingPage })));
+const MbgPurchasingRecapPage = safeLazy(() => import("@/pages/mbg/MbgPurchasingRecapPage").then(module => ({ default: module.MbgPurchasingRecapPage })));
+const MbgPurchasingArchivePage = safeLazy(() => import("@/pages/mbg/MbgPurchasingArchivePage").then(module => ({ default: module.MbgPurchasingArchivePage })));
+const MbgSupplierPage = safeLazy(() => import("@/pages/mbg/MbgSupplierPage").then(module => ({ default: module.MbgSupplierPage })));
+const MbgDistributionPage = safeLazy(() => import("@/pages/mbg/MbgDistributionPage").then(module => ({ default: module.MbgDistributionPage })));
+const MbgDeliveryPage = safeLazy(() => import("@/pages/mbg/MbgDeliveryPage").then(module => ({ default: module.MbgDeliveryPage })));
+const MbgArchivePage = safeLazy(() => import("@/pages/mbg/MbgArchivePage").then(module => ({ default: module.MbgArchivePage })));
+const MbgReportPage = safeLazy(() => import("@/pages/mbg/MbgReportPage").then(module => ({ default: module.MbgReportPage })));
+const MbgOrdersPage = safeLazy(() => import("@/pages/mbg/MbgOrdersPage").then(module => ({ default: module.MbgOrdersPage })));
 
 import {
   CategoryIndexStub,
