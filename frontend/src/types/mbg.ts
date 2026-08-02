@@ -515,4 +515,136 @@ export interface MbgSubPurchasingTask {
   createdAt: string;
   updatedAt: string;
 }
+export interface MbgPortionNutritionItem {
+  menuName: string;
+  rincianBahan: string;
+  beratBersih: number;
+  energi: number;
+  protein: number;
+  lemak: number;
+  karbohidrat: number;
+  serat: number;
+}
 
+export interface MbgPortionBahanItem {
+  rincianBahan: string;
+  hargaBahan: number;
+  bddPercent: number;
+  beratKotor: number;
+  totalGml: number;
+  sparePercent: number;
+  kebutuhan: number;
+  satuan: string;
+  harga: number;
+}
+
+export interface MbgPortionBumbuItem {
+  namaMenu: string;
+  namaBumbu: string;
+  hargaBumbu: number;
+  kebutuhan: number;
+  satuan: string;
+  harga: number;
+}
+
+export interface MbgPortionDailyData {
+  portionType: 'kecil' | 'besar' | 'balita' | 'bumil_busui';
+  portionTitle: string;
+  menuList: string[];
+  nutritionItems: MbgPortionNutritionItem[];
+  bahanItems: MbgPortionBahanItem[];
+  bumbuItems: MbgPortionBumbuItem[];
+  totalGizi: {
+    beratBersih: number;
+    energi: number;
+    protein: number;
+    lemak: number;
+    karbohidrat: number;
+    serat: number;
+  };
+  akgMetrics: Record<string, { percentMakanSiang: number; percentHarian: number }>;
+  totalBelanjaBahan: number;
+  hargaBahanPerPorsi: number;
+  totalBelanjaBumbu: number;
+  hargaBumbuPerPorsi: number;
+  totalBelanjaOverall: number;
+  hargaPerPorsiOverall: number;
+}
+
+export interface MbgPaketSehat3bReport {
+  balitaCount: number;
+  bumilBusuiCount: number;
+  keringanItems: {
+    item: string;
+    qtyPcs: number;
+    qty: number;
+    satuan: string;
+    hargaSatuan?: number;
+    totalHarga?: number;
+  }[];
+}
+
+export interface MbgPoReportRow {
+  supplier: string;
+  item: string;
+  jamKedatangan: string;
+  jumlah: number;
+  satuan: string;
+  keterangan: string;
+}
+
+export interface MbgRealisasiPembelianRow {
+  tanggal: string;
+  namaBahan: string;
+  kuantitas: number;
+  satuan: string;
+  hargaPerUnit: number;
+  totalHarga: number;
+}
+
+export interface MbgInspectionFormRow {
+  jenisBahan: string;
+  banyaknya: number;
+  satuan: string;
+  isSesuai: boolean;
+  isBaik: boolean;
+  notes?: string;
+}
+
+export interface MbgWasteLogRow {
+  no: number;
+  namaMakanan: string;
+  kuantitas: number;
+  satuan: string;
+  dokumentasi?: string;
+}
+
+export interface MbgProductionDailyReport {
+  id: string;
+  batchId: string;
+  tanggal: string;
+  sheetDayName?: string; // e.g. "HARI 3"
+  porsiKecil: MbgPortionDailyData;
+  porsiBesar: MbgPortionDailyData;
+  porsiBalita: MbgPortionDailyData;
+  porsiBumilBusui: MbgPortionDailyData;
+  paketSehat3b: MbgPaketSehat3bReport;
+  poRows: MbgPoReportRow[];
+  realisasiPembelianRows: MbgRealisasiPembelianRow[];
+  totalPengeluaran: number;
+  totalAnggaran: number;
+  selisih: number;
+  inspectionForm: {
+    dari: string;
+    kepada: string;
+    waktu: string;
+    noForm: string;
+    rows: MbgInspectionFormRow[];
+    officerName: string;
+    officerTitle: string;
+  };
+  wasteLogs: MbgWasteLogRow[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}

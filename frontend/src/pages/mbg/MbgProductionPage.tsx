@@ -10,7 +10,8 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import type { MbgPmBatch, MbgPmEntry, MbgNutritionEntry, MbgDayMenu } from '@/types/mbg';
+import * as XLSX from 'xlsx';
+import type { MbgPmBatch, MbgPmEntry, MbgNutritionEntry, MbgDayMenu, MbgProductionDailyReport } from '@/types/mbg';
 import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
 import { subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule, saveWeeklySchedule, type MbgPortionClassification } from '@/services/mbgAdminService';
 import {
@@ -18,7 +19,10 @@ import {
   subscribeCustomTkpiEntries, addCustomTkpiEntry, updateCustomTkpiEntry, deleteCustomTkpiEntry,
   subscribeCustomRecipes, addCustomRecipe, updateCustomRecipe, deleteCustomRecipe,
   subscribeRecipeAdjustments, saveRecipeAdjustment, deleteRecipeAdjustment,
+  subscribeDailyReport, saveDailyReport,
 } from '@/services/mbgProductionService';
+import { export8PageDailyReportPdf } from '@/utils/dailyReportPdfExporter';
+import { parseProductionSheetRows, createEmptyPortionData } from '@/utils/productionSheetParser';
 import { updateBatchStatus } from '@/services/mbgAdminService';
 import {
   MBG_BATCH_STATUS_CONFIG,
@@ -85,7 +89,16 @@ export function MbgProductionPage() {
   const [entries, setEntries] = useState<MbgPmEntry[]>([]);
   const [nutritionData, setNutritionData] = useState<MbgNutritionEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'pm-data' | 'nutrition' | 'archive'>('pm-data');
+  const [activeTab, setActiveTab] = useState<'pm-data' | 'nutrition' | 'daily-report' | 'archive'>('pm-data');
+  const [dailyReportSubTab, setDailyReportSubTab] = useState<'kecil' | 'besar' | 'balita' | 'bumil' | 'paket3b' | 'po' | 'qc' | 'waste'>('kecil');
+
+  // Google Sheets & Excel Import States
+  const [showSheetsImportModal, setShowSheetsImportModal] = useState(false);
+  const [sheetsUrlInput, setSheetsUrlInput] = useState('');
+  const [importingSheets, setImportingSheets] = useState(false);
+  const [availableSheetNames, setAvailableSheetNames] = useState<string[]>([]);
+  const [sheetWorkbook, setSheetWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [dailyReport, setDailyReport] = useState<MbgProductionDailyReport | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const [showPmSummaryInGizi, setShowPmSummaryInGizi] = useState(true);
   const [isBatchDropdownOpen, setIsBatchDropdownOpen] = useState(false);
@@ -244,18 +257,22 @@ export function MbgProductionPage() {
     return unsub;
   }, []);
 
-  // Subscribe entries + nutrition + recipe adjustments for selected batch
+  // Subscribe entries + nutrition + recipe adjustments + daily report for selected batch
   useEffect(() => {
     if (!selectedBatchId) return;
     const unsub1 = subscribeEntries(selectedBatchId, setEntries);
     const unsub2 = subscribeNutrition(selectedBatchId, setNutritionData);
     const unsub3 = subscribeRecipeAdjustments(selectedBatchId, (list) => {
-      console.log('[MBG] Recipe adjustments received:', list.length, 'items', list);
       setRecipeAdjustments(list as unknown as RecipeAdjustment[]);
     }, (err) => {
       console.error('Error loading recipe adjustments:', err);
     });
-    return () => { unsub1(); unsub2(); unsub3(); };
+    const unsub4 = subscribeDailyReport(selectedBatchId, (report) => {
+      setDailyReport(report);
+    }, (err) => {
+      console.error('Error loading daily report:', err);
+    });
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
   }, [selectedBatchId]);
 
   const selectedBatch = useMemo(() => {
@@ -1470,6 +1487,107 @@ export function MbgProductionPage() {
     }
   };
 
+  const handleFetchGoogleSheets = async () => {
+    if (!sheetsUrlInput.trim()) {
+      showToast({ message: 'Masukkan URL Google Sheets terlebih dahulu!', variant: 'warning' });
+      return;
+    }
+
+    try {
+      setImportingSheets(true);
+      let fetchUrl = sheetsUrlInput.trim();
+
+      // Check if Google Sheets URL
+      const match = fetchUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      if (match && match[1]) {
+        const spreadsheetId = match[1];
+        fetchUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=xlsx`;
+      }
+
+      const res = await fetch(fetchUrl);
+      if (!res.ok) {
+        throw new Error(`Gagal mengunduh Google Sheets. Status: ${res.status}. Pastikan link spreadsheet dapat diakses publik (Anyone with link).`);
+      }
+
+      const arrayBuffer = await res.arrayBuffer();
+      const wb = XLSX.read(arrayBuffer, { type: 'array' });
+      setSheetWorkbook(wb);
+      
+      const sheetNames = wb.SheetNames.filter(name => !name.toLowerCase().includes('siklus') && !name.toLowerCase().includes('akg'));
+      setAvailableSheetNames(sheetNames.length > 0 ? sheetNames : wb.SheetNames);
+
+      showToast({ message: `Spreadsheet berhasil dibaca! Ditemukan ${wb.SheetNames.length} sheet/tab. Silakan pilih sheet hari yang ingin di-import.`, variant: 'success' });
+    } catch (err: any) {
+      console.error(err);
+      showToast({ message: err.message || 'Gagal membaca link Google Sheets', variant: 'error' });
+    } finally {
+      setImportingSheets(false);
+    }
+  };
+
+  const handleFileUploadExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setImportingSheets(true);
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: 'array' });
+      setSheetWorkbook(wb);
+
+      const sheetNames = wb.SheetNames.filter(name => !name.toLowerCase().includes('siklus') && !name.toLowerCase().includes('akg'));
+      setAvailableSheetNames(sheetNames.length > 0 ? sheetNames : wb.SheetNames);
+
+      showToast({ message: `File Excel berhasil dibaca! Ditemukan ${wb.SheetNames.length} sheet/tab. Silakan pilih sheet hari.`, variant: 'success' });
+    } catch (err: any) {
+      console.error(err);
+      showToast({ message: 'Gagal membaca file Excel', variant: 'error' });
+    } finally {
+      setImportingSheets(false);
+    }
+  };
+
+  const handleSelectSheetDay = async (sheetName: string) => {
+    if (!sheetWorkbook || !selectedBatchId || !selectedBatch) return;
+
+    try {
+      setImportingSheets(true);
+      const ws = sheetWorkbook.Sheets[sheetName];
+      const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+      const parsedReport = parseProductionSheetRows(rows, selectedBatchId, selectedBatch.tanggal, sheetName);
+      
+      await saveDailyReport(dailyReport?.id || null, {
+        ...parsedReport,
+        createdBy: user?.uid || '',
+      });
+
+      setShowSheetsImportModal(false);
+      setActiveTab('daily-report');
+      showToast({ message: `Berhasil meng-import data Laporan Harian (${sheetName}) ke website!`, variant: 'success' });
+    } catch (err: any) {
+      console.error('Parse Sheet error:', err);
+      showToast({ message: 'Gagal memproses sheet ter-pilih', variant: 'error' });
+    } finally {
+      setImportingSheets(false);
+    }
+  };
+
+  const handleTriggerExport8PagePdf = async () => {
+    if (!selectedBatch) {
+      showToast({ message: 'Pilih batch terlebih dahulu!', variant: 'warning' });
+      return;
+    }
+    const reportToExport = dailyReport || parseProductionSheetRows([], selectedBatch.id, selectedBatch.tanggal, 'HARI 3');
+    try {
+      await export8PageDailyReportPdf(reportToExport as MbgProductionDailyReport, selectedBatch);
+      showToast({ message: 'Berhasil meng-export PDF 8-Halaman Laporan Harian Operasional!', variant: 'success' });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: 'Gagal meng-export PDF Laporan Harian', variant: 'error' });
+    }
+  };
+
   return (
     <div className="min-h-screen font-['Hanken_Grotesk',system-ui,sans-serif]">
       {/* Header */}
@@ -1482,8 +1600,8 @@ export function MbgProductionPage() {
 
       {/* Tab Toggle */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div className="flex gap-1 bg-[#F3F4F6] rounded-xl p-1 w-full max-w-md">
-          {(['pm-data', 'nutrition', 'archive'] as const).map((tab) => (
+        <div className="flex gap-1 bg-[#F3F4F6] rounded-xl p-1 w-full max-w-xl">
+          {(['pm-data', 'nutrition', 'daily-report', 'archive'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1493,11 +1611,33 @@ export function MbgProductionPage() {
                   : 'text-[#6B7280] hover:text-[#111827]'
               }`}
             >
-              {tab === 'pm-data' ? '📋 Data PM' : tab === 'nutrition' ? '🧪 Kadar Gizi' : '📁 Arsip Gizi'}
+              {tab === 'pm-data'
+                ? '📋 Data PM'
+                : tab === 'nutrition'
+                ? '🧪 Kadar Gizi'
+                : tab === 'daily-report'
+                ? '📑 Laporan Harian (8 Hal)'
+                : '📁 Arsip Gizi'}
             </button>
           ))}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowSheetsImportModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#10B981] hover:bg-[#059669] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+            title="Import data Laporan Harian via Google Sheets Link / File Excel"
+          >
+            <FileDown className="h-4 w-4 text-white rotate-180" />
+            <span>📥 Import Google Sheets / Excel</span>
+          </button>
+          <button
+            onClick={handleTriggerExport8PagePdf}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+            title="Export Laporan Harian Operasional PDF 8-Halaman Resmi"
+          >
+            <FileDown className="h-4 w-4 text-amber-400" />
+            <span>📄 Export PDF (8 Hal)</span>
+          </button>
           <button
             onClick={() => setShowScheduleModal(true)}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#059669] hover:bg-[#047857] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
@@ -1709,6 +1849,375 @@ export function MbgProductionPage() {
               })}
             </div>
           )}
+        </div>
+      ) : activeTab === 'daily-report' ? (
+        /* Daily Report View (8-Halaman Operasional) */
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                  <span>📑 Laporan Harian Operasional SPPG</span>
+                  {dailyReport?.sheetDayName && (
+                    <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 text-xs font-bold rounded-full border border-amber-200">
+                      {dailyReport.sheetDayName}
+                    </span>
+                  )}
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Format Laporan Harian Operasional resmi (Kandungan Gizi, Pesanan Bahan, Pesanan Bumbu, PO, QC, Limbah)
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setShowSheetsImportModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+                >
+                  <FileDown className="h-4 w-4 text-white rotate-180" />
+                  <span>📥 Import Google Sheets / Excel</span>
+                </button>
+                <button
+                  onClick={handleTriggerExport8PagePdf}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+                >
+                  <FileDown className="h-4 w-4 text-amber-400" />
+                  <span>📄 Export PDF (8-Halaman)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Sub-tab Navigation for 8 Sections */}
+            <div className="flex gap-1.5 overflow-x-auto py-3 border-b border-slate-200 scrollbar-none">
+              {[
+                { key: 'kecil', label: '1. Porsi Kecil' },
+                { key: 'besar', label: '2. Porsi Besar' },
+                { key: 'balita', label: '3. Porsi Balita' },
+                { key: 'bumil', label: '4. Bumil / Busui' },
+                { key: 'paket3b', label: '5. Paket Sehat 3B' },
+                { key: 'po', label: '6. PO & Pembelian' },
+                { key: 'qc', label: '7. Form QC Bahan' },
+                { key: 'waste', label: '8. Rekapan Limbah' },
+              ].map((st) => (
+                <button
+                  key={st.key}
+                  onClick={() => setDailyReportSubTab(st.key as any)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    dailyReportSubTab === st.key
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Sub-tab Content Views */}
+            <div className="pt-4">
+              {dailyReportSubTab === 'kecil' && (
+                <div className="space-y-6">
+                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 1: Realisasi Menu — Porsi Kecil</h3>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                            <th className="px-3 py-2">Menu</th>
+                            <th className="px-3 py-2">Rincian Bahan</th>
+                            <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
+                            <th className="px-3 py-2 text-center">Energi (kkal)</th>
+                            <th className="px-3 py-2 text-center">Protein (g)</th>
+                            <th className="px-3 py-2 text-center">Lemak (g)</th>
+                            <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
+                            <th className="px-3 py-2 text-center">Serat (g)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(dailyReport?.porsiKecil?.nutritionItems || []).map((item, idx) => (
+                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                              <td className="px-3 py-2 font-bold">{item.menuName}</td>
+                              <td className="px-3 py-2">{item.rincianBahan}</td>
+                              <td className="px-3 py-2 text-center">{item.beratBersih}</td>
+                              <td className="px-3 py-2 text-center">{item.energi}</td>
+                              <td className="px-3 py-2 text-center">{item.protein}</td>
+                              <td className="px-3 py-2 text-center">{item.lemak}</td>
+                              <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
+                              <td className="px-3 py-2 text-center">{item.serat}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {dailyReportSubTab === 'besar' && (
+                <div className="space-y-6">
+                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 2: Realisasi Menu — Porsi Besar</h3>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                            <th className="px-3 py-2">Menu</th>
+                            <th className="px-3 py-2">Rincian Bahan</th>
+                            <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
+                            <th className="px-3 py-2 text-center">Energi (kkal)</th>
+                            <th className="px-3 py-2 text-center">Protein (g)</th>
+                            <th className="px-3 py-2 text-center">Lemak (g)</th>
+                            <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
+                            <th className="px-3 py-2 text-center">Serat (g)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(dailyReport?.porsiBesar?.nutritionItems || []).map((item, idx) => (
+                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                              <td className="px-3 py-2 font-bold">{item.menuName}</td>
+                              <td className="px-3 py-2">{item.rincianBahan}</td>
+                              <td className="px-3 py-2 text-center">{item.beratBersih}</td>
+                              <td className="px-3 py-2 text-center">{item.energi}</td>
+                              <td className="px-3 py-2 text-center">{item.protein}</td>
+                              <td className="px-3 py-2 text-center">{item.lemak}</td>
+                              <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
+                              <td className="px-3 py-2 text-center">{item.serat}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {dailyReportSubTab === 'balita' && (
+                <div className="space-y-6">
+                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 3: Realisasi Menu — Porsi Balita</h3>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                            <th className="px-3 py-2">Menu</th>
+                            <th className="px-3 py-2">Rincian Bahan</th>
+                            <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
+                            <th className="px-3 py-2 text-center">Energi (kkal)</th>
+                            <th className="px-3 py-2 text-center">Protein (g)</th>
+                            <th className="px-3 py-2 text-center">Lemak (g)</th>
+                            <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
+                            <th className="px-3 py-2 text-center">Serat (g)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(dailyReport?.porsiBalita?.nutritionItems || []).map((item, idx) => (
+                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                              <td className="px-3 py-2 font-bold">{item.menuName}</td>
+                              <td className="px-3 py-2">{item.rincianBahan}</td>
+                              <td className="px-3 py-2 text-center">{item.beratBersih}</td>
+                              <td className="px-3 py-2 text-center">{item.energi}</td>
+                              <td className="px-3 py-2 text-center">{item.protein}</td>
+                              <td className="px-3 py-2 text-center">{item.lemak}</td>
+                              <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
+                              <td className="px-3 py-2 text-center">{item.serat}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {dailyReportSubTab === 'bumil' && (
+                <div className="space-y-6">
+                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 4: Realisasi Menu — Porsi Bumil / Busui</h3>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                            <th className="px-3 py-2">Menu</th>
+                            <th className="px-3 py-2">Rincian Bahan</th>
+                            <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
+                            <th className="px-3 py-2 text-center">Energi (kkal)</th>
+                            <th className="px-3 py-2 text-center">Protein (g)</th>
+                            <th className="px-3 py-2 text-center">Lemak (g)</th>
+                            <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
+                            <th className="px-3 py-2 text-center">Serat (g)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(dailyReport?.porsiBumilBusui?.nutritionItems || []).map((item, idx) => (
+                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                              <td className="px-3 py-2 font-bold">{item.menuName}</td>
+                              <td className="px-3 py-2">{item.rincianBahan}</td>
+                              <td className="px-3 py-2 text-center">{item.beratBersih}</td>
+                              <td className="px-3 py-2 text-center">{item.energi}</td>
+                              <td className="px-3 py-2 text-center">{item.protein}</td>
+                              <td className="px-3 py-2 text-center">{item.lemak}</td>
+                              <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
+                              <td className="px-3 py-2 text-center">{item.serat}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {dailyReportSubTab === 'paket3b' && (
+                <div className="space-y-6">
+                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 5: Paket Sehat 3B</h3>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Daftar Bahan Keringan</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                            <th className="px-3 py-2">Item Bahan</th>
+                            <th className="px-3 py-2 text-center">Qty (Pcs)</th>
+                            <th className="px-3 py-2 text-center">Qty</th>
+                            <th className="px-3 py-2 text-center">Satuan</th>
+                            <th className="px-3 py-2 text-right">Harga Satuan</th>
+                            <th className="px-3 py-2 text-right">Total Harga</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(dailyReport?.paketSehat3b?.keringanItems || []).map((k, idx) => (
+                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                              <td className="px-3 py-2 font-bold">{k.item}</td>
+                              <td className="px-3 py-2 text-center">{k.qtyPcs}</td>
+                              <td className="px-3 py-2 text-center">{k.qty}</td>
+                              <td className="px-3 py-2 text-center">{k.satuan}</td>
+                              <td className="px-3 py-2 text-right">Rp{(k.hargaSatuan || 0).toLocaleString('id-ID')}</td>
+                              <td className="px-3 py-2 text-right font-bold">Rp{(k.totalHarga || 0).toLocaleString('id-ID')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {dailyReportSubTab === 'po' && (
+                <div className="space-y-6">
+                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 6: PO & Realisasi Pembelian</h3>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Realisasi Pembelian vs Anggaran</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                            <th className="px-3 py-2">Tanggal</th>
+                            <th className="px-3 py-2">Nama Bahan</th>
+                            <th className="px-3 py-2 text-center">Kuantitas</th>
+                            <th className="px-3 py-2 text-center">Satuan</th>
+                            <th className="px-3 py-2 text-right">Harga Per Unit</th>
+                            <th className="px-3 py-2 text-right">Total Harga</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(dailyReport?.realisasiPembelianRows || []).map((r, idx) => (
+                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                              <td className="px-3 py-2">{r.tanggal}</td>
+                              <td className="px-3 py-2 font-bold">{r.namaBahan}</td>
+                              <td className="px-3 py-2 text-center">{r.kuantitas}</td>
+                              <td className="px-3 py-2 text-center">{r.satuan}</td>
+                              <td className="px-3 py-2 text-right">Rp{(r.hargaPerUnit || 0).toLocaleString('id-ID')}</td>
+                              <td className="px-3 py-2 text-right font-bold">Rp{(r.totalHarga || 0).toLocaleString('id-ID')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {dailyReportSubTab === 'qc' && (
+                <div className="space-y-6">
+                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 7: Form Pemeriksaan Bahan Makanan (QC)</h3>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Form QC Pemeriksaan Physical</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                            <th className="px-3 py-2">Jenis Bahan Makanan</th>
+                            <th className="px-3 py-2 text-center">Banyaknya</th>
+                            <th className="px-3 py-2 text-center">Satuan</th>
+                            <th className="px-3 py-2 text-center">Jumlah</th>
+                            <th className="px-3 py-2 text-center">Kondisi Bahan</th>
+                            <th className="px-3 py-2">Catatan QC</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(dailyReport?.inspectionForm?.rows || []).map((qc, idx) => (
+                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                              <td className="px-3 py-2 font-bold">{qc.jenisBahan}</td>
+                              <td className="px-3 py-2 text-center">{qc.banyaknya}</td>
+                              <td className="px-3 py-2 text-center">{qc.satuan}</td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${qc.isSesuai ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                                  {qc.isSesuai ? 'Sesuai' : 'Tidak Sesuai'}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${qc.isBaik ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                                  {qc.isBaik ? 'Baik' : 'Rusak'}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2">{qc.notes || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {dailyReportSubTab === 'waste' && (
+                <div className="space-y-6">
+                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 8: Rekapan Limbah Sisa Makanan</h3>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Tabel Rekapan Limbah</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                            <th className="px-3 py-2 text-center">No</th>
+                            <th className="px-3 py-2">Nama Makanan</th>
+                            <th className="px-3 py-2 text-center">Kuantitas</th>
+                            <th className="px-3 py-2 text-center">Satuan</th>
+                            <th className="px-3 py-2">Dokumentasi</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(dailyReport?.wasteLogs || []).map((w, idx) => (
+                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                              <td className="px-3 py-2 text-center">{w.no || idx + 1}</td>
+                              <td className="px-3 py-2 font-bold">{w.namaMakanan}</td>
+                              <td className="px-3 py-2 text-center">{w.kuantitas}</td>
+                              <td className="px-3 py-2 text-center">{w.satuan}</td>
+                              <td className="px-3 py-2">{w.dokumentasi || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       ) : (
         /* Normal Editor Flow */
@@ -2662,6 +3171,99 @@ export function MbgProductionPage() {
             </>
           )}
         </>
+      )}
+
+      {/* Google Sheets / Excel Import Modal */}
+      {showSheetsImportModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full flex flex-col max-h-[90vh] border border-slate-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white">
+              <div>
+                <h3 className="text-base font-extrabold flex items-center gap-2">
+                  <span>📥 Import Google Sheets / Excel Laporan Harian</span>
+                </h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Paste Link Google Sheets atau upload file Excel (.xlsx) untuk men-generate Laporan Harian Produksi
+                </p>
+              </div>
+              <button
+                onClick={() => setShowSheetsImportModal(false)}
+                className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer text-slate-300"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 overflow-y-auto">
+              {/* Option 1: Google Sheets URL */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700">
+                  1. Paste Link Google Sheets (Public / Anyone with Link):
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={sheetsUrlInput}
+                    onChange={(e) => setSheetsUrlInput(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/1kKXUKYZ.../edit"
+                    className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={handleFetchGoogleSheets}
+                    disabled={importingSheets}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap"
+                  >
+                    {importingSheets ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>🔍 Baca Link</span>}
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Contoh: <code className="bg-slate-100 px-1 py-0.5 rounded">https://docs.google.com/spreadsheets/d/1kKXUKYZ9mSak2NCa687t3pKCuMa-3CVMCAQaISp6S68/edit</code>
+                </p>
+              </div>
+
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink mx-4 text-xs font-bold text-slate-400 uppercase">atau</span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
+
+              {/* Option 2: File Upload */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700">
+                  2. Upload File Excel (.xlsx, .xls):
+                </label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleFileUploadExcel}
+                  disabled={importingSheets}
+                  className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
+                />
+              </div>
+
+              {/* Available Sheet Day Selection */}
+              {availableSheetNames.length > 0 && (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-3">
+                  <h4 className="text-xs font-extrabold text-emerald-900 flex items-center gap-1.5">
+                    <span>✨ Ditemukan {availableSheetNames.length} Sheet/Tab. Pilih Sheet Hari yang Ingin Di-Import:</span>
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {availableSheetNames.map((sheetName) => (
+                      <button
+                        key={sheetName}
+                        onClick={() => handleSelectSheetDay(sheetName)}
+                        disabled={importingSheets}
+                        className="py-2.5 px-3 bg-white border border-emerald-300 hover:bg-emerald-600 hover:text-white text-emerald-800 text-xs font-black rounded-xl shadow-sm transition-all text-center cursor-pointer disabled:opacity-50"
+                      >
+                        {sheetName}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Database TKPI Lookup Modal */}

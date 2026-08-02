@@ -221,3 +221,46 @@ export async function saveRecipeAdjustment(
 export async function deleteRecipeAdjustment(id: string): Promise<void> {
   await deleteDoc(doc(db, RECIPE_ADJUSTMENTS_COLLECTION, id));
 }
+
+// ---- Production Daily Reports ----
+const DAILY_REPORTS_COLLECTION = 'mbg_daily_reports';
+
+export function subscribeDailyReport(
+  batchId: string,
+  callback: (report: MbgProductionDailyReport | null) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, DAILY_REPORTS_COLLECTION),
+    where('batchId', '==', batchId)
+  );
+  return onSnapshot(q, (snap) => {
+    if (snap.empty) {
+      callback(null);
+    } else {
+      const docData = snap.docs[0];
+      callback({ id: docData.id, ...docData.data() } as MbgProductionDailyReport);
+    }
+  }, onError);
+}
+
+export async function saveDailyReport(
+  reportId: string | null,
+  report: Omit<MbgProductionDailyReport, 'id'>
+): Promise<string> {
+  if (reportId) {
+    await updateDoc(doc(db, DAILY_REPORTS_COLLECTION, reportId), {
+      ...report,
+      updatedAt: new Date().toISOString(),
+    });
+    return reportId;
+  } else {
+    const ref = await addDoc(collection(db, DAILY_REPORTS_COLLECTION), {
+      ...report,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    return ref.id;
+  }
+}
+
