@@ -101,9 +101,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (nextUser) {
         setUser(nextUser);
         
+        // Clean up any previous profile listener
+        if (unsubscribeSnapshot) {
+          try {
+            unsubscribeSnapshot();
+          } catch {
+            // Ignore snapshot cleanup errors during auth state transition
+          }
+          unsubscribeSnapshot = null;
+        }
+
         // Subscribe to Firestore user profile document
         const userDocRef = doc(db, "users", nextUser.uid);
-        const realUnsubscribe = onSnapshot(
+        unsubscribeSnapshot = onSnapshot(
           userDocRef,
           async (docSnap) => {
             if (docSnap.exists()) {
@@ -147,12 +157,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
             setLoading(false);
           }
         );
-        unsubscribeSnapshot = () => {
-          setTimeout(() => {
-            realUnsubscribe();
-          }, 100);
-        };
       } else {
+        if (unsubscribeSnapshot) {
+          try {
+            unsubscribeSnapshot();
+          } catch {
+            // Ignore snapshot cleanup errors
+          }
+          unsubscribeSnapshot = null;
+        }
         setUser(null);
         setProfile(null);
         setLoading(false);
@@ -162,7 +175,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => {
       unsubscribeAuth();
       if (unsubscribeSnapshot) {
-        unsubscribeSnapshot();
+        try {
+          unsubscribeSnapshot();
+        } catch {
+          // Ignore
+        }
       }
     };
   }, []);

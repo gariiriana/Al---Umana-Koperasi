@@ -21,15 +21,16 @@ import { HomePage } from "@/storefront/pages/HomePage";
 import { subscribeNotifications } from "@/services/notificationService";
 
 // Helper function to auto-retry and auto-reload on dynamic import chunk loading failures (e.g. after new deployments)
-function safeLazy<T extends React.ComponentType<any>>(
-  importFn: () => Promise<any>
+function safeLazy<T extends React.ComponentType<unknown>>(
+  importFn: () => Promise<Record<string, unknown>>
 ) {
   return lazy(async () => {
     const pageHasBeenReloaded = sessionStorage.getItem('chunk_reload_' + window.location.pathname);
     try {
       const module = await importFn();
       sessionStorage.removeItem('chunk_reload_' + window.location.pathname);
-      return module.default ? module : { default: Object.values(module)[0] as T };
+      const component = (module.default || Object.values(module)[0]) as T;
+      return { default: component };
     } catch (error) {
       if (!pageHasBeenReloaded) {
         sessionStorage.setItem('chunk_reload_' + window.location.pathname, 'true');
