@@ -147,17 +147,53 @@ export function MbgDeliveryPage() {
     return Array.from(new Set([...fromEntries, ...fromTasks]));
   }, [entries, tasks]);
 
-  // Current active task
-  const activeTask = useMemo(() => {
-    if (tasks.length === 0) return null;
-    if (!selectedPetugasName) return tasks[0];
-    const match = tasks.find(
-      (t) =>
-        t.petugasName.toLowerCase().includes(selectedPetugasName.toLowerCase()) ||
-        selectedPetugasName.toLowerCase().includes(t.petugasName.toLowerCase())
-    );
-    return match || tasks[0];
-  }, [tasks, selectedPetugasName]);
+  // Current active task (with auto-fallback synthesis from entries if admin hasn't submitted delivery tasks yet)
+  const activeTask = useMemo<MbgDeliveryTask | null>(() => {
+    // 1. Try finding from real tasks collection first
+    if (tasks.length > 0) {
+      if (!selectedPetugasName) return tasks[0];
+      const match = tasks.find(
+        (t) =>
+          t.petugasName.toLowerCase().trim().includes(selectedPetugasName.toLowerCase().trim()) ||
+          selectedPetugasName.toLowerCase().trim().includes(t.petugasName.toLowerCase().trim())
+      );
+      if (match) return match;
+    }
+
+    // 2. Fallback: Synthesize virtual task from assigned entries directly so courier never loses task!
+    const targetPetugas = selectedPetugasName || profile?.displayName || (user?.email ? user.email.split('@')[0] : '');
+    if (!targetPetugas || entries.length === 0) return tasks[0] || null;
+
+    const tLower = targetPetugas.toLowerCase().trim();
+    const assignedEntries = entries.filter((e) => {
+      const pName = (e.assignedPetugasName || '').toLowerCase().trim();
+      return pName && (pName === tLower || pName.includes(tLower) || tLower.includes(pName));
+    });
+
+    if (assignedEntries.length === 0) return tasks[0] || null;
+
+    const matchedName = assignedEntries[0].assignedPetugasName || targetPetugas;
+    const totalPorsi = assignedEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
+    const firstKenek = assignedEntries.find((e) => e.assignedKenekName)?.assignedKenekName;
+
+    return {
+      id: `virt-task-${selectedBatchId}-${matchedName.replace(/\s+/g, '-')}`,
+      batchId: selectedBatchId || '',
+      petugasId: assignedEntries[0].assignedPetugasId || user?.uid || matchedName.toLowerCase().replace(/\s+/g, '-'),
+      petugasName: matchedName,
+      kenekName: firstKenek,
+      entryIds: assignedEntries.map((e) => e.id),
+      totalPorsi,
+      deadlineAt: selectedBatchId ? undefined : undefined,
+      handoverPhotoId: '',
+      handoverAt: '',
+      status: 'waiting',
+      deliveryPhotos: [],
+      completedAt: '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }, [tasks, selectedPetugasName, profile?.displayName, user, entries, selectedBatchId]);
 
   // Get full entries detail for the current task
   const taskEntries = useMemo(() => {
