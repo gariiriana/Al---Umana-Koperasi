@@ -90,22 +90,36 @@ export function subscribeKurirUsers(
   callback: (kurirs: MbgKurirUser[]) => void
 ): Unsubscribe {
   const colRef = collection(db, 'users');
-  const q = query(colRef, where('role', '==', 'kurir_mbg'));
   return onSnapshot(
-    q,
+    colRef,
     (snap) => {
-      const list = snap.docs.map((docSnap) => {
-        const data = docSnap.data();
-        let name = data.displayName || data.fullName || data.name;
-        if (!name && data.email) {
-          name = data.email.split('@')[0];
-        }
-        return {
-          uid: docSnap.id,
-          name: name || 'Kurir MBG',
-          email: data.email || '',
-        };
-      });
+      const allowedRoles = [
+        'kurir_mbg',
+        'kurir',
+        'distribusi_mbg',
+        'distribusi',
+        'admin',
+        'admin_mbg',
+        'produksi_mbg',
+      ];
+      const list = snap.docs
+        .map((docSnap) => {
+          const data = docSnap.data();
+          const role = (data.role || '').toLowerCase();
+          let name = data.displayName || data.fullName || data.name;
+          if (!name && data.email) {
+            name = data.email.split('@')[0];
+          }
+          return {
+            uid: docSnap.id,
+            name: name || 'Kurir MBG',
+            email: data.email || '',
+            role,
+          };
+        })
+        .filter((user) => !user.role || allowedRoles.includes(user.role))
+        .sort((a, b) => a.name.localeCompare(b.name, 'id-ID'));
+
       callback(list);
     },
     (err) => {

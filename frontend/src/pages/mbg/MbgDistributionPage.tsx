@@ -283,11 +283,66 @@ export function MbgDistributionPage() {
   // Search & Filter state for Laporan Kurir in Distribusi MBG
   const [distribSearchQuery, setDistribSearchQuery] = useState('');
 
-  // Filter delivery docs for selected batch & search query
+  // Filter delivery docs for selected batch & search query (synthesizing live uploads from couriers)
   const batchDeliveryDocs = useMemo(() => {
-    if (!selectedBatchId) return deliveryDocs;
-    return deliveryDocs.filter((d) => d.batchId === selectedBatchId);
-  }, [deliveryDocs, selectedBatchId]);
+    const savedDocs = selectedBatchId
+      ? deliveryDocs.filter((d) => d.batchId === selectedBatchId)
+      : deliveryDocs;
+
+    const docMap = new Map<string, MbgDeliveryDocument>();
+    savedDocs.forEach((d) => docMap.set(d.petugasName.toLowerCase().trim(), d));
+
+    if (entries.length > 0) {
+      const petugasGroups: Record<string, MbgPmEntry[]> = {};
+      entries.forEach((e) => {
+        if (e.assignedPetugasName && !e.isSekolahLibur) {
+          const key = e.assignedPetugasName.trim();
+          if (!petugasGroups[key]) petugasGroups[key] = [];
+          petugasGroups[key].push(e);
+        }
+      });
+
+      Object.entries(petugasGroups).forEach(([pName, pEntries]) => {
+        const key = pName.toLowerCase().trim();
+        const completedCount = pEntries.filter((e) =>
+          Boolean(e.photoMenuUrl || e.photoSerahTerimaUrl || e.photoSuratJalanUrl || e.photoPenerimaUrl)
+        ).length;
+        const totalPorsi = pEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
+        const matchedTask = deliveryTasks.find(
+          (t) => t.petugasName.toLowerCase().trim() === key || (t.petugasId && t.petugasId === pEntries[0]?.assignedPetugasId)
+        );
+
+        if (docMap.has(key)) {
+          // Update live metrics on existing saved doc
+          const existing = docMap.get(key)!;
+          docMap.set(key, {
+            ...existing,
+            totalInstitusi: pEntries.length,
+            totalPorsi,
+            completedCount: Math.max(existing.completedCount || 0, completedCount),
+          });
+        } else {
+          // Create virtual doc from live entries
+          docMap.set(key, {
+            id: matchedTask ? matchedTask.id : `virt-${key}`,
+            batchId: selectedBatchId || pEntries[0]?.batchId || '',
+            tanggalBatch: selectedBatch?.tanggal || new Date().toISOString().split('T')[0],
+            petugasName: pName,
+            petugasId: pEntries[0]?.assignedPetugasId || matchedTask?.petugasId || key.replace(/\s+/g, '-'),
+            documentType: 'delivery_report',
+            fileName: `Laporan_Distribusi_MBG_${pName.replace(/\s+/g, '_')}_${selectedBatch?.tanggal || 'aktif'}.pdf`,
+            totalInstitusi: pEntries.length,
+            totalPorsi,
+            completedCount,
+            createdAt: matchedTask?.createdAt || new Date().toISOString(),
+            createdBy: pName,
+          });
+        }
+      });
+    }
+
+    return Array.from(docMap.values());
+  }, [deliveryDocs, deliveryTasks, entries, selectedBatch, selectedBatchId]);
 
   const filteredBatchDeliveryDocs = useMemo(() => {
     if (!distribSearchQuery.trim()) return batchDeliveryDocs;
@@ -327,16 +382,25 @@ export function MbgDistributionPage() {
     if (!assignModalEntry || !assignKurirName.trim()) return;
     const cleanKurir = assignKurirName.trim();
     const cleanKenek = assignKenekName.trim();
-    const kurirId = cleanKurir.toLowerCase().replace(/\s+/g, '-');
+
+    const matched = kurirUsers.find(
+      (u) =>
+        u.name.toLowerCase() === cleanKurir.toLowerCase() ||
+        u.email.toLowerCase().includes(cleanKurir.toLowerCase()) ||
+        u.name.toLowerCase().includes(cleanKurir.toLowerCase()) ||
+        cleanKurir.toLowerCase().includes(u.name.toLowerCase())
+    );
+    const kurirId = matched ? matched.uid : cleanKurir.toLowerCase().replace(/\s+/g, '-');
+    const finalKurirName = matched ? matched.name : cleanKurir;
 
     try {
       await updateEntry(assignModalEntry.id, {
-        assignedPetugasName: cleanKurir,
+        assignedPetugasName: finalKurirName,
         assignedPetugasId: kurirId,
         assignedKenekName: cleanKenek || undefined,
       });
       showToast({
-        message: `${assignModalEntry.institutionName} ditugaskan ke ${cleanKurir}${cleanKenek ? ` + ${cleanKenek}` : ''}`,
+        message: `${assignModalEntry.institutionName} ditugaskan ke ${finalKurirName}${cleanKenek ? ` + ${cleanKenek}` : ''}`,
         variant: 'success',
       });
       setAssignModalEntry(null);
@@ -561,7 +625,16 @@ export function MbgDistributionPage() {
                   img.src = slot.url!;
                 });
                 if (img.complete && img.naturalWidth > 0) {
-                  doc.addImage(img, 'JPEG', x, photoY, slotW, photoH);
+                  try {
+                    const isPng = slot.url.startsWith('data:image/png');
+                    doc.addImage(img, isPng ? 'PNG' : 'JPEG', x, photoY, slotW, photoH);
+                  } catch {
+                    doc.setDrawColor(203, 213, 225);
+                    doc.rect(x, photoY, slotW, photoH);
+                    doc.setFontSize(7);
+                    doc.setTextColor(148, 163, 184);
+                    doc.text('Foto gagal dirender', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
+                  }
                 } else {
                   doc.setDrawColor(203, 213, 225);
                   doc.rect(x, photoY, slotW, photoH);
@@ -682,10 +755,13 @@ export function MbgDistributionPage() {
                     </button>
                   </div>
 
-                  {/* GANTI MENU KERINGAN label */}
+                  {/* GANTI MENU KERINGAN & PAKET 3B BANNERS */}
                   {hasMenuKeringan && (
-                    <div className="flex items-center gap-2 text-xs font-extrabold text-red-700 bg-red-50 px-4 py-3 rounded-xl border border-red-200">
-                      🍚 GANTI MENU KERINGAN
+                    <div className="flex items-center justify-between text-xs font-extrabold text-red-700 bg-red-50 px-4 py-3 rounded-xl border border-red-200">
+                      <span>🍚 GANTI MENU KERINGAN / PAKET SEHAT 3B (Balita, Bumil, Busui)</span>
+                      <span className="text-[10px] text-red-600 bg-white px-2 py-0.5 rounded border border-red-200 font-mono">
+                        {entries.filter((e) => e.institutionType === 'posyandu' || e.institutionName.toLowerCase().includes('3b')).length} Institusi 3B
+                      </span>
                     </div>
                   )}
 

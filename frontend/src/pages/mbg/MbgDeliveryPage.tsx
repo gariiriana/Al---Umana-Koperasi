@@ -106,17 +106,16 @@ export function MbgDeliveryPage() {
   // Determine petugasId/name based on logged in user profile
   useEffect(() => {
     if (profile) {
-      if (profile.role === 'kurir_mbg') {
+      if (['kurir_mbg', 'kurir', 'distribusi_mbg', 'distribusi', 'admin', 'admin_mbg'].includes(profile.role)) {
         setDetectedPetugasId(user?.uid || '');
-        setSelectedPetugasName(profile.displayName || '');
-      } else {
-        // Fallback for admin or other roles testing
-        setDetectedPetugasId('');
+        if (!selectedPetugasName) {
+          setSelectedPetugasName(profile.displayName || (user?.email ? user.email.split('@')[0] : ''));
+        }
       }
     }
-  }, [profile, user]);
+  }, [profile, user, selectedPetugasName]);
 
-  // Subscribe to tasks for the selected petugas
+  // Subscribe to tasks for the selected batch & petugas
   useEffect(() => {
     if (!selectedBatchId) return;
 
@@ -126,8 +125,8 @@ export function MbgDeliveryPage() {
 
     const unsubTasks = subscribeKurirTasks(
       selectedBatchId,
-      uUid,
-      uEmail,
+      selectedPetugasName ? '' : uUid,
+      selectedPetugasName ? '' : uEmail,
       uName,
       (data) => {
         setTasks(data);
@@ -143,18 +142,42 @@ export function MbgDeliveryPage() {
   }, [selectedBatchId, selectedPetugasName, profile?.displayName, user]);
 
   const uniqueKurirNames = useMemo(() => {
-    return Array.from(new Set(entries.map((e) => e.assignedPetugasName).filter(Boolean)));
-  }, [entries]);
+    const fromEntries = entries.map((e) => e.assignedPetugasName).filter(Boolean);
+    const fromTasks = tasks.map((t) => t.petugasName).filter(Boolean);
+    return Array.from(new Set([...fromEntries, ...fromTasks]));
+  }, [entries, tasks]);
 
   // Current active task
   const activeTask = useMemo(() => {
-    return tasks[0] || null;
-  }, [tasks]);
+    if (tasks.length === 0) return null;
+    if (!selectedPetugasName) return tasks[0];
+    const match = tasks.find(
+      (t) =>
+        t.petugasName.toLowerCase().includes(selectedPetugasName.toLowerCase()) ||
+        selectedPetugasName.toLowerCase().includes(t.petugasName.toLowerCase())
+    );
+    return match || tasks[0];
+  }, [tasks, selectedPetugasName]);
 
   // Get full entries detail for the current task
   const taskEntries = useMemo(() => {
     if (!activeTask) return [];
-    return entries.filter((e) => e.assignedPetugasName === activeTask.petugasName);
+    // 1. Direct match by task.entryIds if present
+    if (activeTask.entryIds && activeTask.entryIds.length > 0) {
+      const byIds = entries.filter((e) => activeTask.entryIds.includes(e.id));
+      if (byIds.length > 0) return byIds;
+    }
+    // 2. Match by assignedPetugasName
+    const tNameLower = (activeTask.petugasName || '').toLowerCase().trim();
+    return entries.filter((e) => {
+      const eNameLower = (e.assignedPetugasName || '').toLowerCase().trim();
+      if (!eNameLower) return false;
+      return (
+        eNameLower === tNameLower ||
+        eNameLower.includes(tNameLower) ||
+        tNameLower.includes(eNameLower)
+      );
+    });
   }, [activeTask, entries]);
 
   const activeNonLiburEntries = useMemo(() => {
@@ -479,7 +502,16 @@ export function MbgDeliveryPage() {
                 img.src = slot.url!;
               });
               if (img.complete && img.naturalWidth > 0) {
-                doc.addImage(img, 'JPEG', x, photoY, slotW, photoH);
+                try {
+                  const isPng = slot.url.startsWith('data:image/png');
+                  doc.addImage(img, isPng ? 'PNG' : 'JPEG', x, photoY, slotW, photoH);
+                } catch {
+                  doc.setDrawColor(203, 213, 225);
+                  doc.rect(x, photoY, slotW, photoH);
+                  doc.setFontSize(7);
+                  doc.setTextColor(148, 163, 184);
+                  doc.text('Foto gagal dirender', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
+                }
               } else {
                 doc.setDrawColor(203, 213, 225);
                 doc.rect(x, photoY, slotW, photoH);
@@ -762,25 +794,23 @@ export function MbgDeliveryPage() {
           </p>
         </div>
 
-        {/* Fallback selector for testing */}
-        {profile?.role !== 'kurir_mbg' && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-gray-500">Pilih Petugas (Simulasi):</span>
-            <select
-              title="Pilih Petugas"
-              value={selectedPetugasName}
-              onChange={(e) => setSelectedPetugasName(e.target.value)}
-              className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] transition-all cursor-pointer"
-            >
-              <option value="">-- Pilih Petugas --</option>
-              {uniqueKurirNames.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        {/* Petugas Selector for preview / simulation */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-gray-500">Pilih Petugas:</span>
+          <select
+            title="Pilih Petugas"
+            value={selectedPetugasName}
+            onChange={(e) => setSelectedPetugasName(e.target.value)}
+            className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] transition-all cursor-pointer"
+          >
+            <option value="">-- Semua / Akun Saya --</option>
+            {uniqueKurirNames.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Page Tab: Tugas Aktif / Arsip Dokumen */}

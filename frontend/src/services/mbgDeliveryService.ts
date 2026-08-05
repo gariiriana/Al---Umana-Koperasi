@@ -3,7 +3,7 @@
 // ============================================================================
 
 import {
-  collection, doc, updateDoc, addDoc,
+  collection, doc, updateDoc, addDoc, getDocs,
   query, where, orderBy, onSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -26,34 +26,83 @@ export function subscribeKurirTasks(
   );
   return onSnapshot(q, (snap) => {
     const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryTask));
-    const uidLower = (userUid || '').toLowerCase();
-    const emailLower = (userEmail || '').toLowerCase();
+
+    // If no user identity specified, return all batch tasks (for admin preview)
+    if (!userUid && !userEmail && !userDisplayName) {
+      callback(list);
+      return;
+    }
+
+    const uidLower = (userUid || '').toLowerCase().trim();
+    const emailLower = (userEmail || '').toLowerCase().trim();
     const emailHandle = emailLower ? emailLower.split('@')[0] : '';
-    const nameLower = (userDisplayName || '').toLowerCase();
+    const nameLower = (userDisplayName || '').toLowerCase().trim();
+    const nameTokens = nameLower.split(/\s+/).filter((t) => t.length >= 3);
 
-    const filtered = list.filter((t) => {
-      // If admin or no user identity specified, return all batch tasks
-      if (!userUid && !userEmail && !userDisplayName) return true;
+    // Scoring-based matching: higher score = better match
+    const matchScore = (tName: string, tId: string): number => {
+      if (!tName && !tId) return 0;
+      const targetName = (tName || '').toLowerCase().trim();
+      const targetId = (tId || '').toLowerCase().trim();
 
-      const tPetugasId = (t.petugasId || '').toLowerCase();
-      const tPetugasName = (t.petugasName || '').toLowerCase();
-      const tKenekId = (t.kenekId || '').toLowerCase();
-      const tKenekName = (t.kenekName || '').toLowerCase();
+      // Exact UID match = highest priority
+      if (uidLower && targetId === uidLower) return 100;
 
-      const isMatchKurir =
-        (uidLower && tPetugasId === uidLower) ||
-        (nameLower && tPetugasName === nameLower) ||
-        (emailHandle && tPetugasName.includes(emailHandle)) ||
-        (emailHandle && tPetugasId.includes(emailHandle));
+      // Exact full name match
+      if (nameLower && targetName === nameLower) return 90;
 
-      const isMatchKenek =
-        (uidLower && tKenekId === uidLower) ||
-        (nameLower && tKenekName === nameLower) ||
-        (emailHandle && tKenekName.includes(emailHandle)) ||
-        (emailHandle && tKenekId.includes(emailHandle));
+      // Exact petugasId contains UID
+      if (uidLower && targetId && targetName.includes(uidLower)) return 80;
 
-      return isMatchKurir || isMatchKenek;
+      // Name contains or is contained (partial match)
+      if (nameLower && (targetName.includes(nameLower) || nameLower.includes(targetName))) return 70;
+
+      // Email handle match
+      if (emailHandle && emailHandle.length >= 3 && (targetName.includes(emailHandle) || targetId.includes(emailHandle))) return 60;
+
+      // Token-level match (individual name words)
+      if (nameTokens.some((tok) => targetName.includes(tok))) return 50;
+      if (nameTokens.some((tok) => targetId.includes(tok))) return 40;
+
+      return 0;
+    };
+
+    const scored = list.map((t) => {
+      const kurirScore = matchScore(t.petugasName, t.petugasId);
+      const kenekScore = matchScore(t.kenekName || '', t.kenekId || '');
+      return { task: t, score: Math.max(kurirScore, kenekScore) };
     });
+
+    const filtered = scored
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((s) => s.task);
+
+    // Debug log for troubleshooting
+    if (filtered.length === 0 && list.length > 0) {
+      console.warn(
+        `[subscribeKurirTasks] No match for user (uid=${uidLower}, name=${nameLower}, email=${emailHandle}) in ${list.length} tasks:`,
+        list.map((t) => ({ petugasName: t.petugasName, petugasId: t.petugasId }))
+      );
+
+      // Fallback: broad word-level matching
+      const fallbackMatches = list.filter((t) => {
+        const pName = (t.petugasName || '').toLowerCase();
+        const pId = (t.petugasId || '').toLowerCase();
+        const kName = (t.kenekName || '').toLowerCase();
+        return (
+          (nameLower && pName.split(/\s+/).some((w) => w.length >= 3 && nameLower.includes(w))) ||
+          (nameLower && kName.split(/\s+/).some((w) => w.length >= 3 && nameLower.includes(w))) ||
+          (emailHandle && pId.includes(emailHandle))
+        );
+      });
+      if (fallbackMatches.length > 0) {
+        console.log(`[subscribeKurirTasks] Fallback matched ${fallbackMatches.length} tasks`);
+        callback(fallbackMatches);
+        return;
+      }
+    }
+
     callback(filtered);
   }, onError);
 }
@@ -290,6 +339,34 @@ export async function saveDeliveryDocument(
 ): Promise<string> {
   const docRef = await addDoc(collection(db, DOCUMENTS_COLLECTION), data);
   return docRef.id;
+}
+
+export async function upsertDeliveryDocument(
+  data: Omit<MbgDeliveryDocument, 'id'>
+): Promise<string> {
+  try {
+    const colRef = collection(db, DOCUMENTS_COLLECTION);
+    const q = query(
+      colRef,
+      where('batchId', '==', data.batchId),
+      where('petugasName', '==', data.petugasName)
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const existingDoc = snap.docs[0];
+      await updateDoc(doc(db, DOCUMENTS_COLLECTION, existingDoc.id), {
+        ...data,
+        updatedAt: new Date().toISOString(),
+      });
+      return existingDoc.id;
+    } else {
+      const docRef = await addDoc(colRef, data);
+      return docRef.id;
+    }
+  } catch (err) {
+    console.error('Error upserting delivery document:', err);
+    return saveDeliveryDocument(data);
+  }
 }
 
 export function subscribeDeliveryDocuments(

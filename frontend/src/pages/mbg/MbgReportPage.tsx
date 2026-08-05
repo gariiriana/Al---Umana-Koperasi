@@ -244,6 +244,31 @@ export function MbgReportPage() {
         const tableRows: string[][] = [];
         let rowIdx = 1;
 
+        // Preload images safely
+        const loadedImages: Record<string, HTMLImageElement> = {};
+        for (const entry of activeEntries) {
+          for (const url of [entry.photoMenuUrl, entry.photoSerahTerimaUrl, entry.photoSuratJalanUrl]) {
+            if (url && !loadedImages[url]) {
+              try {
+                const img = new Image();
+                if (url.startsWith('http')) {
+                  img.crossOrigin = 'anonymous';
+                }
+                await new Promise<void>((resolve) => {
+                  img.onload = () => resolve();
+                  img.onerror = () => resolve();
+                  img.src = url;
+                });
+                if (img.complete && img.naturalWidth > 0) {
+                  loadedImages[url] = img;
+                }
+              } catch (err) {
+                console.warn('Preload image failed:', err);
+              }
+            }
+          }
+        }
+
         for (const entry of activeEntries) {
           tableRows.push([
             `${rowIdx}.`,
@@ -278,21 +303,21 @@ export function MbgReportPage() {
               const imgW = data.column.width - pad * 2;
               const imgH = data.row.height - pad * 2;
 
-              if (data.column.index === 2 && entry.photoMenuUrl) {
+              if (data.column.index === 2 && entry.photoMenuUrl && loadedImages[entry.photoMenuUrl]) {
                 try {
-                  doc.addImage(entry.photoMenuUrl, 'JPEG', data.cell.x + pad, data.cell.y + pad, imgW, imgH);
+                  doc.addImage(loadedImages[entry.photoMenuUrl], 'JPEG', data.cell.x + pad, data.cell.y + pad, imgW, imgH);
                 } catch (err) {
                   console.warn('Failed rendering menu photo in PDF:', err);
                 }
-              } else if (data.column.index === 3 && entry.photoSerahTerimaUrl) {
+              } else if (data.column.index === 3 && entry.photoSerahTerimaUrl && loadedImages[entry.photoSerahTerimaUrl]) {
                 try {
-                  doc.addImage(entry.photoSerahTerimaUrl, 'JPEG', data.cell.x + pad, data.cell.y + pad, imgW, imgH);
+                  doc.addImage(loadedImages[entry.photoSerahTerimaUrl], 'JPEG', data.cell.x + pad, data.cell.y + pad, imgW, imgH);
                 } catch (err) {
                   console.warn('Failed rendering serah terima photo in PDF:', err);
                 }
-              } else if (data.column.index === 4 && entry.photoSuratJalanUrl) {
+              } else if (data.column.index === 4 && entry.photoSuratJalanUrl && loadedImages[entry.photoSuratJalanUrl]) {
                 try {
-                  doc.addImage(entry.photoSuratJalanUrl, 'JPEG', data.cell.x + pad, data.cell.y + pad, imgW, imgH);
+                  doc.addImage(loadedImages[entry.photoSuratJalanUrl], 'JPEG', data.cell.x + pad, data.cell.y + pad, imgW, imgH);
                 } catch (err) {
                   console.warn('Failed rendering surat jalan photo in PDF:', err);
                 }

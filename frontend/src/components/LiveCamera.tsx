@@ -138,21 +138,64 @@ export function LiveCamera({
     };
   }, [isOpen]);
 
-  // ─── 2. Load Camera Devices ───
+  // ─── 2. Load Camera Devices (request permission first, then enumerate) ───
   useEffect(() => {
     if (!isOpen) return;
 
     const getDevices = async () => {
       try {
+        // Phase 1: Request camera permission with back camera preference
+        // This is needed so enumerateDevices() returns labels
+        let tempStream: MediaStream | null = null;
+        try {
+          tempStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } },
+            audio: false,
+          });
+        } catch {
+          // If environment fails, try any camera
+          try {
+            tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          } catch (e2) {
+            console.error("Cannot get any camera permission:", e2);
+          }
+        }
+
+        // Phase 2: Now enumerate devices (labels should be available)
         const allDevices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = allDevices.filter((d) => d.kind === "videoinput");
+
+        // Stop temp stream — it was only for permission
+        if (tempStream) {
+          tempStream.getTracks().forEach((t) => t.stop());
+        }
+
         if (videoDevices.length > 0 && !selectedDeviceId) {
+          // Try to find back camera by label
           const backCam = videoDevices.find(
             (d) =>
-              d.label.toLowerCase().includes("back") ||
-              d.label.toLowerCase().includes("environment")
+              d.label &&
+              (d.label.toLowerCase().includes("back") ||
+                d.label.toLowerCase().includes("environment") ||
+                d.label.toLowerCase().includes("belakang") ||
+                d.label.toLowerCase().includes("rear") ||
+                d.label.toLowerCase().includes("0, facing back") ||
+                d.label.toLowerCase().includes("camera2") ||
+                /camera\s*0/i.test(d.label))
           );
-          setSelectedDeviceId(backCam ? backCam.deviceId : videoDevices[0].deviceId);
+
+          if (backCam) {
+            console.log("[LiveCamera] Found back camera by label:", backCam.label);
+            setSelectedDeviceId(backCam.deviceId);
+          } else if (videoDevices.length >= 2) {
+            // Fallback: on most phones, front camera = index 0, back = last index
+            const lastDevice = videoDevices[videoDevices.length - 1];
+            console.log("[LiveCamera] Fallback to last camera device:", lastDevice.label || lastDevice.deviceId);
+            setSelectedDeviceId(lastDevice.deviceId);
+          } else if (videoDevices.length === 1) {
+            // Only 1 camera — use it
+            setSelectedDeviceId(videoDevices[0].deviceId);
+          }
         }
       } catch (err) {
         console.error("Error listing cameras:", err);
@@ -174,7 +217,7 @@ export function LiveCamera({
       const constraints: MediaStreamConstraints = {
         video: selectedDeviceId
           ? { deviceId: { exact: selectedDeviceId } }
-          : { facingMode },
+          : { facingMode: { ideal: facingMode } },
         audio: false,
       };
 
@@ -256,11 +299,70 @@ export function LiveCamera({
   }, [flashOn]);
 
   // ─── Toggle front/back camera ───
-  const toggleFacingMode = () => {
-    setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
-    setSelectedDeviceId("");
+  const toggleFacingMode = async () => {
     setZoomLevel(1);
     setFlashOn(false);
+
+    try {
+      const allDevices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = allDevices.filter((d) => d.kind === "videoinput");
+
+      if (videoDevices.length >= 2 && selectedDeviceId) {
+        // Find the current device index, then pick the "other" camera
+        const currentIdx = videoDevices.findIndex((d) => d.deviceId === selectedDeviceId);
+        const isCurrentBack = facingMode === "environment";
+
+        if (isCurrentBack) {
+          // Switch to front: pick first device that looks like front, or index 0
+          const frontCam = videoDevices.find(
+            (d) =>
+              d.deviceId !== selectedDeviceId &&
+              d.label &&
+              (d.label.toLowerCase().includes("front") ||
+                d.label.toLowerCase().includes("user") ||
+                d.label.toLowerCase().includes("depan"))
+          );
+          const targetDevice = frontCam || videoDevices.find((d) => d.deviceId !== selectedDeviceId);
+          if (targetDevice) {
+            setSelectedDeviceId(targetDevice.deviceId);
+            setFacingMode("user");
+            console.log("[LiveCamera] Switched to front camera:", targetDevice.label || targetDevice.deviceId);
+            return;
+          }
+        } else {
+          // Switch to back: pick device that looks like back, or last device
+          const backCam = videoDevices.find(
+            (d) =>
+              d.deviceId !== selectedDeviceId &&
+              d.label &&
+              (d.label.toLowerCase().includes("back") ||
+                d.label.toLowerCase().includes("environment") ||
+                d.label.toLowerCase().includes("belakang") ||
+                d.label.toLowerCase().includes("rear"))
+          );
+          const targetDevice = backCam || videoDevices[videoDevices.length - 1];
+          if (targetDevice && targetDevice.deviceId !== selectedDeviceId) {
+            setSelectedDeviceId(targetDevice.deviceId);
+            setFacingMode("environment");
+            console.log("[LiveCamera] Switched to back camera:", targetDevice.label || targetDevice.deviceId);
+            return;
+          }
+        }
+
+        // Fallback: just cycle to next device
+        const nextIdx = (currentIdx + 1) % videoDevices.length;
+        setSelectedDeviceId(videoDevices[nextIdx].deviceId);
+        setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
+      } else {
+        // Only 1 device or no selected — toggle facingMode constraint
+        setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
+        setSelectedDeviceId("");
+      }
+    } catch {
+      // Fallback if enumeration fails
+      setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
+      setSelectedDeviceId("");
+    }
   };
 
   // ─── Pinch-to-zoom handlers ───

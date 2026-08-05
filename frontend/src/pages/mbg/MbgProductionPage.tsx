@@ -1487,6 +1487,40 @@ export function MbgProductionPage() {
     }
   };
 
+// Helper: Filter only visible & non-empty sheet tabs from Google Sheets/Excel
+function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
+  const sheetsMeta = wb.Workbook?.Sheets || [];
+  
+  const filtered = wb.SheetNames.filter((name, idx) => {
+    const nameLower = name.toLowerCase().trim();
+    if (nameLower.includes('siklus') || nameLower.includes('akg')) {
+      return false;
+    }
+
+    // Check if sheet tab is marked hidden in Google Sheets / Excel
+    const meta = sheetsMeta[idx];
+    if (meta && (meta.Hidden === 1 || meta.Hidden === 2)) {
+      return false;
+    }
+
+    // Check if sheet contains content
+    const ws = wb.Sheets[name];
+    if (!ws || !ws['!ref']) {
+      return false;
+    }
+
+    // Verify row count is non-empty
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    if (range.e.r - range.s.r < 2) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return filtered.length > 0 ? filtered : wb.SheetNames.filter((n) => !n.toLowerCase().includes('siklus') && !n.toLowerCase().includes('akg'));
+}
+
   const handleFetchGoogleSheets = async () => {
     if (!sheetsUrlInput.trim()) {
       showToast({ message: 'Masukkan URL Google Sheets terlebih dahulu!', variant: 'info' });
@@ -1513,10 +1547,10 @@ export function MbgProductionPage() {
       const wb = XLSX.read(arrayBuffer, { type: 'array' });
       setSheetWorkbook(wb);
       
-      const sheetNames = wb.SheetNames.filter(name => !name.toLowerCase().includes('siklus') && !name.toLowerCase().includes('akg'));
-      setAvailableSheetNames(sheetNames.length > 0 ? sheetNames : wb.SheetNames);
+      const sheetNames = getVisibleSheetNames(wb);
+      setAvailableSheetNames(sheetNames);
 
-      showToast({ message: `Spreadsheet berhasil dibaca! Ditemukan ${wb.SheetNames.length} sheet/tab. Silakan pilih sheet hari yang ingin di-import.`, variant: 'success' });
+      showToast({ message: `Spreadsheet berhasil dibaca! Ditemukan ${sheetNames.length} sheet/tab aktif. Silakan pilih sheet hari yang ingin di-import.`, variant: 'success' });
     } catch (err: unknown) {
       console.error(err);
       const errMsg = err instanceof Error ? err.message : 'Gagal membaca link Google Sheets';
@@ -1536,10 +1570,10 @@ export function MbgProductionPage() {
       const wb = XLSX.read(data, { type: 'array' });
       setSheetWorkbook(wb);
 
-      const sheetNames = wb.SheetNames.filter(name => !name.toLowerCase().includes('siklus') && !name.toLowerCase().includes('akg'));
-      setAvailableSheetNames(sheetNames.length > 0 ? sheetNames : wb.SheetNames);
+      const sheetNames = getVisibleSheetNames(wb);
+      setAvailableSheetNames(sheetNames);
 
-      showToast({ message: `File Excel berhasil dibaca! Ditemukan ${wb.SheetNames.length} sheet/tab. Silakan pilih sheet hari.`, variant: 'success' });
+      showToast({ message: `File Excel berhasil dibaca! Ditemukan ${sheetNames.length} sheet/tab aktif. Silakan pilih sheet hari.`, variant: 'success' });
     } catch (err: unknown) {
       console.error(err);
       showToast({ message: 'Gagal membaca file Excel', variant: 'error' });

@@ -921,6 +921,10 @@ export function MbgAdminPage() {
             lowerName.startsWith('balita') ||
             lowerName.startsWith('bumil') ||
             lowerName.startsWith('busui') ||
+            lowerName.includes('3b') ||
+            lowerName.includes('3b') ||
+            lowerName.includes('paket 3b') ||
+            lowerName.includes('paket3b') ||
             (lowerName.includes('balita') && !lowerName.includes('tk') && !lowerName.includes('sps') && !lowerName.includes('sd') && !lowerName.includes('smp')) ||
             (lowerName.includes('bumil') && !lowerName.includes('sd') && !lowerName.includes('smp')) ||
             (lowerName.includes('busui') && !lowerName.includes('sd') && !lowerName.includes('smp'));
