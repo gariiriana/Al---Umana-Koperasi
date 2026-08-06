@@ -138,10 +138,15 @@ export async function addDeliveryPhoto(
   currentPhotos: MbgDeliveryTask['deliveryPhotos'],
   newPhoto: { fileId: string; description: string; institutionName: string }
 ): Promise<void> {
-  await updateDoc(doc(db, DELIVERY_COLLECTION, taskId), {
-    deliveryPhotos: [...currentPhotos, newPhoto],
-    updatedAt: new Date().toISOString(),
-  });
+  if (!taskId || taskId.startsWith('virt-task-')) return;
+  try {
+    await updateDoc(doc(db, DELIVERY_COLLECTION, taskId), {
+      deliveryPhotos: [...(currentPhotos || []), newPhoto],
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn('Failed adding photo to delivery task:', err);
+  }
 }
 
 export async function compressImageBase64(
@@ -218,8 +223,8 @@ export async function updateSchoolDeliveryProof(
   // Update Firestore mbg_pm_entries
   await updateDoc(doc(db, 'mbg_pm_entries', entryId), entryUpdates);
 
-  // Sync to task if taskId provided
-  if (taskId) {
+  // Sync to task if taskId provided and is a real Firestore document
+  if (taskId && !taskId.startsWith('virt-task-')) {
     const taskRef = doc(db, DELIVERY_COLLECTION, taskId);
     const proofKey = `schoolProofs.${entryId}`;
     const taskUpdates: Record<string, unknown> = {
@@ -283,7 +288,7 @@ export async function deleteSchoolDeliveryProof(
     updatedAt: new Date().toISOString(),
   });
 
-  if (taskId) {
+  if (taskId && !taskId.startsWith('virt-task-')) {
     const proofKey = `schoolProofs.${entryId}`;
     try {
       await updateDoc(doc(db, DELIVERY_COLLECTION, taskId), {

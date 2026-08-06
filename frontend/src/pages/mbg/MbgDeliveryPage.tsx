@@ -141,6 +141,16 @@ export function MbgDeliveryPage() {
     };
   }, [selectedBatchId, selectedPetugasName, profile?.displayName, user]);
 
+  // Keep proofModalEntry in sync with live entries snapshot
+  useEffect(() => {
+    if (proofModalEntry) {
+      const updated = entries.find((e) => e.id === proofModalEntry.id);
+      if (updated) {
+        setProofModalEntry(updated);
+      }
+    }
+  }, [entries, proofModalEntry]);
+
   const uniqueKurirNames = useMemo(() => {
     const fromEntries = entries.map((e) => e.assignedPetugasName).filter(Boolean);
     const fromTasks = tasks.map((t) => t.petugasName).filter(Boolean);
@@ -149,50 +159,66 @@ export function MbgDeliveryPage() {
 
   // Current active task (with auto-fallback synthesis from entries if admin hasn't submitted delivery tasks yet)
   const activeTask = useMemo<MbgDeliveryTask | null>(() => {
+    const targetPetugas = selectedPetugasName || profile?.displayName || (user?.email ? user.email.split('@')[0] : '');
+    const tLower = targetPetugas.toLowerCase().trim();
+    const uUid = (user?.uid || '').toLowerCase().trim();
+
     // 1. Try finding from real tasks collection first
     if (tasks.length > 0) {
-      if (!selectedPetugasName) return tasks[0];
-      const match = tasks.find(
-        (t) =>
-          t.petugasName.toLowerCase().trim().includes(selectedPetugasName.toLowerCase().trim()) ||
-          selectedPetugasName.toLowerCase().trim().includes(t.petugasName.toLowerCase().trim())
-      );
-      if (match) return match;
+      if (selectedPetugasName) {
+        const match = tasks.find(
+          (t) =>
+            t.petugasName.toLowerCase().trim().includes(tLower) ||
+            tLower.includes(t.petugasName.toLowerCase().trim())
+        );
+        if (match) return match;
+      } else {
+        // Try matching logged-in user's name, email, or uid in tasks first
+        const match = tasks.find(
+          (t) =>
+            (t.petugasId && uUid && t.petugasId.toLowerCase().trim() === uUid) ||
+            (t.petugasName && tLower && (t.petugasName.toLowerCase().trim().includes(tLower) || tLower.includes(t.petugasName.toLowerCase().trim())))
+        );
+        if (match) return match;
+      }
     }
 
     // 2. Fallback: Synthesize virtual task from assigned entries directly so courier never loses task!
-    const targetPetugas = selectedPetugasName || profile?.displayName || (user?.email ? user.email.split('@')[0] : '');
-    if (!targetPetugas || entries.length === 0) return tasks[0] || null;
+    if (entries.length > 0 && targetPetugas) {
+      const assignedEntries = entries.filter((e) => {
+        const pName = (e.assignedPetugasName || '').toLowerCase().trim();
+        const pId = (e.assignedPetugasId || '').toLowerCase().trim();
+        return (
+          (pName && (pName === tLower || pName.includes(tLower) || tLower.includes(pName))) ||
+          (pId && uUid && pId === uUid)
+        );
+      });
 
-    const tLower = targetPetugas.toLowerCase().trim();
-    const assignedEntries = entries.filter((e) => {
-      const pName = (e.assignedPetugasName || '').toLowerCase().trim();
-      return pName && (pName === tLower || pName.includes(tLower) || tLower.includes(pName));
-    });
+      if (assignedEntries.length > 0) {
+        const matchedName = assignedEntries[0].assignedPetugasName || targetPetugas;
+        const totalPorsi = assignedEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
+        const firstKenek = assignedEntries.find((e) => e.assignedKenekName)?.assignedKenekName;
 
-    if (assignedEntries.length === 0) return tasks[0] || null;
+        return {
+          id: `virt-task-${selectedBatchId}-${matchedName.replace(/\s+/g, '-')}`,
+          batchId: selectedBatchId || '',
+          petugasId: assignedEntries[0].assignedPetugasId || user?.uid || matchedName.toLowerCase().replace(/\s+/g, '-'),
+          petugasName: matchedName,
+          kenekName: firstKenek,
+          entryIds: assignedEntries.map((e) => e.id),
+          totalPorsi,
+          handoverPhotoId: '',
+          handoverAt: '',
+          status: 'waiting',
+          deliveryPhotos: [],
+          completedAt: '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+    }
 
-    const matchedName = assignedEntries[0].assignedPetugasName || targetPetugas;
-    const totalPorsi = assignedEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
-    const firstKenek = assignedEntries.find((e) => e.assignedKenekName)?.assignedKenekName;
-
-    return {
-      id: `virt-task-${selectedBatchId}-${matchedName.replace(/\s+/g, '-')}`,
-      batchId: selectedBatchId || '',
-      petugasId: assignedEntries[0].assignedPetugasId || user?.uid || matchedName.toLowerCase().replace(/\s+/g, '-'),
-      petugasName: matchedName,
-      kenekName: firstKenek,
-      entryIds: assignedEntries.map((e) => e.id),
-      totalPorsi,
-      deadlineAt: selectedBatchId ? undefined : undefined,
-      handoverPhotoId: '',
-      handoverAt: '',
-      status: 'waiting',
-      deliveryPhotos: [],
-      completedAt: '',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    return tasks[0] || null;
   }, [tasks, selectedPetugasName, profile?.displayName, user, entries, selectedBatchId]);
 
   // Get full entries detail for the current task
@@ -300,27 +326,35 @@ export function MbgDeliveryPage() {
       } else if (cameraMode === 'delivery' && selectedEntryForDeliveryPhoto) {
         const reader = new FileReader();
         reader.onload = async () => {
-          const dataUrl = reader.result as string;
-          const timestampStr = new Date().toLocaleString('id-ID');
-          await updateSchoolDeliveryProof(
-            selectedEntryForDeliveryPhoto.id,
-            selectedEntryForDeliveryPhoto.institutionName,
-            targetProofType,
-            dataUrl,
-            activeTaskId,
-            { timestamp: timestampStr, location: 'SPPG Sukabumi' }
-          );
+          try {
+            const dataUrl = reader.result as string;
+            const timestampStr = new Date().toLocaleString('id-ID');
+            await updateSchoolDeliveryProof(
+              selectedEntryForDeliveryPhoto.id,
+              selectedEntryForDeliveryPhoto.institutionName,
+              targetProofType,
+              dataUrl,
+              activeTaskId,
+              { timestamp: timestampStr, location: 'SPPG Sukabumi' }
+            );
 
-          await addDeliveryPhoto(activeTaskId, activeTask?.deliveryPhotos || [], {
-            fileId: fakeFileId,
-            description: `Bukti ${targetProofType} untuk ${selectedEntryForDeliveryPhoto.institutionName}`,
-            institutionName: selectedEntryForDeliveryPhoto.institutionName,
-          });
+            await addDeliveryPhoto(activeTaskId, activeTask?.deliveryPhotos || [], {
+              fileId: fakeFileId,
+              description: `Bukti ${targetProofType} untuk ${selectedEntryForDeliveryPhoto.institutionName}`,
+              institutionName: selectedEntryForDeliveryPhoto.institutionName,
+            });
 
-          showToast({
-            message: `Foto ${targetProofType.replace('_', ' ')} untuk ${selectedEntryForDeliveryPhoto.institutionName} berhasil disimpan`,
-            variant: 'success',
-          });
+            showToast({
+              message: `Foto ${targetProofType.replace('_', ' ')} untuk ${selectedEntryForDeliveryPhoto.institutionName} berhasil disimpan`,
+              variant: 'success',
+            });
+          } catch (err) {
+            console.error('Error saving delivery photo proof:', err);
+            showToast({ message: 'Gagal menyimpan foto bukti', variant: 'error' });
+          }
+        };
+        reader.onerror = () => {
+          showToast({ message: 'Gagal membaca file foto dari kamera', variant: 'error' });
         };
         reader.readAsDataURL(_file);
       }
@@ -351,20 +385,28 @@ export function MbgDeliveryPage() {
     try {
       const reader = new FileReader();
       reader.onload = async () => {
-        const dataUrl = reader.result as string;
-        const timestampStr = new Date().toLocaleString('id-ID');
-        await updateSchoolDeliveryProof(
-          entry.id,
-          entry.institutionName,
-          proofType,
-          dataUrl,
-          activeTask.id,
-          { timestamp: timestampStr, location: 'Upload Device' }
-        );
-        showToast({
-          message: `Foto ${proofType.replace('_', ' ')} untuk ${entry.institutionName} berhasil diunggah`,
-          variant: 'success',
-        });
+        try {
+          const dataUrl = reader.result as string;
+          const timestampStr = new Date().toLocaleString('id-ID');
+          await updateSchoolDeliveryProof(
+            entry.id,
+            entry.institutionName,
+            proofType,
+            dataUrl,
+            activeTask.id,
+            { timestamp: timestampStr, location: 'Upload Device' }
+          );
+          showToast({
+            message: `Foto ${proofType.replace('_', ' ')} untuk ${entry.institutionName} berhasil diunggah`,
+            variant: 'success',
+          });
+        } catch (err) {
+          console.error('Error uploading device file proof:', err);
+          showToast({ message: 'Gagal mengunggah foto', variant: 'error' });
+        }
+      };
+      reader.onerror = () => {
+        showToast({ message: 'Gagal membaca file dari device', variant: 'error' });
       };
       reader.readAsDataURL(file);
     } catch {
@@ -628,16 +670,87 @@ export function MbgDeliveryPage() {
   // Search & Filter state for Archive Documents
   const [archiveSearchQuery, setArchiveSearchQuery] = useState('');
 
+  // Combine saved archive docs with live active task entries so couriers immediately see uploaded photos in History
+  const combinedArchiveDocs = useMemo(() => {
+    const docMap = new Map<string, MbgDeliveryDocument>();
+
+    // Add saved documents from Firestore first
+    archiveDocs.forEach((d) => {
+      docMap.set(`${d.batchId}_${d.petugasName.toLowerCase().trim()}`, d);
+    });
+
+    // Synthesize live tasks/entries if available
+    if (entries.length > 0) {
+      const petugasGroups: Record<string, MbgPmEntry[]> = {};
+      entries.forEach((e) => {
+        if (e.assignedPetugasName && !e.isSekolahLibur) {
+          const pKey = e.assignedPetugasName.trim();
+          if (!petugasGroups[pKey]) petugasGroups[pKey] = [];
+          petugasGroups[pKey].push(e);
+        }
+      });
+
+      const batch = batches.find((b) => b.id === selectedBatchId);
+      const batchTanggal = batch?.tanggal || new Date().toISOString().split('T')[0];
+
+      Object.entries(petugasGroups).forEach(([pName, pEntries]) => {
+        const pKey = pName.toLowerCase().trim();
+        const mapKey = `${selectedBatchId}_${pKey}`;
+
+        const completedCount = pEntries.filter((e) =>
+          Boolean(e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl && e.photoPenerimaUrl)
+        ).length;
+        const totalPorsi = pEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
+
+        if (docMap.has(mapKey)) {
+          const existing = docMap.get(mapKey)!;
+          docMap.set(mapKey, {
+            ...existing,
+            totalInstitusi: pEntries.length,
+            totalPorsi,
+            completedCount: Math.max(existing.completedCount || 0, completedCount),
+          });
+        } else {
+          // Include live tasks if photos have been uploaded or task is assigned
+          const hasAnyPhoto = pEntries.some((e) =>
+            Boolean(e.photoMenuUrl || e.photoSerahTerimaUrl || e.photoSuratJalanUrl || e.photoPenerimaUrl)
+          );
+
+          if (hasAnyPhoto || (activeTask && activeTask.petugasName.toLowerCase().trim() === pKey)) {
+            docMap.set(mapKey, {
+              id: `virt-doc-${selectedBatchId}-${pKey.replace(/\s+/g, '-')}`,
+              batchId: selectedBatchId || '',
+              tanggalBatch: batchTanggal,
+              petugasName: pName,
+              petugasId: pEntries[0]?.assignedPetugasId || pKey.replace(/\s+/g, '-'),
+              documentType: 'delivery_report',
+              fileName: `Laporan_Distribusi_MBG_${pName.replace(/\s+/g, '_')}_${batchTanggal}.pdf`,
+              totalInstitusi: pEntries.length,
+              totalPorsi,
+              completedCount,
+              createdAt: new Date().toISOString(),
+              createdBy: user?.uid || pName,
+            });
+          }
+        }
+      });
+    }
+
+    return Array.from(docMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [archiveDocs, entries, batches, selectedBatchId, activeTask, user?.uid]);
+
   const filteredArchiveDocs = useMemo(() => {
-    if (!archiveSearchQuery.trim()) return archiveDocs;
+    if (!archiveSearchQuery.trim()) return combinedArchiveDocs;
     const q = archiveSearchQuery.toLowerCase().trim();
-    return archiveDocs.filter((d) => {
+    return combinedArchiveDocs.filter((d) => {
       const matchPetugas = d.petugasName?.toLowerCase().includes(q);
       const matchTanggal = d.tanggalBatch?.toLowerCase().includes(q);
       const matchFile = d.fileName?.toLowerCase().includes(q);
       return matchPetugas || matchTanggal || matchFile;
     });
-  }, [archiveDocs, archiveSearchQuery]);
+  }, [combinedArchiveDocs, archiveSearchQuery]);
 
   // Re-export PDF for an archived document in MbgDeliveryPage
   const handleReExportArchivedDoc = async (docMeta: MbgDeliveryDocument) => {
