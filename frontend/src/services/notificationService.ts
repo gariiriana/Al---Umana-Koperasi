@@ -84,6 +84,8 @@ export function subscribeNotifications(
 ): Unsubscribe {
   let listUser: FirestoreNotification[] = [];
   let listRole: FirestoreNotification[] = [];
+  let unsubUser: Unsubscribe = () => {};
+  let unsubRole: Unsubscribe = () => {};
 
   const emit = () => {
     const combined = [...listUser, ...listRole];
@@ -92,44 +94,59 @@ export function subscribeNotifications(
     callback(unique);
   };
 
-  const qUser = query(
-    collection(db, "notifications"),
-    where("recipientId", "==", userId),
-    orderBy("createdAt", "desc")
-  );
+  const handleErr = (err: Error) => {
+    console.warn("Notification subscription error (handled gracefully):", err);
+    onError?.(err);
+  };
 
-  const unsubUser = onSnapshot(
-    qUser,
-    (snap) => {
-      listUser = snap.docs.map((d) => firestoreDocToNotification(d.id, d.data()));
-      emit();
-    },
-    onError
-  );
-
-  if (role && role !== "pelanggan") {
-    const qRole = query(
+  try {
+    const qUser = query(
       collection(db, "notifications"),
-      where("recipientId", "==", role),
+      where("recipientId", "==", userId),
       orderBy("createdAt", "desc")
     );
 
-    const unsubRole = onSnapshot(
-      qRole,
+    unsubUser = onSnapshot(
+      qUser,
       (snap) => {
-        listRole = snap.docs.map((d) => firestoreDocToNotification(d.id, d.data()));
+        listUser = snap.docs.map((d) => firestoreDocToNotification(d.id, d.data()));
         emit();
       },
-      onError
+      handleErr
     );
+  } catch (err) {
+    handleErr(err as Error);
+  }
+
+  if (role && role !== "pelanggan") {
+    try {
+      const qRole = query(
+        collection(db, "notifications"),
+        where("recipientId", "==", role),
+        orderBy("createdAt", "desc")
+      );
+
+      unsubRole = onSnapshot(
+        qRole,
+        (snap) => {
+          listRole = snap.docs.map((d) => firestoreDocToNotification(d.id, d.data()));
+          emit();
+        },
+        handleErr
+      );
+    } catch (err) {
+      handleErr(err as Error);
+    }
 
     return () => {
-      unsubUser();
-      unsubRole();
+      try { unsubUser(); } catch { /* ignore */ }
+      try { unsubRole(); } catch { /* ignore */ }
     };
   }
 
-  return unsubUser;
+  return () => {
+    try { unsubUser(); } catch { /* ignore */ }
+  };
 }
 
 /**
@@ -144,89 +161,151 @@ export function subscribeUnreadCount(
 ): Unsubscribe {
   let countUser = 0;
   let countRole = 0;
+  let unsubUser: Unsubscribe = () => {};
+  let unsubRole: Unsubscribe = () => {};
 
   const emit = () => {
     callback(countUser + countRole);
   };
 
-  const qUser = query(
-    collection(db, "notifications"),
-    where("recipientId", "==", userId),
-    where("read", "==", false)
-  );
+  const handleErr = (err: Error) => {
+    console.warn("Unread count subscription error (handled gracefully):", err);
+    onError?.(err);
+  };
 
-  const unsubUser = onSnapshot(
-    qUser,
-    (snap) => {
-      countUser = snap.size;
-      emit();
-    },
-    onError
-  );
-
-  if (role && role !== "pelanggan") {
-    const qRole = query(
+  try {
+    const qUser = query(
       collection(db, "notifications"),
-      where("recipientId", "==", role),
+      where("recipientId", "==", userId),
       where("read", "==", false)
     );
 
-    const unsubRole = onSnapshot(
-      qRole,
+    unsubUser = onSnapshot(
+      qUser,
       (snap) => {
-        countRole = snap.size;
+        countUser = snap.size;
         emit();
       },
-      onError
+      handleErr
     );
+  } catch (err) {
+    handleErr(err as Error);
+  }
+
+  if (role && role !== "pelanggan") {
+    try {
+      const qRole = query(
+        collection(db, "notifications"),
+        where("recipientId", "==", role),
+        where("read", "==", false)
+      );
+
+      unsubRole = onSnapshot(
+        qRole,
+        (snap) => {
+          countRole = snap.size;
+          emit();
+        },
+        handleErr
+      );
+    } catch (err) {
+      handleErr(err as Error);
+    }
 
     return () => {
-      unsubUser();
-      unsubRole();
+      try { unsubUser(); } catch { /* ignore */ }
+      try { unsubRole(); } catch { /* ignore */ }
     };
   }
 
-  return unsubUser;
+  return () => {
+    try { unsubUser(); } catch { /* ignore */ }
+  };
 }
 
 /** Mark a single notification as read. */
 export async function markNotificationAsRead(
   notificationId: string
 ): Promise<void> {
-  const docRef = doc(db, "notifications", notificationId);
-  await updateDoc(docRef, { read: true });
+  try {
+    const docRef = doc(db, "notifications", notificationId);
+    await updateDoc(docRef, { read: true });
+  } catch (err) {
+    console.warn("Failed marking notification as read:", err);
+  }
 }
 
-/** Mark all notifications as read for a user and optional role. */
+/** Mark all notifications as read for a user, optional role, and/or explicit doc IDs. */
 export async function markAllNotificationsAsRead(
   userId: string,
-  role?: string
+  role?: string,
+  explicitDocIds?: string[]
 ): Promise<void> {
-  const qUser = query(
-    collection(db, "notifications"),
-    where("recipientId", "==", userId),
-    where("read", "==", false)
-  );
-  const snapUser = await getDocs(qUser);
-  let docsToUpdate = [...snapUser.docs];
+  const docRefsMap = new Map<string, ReturnType<typeof doc>>();
 
-  if (role && role !== "pelanggan") {
-    const qRole = query(
-      collection(db, "notifications"),
-      where("recipientId", "==", role),
-      where("read", "==", false)
-    );
-    const snapRole = await getDocs(qRole);
-    docsToUpdate = [...docsToUpdate, ...snapRole.docs];
+  // 1. Add any explicitly provided unread IDs
+  if (explicitDocIds && explicitDocIds.length > 0) {
+    for (const id of explicitDocIds) {
+      if (id) docRefsMap.set(id, doc(db, "notifications", id));
+    }
   }
 
-  if (docsToUpdate.length === 0) return;
+  // 2. Query user unread
+  try {
+    const qUser = query(
+      collection(db, "notifications"),
+      where("recipientId", "==", userId),
+      where("read", "==", false)
+    );
+    const snapUser = await getDocs(qUser);
+    snapUser.docs.forEach((d) => docRefsMap.set(d.id, d.ref));
+  } catch (err) {
+    console.warn("Failed fetching unread for user:", err);
+  }
 
-  const batch = writeBatch(db);
-  docsToUpdate.forEach((d) => {
-    batch.update(d.ref, { read: true });
-  });
-  await batch.commit();
+  // 3. Query role unread (including role aliases)
+  if (role && role !== "pelanggan") {
+    const rolesToQuery = [role];
+    if (role === "produksi_1") rolesToQuery.push("tim_produksi");
+    if (role === "tim_produksi") rolesToQuery.push("produksi_1");
+    if (role === "distribusi_1") rolesToQuery.push("distribusi");
+    if (role === "distribusi") rolesToQuery.push("distribusi_1");
+
+    for (const r of rolesToQuery) {
+      try {
+        const qRole = query(
+          collection(db, "notifications"),
+          where("recipientId", "==", r),
+          where("read", "==", false)
+        );
+        const snapRole = await getDocs(qRole);
+        snapRole.docs.forEach((d) => docRefsMap.set(d.id, d.ref));
+      } catch (err) {
+        console.warn(`Failed fetching unread for role ${r}:`, err);
+      }
+    }
+  }
+
+  const allRefs = Array.from(docRefsMap.values());
+  if (allRefs.length === 0) return;
+
+  // Chunk in batches of 300 to stay well within Firestore's 500 limit
+  const CHUNK_SIZE = 300;
+  for (let i = 0; i < allRefs.length; i += CHUNK_SIZE) {
+    const chunk = allRefs.slice(i, i + CHUNK_SIZE);
+    try {
+      const batch = writeBatch(db);
+      chunk.forEach((ref) => {
+        batch.update(ref, { read: true });
+      });
+      await batch.commit();
+    } catch (batchErr) {
+      console.warn("Batch mark read failed, falling back to individual updates:", batchErr);
+      await Promise.allSettled(
+        chunk.map((ref) => updateDoc(ref, { read: true }))
+      );
+    }
+  }
 }
 
 export function parseToIsoString(value: unknown): string {

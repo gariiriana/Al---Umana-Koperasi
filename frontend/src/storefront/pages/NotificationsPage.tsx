@@ -207,10 +207,16 @@ export function NotificationsPage() {
   const handleMarkAllRead = async () => {
     if (!user || markingRead) return;
     setMarkingRead(true);
+
+    const unreadIds = firestoreNotifs.filter((n) => !n.read).map((n) => n.id);
+
+    // Optimistically update local state immediately
+    setFirestoreNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
+
     try {
-      await markAllNotificationsAsRead(user.uid, profile?.role);
+      await markAllNotificationsAsRead(user.uid, profile?.role, unreadIds);
     } catch (err) {
-      console.error("Failed to mark all as read:", err);
+      console.error("Failed to mark all as read in Firestore:", err);
     } finally {
       setMarkingRead(false);
     }

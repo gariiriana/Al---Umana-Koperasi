@@ -48,6 +48,10 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/distribusi/handover", label: "Handover", icon: Truck },
   { to: "/distribusi/delivery", label: "Delivery", icon: Package },
   { to: "/admin/products", label: "Daftar Produk", icon: Package2 },
+  // --- Katering Operational ---
+  { to: "/katering/mo/jobdesk", label: "Manajemen Job Desk", icon: ClipboardCheck },
+  { to: "/katering/jobdesk", label: "Job Desk Saya", icon: ClipboardCheck },
+  { to: "/katering/co-mo/review", label: "Review Job Desk", icon: ClipboardCheck },
   // --- MBG (Makan Bergizi Gratis) ---
   { to: "/mbg/orders", label: "Pesanan MBG", icon: ShoppingCart },
   { to: "/mbg/admin", label: "Admin MBG", icon: ClipboardCheck },
@@ -76,6 +80,10 @@ const LABELS_DICT = {
     "/distribusi/handover": "Handover",
     "/distribusi/delivery": "Pengantaran",
     "/admin/products": "Daftar Produk",
+    // Katering Operational
+    "/katering/mo/jobdesk": "Manajemen Job Desk",
+    "/katering/jobdesk": "Job Desk Saya",
+    "/katering/co-mo/review": "Review Job Desk",
     // MBG
     "/mbg/orders": "Pesanan MBG",
     "/mbg/admin": "Admin MBG",
@@ -102,6 +110,10 @@ const LABELS_DICT = {
     "/distribusi/handover": "Handover",
     "/distribusi/delivery": "Delivery",
     "/admin/products": "Product List",
+    // Katering Operational
+    "/katering/mo/jobdesk": "Job Desk Management",
+    "/katering/jobdesk": "My Job Desk",
+    "/katering/co-mo/review": "Job Desk Review",
     // MBG
     "/mbg/orders": "MBG Orders",
     "/mbg/admin": "MBG Admin",
@@ -143,10 +155,17 @@ const ITEM_INACTIVE = "text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]";
 
 const roleBadge: Record<string, string> = {
   admin: "Admin",
-  tim_produksi: "Produksi",
-  distribusi: "Distribusi",
+  tim_produksi: "Ust. Joko (Produksi 1)",
+  distribusi: "Dwi (Distribusi 1)",
   monitoring: "Monitoring",
   kurir: "Kurir",
+  // Katering operational roles
+  produksi_1: "Ust. Joko (Produksi 1)",
+  distribusi_1: "Dwi (Distribusi 1)",
+  produksi_2: "Shifa (Produksi 2)",
+  distribusi_2: "Wandi (Distribusi 2)",
+  mo_katering: "Manager Operational",
+  co_mo_katering: "Wakil Kepala MO",
   // MBG roles
   admin_mbg: "Admin MBG",
   produksi_mbg: "Produksi MBG",
@@ -175,7 +194,7 @@ export function Sidebar({
 
   useEffect(() => {
     if (!userRole) return;
-    const isRelevantRole = ["admin", "tim_produksi", "distribusi", "monitoring", "kurir"].includes(userRole);
+    const isRelevantRole = ["admin", "tim_produksi", "distribusi", "monitoring", "kurir", "produksi_1", "distribusi_1", "produksi_2", "distribusi_2", "mo_katering", "co_mo_katering"].includes(userRole);
     if (!isRelevantRole) return;
 
     const unsubscribe = subscribeOrders(

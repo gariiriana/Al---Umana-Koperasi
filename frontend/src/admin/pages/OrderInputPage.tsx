@@ -350,7 +350,7 @@ export function OrderInputPage() {
     }
 
     loadOrder();
-  }, [id, isEditMode, loadingMenu, menuItems, showToast]);
+  }, [id, isEditMode, loadingMenu, menuItems, navigate, showToast]);
 
   // Calculate prices
   const autoCalculatedTotal = isPreOrder ? 0 : selectedItems.reduce((acc, item) => {

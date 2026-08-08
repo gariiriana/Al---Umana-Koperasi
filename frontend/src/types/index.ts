@@ -3,6 +3,12 @@ export type { CourierGPS } from './courier-gps';
 export type { FileMetadataStatus, FileMetadata, FileChunk } from './file';
 export type { InventoryItem, InventoryItemInput } from './inventory';
 export type {
+  CateringJobDesk,
+  JobDeskStatus,
+  JobDeskReviewStatus,
+  JobDeskAssignableRole,
+} from './cateringJobDesk';
+export type {
   MbgInstitutionType,
   MbgPortionSize,
   MbgMenuType,

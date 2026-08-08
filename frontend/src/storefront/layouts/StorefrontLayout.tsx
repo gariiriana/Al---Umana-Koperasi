@@ -240,108 +240,123 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
       } as unknown as Order;
     };
 
-    const q = query(
-      collection(db, "orders"),
-      where("customerId", "==", user.uid)
-    );
+    let unsubscribeOrders: () => void = () => {};
+    try {
+      const q = query(
+        collection(db, "orders"),
+        where("customerId", "==", user.uid)
+      );
 
-    const unsubscribeOrders = onSnapshot(q, (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        const orderId = change.doc.id;
-        const data = change.doc.data();
-        const orderObj = mapDocToOrder(orderId, data);
+      unsubscribeOrders = onSnapshot(
+        q,
+        (snapshot) => {
+          snapshot.docChanges().forEach((change) => {
+            const orderId = change.doc.id;
+            const data = change.doc.data();
+            const orderObj = mapDocToOrder(orderId, data);
 
-        const status = orderObj.status;
-        const paymentStatus = orderObj.paymentStatus;
-        const shortId = orderId.slice(-6).toUpperCase();
+            const status = orderObj.status;
+            const paymentStatus = orderObj.paymentStatus;
+            const shortId = orderId.slice(-6).toUpperCase();
 
-        if (change.type === "added") {
-          if (!isInitialLoad) {
-            showToast({
-              message: lang === "id"
-                ? `Pesanan #${shortId} berhasil ditempatkan!`
-                : `Order #${shortId} successfully placed!`,
-              variant: "success",
-            });
-          }
-          previousStatuses[orderId] = { status, paymentStatus };
-        } else if (change.type === "modified") {
-          const prev = previousStatuses[orderId];
-          if (prev) {
-            if (prev.status !== status) {
-              let statusTextId = "";
-              let statusTextEn = "";
-              switch (status) {
-                case "PENDING":
-                  statusTextId = "dikonfirmasi";
-                  statusTextEn = "confirmed";
-                  break;
-                case "IN_PRODUCTION":
-                  statusTextId = "sedang diproduksi";
-                  statusTextEn = "in production";
-                  break;
-                case "QC":
-                  statusTextId = "sedang diuji kelayakan (QC)";
-                  statusTextEn = "being quality checked (QC)";
-                  break;
-                case "READY_TO_DELIVER":
-                  statusTextId = "siap dikirim";
-                  statusTextEn = "ready to deliver";
-                  break;
-                case "OUT_FOR_DELIVERY":
-                  statusTextId = "sedang dikirim oleh kurir";
-                  statusTextEn = "out for delivery";
-                  break;
-                case "COMPLETED":
-                  statusTextId = "selesai";
-                  statusTextEn = "completed";
-                  break;
-                case "DELIVERY_FAILED":
-                  statusTextId = `gagal dikirim: ${orderObj.rejectionReason || "-"}`;
-                  statusTextEn = `delivery failed: ${orderObj.rejectionReason || "-"}`;
-                  break;
-                default:
-                  statusTextId = (status as string).toLowerCase();
-                  statusTextEn = (status as string).toLowerCase();
-              }
-
-              showToast({
-                message: lang === "id"
-                  ? `Pesanan #${shortId} ${statusTextId}!`
-                  : `Order #${shortId} is ${statusTextEn}!`,
-                variant: status === "DELIVERY_FAILED" ? "error" : "info",
-              });
-            }
-
-            if (prev.paymentStatus !== paymentStatus && paymentStatus) {
-              if (paymentStatus === "SUDAH_DIBAYAR") {
+            if (change.type === "added") {
+              if (!isInitialLoad) {
                 showToast({
                   message: lang === "id"
-                    ? `Pembayaran Pesanan #${shortId} disetujui!`
-                    : `Payment for Order #${shortId} approved!`,
+                    ? `Pesanan #${shortId} berhasil ditempatkan!`
+                    : `Order #${shortId} successfully placed!`,
                   variant: "success",
                 });
-              } else if (paymentStatus === "JATUH_TEMPO") {
-                showToast({
-                  message: lang === "id"
-                    ? `Pembayaran Pesanan #${shortId} telah jatuh tempo!`
-                    : `Payment for Order #${shortId} is overdue!`,
-                  variant: "error",
-                });
               }
-            }
-          }
-          previousStatuses[orderId] = { status, paymentStatus };
-        } else if (change.type === "removed") {
-          delete previousStatuses[orderId];
-        }
-      });
+              previousStatuses[orderId] = { status, paymentStatus };
+            } else if (change.type === "modified") {
+              const prev = previousStatuses[orderId];
+              if (prev) {
+                if (prev.status !== status) {
+                  let statusTextId = "";
+                  let statusTextEn = "";
+                  switch (status) {
+                    case "PENDING":
+                      statusTextId = "dikonfirmasi";
+                      statusTextEn = "confirmed";
+                      break;
+                    case "IN_PRODUCTION":
+                      statusTextId = "sedang diproduksi";
+                      statusTextEn = "in production";
+                      break;
+                    case "QC":
+                      statusTextId = "sedang diuji kelayakan (QC)";
+                      statusTextEn = "being quality checked (QC)";
+                      break;
+                    case "READY_TO_DELIVER":
+                      statusTextId = "siap dikirim";
+                      statusTextEn = "ready to deliver";
+                      break;
+                    case "OUT_FOR_DELIVERY":
+                      statusTextId = "sedang dikirim oleh kurir";
+                      statusTextEn = "out for delivery";
+                      break;
+                    case "COMPLETED":
+                      statusTextId = "selesai";
+                      statusTextEn = "completed";
+                      break;
+                    case "DELIVERY_FAILED":
+                      statusTextId = `gagal dikirim: ${orderObj.rejectionReason || "-"}`;
+                      statusTextEn = `delivery failed: ${orderObj.rejectionReason || "-"}`;
+                      break;
+                    default:
+                      statusTextId = (status as string).toLowerCase();
+                      statusTextEn = (status as string).toLowerCase();
+                  }
 
-      isInitialLoad = false;
-    });
+                  showToast({
+                    message: lang === "id"
+                      ? `Pesanan #${shortId} ${statusTextId}!`
+                      : `Order #${shortId} is ${statusTextEn}!`,
+                    variant: status === "DELIVERY_FAILED" ? "error" : "info",
+                  });
+                }
+
+                if (prev.paymentStatus !== paymentStatus && paymentStatus) {
+                  if (paymentStatus === "SUDAH_DIBAYAR") {
+                    showToast({
+                      message: lang === "id"
+                        ? `Pembayaran Pesanan #${shortId} disetujui!`
+                        : `Payment for Order #${shortId} approved!`,
+                      variant: "success",
+                    });
+                  } else if (paymentStatus === "JATUH_TEMPO") {
+                    showToast({
+                      message: lang === "id"
+                        ? `Pembayaran Pesanan #${shortId} telah jatuh tempo!`
+                        : `Payment for Order #${shortId} is overdue!`,
+                      variant: "error",
+                    });
+                  }
+                }
+              }
+              previousStatuses[orderId] = { status, paymentStatus };
+            } else if (change.type === "removed") {
+              delete previousStatuses[orderId];
+            }
+          });
+
+          isInitialLoad = false;
+        },
+        (error) => {
+          console.warn("Storefront orders listener handled gracefully:", error);
+        }
+      );
+    } catch (err) {
+      console.warn("Failed setting up storefront orders query:", err);
+    }
 
     return () => {
-      unsubscribeOrders();
+      try {
+        unsubscribeOrders();
+      } catch {
+        /* ignore */
+      }
     };
   }, [user, lang, showToast]);
 

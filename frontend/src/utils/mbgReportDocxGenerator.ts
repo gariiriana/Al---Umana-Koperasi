@@ -14,6 +14,7 @@ import {
   AlignmentType,
   ImageRun,
   PageBreak,
+  type ISectionOptions,
 } from 'docx';
 import type { MbgPmEntry } from '@/types/mbg';
 
@@ -44,10 +45,10 @@ export async function generateMbgDistributionDocx(
   groupedData: MbgDateGroup[],
   logoBase64?: string | null
 ): Promise<Blob> {
-  const sections: any[] = [];
+  const sections: ISectionOptions[] = [];
 
   // === 1. COVER PAGE ===
-  const coverChildren: any[] = [];
+  const coverChildren: (Paragraph | Table)[] = [];
 
   // Logo (if available)
   if (logoBase64) {
@@ -295,7 +296,7 @@ export async function generateMbgDistributionDocx(
       if (entry.isSekolahLibur) continue;
 
       // Prepare image cell children
-      const menuCellChildren: any[] = [];
+      const menuCellChildren: Paragraph[] = [];
       if (entry.photoMenuUrl) {
         const menuBytes = dataUriToUint8Array(entry.photoMenuUrl);
         if (menuBytes) {
@@ -322,7 +323,7 @@ export async function generateMbgDistributionDocx(
         );
       }
 
-      const serahCellChildren: any[] = [];
+      const serahCellChildren: Paragraph[] = [];
       if (entry.photoSerahTerimaUrl) {
         const serahBytes = dataUriToUint8Array(entry.photoSerahTerimaUrl);
         if (serahBytes) {
@@ -349,7 +350,7 @@ export async function generateMbgDistributionDocx(
         );
       }
 
-      const sjCellChildren: any[] = [];
+      const sjCellChildren: Paragraph[] = [];
       if (entry.photoSuratJalanUrl) {
         const sjBytes = dataUriToUint8Array(entry.photoSuratJalanUrl);
         if (sjBytes) {

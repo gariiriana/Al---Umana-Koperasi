@@ -73,6 +73,11 @@ const NotFoundPage = safeLazy(() => import("@/pages/NotFoundPage").then(module =
 const PromosPage = safeLazy(() => import("@/admin/pages/PromosPage").then(module => ({ default: module.PromosPage })));
 const SchedulesPage = safeLazy(() => import("@/pages/SchedulesPage").then(module => ({ default: module.SchedulesPage })));
 
+// --- Katering Operational Pages ---
+const MoJobDeskPage = safeLazy(() => import("@/pages/katering/MoJobDeskPage").then(module => ({ default: module.MoJobDeskPage })));
+const OperationalJobDeskPage = safeLazy(() => import("@/pages/katering/OperationalJobDeskPage").then(module => ({ default: module.OperationalJobDeskPage })));
+const CoMoReviewPage = safeLazy(() => import("@/pages/katering/CoMoReviewPage").then(module => ({ default: module.CoMoReviewPage })));
+
 // --- MBG (Makan Bergizi Gratis) Pages ---
 const MbgAdminPage = safeLazy(() => import("@/pages/mbg/MbgAdminPage").then(module => ({ default: module.MbgAdminPage })));
 const MbgProductionPage = safeLazy(() => import("@/pages/mbg/MbgProductionPage").then(module => ({ default: module.MbgProductionPage })));
@@ -429,7 +434,7 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Orders"
-              allowedRoles={["admin", "monitoring"]}
+              allowedRoles={["admin", "monitoring", "mo_katering", "co_mo_katering"]}
             >
               <OrdersPage />
             </ShelledRoute>
@@ -488,7 +493,7 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Production"
-              allowedRoles={["tim_produksi"]}
+              allowedRoles={["tim_produksi", "produksi_1"]}
             >
               <ProductionPage />
             </ShelledRoute>
@@ -501,7 +506,7 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Riwayat Produksi & QC"
-              allowedRoles={["tim_produksi"]}
+              allowedRoles={["tim_produksi", "produksi_1"]}
             >
               <ProductionHistoryPage />
             </ShelledRoute>
@@ -513,7 +518,7 @@ function RoutesTree() {
         path="/admin/food-schedule"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Jadwal Makanan" allowedRoles={["tim_produksi"]}>
+            <ShelledRoute pageTitle="Jadwal Makanan" allowedRoles={["tim_produksi", "produksi_1"]}>
               <FoodSchedulePage />
             </ShelledRoute>
           </Protected>
@@ -525,7 +530,7 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Handover"
-              allowedRoles={["distribusi"]}
+              allowedRoles={["distribusi", "distribusi_1"]}
             >
               <HandoverPage />
             </ShelledRoute>
@@ -538,7 +543,7 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Delivery Scheduler"
-              allowedRoles={["distribusi"]}
+              allowedRoles={["distribusi", "distribusi_1"]}
             >
               <DeliverySchedulerPage />
             </ShelledRoute>
@@ -596,6 +601,12 @@ function RoutesTree() {
                 "tim_produksi",
                 "distribusi",
                 "kurir",
+                "produksi_1",
+                "distribusi_1",
+                "produksi_2",
+                "distribusi_2",
+                "mo_katering",
+                "co_mo_katering",
               ]}
             >
               <SettingsPage />
@@ -609,7 +620,7 @@ function RoutesTree() {
         path="/admin/products"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Daftar Produk" allowedRoles={["tim_produksi", "produksi_mbg", "admin_mbg"]}>
+            <ShelledRoute pageTitle="Daftar Produk" allowedRoles={["tim_produksi", "produksi_1", "produksi_mbg", "admin_mbg"]}>
               <ProductsPage />
             </ShelledRoute>
           </Protected>
@@ -619,7 +630,7 @@ function RoutesTree() {
         path="/admin/products/new"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Tambah Produk" allowedRoles={["tim_produksi", "produksi_mbg"]}>
+            <ShelledRoute pageTitle="Tambah Produk" allowedRoles={["tim_produksi", "produksi_1", "produksi_mbg"]}>
               <ProductFormPage />
             </ShelledRoute>
           </Protected>
@@ -629,7 +640,7 @@ function RoutesTree() {
         path="/admin/products/:id/edit"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Ubah Produk" allowedRoles={["tim_produksi", "produksi_mbg"]}>
+            <ShelledRoute pageTitle="Ubah Produk" allowedRoles={["tim_produksi", "produksi_1", "produksi_mbg"]}>
               <ProductFormPage />
             </ShelledRoute>
           </Protected>
@@ -639,8 +650,42 @@ function RoutesTree() {
         path="/admin/categories"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Kategori" allowedRoles={["tim_produksi", "produksi_mbg"]}>
+            <ShelledRoute pageTitle="Kategori" allowedRoles={["tim_produksi", "produksi_1", "produksi_mbg"]}>
               <CategoriesPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+
+      {/* ================================================================ */}
+      {/* Katering Operational Routes                                     */}
+      {/* ================================================================ */}
+      <Route
+        path="/katering/mo/jobdesk"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Manajemen Job Desk" allowedRoles={["mo_katering"]}>
+              <MoJobDeskPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/katering/jobdesk"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Job Desk Saya" allowedRoles={["produksi_1", "distribusi_1", "produksi_2", "distribusi_2", "tim_produksi", "distribusi"]}>
+              <OperationalJobDeskPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/katering/co-mo/review"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Review Job Desk" allowedRoles={["co_mo_katering"]}>
+              <CoMoReviewPage />
             </ShelledRoute>
           </Protected>
         }

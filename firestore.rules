@@ -47,7 +47,10 @@ service cloud.firestore {
     function isTimProduksi() {
       return request.auth != null
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tim_produksi';
+        && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tim_produksi'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_1'
+        );
     }
 
     function isDistribusi() {
@@ -55,6 +58,7 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && (
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi_1'
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distributor'
         );
     }
@@ -109,10 +113,49 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------
+    // Katering Operational Role Helpers
+    // -------------------------------------------------------------------
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isMoKatering() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && getUserRole() == 'mo_katering';
+    }
+
+    function isCoMoKatering() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && getUserRole() == 'co_mo_katering';
+    }
+
+    function isKateringOperational() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && getUserRole() in ['produksi_1', 'distribusi_1', 'produksi_2', 'distribusi_2', 'tim_produksi', 'distribusi'];
+    }
+
+    // -------------------------------------------------------------------
     // Default deny. Any path not matched explicitly is forbidden.
     // -------------------------------------------------------------------
     match /{document=**} {
       allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------
+    // Catering Job Desks
+    // -------------------------------------------------------------------
+    // MO creates/updates/deletes job desk assignments.
+    // Operational roles can update their assigned job desks (status, reason).
+    // CO_MO can update review status (approve/reject).
+    // All authenticated katering roles can read.
+    match /catering_jobdesks/{jobDeskId} {
+      allow read: if request.auth != null;
+      allow create: if isAdmin() || isMoKatering();
+      allow update: if isAdmin() || isMoKatering() || isKateringOperational() || isCoMoKatering();
+      allow delete: if isAdmin() || isMoKatering();
     }
 
     // -------------------------------------------------------------------
@@ -284,12 +327,8 @@ service cloud.firestore {
     // Recipients can update their own notifications (mark as read).
     // Only admins can delete.
     match /notifications/{notificationId} {
-      allow get: if request.auth != null
-        && resource.data.recipientId == request.auth.uid;
-      allow list: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null
-        && resource.data.recipientId == request.auth.uid;
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null;
       allow delete: if isAdmin();
     }
 
@@ -428,7 +467,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /mbg_recipe_adjustments/{adjustmentId} {
       allow read: if request.auth != null;
-      allow read, create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
     }
 
     // -------------------------------------------------------------------
@@ -449,13 +488,12 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------
-    // MBG Sub Purchasing Tasks (tugas belanja sub_purchasing)
+    // Catering Operational Job Desks (MO, CO_MO, Joko, Dwi, Shifa, Wandi)
     // -------------------------------------------------------------------
-    match /mbg_sub_purchasing_tasks/{taskId} {
-      allow read: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
-      allow create: if request.auth != null && (isAdmin() || isPurchasingMbg() || isAdminMbg());
-      allow update: if request.auth != null && (isAdmin() || isPurchasingMbg() || isSubPurchasingMbg() || isAdminMbg());
-      allow delete: if request.auth != null && (isAdmin() || isPurchasingMbg() || isAdminMbg());
+    match /catering_jobdesks/{jobDeskId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
     }
   }
 }
+

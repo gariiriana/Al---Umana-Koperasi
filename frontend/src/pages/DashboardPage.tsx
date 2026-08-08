@@ -471,19 +471,27 @@ export function DashboardPage() {
             Real-time view of every order in the pipeline.
             {profile?.role && (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 animate-in fade-in duration-300">
-                {{
-                  admin: "Admin",
-                  tim_produksi: "Tim Produksi",
-                  distribusi: "Distribusi",
-                  kurir: "Kurir",
-                  monitoring: "Monitoring",
-                  pelanggan: "Pelanggan",
-                  admin_mbg: "Admin MBG",
-                  produksi_mbg: "Produksi MBG",
-                  purchasing_mbg: "Purchasing MBG",
-                  distribusi_mbg: "Distribusi MBG",
-                  kurir_mbg: "Kurir MBG",
-                }[profile.role] || profile.role}
+                {(
+                  {
+                    admin: "Admin",
+                    tim_produksi: "Tim Produksi (Ust. Joko)",
+                    distribusi: "Distribusi (Dwi)",
+                    kurir: "Kurir",
+                    monitoring: "Monitoring",
+                    pelanggan: "Pelanggan",
+                    admin_mbg: "Admin MBG",
+                    produksi_mbg: "Produksi MBG",
+                    purchasing_mbg: "Purchasing MBG",
+                    distribusi_mbg: "Distribusi MBG",
+                    kurir_mbg: "Kurir MBG",
+                    mo_katering: "Manager Operasional (MO)",
+                    co_mo_katering: "Wakil Kepala MO (CO_MO)",
+                    produksi_1: "Tim Produksi 1 (Ust. Joko)",
+                    distribusi_1: "Distribusi 1 (Dwi)",
+                    produksi_2: "Tim Produksi 2 (Shifa)",
+                    distribusi_2: "Distribusi 2 (Wandi)",
+                  } as Record<string, string>
+                )[profile.role] || profile.role}
               </span>
             )}
           </span>

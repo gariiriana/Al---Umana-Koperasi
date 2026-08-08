@@ -26,6 +26,7 @@ export interface UserProfile {
   email: string;
   displayName: string;
   role: "admin" | "tim_produksi" | "distribusi" | "monitoring" | "kurir" | "pelanggan"
+    | "produksi_1" | "distribusi_1" | "produksi_2" | "distribusi_2" | "mo_katering" | "co_mo_katering"
     | "admin_mbg" | "produksi_mbg" | "purchasing_mbg" | "distribusi_mbg" | "kurir_mbg";
   createdAt?: unknown;
   /** Optional delivery address saved during checkout for auto-fill. */
