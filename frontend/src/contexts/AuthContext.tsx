@@ -129,6 +129,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 defaultRole = "distribusi_mbg";
               } else if (email.startsWith("kurir_mbg") || email.startsWith("kurirmbg")) {
                 defaultRole = "kurir_mbg";
+              } else if (email.startsWith("mo_katering") || email.startsWith("mokatering") || email.startsWith("mo@")) {
+                defaultRole = "mo_katering";
+              } else if (email.startsWith("co_mo_katering") || email.startsWith("como_katering") || email.startsWith("como@")) {
+                defaultRole = "co_mo_katering";
               }
 
               const defaultProfile: UserProfile = {
