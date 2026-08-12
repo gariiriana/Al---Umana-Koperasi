@@ -58,6 +58,7 @@ export function CoMoReviewPage() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectRemark, setRejectRemark] = useState("");
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [approvingJobDesk, setApprovingJobDesk] = useState<CateringJobDesk | null>(null);
 
   useEffect(() => {
     const unsub = subscribeAllJobDesks(
@@ -539,7 +540,7 @@ export function CoMoReviewPage() {
                             <div className="flex gap-1.5 justify-center">
                               <button
                                 type="button"
-                                onClick={() => handleApprove(jd.id)}
+                                onClick={() => setApprovingJobDesk(jd)}
                                 disabled={isProcessing}
                                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
                               >
@@ -600,6 +601,100 @@ export function CoMoReviewPage() {
           </div>
         )}
       </div>
+
+      {/* Confirm Approve Modal */}
+      <AnimatePresence>
+        {approvingJobDesk && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-md w-full p-6 space-y-4 text-left"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-emerald-100 rounded-2xl text-emerald-600">
+                    <CheckCircle2 className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900">
+                      Konfirmasi Persetujuan
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      Review Job Desk oleh CO_MO
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setApprovingJobDesk(null)}
+                  disabled={processingId !== null}
+                  className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <XCircle className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-200/80 text-xs space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 font-medium">PETUGAS (PIC):</span>
+                  <span className="font-extrabold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200">
+                    {approvingJobDesk.pic}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 font-medium">KEGIATAN:</span>
+                  <span className="font-bold text-gray-800 text-right max-w-[200px] truncate">
+                    {approvingJobDesk.kegiatan || approvingJobDesk.title}
+                  </span>
+                </div>
+                {approvingJobDesk.orderLabel && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500 font-medium">PESANAN:</span>
+                    <span className="font-semibold text-gray-700">
+                      {approvingJobDesk.orderLabel}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 font-medium">KEY ID:</span>
+                  <span className="font-mono font-bold text-gray-700 bg-gray-200 px-1.5 py-0.5 rounded text-[11px]">
+                    {approvingJobDesk.keyId}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Apakah Anda yakin ingin menyetujui (<strong>Approve</strong>) job desk ini? Setelah disetujui, status job desk akan diperbarui menjadi <span className="text-emerald-700 font-bold">Approved</span>.
+              </p>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setApprovingJobDesk(null)}
+                  disabled={processingId !== null}
+                  className="px-4 py-2 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleApprove(approvingJobDesk.id);
+                    setApprovingJobDesk(null);
+                  }}
+                  disabled={processingId !== null}
+                  className="flex items-center gap-1.5 px-4.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {processingId === approvingJobDesk.id ? "Memproses..." : "Ya, Setujui"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
