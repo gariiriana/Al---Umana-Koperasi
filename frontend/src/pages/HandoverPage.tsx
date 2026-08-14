@@ -10,6 +10,7 @@ import { transitionOrder, assignCourier } from "@/services/orderService";
 import { subscribeOrders } from "@/services/realtimeService";
 import type { Order, KitchenSignature } from "@/types/order";
 
+import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import { ProofModal } from "@/components/delivery/ProofModal";
@@ -97,6 +98,10 @@ const getOrderDeadline = (order: Order): number => {
 };
 
 export function HandoverPage() {
+  const { profile } = useAuth();
+  const userRole = profile?.role || "";
+  const isReadOnly = ["tim_produksi", "produksi_1", "produksi_2", "monitoring"].includes(userRole);
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -290,11 +295,20 @@ export function HandoverPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-2xl border border-[#E5E7EB] shadow-xs">
         <div>
-          <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]">
-            Handover Paket
-          </h1>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]">
+              Handover Paket
+            </h1>
+            {isReadOnly && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                <Eye className="w-3.5 h-3.5 text-amber-600" /> Mode Lihat (Read-Only)
+              </span>
+            )}
+          </div>
           <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk'] mt-1">
-            Serahkan pesanan yang telah ditugaskan ke kurir dan pantau proses pengantaran secara real-time.
+            {isReadOnly
+              ? "Pantau status serah terima pesanan ke kurir dan proses pengantaran paket secara real-time."
+              : "Serahkan pesanan yang telah ditugaskan ke kurir dan pantau proses pengantaran secara real-time."}
           </p>
         </div>
         <div className="flex items-center gap-2">

@@ -20,7 +20,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
 
   /**
    * Tim Produksi (legacy alias for produksi_1): mengelola proses produksi,
-   * quality control, produk, kategori, dan jadwal makanan.
+   * quality control, produk, kategori, dan jadwal makanan, serta melihat penugasan kurir (read-only).
    */
   tim_produksi: [
     "/admin/production",
@@ -30,6 +30,8 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/admin/categories",
     "/admin/food-schedule",
     "/katering/jobdesk",
+    "/distribusi/scheduler",
+    "/distribusi/handover",
   ],
 
   /**
@@ -66,6 +68,8 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/admin/categories",
     "/admin/food-schedule",
     "/katering/jobdesk",
+    "/distribusi/scheduler",
+    "/distribusi/handover",
   ],
 
   /**
@@ -82,6 +86,8 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
    */
   produksi_2: [
     "/katering/jobdesk",
+    "/distribusi/scheduler",
+    "/distribusi/handover",
   ],
 
   /**

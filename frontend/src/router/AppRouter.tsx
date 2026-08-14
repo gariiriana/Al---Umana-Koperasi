@@ -530,7 +530,15 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Handover"
-              allowedRoles={["distribusi", "distribusi_1"]}
+              allowedRoles={[
+                "distribusi",
+                "distribusi_1",
+                "tim_produksi",
+                "produksi_1",
+                "produksi_2",
+                "admin",
+                "monitoring",
+              ]}
             >
               <HandoverPage />
             </ShelledRoute>
@@ -543,7 +551,15 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute
               pageTitle="Delivery Scheduler"
-              allowedRoles={["distribusi", "distribusi_1"]}
+              allowedRoles={[
+                "distribusi",
+                "distribusi_1",
+                "tim_produksi",
+                "produksi_1",
+                "produksi_2",
+                "admin",
+                "monitoring",
+              ]}
             >
               <DeliverySchedulerPage />
             </ShelledRoute>

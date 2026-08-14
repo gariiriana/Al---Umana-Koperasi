@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Calendar, Clock, CheckSquare, Square, Truck, Check, MapPin, AlertCircle, FileDown, Image, Search, X } from "lucide-react";
+import { Loader2, Calendar, Clock, CheckSquare, Square, Truck, Check, MapPin, AlertCircle, FileDown, Image, Search, X, Eye } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { subscribeOrders } from "@/services/realtimeService";
 import { assignMultipleOrders } from "@/services/orderService";
 import type { Order } from "@/types/order";
 import { useToast } from "@/contexts/ToastContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { formatIDR } from "@/lib/format";
@@ -82,11 +83,15 @@ const getBase64ImageFromUrl = (url: string): Promise<string> => {
 
 export function DeliverySchedulerPage() {
   const { showToast } = useToast();
+  const { profile } = useAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [couriers, setCouriers] = useState<Courier[]>([]);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
+
+  const userRole = profile?.role || "";
+  const isReadOnly = ["tim_produksi", "produksi_1", "produksi_2", "monitoring"].includes(userRole);
 
   // Scheduler States
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
@@ -160,8 +165,8 @@ export function DeliverySchedulerPage() {
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
 
-
   const handleSelectOrder = (id: string) => {
+    if (isReadOnly) return;
     if (selectedOrderIds.includes(id)) {
       setSelectedOrderIds(selectedOrderIds.filter(x => x !== id));
     } else {
@@ -170,6 +175,7 @@ export function DeliverySchedulerPage() {
   };
 
   const handleSelectAll = () => {
+    if (isReadOnly) return;
     if (selectedOrderIds.length === readyOrders.length) {
       setSelectedOrderIds([]);
     } else {
@@ -439,11 +445,20 @@ export function DeliverySchedulerPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-2xl border border-[#E5E7EB] shadow-xs">
         <div>
-          <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]">
-            Delivery Scheduler
-          </h1>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]">
+              Delivery Scheduler
+            </h1>
+            {isReadOnly && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                <Eye className="w-3.5 h-3.5 text-amber-600" /> Mode Lihat Penugasan (Read-Only)
+              </span>
+            )}
+          </div>
           <p className="text-[11px] sm:text-xs text-[#6B7280] font-['Hanken_Grotesk'] mt-1">
-            Jadwalkan pengiriman masal, tugaskan kurir sekaligus, dan hindari bentrok waktu pengantaran.
+            {isReadOnly
+              ? "Pantau daftar pesanan siap dikirim, jadwal pengantaran, dan kurir yang bertugas secara real-time."
+              : "Jadwalkan pengiriman masal, tugaskan kurir sekaligus, dan hindari bentrok waktu pengantaran."}
           </p>
         </div>
       </div>
@@ -523,10 +538,10 @@ export function DeliverySchedulerPage() {
               <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
                 Pesanan Siap Dikirim ({readyOrders.length})
               </h3>
-              {readyOrders.length > 0 && (
+              {!isReadOnly && readyOrders.length > 0 && (
                 <button
                   onClick={handleSelectAll}
-                  className="text-xs font-bold text-[#B45309] hover:underline flex items-center gap-1.5"
+                  className="text-xs font-bold text-[#B45309] hover:underline flex items-center gap-1.5 cursor-pointer"
                 >
                   {selectedOrderIds.length === readyOrders.length ? "Batal Pilih Semua" : "Pilih Semua"}
                 </button>
@@ -534,7 +549,7 @@ export function DeliverySchedulerPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 max-h-[70vh] overflow-y-auto pr-2">
-              {readyOrders.map((o) => {
+              {readyOrders.map((o, idx) => {
                 const isSelected = selectedOrderIds.includes(o.id);
                 const shortId = o.id.slice(-6).toUpperCase();
                 
@@ -542,19 +557,29 @@ export function DeliverySchedulerPage() {
                   <div
                     key={o.id}
                     onClick={() => handleSelectOrder(o.id)}
-                    className={`p-2.5 xs:p-4 bg-white border rounded-2xl cursor-pointer transition-all duration-200 flex items-start gap-2 xs:gap-4 ${
+                    className={`p-2.5 xs:p-4 bg-white border rounded-2xl transition-all duration-200 flex items-start gap-2 xs:gap-4 ${
+                      !isReadOnly ? "cursor-pointer" : ""
+                    } ${
                       isSelected 
                         ? "border-[#FDE047] bg-[#FFFDF5] ring-2 ring-[#FEF08A]/40" 
                         : "border-[#E5E7EB] hover:border-[#FBBF24]"
                     }`}
                   >
-                    <div className="pt-0.5 shrink-0">
-                      {isSelected ? (
-                        <CheckSquare className="w-4 h-4 xs:w-5 xs:h-5 text-[#D97706]" />
-                      ) : (
-                        <Square className="w-4 h-4 xs:w-5 xs:h-5 text-[#9CA3AF]" />
-                      )}
-                    </div>
+                    {!isReadOnly ? (
+                      <div className="pt-0.5 shrink-0">
+                        {isSelected ? (
+                          <CheckSquare className="w-4 h-4 xs:w-5 xs:h-5 text-[#D97706]" />
+                        ) : (
+                          <Square className="w-4 h-4 xs:w-5 xs:h-5 text-[#9CA3AF]" />
+                        )}
+                      </div>
+                    ) : (
+                      <div className="pt-0.5 shrink-0">
+                        <div className="w-6 h-6 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                          {idx + 1}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-2 xs:gap-4">
                       <div>
@@ -688,54 +713,72 @@ export function DeliverySchedulerPage() {
 
           {/* Scheduler panel (Right Column) */}
           <div className="space-y-6">
-            <Card className="p-6 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm space-y-4">
-              <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827] border-b border-[#F3F4F6] pb-3">
-                Form Penugasan Masal
-              </h3>
+            {!isReadOnly ? (
+              <Card className="p-6 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm space-y-4">
+                <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827] border-b border-[#F3F4F6] pb-3">
+                  Form Penugasan Masal
+                </h3>
 
-              <form onSubmit={handleBatchAssign} className="space-y-4">
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-[#6B7280]">
-                    Jumlah Terpilih
-                  </label>
-                  <div className="text-lg font-black text-[#111827]">
-                    {selectedOrderIds.length} Pesanan
+                <form onSubmit={handleBatchAssign} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-[#6B7280]">
+                      Jumlah Terpilih
+                    </label>
+                    <div className="text-lg font-black text-[#111827]">
+                      {selectedOrderIds.length} Pesanan
+                    </div>
                   </div>
-                </div>
 
-                <div className="space-y-1">
-                  <label htmlFor="scheduler-courier" className="block text-xs font-semibold text-[#6B7280]">
-                    Pilih Kurir
-                  </label>
-                  <select
-                    id="scheduler-courier"
-                    className="w-full rounded-lg border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-[#111827] focus:border-[#FBBF24] focus:outline-none"
-                    value={selectedCourierId}
-                    onChange={(e) => setSelectedCourierId(e.target.value)}
+                  <div className="space-y-1">
+                    <label htmlFor="scheduler-courier" className="block text-xs font-semibold text-[#6B7280]">
+                      Pilih Kurir
+                    </label>
+                    <select
+                      id="scheduler-courier"
+                      className="w-full rounded-lg border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-[#111827] focus:border-[#FBBF24] focus:outline-none"
+                      value={selectedCourierId}
+                      onChange={(e) => setSelectedCourierId(e.target.value)}
+                    >
+                      <option value="">-- Pilih Kurir --</option>
+                      {couriers.map((c) => {
+                        const count = getCourierActiveCount(c.uid);
+                        return (
+                          <option key={c.uid} value={c.uid}>
+                            {c.displayName} ({count} Tugas Aktif)
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    loading={assigning}
+                    leftIcon={<Check className="w-4 h-4" />}
+                    className="w-full py-2.5 bg-[#D97706] hover:bg-[#B45309] text-white border-none rounded-xl font-bold shadow-md shadow-amber-700/10 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <option value="">-- Pilih Kurir --</option>
-                    {couriers.map((c) => {
-                      const count = getCourierActiveCount(c.uid);
-                      return (
-                        <option key={c.uid} value={c.uid}>
-                          {c.displayName} ({count} Tugas Aktif)
-                        </option>
-                      );
-                    })}
-                  </select>
+                    Tugaskan Sekarang
+                  </Button>
+                </form>
+              </Card>
+            ) : (
+              <Card className="p-6 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm space-y-3">
+                <div className="flex items-center gap-2 text-amber-800">
+                  <Eye className="w-5 h-5 text-amber-600 shrink-0" />
+                  <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
+                    Info Penugasan Kurir
+                  </h3>
                 </div>
-
-                <Button
-                  type="submit"
-                  variant="primary"
-                  loading={assigning}
-                  leftIcon={<Check className="w-4 h-4" />}
-                  className="w-full py-2.5 bg-[#D97706] hover:bg-[#B45309] text-white border-none rounded-xl font-bold shadow-md shadow-amber-700/10 flex items-center justify-center gap-2"
-                >
-                  Tugaskan Sekarang
-                </Button>
-              </form>
-            </Card>
+                <p className="text-xs text-[#6B7280] leading-relaxed">
+                  Sebagai <strong>Tim Produksi Katering</strong>, Anda dapat memantau pesanan yang siap dikirim, jadwal keberangkatan, dan status tugas kurir secara real-time.
+                </p>
+                <div className="pt-2 border-t border-[#F3F4F6] flex items-center justify-between text-xs font-semibold text-[#374151]">
+                  <span>Total Pesanan Siap Kirim:</span>
+                  <span className="text-sm font-bold text-[#111827]">{readyOrders.length}</span>
+                </div>
+              </Card>
+            )}
 
             {/* Courier active tasks list */}
             <Card className="p-6 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm space-y-4">
