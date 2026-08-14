@@ -109,12 +109,75 @@ export interface CateringJobDesk {
   updatedAt: string;
 }
 
+/** Helper to extract only YYYY-MM-DD from any date string / ISO datetime */
+export function extractDateOnly(dateStr?: string): string {
+  if (!dateStr) return '';
+  if (dateStr.includes('T')) return dateStr.split('T')[0];
+  if (dateStr.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(dateStr)) return dateStr.slice(0, 10);
+  return dateStr;
+}
+
+/** Helper to extract only HH:mm from any time string / ISO datetime */
+export function extractTimeOnly(timeStr?: string, defaultTime = '07:00'): string {
+  if (!timeStr) return defaultTime;
+  let t = timeStr.trim();
+  if (t.includes('T')) {
+    t = t.split('T')[1];
+  }
+  // If format is HH:mm:ss or HH:mm:ss.sss, extract HH:mm
+  if (/^\d{2}:\d{2}/.test(t)) {
+    return t.slice(0, 5);
+  }
+  // If format is HH.mm, convert to HH:mm
+  if (/^\d{2}\.\d{2}/.test(t)) {
+    return t.slice(0, 5).replace('.', ':');
+  }
+  return t || defaultTime;
+}
+
+const MONTH_NAMES_ID = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+];
+
+/** Format date string into human readable Indonesian: e.g. "28 Juli 2026" */
+export function formatIndoDate(dateStr?: string): string {
+  if (!dateStr) return '-';
+  const cleanDate = extractDateOnly(dateStr);
+  const parts = cleanDate.split('-');
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d) && m >= 0 && m < 12) {
+      return `${d} ${MONTH_NAMES_ID[m]} ${y}`;
+    }
+  }
+  return cleanDate || '-';
+}
+
+/** Format time string cleanly: e.g. "22:30" */
+export function formatIndoTime(timeStr?: string, fallback = '07:00'): string {
+  return extractTimeOnly(timeStr, fallback);
+}
+
 /** Helper to generate auto Key ID like CAT-YYYYMMDD-001 */
 export function generateKeyId(dateStr?: string, counter = 1): string {
-  const d = dateStr ? new Date(dateStr) : new Date();
-  const year = isNaN(d.getFullYear()) ? new Date().getFullYear() : d.getFullYear();
-  const month = String(isNaN(d.getMonth()) ? new Date().getMonth() + 1 : d.getMonth() + 1).padStart(2, '0');
-  const day = String(isNaN(d.getDate()) ? new Date().getDate() : d.getDate()).padStart(2, '0');
+  const clean = extractDateOnly(dateStr);
+  if (clean) {
+    const parts = clean.split('-');
+    if (parts.length === 3) {
+      const year = parts[0];
+      const month = parts[1].padStart(2, '0');
+      const day = parts[2].padStart(2, '0');
+      const seq = String(counter).padStart(3, '0');
+      return `CAT-${year}${month}${day}-${seq}`;
+    }
+  }
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
   const seq = String(counter).padStart(3, '0');
   return `CAT-${year}${month}${day}-${seq}`;
 }
@@ -122,8 +185,19 @@ export function generateKeyId(dateStr?: string, counter = 1): string {
 /** Helper to calculate day name in Indonesian from date string */
 export function getHariFromDate(dateStr: string): string {
   if (!dateStr) return '';
+  const cleanDate = extractDateOnly(dateStr);
+  const parts = cleanDate.split('-');
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    const dateObj = new Date(y, m, d);
+    const days: HariIndo[] = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    return days[dateObj.getDay()] || '';
+  }
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return '';
   const days: HariIndo[] = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
   return days[d.getDay()] || '';
 }
+

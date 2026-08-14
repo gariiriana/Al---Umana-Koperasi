@@ -50,6 +50,10 @@ import {
   HARI_OPTIONS,
   generateKeyId,
   getHariFromDate,
+  extractDateOnly,
+  extractTimeOnly,
+  formatIndoDate,
+  formatIndoTime,
 } from "@/types/cateringJobDesk";
 
 interface DraftRow {
@@ -98,7 +102,7 @@ export function MoJobDeskPage() {
       id: "row-1",
       hari: getHariFromDate(todayStr),
       tanggal: todayStr,
-      startTime: "07.00",
+      startTime: "07:00",
       pic: "Joko",
       kegiatan: "",
       keterangan: "",
@@ -177,9 +181,9 @@ export function MoJobDeskPage() {
     (order: Order) => {
       setSelectedOrderContext(order);
       setDetailOrderModal(null);
-      const targetDate = order.eventDate || todayStr;
+      const targetDate = extractDateOnly(order.eventDate) || todayStr;
       const targetHari = getHariFromDate(targetDate) || "Jumat";
-      const targetTime = order.deliveryTime || "07.00";
+      const targetTime = extractTimeOnly(order.deliveryTime || order.eventDate, "07:00");
       const orderLabel = order.institutionName || order.recipientName || `Pesanan #${order.id.slice(-6).toUpperCase()}`;
 
       // Build item details summary
@@ -206,7 +210,7 @@ export function MoJobDeskPage() {
           id: `row-${Date.now()}-2`,
           hari: targetHari,
           tanggal: targetDate,
-          startTime: "06.30",
+          startTime: "06:30",
           pic: "Shifa",
           kegiatan: `Penerimaan & Persiapan Bahan: ${orderLabel}`,
           keterangan: `Cek kelengkapan bahan & bumbu untuk ${order.items?.length || 1} menu`,
@@ -257,7 +261,7 @@ export function MoJobDeskPage() {
           id: `row-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
           hari: lastRow ? lastRow.hari : getHariFromDate(defaultDate),
           tanggal: defaultDate,
-          startTime: lastRow ? lastRow.startTime : "07.00",
+          startTime: lastRow ? lastRow.startTime : "07:00",
           pic: "Joko",
           kegiatan: "",
           keterangan: "",
@@ -346,7 +350,7 @@ export function MoJobDeskPage() {
           id: "row-1",
           hari: getHariFromDate(todayStr),
           tanggal: todayStr,
-          startTime: "07.00",
+          startTime: "07:00",
           pic: "Joko",
           kegiatan: "",
           keterangan: "",
@@ -686,13 +690,13 @@ export function MoJobDeskPage() {
 
                       {/* Event Date & Delivery Time Chips */}
                       <div className="flex items-center gap-2 text-xs text-slate-600 mt-2.5">
-                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-50 border border-slate-100 font-medium text-[11px]">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-100 font-medium text-[11px]">
                           <Calendar className="h-3 w-3 text-slate-400" />
-                          {order.eventDate ? `${getHariFromDate(order.eventDate)}, ${order.eventDate}` : "-"}
+                          {order.eventDate ? `${getHariFromDate(order.eventDate)}, ${formatIndoDate(order.eventDate)}` : "-"}
                         </span>
-                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-50 border border-slate-100 font-medium text-[11px]">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-100 font-medium text-[11px]">
                           <Clock className="h-3 w-3 text-slate-400" />
-                          {order.deliveryTime || "07.00"}
+                          {formatIndoTime(order.deliveryTime || order.eventDate)}
                         </span>
                       </div>
 
@@ -791,7 +795,7 @@ export function MoJobDeskPage() {
                   {selectedOrderContext.institutionName || selectedOrderContext.recipientName}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Tgl Acara: <strong className="text-slate-800">{selectedOrderContext.eventDate}</strong> ({getHariFromDate(selectedOrderContext.eventDate)}) • Jam: <strong className="text-slate-800">{selectedOrderContext.deliveryTime || "07.00"}</strong> • Alamat: {selectedOrderContext.deliveryAddress || "-"}
+                  Tgl Acara: <strong className="text-slate-800">{formatIndoDate(selectedOrderContext.eventDate)}</strong> ({getHariFromDate(selectedOrderContext.eventDate)}) • Jam: <strong className="text-slate-800">{formatIndoTime(selectedOrderContext.deliveryTime || selectedOrderContext.eventDate)}</strong> • Alamat: {selectedOrderContext.deliveryAddress || "-"}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -832,34 +836,34 @@ export function MoJobDeskPage() {
           )}
 
           {/* Table Spreadsheet Editor */}
-          <div className="overflow-x-auto border border-slate-200 rounded-xl">
-            <table className="w-full text-left text-xs border-collapse min-w-[950px]">
+          <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-xs">
+            <table className="w-full text-left text-xs border-collapse min-w-[1300px]">
               <thead>
-                <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-700 font-semibold text-[11px]">
-                  <th className="py-2.5 px-3 w-10 text-center text-slate-400">#</th>
-                  <th className="py-2.5 px-3 w-28">Hari</th>
-                  <th className="py-2.5 px-3 w-36">Tanggal</th>
-                  <th className="py-2.5 px-3 w-24 text-center">Start Time</th>
-                  <th className="py-2.5 px-3 w-36">PIC</th>
-                  <th className="py-2.5 px-3 min-w-[200px]">Kegiatan</th>
-                  <th className="py-2.5 px-3 min-w-[240px]">Keterangan</th>
-                  <th className="py-2.5 px-3 w-36">Key ID (Auto)</th>
-                  <th className="py-2.5 px-3 w-36">Terkait Pesanan</th>
-                  <th className="py-2.5 px-2 w-10 text-center"></th>
+                <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-700 font-semibold text-[11px]">
+                  <th className="py-3 px-3 w-12 text-center text-slate-400">#</th>
+                  <th className="py-3 px-3 w-32">Hari</th>
+                  <th className="py-3 px-3 w-44">Tanggal</th>
+                  <th className="py-3 px-3 w-32 text-center">Start Time</th>
+                  <th className="py-3 px-3 w-40">PIC</th>
+                  <th className="py-3 px-3 min-w-[280px]">Kegiatan</th>
+                  <th className="py-3 px-3 min-w-[340px]">Keterangan (Wrap Text)</th>
+                  <th className="py-3 px-3 w-44">Key ID (Auto)</th>
+                  <th className="py-3 px-3 w-48">Terkait Pesanan</th>
+                  <th className="py-3 px-2 w-12 text-center"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {rows.map((row, idx) => (
                   <tr key={row.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-2 px-3 text-center text-slate-400 font-semibold">
+                    <td className="py-2.5 px-3 text-center text-slate-400 font-semibold align-top pt-3.5">
                       {idx + 1}
                     </td>
                     {/* Hari */}
-                    <td className="py-2 px-2">
+                    <td className="py-2 px-2 align-top">
                       <select
                         value={row.hari}
                         onChange={(e) => handleRowChange(row.id, "hari", e.target.value)}
-                        className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white text-xs font-semibold focus:ring-1 focus:ring-slate-900"
+                        className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white text-xs font-semibold focus:ring-2 focus:ring-slate-900 transition-colors cursor-pointer"
                       >
                         {HARI_OPTIONS.map((h) => (
                           <option key={h} value={h}>
@@ -869,30 +873,29 @@ export function MoJobDeskPage() {
                       </select>
                     </td>
                     {/* Tanggal */}
-                    <td className="py-2 px-2">
+                    <td className="py-2 px-2 align-top">
                       <input
                         type="date"
                         value={row.tanggal}
                         onChange={(e) => handleRowChange(row.id, "tanggal", e.target.value)}
-                        className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white text-xs font-semibold focus:ring-1 focus:ring-slate-900"
+                        className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white text-xs font-semibold focus:ring-2 focus:ring-slate-900 transition-colors"
                       />
                     </td>
                     {/* Start Time */}
-                    <td className="py-2 px-2">
+                    <td className="py-2 px-2 align-top">
                       <input
-                        type="text"
-                        placeholder="09.00"
+                        type="time"
                         value={row.startTime}
                         onChange={(e) => handleRowChange(row.id, "startTime", e.target.value)}
-                        className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white text-xs font-mono text-center focus:ring-1 focus:ring-slate-900"
+                        className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white text-xs font-mono font-bold text-center focus:ring-2 focus:ring-slate-900 transition-colors"
                       />
                     </td>
                     {/* PIC */}
-                    <td className="py-2 px-2">
+                    <td className="py-2 px-2 align-top">
                       <select
                         value={row.pic}
                         onChange={(e) => handleRowChange(row.id, "pic", e.target.value as PicShortName)}
-                        className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-slate-100/70 font-bold text-slate-900 focus:bg-white text-xs focus:ring-1 focus:ring-slate-900"
+                        className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-slate-100/80 font-bold text-slate-900 focus:bg-white text-xs focus:ring-2 focus:ring-slate-900 transition-colors cursor-pointer"
                       >
                         {PIC_OPTIONS.map((p) => (
                           <option key={p} value={p}>
@@ -902,42 +905,42 @@ export function MoJobDeskPage() {
                       </select>
                     </td>
                     {/* Kegiatan */}
-                    <td className="py-2 px-2">
-                      <input
-                        type="text"
+                    <td className="py-2 px-2 align-top">
+                      <textarea
+                        rows={2}
                         placeholder="Misal: Produksi Menu Utama / Capcay"
                         value={row.kegiatan}
                         onChange={(e) => handleRowChange(row.id, "kegiatan", e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 focus:bg-white text-xs font-medium focus:ring-1 focus:ring-slate-900"
+                        className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:bg-white text-xs font-medium focus:ring-2 focus:ring-slate-900 transition-colors resize-y leading-relaxed min-h-[58px]"
                       />
                     </td>
                     {/* Keterangan */}
-                    <td className="py-2 px-2">
-                      <input
-                        type="text"
-                        placeholder="Misal: 120 porsi nasi box saji"
+                    <td className="py-2 px-2 align-top">
+                      <textarea
+                        rows={2}
+                        placeholder="Misal: 120 porsi nasi box saji..."
                         value={row.keterangan}
                         onChange={(e) => handleRowChange(row.id, "keterangan", e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 focus:bg-white text-xs focus:ring-1 focus:ring-slate-900"
+                        className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:bg-white text-xs focus:ring-2 focus:ring-slate-900 transition-colors resize-y leading-relaxed min-h-[58px]"
                       />
                     </td>
                     {/* Key ID (100% Otomatis / Read-Only Badge) */}
-                    <td className="py-2 px-2 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-200">
-                        <span className="text-[11px] font-mono font-bold text-slate-800 tracking-wide">
+                    <td className="py-2 px-2 whitespace-nowrap align-top">
+                      <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 border border-slate-200">
+                        <span className="text-xs font-mono font-bold text-slate-800 tracking-wide">
                           {row.keyId}
                         </span>
-                        <span className="text-[9px] font-bold uppercase text-slate-500 bg-slate-200/80 px-1 py-0.5 rounded ml-auto">
+                        <span className="text-[9px] font-bold uppercase text-slate-500 bg-slate-200/90 px-1.5 py-0.5 rounded ml-auto">
                           Auto
                         </span>
                       </div>
                     </td>
                     {/* Link Order (Optional) */}
-                    <td className="py-2 px-2">
+                    <td className="py-2 px-2 align-top">
                       <select
                         value={row.orderId || ""}
                         onChange={(e) => handleRowChange(row.id, "orderId", e.target.value)}
-                        className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-[11px] focus:ring-1 focus:ring-slate-900"
+                        className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-slate-50 text-xs focus:ring-2 focus:ring-slate-900 transition-colors"
                       >
                         <option value="">(Tugas Umum / Non-Order)</option>
                         {orders.map((o) => (
@@ -948,15 +951,15 @@ export function MoJobDeskPage() {
                       </select>
                     </td>
                     {/* Delete button */}
-                    <td className="py-2 px-2 text-center">
+                    <td className="py-2 px-2 text-center align-top pt-2.5">
                       <button
                         type="button"
                         onClick={() => handleRemoveRow(row.id)}
                         disabled={rows.length === 1}
-                        className="p-1 text-slate-400 hover:text-rose-600 rounded disabled:opacity-30 cursor-pointer"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg disabled:opacity-30 cursor-pointer transition-colors"
                         title="Hapus baris"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </td>
                   </tr>
@@ -1268,7 +1271,7 @@ export function MoJobDeskPage() {
                     <div>
                       <p className="text-[10px] font-semibold text-slate-400">Tanggal Acara:</p>
                       <p className="font-semibold text-slate-900">
-                        {detailOrderModal.eventDate ? `${getHariFromDate(detailOrderModal.eventDate)}, ${detailOrderModal.eventDate}` : "-"}
+                        {detailOrderModal.eventDate ? `${getHariFromDate(detailOrderModal.eventDate)}, ${formatIndoDate(detailOrderModal.eventDate)}` : "-"}
                       </p>
                     </div>
                   </div>
@@ -1276,7 +1279,7 @@ export function MoJobDeskPage() {
                     <Clock className="h-4 w-4 text-slate-400 shrink-0" />
                     <div>
                       <p className="text-[10px] font-semibold text-slate-400">Jam Pengiriman:</p>
-                      <p className="font-semibold text-slate-900">{detailOrderModal.deliveryTime || "07.00"}</p>
+                      <p className="font-semibold text-slate-900">{formatIndoTime(detailOrderModal.deliveryTime || detailOrderModal.eventDate)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2.5">
