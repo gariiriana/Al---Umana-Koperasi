@@ -7,6 +7,7 @@
 import {
   doc,
   setDoc,
+  deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -270,4 +271,50 @@ export async function seedOperationalData(userUid: string = "system-admin"): Pro
     batchesCount: sampleMbgBatches.length,
     entriesCount: totalEntriesCreated,
   };
+}
+
+export async function clearSampleOperationalData(): Promise<number> {
+  const now = new Date();
+  const getOffsetDateStr = (daysOffset: number): string => {
+    const d = new Date(now.getTime() + daysOffset * 24 * 60 * 60 * 1000);
+    return d.toISOString().split("T")[0];
+  };
+
+  const dates = [
+    getOffsetDateStr(0),
+    getOffsetDateStr(1),
+    getOffsetDateStr(2),
+    getOffsetDateStr(3),
+    "2026-08-15",
+    "2026-08-16",
+    "2026-08-17",
+    "2026-08-18",
+    "2026-08-19",
+  ];
+  const orderPrefixes = ["ord-scg", "ord-disdik", "ord-ponpes", "ord-wedding", "ord-klinik"];
+
+  let deletedCount = 0;
+  for (const pfx of orderPrefixes) {
+    for (const d of dates) {
+      try {
+        await deleteDoc(doc(db, "orders", `${pfx}-${d}`));
+        deletedCount++;
+      } catch {
+        // ignore if not exists
+      }
+    }
+  }
+
+  for (const d of dates) {
+    try {
+      await deleteDoc(doc(db, "mbg_pm_batches", `batch-mbg-${d}`));
+      for (let i = 1; i <= 30; i++) {
+        await deleteDoc(doc(db, "mbg_pm_entries", `entry-batch-mbg-${d}-${i}`));
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return deletedCount;
 }

@@ -26,7 +26,6 @@
 import {
   collection,
   doc,
-  limit as firestoreLimit,
   onSnapshot,
   orderBy,
   query,
@@ -43,21 +42,6 @@ import type { Order, OrderStatus } from "@/types/order";
 import type { CourierGPS } from "@/types/courier-gps";
 import type { FileMetadata } from "@/types/file";
 import { subscriptionManager } from "@/services/subscriptionManager";
-
-/* ------------------------------------------------------------------ */
-/*  Constants                                                          */
-/* ------------------------------------------------------------------ */
-
-/**
- * Default cap on the number of orders returned by `subscribeOrders()`.
- * Prevents a full-collection listener that would fan out every single
- * write across the `orders` collection to every connected client.
- *
- * At 100 orders, even with millions of concurrent users, each listener
- * only receives updates for the 100 most recent orders — not the
- * entire collection.
- */
-const DEFAULT_ORDERS_LIMIT = 100;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -184,18 +168,24 @@ function snapshotToCourierGPS(
  */
 export function subscribeOrders(
   listener: (orders: Order[]) => void,
-  onError?: (err: Error) => void,
-  limit: number = DEFAULT_ORDERS_LIMIT
+  onError?: (err: Error) => void
 ): Unsubscribe {
-  const q = query(
-    collection(db, "orders"),
-    orderBy("createdAt", "desc"),
-    firestoreLimit(limit)
-  );
-  return subscriptionManager.subscribe(
-    q,
-    (snap) => listener(snapshotToOrders(snap)),
-    onError
+  const collRef = collection(db, "orders");
+  return onSnapshot(
+    collRef,
+    (snap) => {
+      const orders = snap.docs.map(snapshotToOrder);
+      orders.sort((a, b) => {
+        const dateA = a.eventDate || a.createdAt || "";
+        const dateB = b.eventDate || b.createdAt || "";
+        return dateB.localeCompare(dateA);
+      });
+      listener(orders);
+    },
+    (err) => {
+      console.error("subscribeOrders error:", err);
+      onError?.(err);
+    }
   );
 }
 

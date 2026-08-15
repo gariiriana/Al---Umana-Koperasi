@@ -47,7 +47,6 @@ import {
   subscribeAllJobDesks,
   type CreateJobDeskInput,
 } from "@/services/cateringJobDeskService";
-import { seedOperationalData } from "@/services/operationalSeedService";
 import type { Order } from "@/types/order";
 import type { MbgPmBatch, MbgPmEntry } from "@/types/mbg";
 import type {
@@ -171,21 +170,6 @@ export function MoJobDeskPage() {
   ]);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [seeding, setSeeding] = useState(false);
-
-  // Manual seed trigger
-  const handleSeedData = useCallback(async () => {
-    setSeeding(true);
-    try {
-      const res = await seedOperationalData(user?.uid || "mo-user");
-      alert(`Berhasil memuat data contoh operasional:\n• ${res.ordersCount} Pesanan Katering\n• ${res.batchesCount} Batch MBG (${res.entriesCount} Sekolah/Lembaga)`);
-    } catch (err) {
-      console.error("Gagal memuat data contoh:", err);
-      alert("Gagal memuat data contoh operasional.");
-    } finally {
-      setSeeding(false);
-    }
-  }, [user?.uid]);
 
   // Subscribe to all job desks, orders, and MBG data
   useEffect(() => {
@@ -238,21 +222,9 @@ export function MoJobDeskPage() {
       }
     );
 
-    // Auto-seed if database is empty on first load
-    const autoSeedTimer = setTimeout(async () => {
-      if (mounted && orders.length === 0 && mbgBatches.length === 0) {
-        try {
-          await seedOperationalData(user?.uid || "mo-user");
-        } catch (e) {
-          console.warn("Auto-seed skipped:", e);
-        }
-      }
-    }, 2000);
-
     return () => {
       mounted = false;
       clearTimeout(timer);
-      clearTimeout(autoSeedTimer);
       unsubDesks();
       unsubOrders();
       unsubBatches();
@@ -928,7 +900,7 @@ export function MoJobDeskPage() {
       <div className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white p-6 sm:p-8 rounded-3xl shadow-xl border border-slate-800">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-amber-400 text-slate-950 shadow-xs">
                 <Sparkles className="h-3.5 w-3.5" />
                 Manager Operational (MO)
@@ -937,15 +909,6 @@ export function MoJobDeskPage() {
                 <CalendarDays className="h-3.5 w-3.5 text-amber-400" />
                 Sistem Job Desk Berbasis Tanggal (Per Tanggal)
               </span>
-              <button
-                type="button"
-                onClick={handleSeedData}
-                disabled={seeding}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-extrabold bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50"
-              >
-                <Sparkles className="h-3 w-3" />
-                <span>{seeding ? "Mengisi Data..." : "🌱 Muat Data Contoh Katering & MBG"}</span>
-              </button>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
               Penyusunan & Distribusi Job Desk Harian
@@ -1114,19 +1077,8 @@ export function MoJobDeskPage() {
               {filteredCateringDateGroups.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center shadow-xs">
                   <CalendarDays className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm font-bold text-slate-800">Tidak ada tanggal pesanan katering yang sesuai</p>
-                  <p className="text-xs text-slate-400 mt-1">Belum ada pesanan katering di sistem atau sesuaikan filter Anda.</p>
-                  <div className="mt-4">
-                    <button
-                      type="button"
-                      onClick={handleSeedData}
-                      disabled={seeding}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-extrabold text-slate-950 bg-amber-400 hover:bg-amber-500 shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                      <span>{seeding ? "Sedang Mengisi Data..." : "🌱 Isi Data Pesanan Katering & MBG Contoh"}</span>
-                    </button>
-                  </div>
+                  <p className="text-sm font-semibold text-slate-700">Tidak ada tanggal pesanan katering yang sesuai filter</p>
+                  <p className="text-xs text-slate-400 mt-1">Admin Katering belum menambahkan pesanan atau sesuaikan kata kunci pencarian / filter Anda</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1170,87 +1122,83 @@ export function MoJobDeskPage() {
                             </div>
                           </div>
 
-                          {/* Header Action Buttons */}
-                          <div className="flex items-center gap-2 self-start sm:self-center">
+                          <div className="flex items-center gap-2.5">
                             <button
                               type="button"
                               onClick={() => toggleDateExpanded(group.date)}
-                              className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors"
+                              className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-xs font-bold text-slate-700 transition-colors cursor-pointer"
                             >
-                              <span>{isExpanded ? "Sembunyikan Pesanan" : "Lihat Daftar Pesanan"}</span>
-                              {isExpanded ? (
-                                <ChevronDown className="h-3.5 w-3.5" />
-                              ) : (
-                                <ChevronRight className="h-3.5 w-3.5" />
-                              )}
+                              {isExpanded ? "Sembunyikan Pesanan ˄" : "Lihat Daftar Pesanan >"}
                             </button>
 
                             <button
                               type="button"
                               onClick={() => handleGenerateCateringJobDesksForDate(group)}
-                              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold text-slate-950 bg-amber-400 hover:bg-amber-500 shadow-xs cursor-pointer transition-all active:scale-95"
+                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black bg-amber-400 hover:bg-amber-500 text-slate-950 shadow-xs cursor-pointer transition-all active:scale-95"
                             >
-                              <Sparkles className="h-3.5 w-3.5" />
-                              <span>📝 Susun Job Desk Tanggal Ini</span>
+                              <FileSpreadsheet className="h-3.5 w-3.5" />
+                              <span>Susun Job Desk Tanggal Ini</span>
                             </button>
                           </div>
                         </div>
 
-                        {/* Collapsible List of Orders on this Date */}
+                        {/* Expandable Order List for this Date */}
                         {isExpanded && (
-                          <div className="p-4 sm:p-5 bg-white space-y-3 divide-y divide-slate-100">
-                            {group.orders.map((order, idx) => {
-                              const existingDesks = jobDesksByOrderId.get(order.id) || [];
-                              const isOrderAssigned = existingDesks.length > 0;
-                              const title = order.institutionName || order.recipientName || `Pesanan #${order.id.slice(-6).toUpperCase()}`;
+                          <div className="p-4 bg-slate-50 border-t border-slate-200/80 space-y-3">
+                            <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">
+                              Daftar Pesanan ({group.orders.length})
+                            </h4>
 
-                              return (
-                                <div
-                                  key={order.id}
-                                  className={`pt-3 first:pt-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl ${
-                                    isOrderAssigned ? "bg-emerald-50/30" : "bg-slate-50"
-                                  }`}
-                                >
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-[10px] font-mono font-bold bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">
-                                        #{idx + 1}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {group.orders.map((ord, oIdx) => {
+                                const ordDesks = jobDesksByOrderId.get(ord.id) || [];
+                                const isOrdAssigned = ordDesks.length > 0;
+                                return (
+                                  <div
+                                    key={ord.id}
+                                    className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2"
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-[10px] font-mono font-bold text-slate-400">
+                                            #{oIdx + 1}
+                                          </span>
+                                          <span className="text-xs font-extrabold text-slate-900">
+                                            {ord.institutionName || ord.recipientName || "Pesanan"}
+                                          </span>
+                                        </div>
+                                        <p className="text-[11px] text-slate-600 mt-0.5 line-clamp-1">
+                                          Menu: <strong className="text-slate-800">{(ord.items || []).map((it) => `${it.itemName} (x${it.quantity})`).join(", ") || "Menu Katering Standar"}</strong>
+                                        </p>
+                                      </div>
+
+                                      <span
+                                        className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                          isOrdAssigned
+                                            ? "bg-emerald-100 text-emerald-800"
+                                            : "bg-amber-100 text-amber-800"
+                                        }`}
+                                      >
+                                        {isOrdAssigned ? "Ada Job Desk" : "Belum Dibuat"}
                                       </span>
-                                      <h4 className="text-xs font-bold text-slate-900">{title}</h4>
-                                      {isOrderAssigned ? (
-                                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                                          ✓ {existingDesks.length} Tugas Dibuat
-                                        </span>
-                                      ) : (
-                                        <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">
-                                          Belum Dibuat
-                                        </span>
-                                      )}
                                     </div>
-                                    <p className="text-[11px] text-slate-600">
-                                      Menu:{" "}
-                                      <strong className="text-slate-800">
-                                        {(order.items || []).map((it) => `${it.itemName} (x${it.quantity})`).join(", ") || "Menu Katering Standar"}
-                                      </strong>
-                                    </p>
-                                    <p className="text-[10px] text-slate-500">
-                                      Jam Kirim: <span className="font-mono font-bold">{order.deliveryTime || "-"}</span> • Alamat:{" "}
-                                      <span>{order.deliveryAddress || "-"}</span>
-                                    </p>
-                                  </div>
 
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <button
-                                      type="button"
-                                      onClick={() => setDetailOrderModal(order)}
-                                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 cursor-pointer"
-                                    >
-                                      Detail Pesanan
-                                    </button>
+                                    <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100">
+                                      <span>
+                                        Jam Kirim:{" "}
+                                        <strong className="font-mono font-bold text-slate-700">
+                                          {ord.deliveryTime || "-"}
+                                        </strong>
+                                      </span>
+                                      <span className="truncate max-w-[180px]" title={ord.deliveryAddress}>
+                                        Alamat: {ord.deliveryAddress || "-"}
+                                      </span>
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1275,19 +1223,8 @@ export function MoJobDeskPage() {
               {filteredMbgDateGroups.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center shadow-xs">
                   <Milk className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm font-bold text-slate-800">Tidak ada tanggal batch MBG yang sesuai</p>
-                  <p className="text-xs text-slate-400 mt-1">Admin MBG belum menambahkan batch jadwal atau sesuaikan filter Anda.</p>
-                  <div className="mt-4">
-                    <button
-                      type="button"
-                      onClick={handleSeedData}
-                      disabled={seeding}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                      <span>{seeding ? "Sedang Mengisi Data..." : "🌱 Isi Data Pesanan Katering & MBG Contoh"}</span>
-                    </button>
-                  </div>
+                  <p className="text-sm font-semibold text-slate-700">Tidak ada tanggal batch MBG yang sesuai filter</p>
+                  <p className="text-xs text-slate-400 mt-1">Admin MBG belum menambahkan batch jadwal atau sesuaikan filter pencarian Anda</p>
                 </div>
               ) : (
                 <div className="space-y-4">
