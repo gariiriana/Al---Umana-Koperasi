@@ -110,12 +110,22 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'dokumentasi_produksiMBG';
     }
 
+    function isProduksiMbg2() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MBG2'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'mbg2'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_mbg_2'
+        );
+    }
+
     function isAnyMbg() {
-      return isAdminMbg() || isProduksiMbg() || isDokumentasiProduksiMbg() || isPurchasingMbg() || isDistribusiMbg() || isKurirMbg() || isSubPurchasingMbg();
+      return isAdminMbg() || isProduksiMbg() || isProduksiMbg2() || isDokumentasiProduksiMbg() || isPurchasingMbg() || isDistribusiMbg() || isKurirMbg() || isSubPurchasingMbg();
     }
 
     // -------------------------------------------------------------------
-    // Katering Operational Role Helpers
+    // Katering & Operational Role Helpers
     // -------------------------------------------------------------------
     function getUserRole() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
@@ -135,8 +145,20 @@ service cloud.firestore {
 
     function isKateringOperational() {
       return request.auth != null
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && getUserRole() in ['produksi_1', 'distribusi_1', 'produksi_2', 'distribusi_2', 'tim_produksi', 'distribusi'];
+        && (
+          (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && getUserRole() in [
+              'produksi_1', 'distribusi_1', 'produksi_2', 'distribusi_2',
+              'tim_produksi', 'distribusi', 'MBG2', 'mbg2',
+              'produksi_mbg_2', 'distribusi_mbg_2'
+            ]
+          )
+          || ('email' in request.auth.token && (
+            request.auth.token.email == 'dstribusi2@alumana.id' ||
+            request.auth.token.email == 'Dstribusi2@alumana.id'
+          ))
+        );
     }
 
     // -------------------------------------------------------------------

@@ -167,8 +167,17 @@ function ShelledRoute({
     return <LoadingScreen message="Memuat profil..." />;
   }
 
+  const isWhitelistedEmail =
+    (user?.email && user.email.toLowerCase() === "dstribusi2@alumana.id") ||
+    (profile?.email && profile.email.toLowerCase() === "dstribusi2@alumana.id");
+
   // Redirect to respective default landing page if role is not allowed
-  if (profile && profile.role !== "admin" && !allowedRoles.includes(profile.role)) {
+  if (
+    profile &&
+    profile.role !== "admin" &&
+    !allowedRoles.includes(profile.role) &&
+    !isWhitelistedEmail
+  ) {
     // Admin-only routes (those that allow ONLY the admin role) show the
     // "Akses Ditolak" screen for non-admins and redirect to the storefront
     // homepage within 3 seconds (Requirements 16.3, 16.5).
@@ -690,7 +699,21 @@ function RoutesTree() {
         path="/katering/jobdesk"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Job Desk Saya" allowedRoles={["produksi_1", "distribusi_1", "produksi_2", "distribusi_2", "tim_produksi", "distribusi"]}>
+            <ShelledRoute
+              pageTitle="Job Desk Saya"
+              allowedRoles={[
+                "produksi_1",
+                "distribusi_1",
+                "produksi_2",
+                "distribusi_2",
+                "tim_produksi",
+                "distribusi",
+                "MBG2",
+                "mbg2",
+                "produksi_mbg_2",
+                "distribusi_mbg_2",
+              ]}
+            >
               <OperationalJobDeskPage />
             </ShelledRoute>
           </Protected>

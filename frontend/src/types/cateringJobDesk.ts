@@ -2,6 +2,9 @@
 // Catering Job Desk Types (Excel Form Layout Compatible)
 // ============================================================================
 
+/** Operational division for job desks: Katering or MBG */
+export type JobDeskDivision = 'katering' | 'mbg';
+
 /** Status of a job desk item as set by the operational role. */
 export type JobDeskStatus = 'pending' | 'complete' | 'incomplete';
 
@@ -9,17 +12,31 @@ export type JobDeskStatus = 'pending' | 'complete' | 'incomplete';
 export type JobDeskReviewStatus = 'not_submitted' | 'pending_review' | 'approved' | 'rejected';
 
 /** Operational roles that can be assigned job desks. */
-export type JobDeskAssignableRole = 'produksi_1' | 'distribusi_1' | 'produksi_2' | 'distribusi_2';
+export type JobDeskAssignableRole =
+  | 'produksi_1'
+  | 'distribusi_1'
+  | 'produksi_2'
+  | 'distribusi_2'
+  | 'MBG2'
+  | 'distribusi_mbg_2';
 
 /** Short PIC names matching the excel layout. */
-export type PicShortName = 'Joko' | 'Dwi' | 'Shifa' | 'Wandi';
+export type PicShortName =
+  | 'Joko'
+  | 'Dwi'
+  | 'Shifa'
+  | 'Wandi'
+  | 'MBG2'
+  | 'Distribusi2';
 
 /** Display labels for assignable roles. */
 export const JOBDESK_ROLE_LABELS: Record<JobDeskAssignableRole, string> = {
-  produksi_1: 'Joko (Produksi 1)',
-  distribusi_1: 'Dwi (Distribusi 1)',
-  produksi_2: 'Shifa (Produksi 2)',
-  distribusi_2: 'Wandi (Distribusi 2)',
+  produksi_1: 'Joko (Produksi 1 - Katering)',
+  distribusi_1: 'Dwi (Distribusi 1 - Katering)',
+  produksi_2: 'Shifa (Produksi 2 - Katering)',
+  distribusi_2: 'Wandi (Distribusi 2 - Katering & MBG)',
+  MBG2: 'Produksi MBG 2 (MBG2)',
+  distribusi_mbg_2: 'Distribusi MBG 2 (Dstribusi2@alumana.id)',
 };
 
 /** Mapping from short PIC name to role ID and vice versa. */
@@ -28,6 +45,8 @@ export const PIC_NAME_TO_ROLE: Record<PicShortName, JobDeskAssignableRole> = {
   Dwi: 'distribusi_1',
   Shifa: 'produksi_2',
   Wandi: 'distribusi_2',
+  MBG2: 'MBG2',
+  Distribusi2: 'distribusi_2',
 };
 
 export const ROLE_TO_PIC_NAME: Record<JobDeskAssignableRole, PicShortName> = {
@@ -35,6 +54,8 @@ export const ROLE_TO_PIC_NAME: Record<JobDeskAssignableRole, PicShortName> = {
   distribusi_1: 'Dwi',
   produksi_2: 'Shifa',
   distribusi_2: 'Wandi',
+  MBG2: 'MBG2',
+  distribusi_mbg_2: 'Distribusi2',
 };
 
 /** Days of the week in Indonesian. */
@@ -54,6 +75,9 @@ export type HariIndo = typeof HARI_OPTIONS[number];
 export interface CateringJobDesk {
   id: string;
 
+  /** Operational division: 'katering' (default) or 'mbg' */
+  division?: JobDeskDivision;
+
   // === Excel Column Fields ===
   /** Kolom A: Hari (e.g. "Jumat", "Sabtu") */
   hari: string;
@@ -61,13 +85,13 @@ export interface CateringJobDesk {
   tanggal: string;
   /** Kolom C: Start Time / Jam Mulai (e.g. "09.00", "04.30") */
   startTime: string;
-  /** Kolom D: PIC (e.g. "Joko", "Dwi", "Shifa", "Wandi") */
+  /** Kolom D: PIC (e.g. "Joko", "Dwi", "Shifa", "Wandi", "MBG2") */
   pic: PicShortName | string;
-  /** Kolom E: Kegiatan (e.g. "Pesanan Usth Nur", "Laporan produksi sarapan") */
+  /** Kolom E: Kegiatan (e.g. "Pesanan Usth Nur", "MBG SDN 01 Sukamaju") */
   kegiatan: string;
-  /** Kolom F: Keterangan / Detail tugas (e.g. "3. Capcay 6 porsi", "120 porsi nasi (21 kg)") */
+  /** Kolom F: Keterangan / Detail tugas (e.g. "3. Capcay 6 porsi", "120 porsi porsi kecil") */
   keterangan: string;
-  /** Kolom G: Key ID (e.g. "CAT-20260717-044") */
+  /** Kolom G: Key ID (e.g. "CAT-20260717-044" atau "MBG-20260717-012") */
   keyId: string;
 
   // === System & Operational Fields ===
@@ -75,6 +99,17 @@ export interface CateringJobDesk {
   orderId?: string;
   /** Human-readable order label. */
   orderLabel?: string;
+
+  // === MBG Linked Metadata (if division === 'mbg') ===
+  /** Reference to MBG Batch ID */
+  mbgBatchId?: string;
+  /** Nama Institusi / Sekolah MBG (e.g. "SDN Sukamaju 01") */
+  mbgInstitutionName?: string;
+  /** Jumlah Total Porsi MBG */
+  mbgPortionCount?: number;
+  /** Tipe Menu / Porsi MBG (e.g. "Porsi Besar", "Porsi Kecil") */
+  mbgMenuType?: string;
+
   /** The operational role this job desk is assigned to. */
   assignedRole: JobDeskAssignableRole;
   /** UID of MO who created this job desk. */
@@ -161,8 +196,9 @@ export function formatIndoTime(timeStr?: string, fallback = '07:00'): string {
   return extractTimeOnly(timeStr, fallback);
 }
 
-/** Helper to generate auto Key ID like CAT-YYYYMMDD-001 */
-export function generateKeyId(dateStr?: string, counter = 1): string {
+/** Helper to generate auto Key ID like CAT-YYYYMMDD-001 or MBG-YYYYMMDD-001 */
+export function generateKeyId(dateStr?: string, counter = 1, prefix = 'CAT'): string {
+  const pfx = prefix.toUpperCase();
   const clean = extractDateOnly(dateStr);
   if (clean) {
     const parts = clean.split('-');
@@ -171,7 +207,7 @@ export function generateKeyId(dateStr?: string, counter = 1): string {
       const month = parts[1].padStart(2, '0');
       const day = parts[2].padStart(2, '0');
       const seq = String(counter).padStart(3, '0');
-      return `CAT-${year}${month}${day}-${seq}`;
+      return `${pfx}-${year}${month}${day}-${seq}`;
     }
   }
   const d = new Date();
@@ -179,7 +215,7 @@ export function generateKeyId(dateStr?: string, counter = 1): string {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   const seq = String(counter).padStart(3, '0');
-  return `CAT-${year}${month}${day}-${seq}`;
+  return `${pfx}-${year}${month}${day}-${seq}`;
 }
 
 /** Helper to calculate day name in Indonesian from date string */

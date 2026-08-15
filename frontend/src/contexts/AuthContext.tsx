@@ -27,7 +27,8 @@ export interface UserProfile {
   displayName: string;
   role: "admin" | "tim_produksi" | "distribusi" | "monitoring" | "kurir" | "pelanggan"
     | "produksi_1" | "distribusi_1" | "produksi_2" | "distribusi_2" | "mo_katering" | "co_mo_katering"
-    | "admin_mbg" | "produksi_mbg" | "purchasing_mbg" | "distribusi_mbg" | "kurir_mbg";
+    | "admin_mbg" | "produksi_mbg" | "purchasing_mbg" | "distribusi_mbg" | "kurir_mbg" | "sub_purchasing_mbg"
+    | "MBG2" | "mbg2" | "produksi_mbg_2" | "distribusi_mbg_2" | "dokumentasi_produksiMBG";
   createdAt?: unknown;
   /** Optional delivery address saved during checkout for auto-fill. */
   savedDeliveryAddress?: string;
@@ -119,7 +120,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
               const email = nextUser.email || "";
               
               let defaultRole: UserProfile["role"] = "pelanggan";
-              if (email.startsWith("admin_mbg") || email.startsWith("adminmbg")) {
+              if (email.toLowerCase() === "dstribusi2@alumana.id") {
+                defaultRole = "distribusi_2";
+              } else if (email.startsWith("produksi_mbg_2") || email.startsWith("mbg2") || email.startsWith("produksi2_mbg")) {
+                defaultRole = "MBG2";
+              } else if (email.startsWith("admin_mbg") || email.startsWith("adminmbg")) {
                 defaultRole = "admin_mbg";
               } else if (email.startsWith("produksi_mbg") || email.startsWith("produksimbg")) {
                 defaultRole = "produksi_mbg";

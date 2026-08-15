@@ -4,9 +4,11 @@ export type { FileMetadataStatus, FileMetadata, FileChunk } from './file';
 export type { InventoryItem, InventoryItemInput } from './inventory';
 export type {
   CateringJobDesk,
+  JobDeskDivision,
   JobDeskStatus,
   JobDeskReviewStatus,
   JobDeskAssignableRole,
+  PicShortName,
 } from './cateringJobDesk';
 export type {
   MbgInstitutionType,

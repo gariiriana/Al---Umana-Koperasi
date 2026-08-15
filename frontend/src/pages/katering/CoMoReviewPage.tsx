@@ -1,12 +1,13 @@
 // ============================================================================
-// CO_MO Review & Monitoring Page (Excel Layout & Review Workflow)
+// CO_MO Review & Monitoring Page (Excel Layout & Review Workflow - Katering & MBG)
 // ============================================================================
 // Wakil Kepala Manager Operational (CO_MO) uses this page to:
-// 1. Monitor job desks with exact Excel columns (Hari, Tanggal, Start Time, PIC, Kegiatan, Keterangan, Key ID)
-// 2. Filter by specific operational role (Ust. Joko / Dwi / Shifa / Wandi)
-// 3. Filter by specific catering order (e.g. Pesanan A, B, etc.)
-// 4. Review submitted job desks (Approve / Reject with remark)
-// 5. Monitor overall completion & review stats
+// 1. Monitor job desks with exact Excel columns (Divisi, Hari, Tanggal, Start Time, PIC, Kegiatan, Keterangan, Key ID)
+// 2. Filter by division (🍱 Katering Reguler vs 🥛 Program MBG)
+// 3. Filter by specific operational role (Joko, Dwi, Shifa, Wandi, MBG2)
+// 4. Filter by specific order or MBG school
+// 5. Review submitted job desks (Approve / Reject with remark)
+// 6. Monitor overall completion & review stats in real-time
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
@@ -25,6 +26,8 @@ import {
   Layers,
   Sparkles,
   Table as TableIcon,
+  Milk,
+  UtensilsCrossed,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -40,7 +43,14 @@ import {
 
 type ReviewFilter = "all" | "pending_review" | "approved" | "rejected" | "not_submitted";
 
-const PIC_OPTIONS: PicShortName[] = ["Joko", "Dwi", "Shifa", "Wandi"];
+const PIC_OPTIONS: PicShortName[] = [
+  "Joko",
+  "Dwi",
+  "Shifa",
+  "Wandi",
+  "MBG2",
+  "Distribusi2",
+];
 
 export function CoMoReviewPage() {
   const { user } = useAuth();
@@ -48,6 +58,7 @@ export function CoMoReviewPage() {
   const [loading, setLoading] = useState(true);
 
   // Multi-Filter state
+  const [divisionFilter, setDivisionFilter] = useState<"all" | "katering" | "mbg">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("all");
   const [selectedPic, setSelectedPic] = useState<string>("all");
@@ -74,34 +85,51 @@ export function CoMoReviewPage() {
     return () => unsub();
   }, []);
 
-  // Distinct order list for dropdown filter
+  // Distinct order / MBG institution list for dropdown filter
   const orderOptions = useMemo(() => {
     const map = new Map<string, string>();
     for (const jd of allJobDesks) {
       if (jd.orderId) {
-        map.set(jd.orderId, jd.orderLabel || jd.orderId);
+        const label =
+          jd.division === "mbg"
+            ? `🥛 MBG: ${jd.mbgInstitutionName || jd.orderLabel || jd.orderId}`
+            : `🍱 Katering: ${jd.orderLabel || jd.orderId}`;
+        map.set(jd.orderId, label);
       }
     }
     return Array.from(map.entries());
   }, [allJobDesks]);
 
-  // Global stats
+  // Global stats by division
   const stats = useMemo(() => {
-    const total = allJobDesks.length;
-    const pendingReview = allJobDesks.filter((jd) => jd.reviewStatus === "pending_review").length;
-    const approved = allJobDesks.filter((jd) => jd.reviewStatus === "approved").length;
-    const rejected = allJobDesks.filter((jd) => jd.reviewStatus === "rejected").length;
-    const notSubmitted = allJobDesks.filter(
+    const targetSet = divisionFilter === "all"
+      ? allJobDesks
+      : allJobDesks.filter((d) => (d.division || "katering") === divisionFilter);
+
+    const total = targetSet.length;
+    const kateringCount = allJobDesks.filter((d) => d.division !== "mbg").length;
+    const mbgCount = allJobDesks.filter((d) => d.division === "mbg").length;
+
+    const pendingReview = targetSet.filter((jd) => jd.reviewStatus === "pending_review").length;
+    const approved = targetSet.filter((jd) => jd.reviewStatus === "approved").length;
+    const rejected = targetSet.filter((jd) => jd.reviewStatus === "rejected").length;
+    const notSubmitted = targetSet.filter(
       (jd) => jd.reviewStatus === "not_submitted"
     ).length;
-    return { total, pendingReview, approved, rejected, notSubmitted };
-  }, [allJobDesks]);
+
+    return { total, kateringCount, mbgCount, pendingReview, approved, rejected, notSubmitted };
+  }, [allJobDesks, divisionFilter]);
 
   // Main multi-filter engine
   const filteredJobDesks = useMemo(() => {
     let result = allJobDesks;
 
-    // 1. Filter by specific PIC (e.g. Joko, Dwi, Shifa, Wandi)
+    // 0. Filter by division
+    if (divisionFilter !== "all") {
+      result = result.filter((jd) => (jd.division || "katering") === divisionFilter);
+    }
+
+    // 1. Filter by specific PIC
     if (selectedPic !== "all") {
       result = result.filter(
         (jd) =>
@@ -110,7 +138,7 @@ export function CoMoReviewPage() {
       );
     }
 
-    // 2. Filter by specific order (e.g. Pesanan A, Pesanan B)
+    // 2. Filter by specific order / institution
     if (selectedOrder !== "all") {
       result = result.filter((jd) => jd.orderId === selectedOrder);
     }
@@ -120,7 +148,7 @@ export function CoMoReviewPage() {
       result = result.filter((jd) => jd.tanggal === selectedDate);
     }
 
-    // 4. Filter by review status (Pending Review, Approved, Rejected, Not Submitted)
+    // 4. Filter by review status
     if (reviewFilter !== "all") {
       result = result.filter((jd) => jd.reviewStatus === reviewFilter);
     }
@@ -133,6 +161,7 @@ export function CoMoReviewPage() {
           (jd.kegiatan || jd.title || "").toLowerCase().includes(q) ||
           (jd.keterangan || jd.description || "").toLowerCase().includes(q) ||
           (jd.orderLabel || "").toLowerCase().includes(q) ||
+          (jd.mbgInstitutionName || "").toLowerCase().includes(q) ||
           (jd.keyId || "").toLowerCase().includes(q) ||
           (jd.pic || "").toLowerCase().includes(q) ||
           (jd.hari || "").toLowerCase().includes(q) ||
@@ -143,7 +172,7 @@ export function CoMoReviewPage() {
     }
 
     return result;
-  }, [allJobDesks, selectedPic, selectedOrder, selectedDate, reviewFilter, searchQuery]);
+  }, [allJobDesks, divisionFilter, selectedPic, selectedOrder, selectedDate, reviewFilter, searchQuery]);
 
   // Handle approve
   const handleApprove = useCallback(
@@ -182,6 +211,7 @@ export function CoMoReviewPage() {
   );
 
   const activeFilterCount =
+    (divisionFilter !== "all" ? 1 : 0) +
     (selectedPic !== "all" ? 1 : 0) +
     (selectedOrder !== "all" ? 1 : 0) +
     (selectedDate ? 1 : 0) +
@@ -189,6 +219,7 @@ export function CoMoReviewPage() {
     (searchQuery.trim() ? 1 : 0);
 
   const resetAllFilters = () => {
+    setDivisionFilter("all");
     setSelectedPic("all");
     setSelectedOrder("all");
     setSelectedDate("");
@@ -208,32 +239,60 @@ export function CoMoReviewPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6 pb-16">
+      {/* Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-3xl text-white shadow-xl">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-              Review Job Desk (CO_MO)
-            </h1>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800">
-              <Sparkles className="h-3 w-3" /> Monitoring & Persetujuan
-            </span>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-amber-300 text-xs font-semibold backdrop-blur-md mb-2">
+            <Sparkles className="h-3.5 w-3.5" />
+            Monitoring & Validasi Review CO_MO
           </div>
-          <p className="text-sm text-gray-500 mt-1">
-            Pantau dan review job desk dari Ust. Joko, Dwi, Shifa, dan Wandi dalam format tabel Excel
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+            Ruang Review Co-Manager Operasional
+          </h1>
+          <p className="text-slate-300 text-xs sm:text-sm mt-1">
+            Pantau dan verifikasi checklist tugas dari Joko, Dwi, Shifa, Wandi, dan MBG2 (Katering & Program MBG).
           </p>
         </div>
 
-        {activeFilterCount > 0 && (
+        {/* Division Tab Switcher */}
+        <div className="inline-flex p-1 bg-white/10 backdrop-blur-md rounded-xl border border-white/10 shrink-0 self-start sm:self-center">
           <button
             type="button"
-            onClick={resetAllFilters}
-            className="self-start sm:self-auto text-xs font-bold text-indigo-600 hover:text-indigo-800 px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 transition-colors cursor-pointer"
+            onClick={() => setDivisionFilter("all")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              divisionFilter === "all"
+                ? "bg-white text-slate-900 shadow-xs"
+                : "text-slate-200 hover:text-white"
+            }`}
           >
-            Reset Semua Filter ({activeFilterCount})
+            ⚡ Semua Divisi ({allJobDesks.length})
           </button>
-        )}
+          <button
+            type="button"
+            onClick={() => setDivisionFilter("katering")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              divisionFilter === "katering"
+                ? "bg-amber-400 text-slate-950 shadow-xs"
+                : "text-slate-200 hover:text-white"
+            }`}
+          >
+            <UtensilsCrossed className="h-3.5 w-3.5" />
+            <span>Katering ({stats.kateringCount})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setDivisionFilter("mbg")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              divisionFilter === "mbg"
+                ? "bg-emerald-500 text-white shadow-xs"
+                : "text-slate-200 hover:text-white"
+            }`}
+          >
+            <Milk className="h-3.5 w-3.5" />
+            <span>MBG ({stats.mbgCount})</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats Dashboard / Review Status Filter Pills */}
@@ -264,7 +323,7 @@ export function CoMoReviewPage() {
                 else if (s.label === "Belum Submit") setReviewFilter("not_submitted");
               }}
               className={`${s.bg} rounded-2xl p-3.5 text-center transition-all hover:scale-105 cursor-pointer ${
-                isSelected ? "ring-2 ring-indigo-500 ring-offset-2 shadow-sm" : ""
+                isSelected ? "ring-2 ring-indigo-500 ring-offset-2 shadow-xs" : ""
               }`}
             >
               <s.icon className={`h-4 w-4 ${s.color} mx-auto mb-1`} />
@@ -276,17 +335,29 @@ export function CoMoReviewPage() {
       </div>
 
       {/* Multi-Filter Bar: Role, Order, Date, Search */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-3">
-        <div className="flex items-center gap-2 text-xs font-bold text-gray-700 mb-1">
-          <Filter className="h-4 w-4 text-indigo-600" />
-          <span>Filter Lanjutan (Role, Pesanan, Tanggal)</span>
+      <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-bold text-gray-700">
+            <Filter className="h-4 w-4 text-indigo-600" />
+            <span>Filter Lanjutan (Role, Pesanan / Lembaga, Tanggal)</span>
+          </div>
+
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={resetAllFilters}
+              className="text-xs font-bold text-indigo-600 hover:text-indigo-800 px-3 py-1 rounded-lg bg-indigo-50 border border-indigo-200 transition-colors cursor-pointer"
+            >
+              Reset Semua Filter ({activeFilterCount})
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           {/* 1. Filter by Petugas / PIC */}
           <div className="relative">
             <label className="block text-[11px] font-bold text-gray-500 mb-1">
-              Petugas (PIC)
+              Petugas (PIC Teklap)
             </label>
             <div className="relative">
               <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -295,10 +366,10 @@ export function CoMoReviewPage() {
                 onChange={(e) => setSelectedPic(e.target.value)}
                 className="w-full pl-9 pr-8 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold text-gray-800 focus:ring-2 focus:ring-indigo-400 appearance-none cursor-pointer"
               >
-                <option value="all">Semua Petugas (Joko, Dwi, Shifa, Wandi)</option>
+                <option value="all">Semua Petugas</option>
                 {PIC_OPTIONS.map((p) => (
                   <option key={p} value={p}>
-                    {p} ({JOBDESK_ROLE_LABELS[PIC_NAME_TO_ROLE[p]]})
+                    {JOBDESK_ROLE_LABELS[PIC_NAME_TO_ROLE[p]] || p}
                   </option>
                 ))}
               </select>
@@ -306,10 +377,10 @@ export function CoMoReviewPage() {
             </div>
           </div>
 
-          {/* 2. Filter by Pesanan */}
+          {/* 2. Filter by Pesanan / Lembaga */}
           <div className="relative">
             <label className="block text-[11px] font-bold text-gray-500 mb-1">
-              Pesanan Katering
+              Pesanan / Lembaga MBG
             </label>
             <div className="relative">
               <Layers className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -318,7 +389,7 @@ export function CoMoReviewPage() {
                 onChange={(e) => setSelectedOrder(e.target.value)}
                 className="w-full pl-9 pr-8 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold text-gray-800 focus:ring-2 focus:ring-indigo-400 appearance-none cursor-pointer"
               >
-                <option value="all">Semua Pesanan</option>
+                <option value="all">Semua Pesanan & Lembaga</option>
                 {orderOptions.map(([id, label]) => (
                   <option key={id} value={id}>
                     {label}
@@ -356,7 +427,7 @@ export function CoMoReviewPage() {
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari kegiatan, Key ID..."
+                placeholder="Cari kegiatan, Key ID, sekolah..."
                 className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs text-gray-800 placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-400"
               />
             </div>
@@ -371,7 +442,7 @@ export function CoMoReviewPage() {
             onClick={() => setSelectedPic("all")}
             className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors cursor-pointer ${
               selectedPic === "all"
-                ? "bg-indigo-600 text-white shadow-sm"
+                ? "bg-indigo-600 text-white shadow-xs"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
           >
@@ -384,7 +455,7 @@ export function CoMoReviewPage() {
               onClick={() => setSelectedPic(p)}
               className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors cursor-pointer ${
                 selectedPic === p
-                  ? "bg-indigo-600 text-white shadow-sm"
+                  ? "bg-indigo-600 text-white shadow-xs"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >
@@ -395,7 +466,7 @@ export function CoMoReviewPage() {
       </div>
 
       {/* Main Table: Excel-Style Spreadsheet View for CO_MO */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
         <div className="px-5 py-3.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TableIcon className="h-4 w-4 text-indigo-600" />
@@ -426,13 +497,14 @@ export function CoMoReviewPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse min-w-[1050px]">
+            <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
               <thead>
                 <tr className="bg-gray-100 border-b border-gray-200 text-gray-700 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-3.5 w-24">Hari</th>
-                  <th className="py-3 px-3.5 w-28">Tanggal</th>
+                  <th className="py-3 px-3.5 w-20">Divisi</th>
+                  <th className="py-3 px-3.5 w-20">Hari</th>
+                  <th className="py-3 px-3.5 w-24">Tanggal</th>
                   <th className="py-3 px-3.5 w-20 text-center">Start Time</th>
-                  <th className="py-3 px-3.5 w-28">PIC</th>
+                  <th className="py-3 px-3.5 w-28">PIC Teklap</th>
                   <th className="py-3 px-3.5 min-w-[200px]">Kegiatan</th>
                   <th className="py-3 px-3.5 min-w-[240px]">Keterangan</th>
                   <th className="py-3 px-3.5 w-36 font-mono">Key ID</th>
@@ -461,6 +533,21 @@ export function CoMoReviewPage() {
                           : "hover:bg-gray-50"
                       }`}
                     >
+                      {/* Divisi Badge */}
+                      <td className="py-3 px-3.5">
+                        {jd.division === "mbg" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            <Milk className="h-3 w-3 text-emerald-600" />
+                            MBG
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200">
+                            <UtensilsCrossed className="h-3 w-3 text-amber-600" />
+                            Katering
+                          </span>
+                        )}
+                      </td>
+
                       {/* Hari */}
                       <td className="py-3 px-3.5 font-bold text-gray-900">{jd.hari || "-"}</td>
                       {/* Tanggal */}
@@ -471,16 +558,16 @@ export function CoMoReviewPage() {
                       </td>
                       {/* PIC */}
                       <td className="py-3 px-3.5">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-extrabold bg-slate-100 text-slate-800 border border-slate-200">
                           {jd.pic}
                         </span>
                       </td>
                       {/* Kegiatan */}
                       <td className="py-3 px-3.5 font-bold text-gray-900">
                         {jd.kegiatan || jd.title}
-                        {jd.orderLabel && (
+                        {(jd.orderLabel || jd.mbgInstitutionName) && (
                           <p className="text-[10px] text-gray-400 font-normal mt-0.5">
-                            Pesanan: {jd.orderLabel}
+                            {jd.division === "mbg" ? `Lembaga: ${jd.mbgInstitutionName || jd.orderLabel}` : `Pesanan: ${jd.orderLabel}`}
                           </p>
                         )}
                       </td>
@@ -508,89 +595,101 @@ export function CoMoReviewPage() {
                       {/* Status PIC */}
                       <td className="py-3 px-3.5 text-center">
                         {jd.status === "complete" ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
                             <CheckCircle2 className="h-3.5 w-3.5" /> Complete
                           </span>
                         ) : jd.status === "incomplete" ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-orange-100 text-orange-700">
-                            <AlertCircle className="h-3.5 w-3.5" /> Incomplete
-                          </span>
+                          <div>
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-800">
+                              <AlertCircle className="h-3.5 w-3.5" /> Incomplete
+                            </span>
+                          </div>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-500">
-                            <Clock className="h-3 w-3" /> Pending
-                          </span>
+                          <span className="text-xs text-gray-400">Belum Ditandai</span>
                         )}
                       </td>
 
                       {/* Aksi Review CO_MO */}
                       <td className="py-3 px-3.5 text-center">
                         {isApproved ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Approved
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Disetujui (Approved)
                           </span>
                         ) : isRejected ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-extrabold bg-red-100 text-red-800 border border-red-200">
-                              <XCircle className="h-3.5 w-3.5 text-red-600" /> Rejected
+                          <div className="space-y-1">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold bg-red-100 text-red-800 border border-red-200">
+                              <XCircle className="h-3.5 w-3.5" /> Ditolak (Rejected)
                             </span>
-                            <p className="text-[10px] text-gray-400 mt-1">Menunggu perbaikan PIC</p>
-                          </div>
-                        ) : isPendingReview ? (
-                          <div className="space-y-2">
-                            <div className="flex gap-1.5 justify-center">
+                            <div>
                               <button
                                 type="button"
                                 onClick={() => setApprovingJobDesk(jd)}
-                                disabled={isProcessing}
-                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer underline"
                               >
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                {isProcessing ? "..." : "Approve"}
+                                Ubah ke Approve
                               </button>
+                            </div>
+                          </div>
+                        ) : isRejecting ? (
+                          <div className="space-y-2 p-2 bg-red-50 rounded-xl border border-red-200 text-left">
+                            <label className="block text-[10px] font-bold text-red-800">
+                              Catatan Penolakan untuk Petugas:
+                            </label>
+                            <textarea
+                              value={rejectRemark}
+                              onChange={(e) => setRejectRemark(e.target.value)}
+                              placeholder="Tulis alasan kenapa ditolak..."
+                              rows={2}
+                              className="w-full px-2 py-1 rounded-lg border border-red-300 text-xs focus:ring-1 focus:ring-red-400 bg-white"
+                            />
+                            <div className="flex gap-1.5 justify-end">
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setRejectingId(isRejecting ? null : jd.id);
+                                  setRejectingId(null);
                                   setRejectRemark("");
                                 }}
-                                disabled={isProcessing}
-                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+                                className="px-2 py-1 text-[10px] font-bold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 cursor-pointer"
                               >
-                                <XCircle className="h-3.5 w-3.5" />
-                                Reject
+                                Batal
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleReject(jd.id)}
+                                disabled={isProcessing || !rejectRemark.trim()}
+                                className="px-2.5 py-1 text-[10px] font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50 cursor-pointer"
+                              >
+                                {isProcessing ? "Menyimpan..." : "Kirim Penolakan"}
                               </button>
                             </div>
-
-                            {/* Rejection Remark Input Form */}
-                            <AnimatePresence>
-                              {isRejecting && (
-                                <motion.div
-                                  initial={{ opacity: 0, height: 0 }}
-                                  animate={{ opacity: 1, height: "auto" }}
-                                  exit={{ opacity: 0, height: 0 }}
-                                  className="pt-1 text-left space-y-1.5"
-                                >
-                                  <textarea
-                                    value={rejectRemark}
-                                    onChange={(e) => setRejectRemark(e.target.value)}
-                                    placeholder="Tulis alasan / remark penolakan..."
-                                    rows={2}
-                                    className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-red-300 focus:ring-1 focus:ring-red-400 resize-none bg-white"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => handleReject(jd.id)}
-                                    disabled={isProcessing || !rejectRemark.trim()}
-                                    className="w-full py-1 text-[11px] font-bold text-white bg-red-700 hover:bg-red-800 rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
-                                  >
-                                    Kirim Penolakan + Remark
-                                  </button>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
                           </div>
                         ) : (
-                          <span className="text-[11px] text-gray-400">Belum disubmit oleh PIC</span>
+                          <div className="flex items-center justify-center gap-1.5">
+                            {/* Approve Button */}
+                            <button
+                              type="button"
+                              onClick={() => setApprovingJobDesk(jd)}
+                              disabled={isProcessing}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition-all cursor-pointer"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Approve
+                            </button>
+
+                            {/* Reject Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRejectingId(jd.id);
+                                setRejectRemark("");
+                              }}
+                              disabled={isProcessing}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 transition-all cursor-pointer"
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                              Tolak
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -602,79 +701,52 @@ export function CoMoReviewPage() {
         )}
       </div>
 
-      {/* Confirm Approve Modal */}
+      {/* Confirmation Modal for Approve */}
       <AnimatePresence>
         {approvingJobDesk && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-md w-full p-6 space-y-4 text-left"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-200"
             >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-emerald-100 rounded-2xl text-emerald-600">
-                    <CheckCircle2 className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-gray-900">
-                      Konfirmasi Persetujuan
-                    </h3>
-                    <p className="text-xs text-gray-500">
-                      Review Job Desk oleh CO_MO
-                    </p>
-                  </div>
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-emerald-100 text-emerald-700 rounded-xl">
+                  <CheckCircle2 className="h-6 w-6" />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setApprovingJobDesk(null)}
-                  disabled={processingId !== null}
-                  className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <XCircle className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-200/80 text-xs space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-medium">PETUGAS (PIC):</span>
-                  <span className="font-extrabold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200">
-                    {approvingJobDesk.pic}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-medium">KEGIATAN:</span>
-                  <span className="font-bold text-gray-800 text-right max-w-[200px] truncate">
-                    {approvingJobDesk.kegiatan || approvingJobDesk.title}
-                  </span>
-                </div>
-                {approvingJobDesk.orderLabel && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500 font-medium">PESANAN:</span>
-                    <span className="font-semibold text-gray-700">
-                      {approvingJobDesk.orderLabel}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-medium">KEY ID:</span>
-                  <span className="font-mono font-bold text-gray-700 bg-gray-200 px-1.5 py-0.5 rounded text-[11px]">
-                    {approvingJobDesk.keyId}
-                  </span>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">
+                    Konfirmasi Persetujuan (Approve)
+                  </h3>
+                  <p className="text-xs text-gray-500 font-mono">
+                    {approvingJobDesk.keyId} • {approvingJobDesk.division === "mbg" ? "🥛 Program MBG" : "🍱 Katering"}
+                  </p>
                 </div>
               </div>
 
-              <p className="text-xs text-gray-600 leading-relaxed">
-                Apakah Anda yakin ingin menyetujui (<strong>Approve</strong>) job desk ini? Setelah disetujui, status job desk akan diperbarui menjadi <span className="text-emerald-700 font-bold">Approved</span>.
+              <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 text-xs space-y-1.5">
+                <p>
+                  <strong className="text-gray-700">Petugas:</strong> {approvingJobDesk.pic}
+                </p>
+                <p>
+                  <strong className="text-gray-700">Kegiatan:</strong> {approvingJobDesk.kegiatan}
+                </p>
+                <p>
+                  <strong className="text-gray-700">Status Pengerjaan:</strong>{" "}
+                  <span className="font-bold text-emerald-700">{approvingJobDesk.status}</span>
+                </p>
+              </div>
+
+              <p className="text-xs text-gray-500">
+                Dengan menyetujui, tugas ini akan ditandai tuntas 100% dan statusnya diperbarui untuk Manager Operasional.
               </p>
 
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
+              <div className="flex gap-2 justify-end pt-2">
                 <button
                   type="button"
                   onClick={() => setApprovingJobDesk(null)}
-                  disabled={processingId !== null}
-                  className="px-4 py-2 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl cursor-pointer"
                 >
                   Batal
                 </button>
@@ -684,11 +756,9 @@ export function CoMoReviewPage() {
                     await handleApprove(approvingJobDesk.id);
                     setApprovingJobDesk(null);
                   }}
-                  disabled={processingId !== null}
-                  className="flex items-center gap-1.5 px-4.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs cursor-pointer"
                 >
-                  <CheckCircle2 className="h-4 w-4" />
-                  {processingId === approvingJobDesk.id ? "Memproses..." : "Ya, Setujui"}
+                  Ya, Setujui Tugas
                 </button>
               </div>
             </motion.div>

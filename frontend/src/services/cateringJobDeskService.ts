@@ -21,6 +21,7 @@ import { db } from "@/lib/firebase";
 import type {
   CateringJobDesk,
   JobDeskAssignableRole,
+  JobDeskDivision,
   JobDeskStatus,
   PicShortName,
 } from "@/types/cateringJobDesk";
@@ -49,10 +50,20 @@ function docToJobDesk(id: string, data: Record<string, unknown>): CateringJobDes
   const tanggal = (data.tanggal as string) || "";
   const hari = (data.hari as string) || (tanggal ? getHariFromDate(tanggal) : "");
   const startTime = (data.startTime as string) || "";
-  const keyId = (data.keyId as string) || `CAT-${id.slice(0, 8).toUpperCase()}`;
+
+  // Auto detect division: fallback to 'mbg' if mbg fields exist, otherwise 'katering'
+  const division: JobDeskDivision =
+    (data.division as JobDeskDivision) ||
+    (data.mbgBatchId || data.mbgInstitutionName || kegiatan.toLowerCase().includes("mbg")
+      ? "mbg"
+      : "katering");
+
+  const defaultKeyPrefix = division === "mbg" ? "MBG" : "CAT";
+  const keyId = (data.keyId as string) || `${defaultKeyPrefix}-${id.slice(0, 8).toUpperCase()}`;
 
   return {
     id,
+    division,
     hari,
     tanggal,
     startTime,
@@ -62,6 +73,10 @@ function docToJobDesk(id: string, data: Record<string, unknown>): CateringJobDes
     keyId,
     orderId: (data.orderId as string) || "",
     orderLabel: (data.orderLabel as string) || "",
+    mbgBatchId: (data.mbgBatchId as string) || undefined,
+    mbgInstitutionName: (data.mbgInstitutionName as string) || undefined,
+    mbgPortionCount: typeof data.mbgPortionCount === "number" ? data.mbgPortionCount : undefined,
+    mbgMenuType: (data.mbgMenuType as string) || undefined,
     assignedRole,
     assignedBy: (data.assignedBy as string) || "",
     title: kegiatan,
@@ -84,6 +99,7 @@ function docToJobDesk(id: string, data: Record<string, unknown>): CateringJobDes
 // ---------------------------------------------------------------------------
 
 export interface CreateJobDeskInput {
+  division?: JobDeskDivision;
   hari?: string;
   tanggal: string;
   startTime: string;
@@ -93,6 +109,10 @@ export interface CreateJobDeskInput {
   keyId?: string;
   orderId?: string;
   orderLabel?: string;
+  mbgBatchId?: string;
+  mbgInstitutionName?: string;
+  mbgPortionCount?: number;
+  mbgMenuType?: string;
   assignedRole?: JobDeskAssignableRole;
   assignedByUid: string;
 }
@@ -103,9 +123,14 @@ export async function createJobDesk(input: CreateJobDeskInput): Promise<string> 
     input.assignedRole ||
     (PIC_NAME_TO_ROLE[input.pic as PicShortName] || "produksi_1");
   const calculatedHari = input.hari || getHariFromDate(input.tanggal);
-  const calculatedKeyId = input.keyId || generateKeyId(input.tanggal, Math.floor(Math.random() * 900) + 100);
+  const division = input.division || (input.mbgBatchId || input.mbgInstitutionName ? "mbg" : "katering");
+  const keyPrefix = division === "mbg" ? "MBG" : "CAT";
+  const calculatedKeyId =
+    input.keyId ||
+    generateKeyId(input.tanggal, Math.floor(Math.random() * 900) + 100, keyPrefix);
 
   const docRef = await addDoc(collection(db, COLLECTION), {
+    division,
     hari: calculatedHari,
     tanggal: input.tanggal,
     startTime: input.startTime,
@@ -115,6 +140,10 @@ export async function createJobDesk(input: CreateJobDeskInput): Promise<string> 
     keyId: calculatedKeyId,
     orderId: input.orderId || "",
     orderLabel: input.orderLabel || "",
+    mbgBatchId: input.mbgBatchId || null,
+    mbgInstitutionName: input.mbgInstitutionName || null,
+    mbgPortionCount: typeof input.mbgPortionCount === "number" ? input.mbgPortionCount : null,
+    mbgMenuType: input.mbgMenuType || null,
     assignedRole: role,
     assignedBy: input.assignedByUid,
     title: input.kegiatan,
@@ -139,10 +168,14 @@ export async function batchCreateJobDesks(
       input.assignedRole ||
       (PIC_NAME_TO_ROLE[input.pic as PicShortName] || "produksi_1");
     const calculatedHari = input.hari || getHariFromDate(input.tanggal);
-    const calculatedKeyId = input.keyId || generateKeyId(input.tanggal, index + 1);
+    const division = input.division || (input.mbgBatchId || input.mbgInstitutionName ? "mbg" : "katering");
+    const keyPrefix = division === "mbg" ? "MBG" : "CAT";
+    const calculatedKeyId =
+      input.keyId || generateKeyId(input.tanggal, index + 1, keyPrefix);
 
     const newDoc = doc(collRef);
     batch.set(newDoc, {
+      division,
       hari: calculatedHari,
       tanggal: input.tanggal,
       startTime: input.startTime,
@@ -152,6 +185,10 @@ export async function batchCreateJobDesks(
       keyId: calculatedKeyId,
       orderId: input.orderId || "",
       orderLabel: input.orderLabel || "",
+      mbgBatchId: input.mbgBatchId || null,
+      mbgInstitutionName: input.mbgInstitutionName || null,
+      mbgPortionCount: typeof input.mbgPortionCount === "number" ? input.mbgPortionCount : null,
+      mbgMenuType: input.mbgMenuType || null,
       assignedRole: role,
       assignedBy: input.assignedByUid,
       title: input.kegiatan,
@@ -258,10 +295,11 @@ export async function rejectJobDesk(
 // Real-time Subscriptions
 // ---------------------------------------------------------------------------
 
-/** Subscribe to all job desks (for CO_MO and MO overview). */
+/** Subscribe to all job desks (for CO_MO and MO overview), optionally filtered by division. */
 export function subscribeAllJobDesks(
   onData: (jobDesks: CateringJobDesk[]) => void,
-  onError?: (error: Error) => void
+  onError?: (error: Error) => void,
+  division?: JobDeskDivision
 ): () => void {
   const q = query(
     collection(db, COLLECTION),
@@ -271,9 +309,12 @@ export function subscribeAllJobDesks(
   return onSnapshot(
     q,
     (snapshot) => {
-      const results = snapshot.docs.map((d) =>
+      let results = snapshot.docs.map((d) =>
         docToJobDesk(d.id, d.data() as Record<string, unknown>)
       );
+      if (division) {
+        results = results.filter((jd) => jd.division === division);
+      }
       onData(results);
     },
     (error) => {
@@ -310,13 +351,18 @@ export function subscribeJobDesksByOrder(
   );
 }
 
-/** Subscribe to job desks assigned to a specific role or PIC name (handles aliases and PIC matching). */
+/** Subscribe to job desks assigned to a specific role or PIC name (handles aliases, MBG2, and dual-scope Dstribusi2@alumana.id). */
 export function subscribeJobDesksByRole(
   role: JobDeskAssignableRole,
   onData: (jobDesks: CateringJobDesk[]) => void,
-  onError?: (error: Error) => void
+  onError?: (error: Error) => void,
+  userEmail?: string
 ): () => void {
   const picName = ROLE_TO_PIC_NAME[role] || "Joko";
+  const isDualDistribusi =
+    role === "distribusi_2" ||
+    role === "distribusi_mbg_2" ||
+    (userEmail && userEmail.toLowerCase() === "dstribusi2@alumana.id");
 
   const q = query(
     collection(db, COLLECTION),
@@ -329,12 +375,22 @@ export function subscribeJobDesksByRole(
       const results = snapshot.docs
         .map((d) => docToJobDesk(d.id, d.data() as Record<string, unknown>))
         .filter((jd) => {
+          // Dual-Scope Distribusi 2 (Wandi / Dstribusi2@alumana.id): matches both katering & mbg distribusi
+          if (isDualDistribusi) {
+            if (jd.assignedRole === "distribusi_2" || jd.assignedRole === "distribusi_mbg_2") return true;
+            if (jd.pic === "Wandi" || jd.pic === "Distribusi2" || jd.pic?.toLowerCase().includes("distribusi")) return true;
+            return false;
+          }
+
+          if (role === "MBG2") {
+            return jd.assignedRole === "MBG2" || jd.pic === "MBG2" || jd.pic?.toLowerCase().includes("mbg 2");
+          }
+
           if (jd.assignedRole === role) return true;
           if (jd.pic === picName) return true;
           if (role === "produksi_1" && jd.pic === "Joko") return true;
           if (role === "distribusi_1" && jd.pic === "Dwi") return true;
           if (role === "produksi_2" && jd.pic === "Shifa") return true;
-          if (role === "distribusi_2" && jd.pic === "Wandi") return true;
           return false;
         });
       onData(results);

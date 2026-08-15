@@ -202,6 +202,34 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/mbg/sub-purchasing",
     "/mbg/orders",
   ],
+
+  /**
+   * Produksi MBG 2 — MBG2: Tim produksi MBG 2.
+   */
+  MBG2: [
+    "/katering/jobdesk",
+    "/mbg/production",
+    "/mbg/cooking",
+  ],
+  mbg2: [
+    "/katering/jobdesk",
+    "/mbg/production",
+    "/mbg/cooking",
+  ],
+  produksi_mbg_2: [
+    "/katering/jobdesk",
+    "/mbg/production",
+    "/mbg/cooking",
+  ],
+
+  /**
+   * Distribusi MBG 2 — Dstribusi2@alumana.id
+   */
+  distribusi_mbg_2: [
+    "/katering/jobdesk",
+    "/mbg/distribution",
+    "/mbg/delivery",
+  ],
 };
 
 /** Roles that land on the admin AppShell when authenticated. */
@@ -222,6 +250,36 @@ export const ADMIN_SHELL_ROLES = [
   "distribusi_mbg",
   "kurir_mbg",
   "sub_purchasing_mbg",
+  "MBG2",
+  "mbg2",
+  "produksi_mbg_2",
+  "distribusi_mbg_2",
+] as const;
+
+export const ALL_ROLES = [
+  "admin",
+  "customer",
+  "monitoring",
+  "tim_produksi",
+  "distribusi",
+  "kurir",
+  "produksi_1",
+  "distribusi_1",
+  "produksi_2",
+  "distribusi_2",
+  "mo_katering",
+  "co_mo_katering",
+  "admin_mbg",
+  "produksi_mbg",
+  "dokumentasi_produksiMBG",
+  "purchasing_mbg",
+  "distribusi_mbg",
+  "kurir_mbg",
+  "sub_purchasing_mbg",
+  "MBG2",
+  "mbg2",
+  "produksi_mbg_2",
+  "distribusi_mbg_2",
 ] as const;
 
 /**
@@ -249,4 +307,8 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   distribusi_mbg: "/mbg/distribution",
   kurir_mbg: "/mbg/delivery",
   sub_purchasing_mbg: "/mbg/sub-purchasing",
+  MBG2: "/katering/jobdesk",
+  mbg2: "/katering/jobdesk",
+  produksi_mbg_2: "/katering/jobdesk",
+  distribusi_mbg_2: "/katering/jobdesk",
 };
