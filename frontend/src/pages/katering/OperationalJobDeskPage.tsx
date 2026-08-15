@@ -41,8 +41,14 @@ import { JOBDESK_ROLE_LABELS, ROLE_TO_PIC_NAME } from "@/types/cateringJobDesk";
 
 /** Map user profile role to job desk assignable role. */
 function mapToAssignableRole(profileRole?: string, email?: string): JobDeskAssignableRole | null {
-  if (email && email.toLowerCase() === "dstribusi2@alumana.id") {
-    return "distribusi_2";
+  if (email) {
+    const em = email.toLowerCase();
+    if (em.includes("produksimbg2") || em.includes("produksimbg") || em.includes("joko")) {
+      return "produksi_1";
+    }
+    if (em === "dstribusi2@alumana.id" || em.startsWith("wandi")) {
+      return "distribusi_2";
+    }
   }
   const mapping: Record<string, JobDeskAssignableRole> = {
     produksi_1: "produksi_1",
@@ -53,6 +59,7 @@ function mapToAssignableRole(profileRole?: string, email?: string): JobDeskAssig
     distribusi: "distribusi_1", // Legacy alias for Dwi
     MBG2: "MBG2",
     mbg2: "MBG2",
+    produksi_mbg: "produksi_1", // Ust. Joko
     produksi_mbg_2: "MBG2",
     distribusi_mbg_2: "distribusi_2",
   };
@@ -75,14 +82,20 @@ export function OperationalJobDeskPage() {
   const [rowReason, setRowReason] = useState<Record<string, string>>({});
   const [submittingRowId, setSubmittingRowId] = useState<string | null>(null);
 
-  const assignableRole = mapToAssignableRole(profile?.role, profile?.email || user?.email || undefined);
-  const picShortName = assignableRole ? ROLE_TO_PIC_NAME[assignableRole] : "Joko";
+  const emailLower = (profile?.email || user?.email || "").toLowerCase();
+  const isJokoAccount = emailLower.includes("produksimbg2") || emailLower.includes("produksimbg") || emailLower.includes("joko");
+
+  const assignableRole = isJokoAccount
+    ? "produksi_1"
+    : mapToAssignableRole(profile?.role, profile?.email || user?.email || undefined);
+  const picShortName = isJokoAccount ? "Joko" : (assignableRole ? ROLE_TO_PIC_NAME[assignableRole] : "Joko");
 
   const isDualScopeUser =
-    (profile?.email && profile.email.toLowerCase() === "dstribusi2@alumana.id") ||
-    (user?.email && user.email.toLowerCase() === "dstribusi2@alumana.id") ||
-    profile?.role === "distribusi_2" ||
-    profile?.role === "distribusi_mbg_2";
+    !isJokoAccount &&
+    ((profile?.email && profile.email.toLowerCase() === "dstribusi2@alumana.id") ||
+      (user?.email && user.email.toLowerCase() === "dstribusi2@alumana.id") ||
+      profile?.role === "distribusi_2" ||
+      profile?.role === "distribusi_mbg_2");
 
   useEffect(() => {
     if (!assignableRole) {

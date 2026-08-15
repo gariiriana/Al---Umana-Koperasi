@@ -120,14 +120,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
               const email = nextUser.email || "";
               
               let defaultRole: UserProfile["role"] = "pelanggan";
-              if (email.toLowerCase() === "dstribusi2@alumana.id") {
+              if (email.toLowerCase() === "dstribusi2@alumana.id" || email.toLowerCase().startsWith("wandi")) {
                 defaultRole = "distribusi_2";
+              } else if (email.startsWith("produksimbg2") || email.startsWith("produksimbg") || email.startsWith("produksi_1") || email.startsWith("produksi_mbg")) {
+                defaultRole = "produksi_1";
               } else if (email.startsWith("produksi_mbg_2") || email.startsWith("mbg2") || email.startsWith("produksi2_mbg")) {
                 defaultRole = "MBG2";
               } else if (email.startsWith("admin_mbg") || email.startsWith("adminmbg")) {
                 defaultRole = "admin_mbg";
-              } else if (email.startsWith("produksi_mbg") || email.startsWith("produksimbg")) {
-                defaultRole = "produksi_mbg";
               } else if (email.startsWith("purchasing_mbg") || email.startsWith("purchasingmbg")) {
                 defaultRole = "purchasing_mbg";
               } else if (email.startsWith("distribusi_mbg") || email.startsWith("distribusimbg")) {

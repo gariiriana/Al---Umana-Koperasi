@@ -168,7 +168,11 @@ const roleBadge: Record<string, string> = {
   co_mo_katering: "Wakil Kepala MO",
   // MBG roles
   admin_mbg: "Admin MBG",
-  produksi_mbg: "Produksi MBG",
+  produksi_mbg: "Ust. Joko (Produksi MBG)",
+  MBG2: "Ust. Joko (Produksi MBG 2)",
+  mbg2: "Ust. Joko (Produksi MBG 2)",
+  produksi_mbg_2: "Ust. Joko (Produksi MBG 2)",
+  distribusi_mbg_2: "Wandi (Distribusi 2)",
   dokumentasi_produksiMBG: "Dokumentasi MBG",
   purchasing_mbg: "Purchasing MBG",
   distribusi_mbg: "Distribusi MBG",
@@ -343,7 +347,16 @@ export function Sidebar({
               <p className="text-sm font-bold text-[#111827] truncate">{userName || userEmail || "Pengguna"}</p>
               {userRole && (
                 <span className="inline-block text-[10px] font-bold bg-[#F3F4F6] text-[#6B7280] rounded-full px-2 py-0.5 mt-0.5">
-                  {roleBadge[userRole] ?? userRole}
+                  {(() => {
+                    const em = (userEmail || userName || "").toLowerCase();
+                    if (em.includes("produksimbg2") || em.includes("produksimbg") || em.includes("joko")) {
+                      return "Ust. Joko (Produksi)";
+                    }
+                    if (em === "dstribusi2@alumana.id" || em.startsWith("wandi")) {
+                      return "Wandi (Distribusi 2)";
+                    }
+                    return roleBadge[userRole] ?? userRole;
+                  })()}
                 </span>
               )}
             </div>

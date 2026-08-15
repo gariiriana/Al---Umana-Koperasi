@@ -358,11 +358,20 @@ export function subscribeJobDesksByRole(
   onError?: (error: Error) => void,
   userEmail?: string
 ): () => void {
-  const picName = ROLE_TO_PIC_NAME[role] || "Joko";
+  const emailLower = (userEmail || "").toLowerCase();
+  const isJoko =
+    emailLower.includes("produksimbg2") ||
+    emailLower.includes("produksimbg") ||
+    emailLower.includes("joko") ||
+    role === "produksi_1";
+
+  const picName = isJoko ? "Joko" : (ROLE_TO_PIC_NAME[role] || "Joko");
   const isDualDistribusi =
-    role === "distribusi_2" ||
-    role === "distribusi_mbg_2" ||
-    (userEmail && userEmail.toLowerCase() === "dstribusi2@alumana.id");
+    !isJoko &&
+    (role === "distribusi_2" ||
+      role === "distribusi_mbg_2" ||
+      emailLower === "dstribusi2@alumana.id" ||
+      emailLower.startsWith("wandi"));
 
   const q = query(
     collection(db, COLLECTION),
@@ -375,6 +384,12 @@ export function subscribeJobDesksByRole(
       const results = snapshot.docs
         .map((d) => docToJobDesk(d.id, d.data() as Record<string, unknown>))
         .filter((jd) => {
+          // Joko: match Joko tasks
+          if (isJoko) {
+            if (jd.pic === "Joko" || jd.assignedRole === "produksi_1" || jd.pic?.toLowerCase().includes("joko")) return true;
+            return false;
+          }
+
           // Dual-Scope Distribusi 2 (Wandi / Dstribusi2@alumana.id): matches both katering & mbg distribusi
           if (isDualDistribusi) {
             if (jd.assignedRole === "distribusi_2" || jd.assignedRole === "distribusi_mbg_2") return true;
@@ -388,7 +403,6 @@ export function subscribeJobDesksByRole(
 
           if (jd.assignedRole === role) return true;
           if (jd.pic === picName) return true;
-          if (role === "produksi_1" && jd.pic === "Joko") return true;
           if (role === "distribusi_1" && jd.pic === "Dwi") return true;
           if (role === "produksi_2" && jd.pic === "Shifa") return true;
           return false;
