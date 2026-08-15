@@ -30,6 +30,7 @@ import {
   FileSpreadsheet,
   ChevronRight,
   CheckCircle,
+  ArrowLeft,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeOrders } from "@/services/realtimeService";
@@ -93,7 +94,7 @@ export function MoJobDeskPage() {
 
   // Filter for orders list
   const [orderSearchQuery, setOrderSearchQuery] = useState("");
-  const [orderHandoverFilter, setOrderHandoverFilter] = useState<"all" | "unassigned" | "assigned">("all");
+  const [orderHandoverFilter, setOrderHandoverFilter] = useState<"all" | "unassigned" | "assigned">("unassigned");
 
   // Draft rows for batch entry
   const todayStr = new Date().toISOString().split("T")[0];
@@ -186,13 +187,7 @@ export function MoJobDeskPage() {
       const targetTime = extractTimeOnly(order.deliveryTime || order.eventDate, "07:00");
       const orderLabel = order.institutionName || order.recipientName || `Pesanan #${order.id.slice(-6).toUpperCase()}`;
 
-      // Build item details summary
-      const itemSummary =
-        order.items && order.items.length > 0
-          ? order.items.map((it, idx) => `${idx + 1}. ${it.itemName} (${it.quantity} ${it.unit || "porsi"})`).join(", ")
-          : order.foodDetails || "Rincian menu katering";
-
-      // Pre-fill standard template rows for this order
+      // Start with 1 clean empty row for this order
       setRows([
         {
           id: `row-${Date.now()}-1`,
@@ -200,45 +195,9 @@ export function MoJobDeskPage() {
           tanggal: targetDate,
           startTime: targetTime,
           pic: "Joko",
-          kegiatan: `Produksi Menu Utama: ${orderLabel}`,
-          keterangan: itemSummary,
+          kegiatan: "",
+          keterangan: "",
           keyId: computeKeyId(targetDate, 0),
-          orderId: order.id,
-          orderLabel,
-        },
-        {
-          id: `row-${Date.now()}-2`,
-          hari: targetHari,
-          tanggal: targetDate,
-          startTime: "06:30",
-          pic: "Shifa",
-          kegiatan: `Penerimaan & Persiapan Bahan: ${orderLabel}`,
-          keterangan: `Cek kelengkapan bahan & bumbu untuk ${order.items?.length || 1} menu`,
-          keyId: computeKeyId(targetDate, 1),
-          orderId: order.id,
-          orderLabel,
-        },
-        {
-          id: `row-${Date.now()}-3`,
-          hari: targetHari,
-          tanggal: targetDate,
-          startTime: targetTime,
-          pic: "Dwi",
-          kegiatan: `Pengemasan & Serah Terima: ${orderLabel}`,
-          keterangan: `Packing box makanan hangat saji untuk ${orderLabel}`,
-          keyId: computeKeyId(targetDate, 2),
-          orderId: order.id,
-          orderLabel,
-        },
-        {
-          id: `row-${Date.now()}-4`,
-          hari: targetHari,
-          tanggal: targetDate,
-          startTime: targetTime,
-          pic: "Wandi",
-          kegiatan: `Pengiriman / Logistik: ${orderLabel}`,
-          keterangan: `Alamat: ${order.deliveryAddress || "Lokasi pemesan"}`,
-          keyId: computeKeyId(targetDate, 3),
           orderId: order.id,
           orderLabel,
         },
@@ -600,18 +559,9 @@ export function MoJobDeskPage() {
               <div className="inline-flex p-0.5 bg-slate-100 rounded-lg text-xs font-medium">
                 <button
                   type="button"
-                  onClick={() => setOrderHandoverFilter("all")}
-                  className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                    orderHandoverFilter === "all" ? "bg-white text-slate-900 shadow-xs font-semibold" : "text-slate-600"
-                  }`}
-                >
-                  Semua ({orders.length})
-                </button>
-                <button
-                  type="button"
                   onClick={() => setOrderHandoverFilter("unassigned")}
                   className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                    orderHandoverFilter === "unassigned" ? "bg-white text-rose-700 shadow-xs font-semibold" : "text-slate-600"
+                    orderHandoverFilter === "unassigned" ? "bg-white text-rose-700 shadow-xs font-semibold" : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   Belum Ditugaskan ({stats.unassignedOrders})
@@ -620,10 +570,19 @@ export function MoJobDeskPage() {
                   type="button"
                   onClick={() => setOrderHandoverFilter("assigned")}
                   className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                    orderHandoverFilter === "assigned" ? "bg-white text-emerald-700 shadow-xs font-semibold" : "text-slate-600"
+                    orderHandoverFilter === "assigned" ? "bg-white text-emerald-700 shadow-xs font-semibold" : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   Sudah Ditugaskan ({stats.totalOrders - stats.unassignedOrders})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderHandoverFilter("all")}
+                  className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                    orderHandoverFilter === "all" ? "bg-white text-slate-900 shadow-xs font-semibold" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Semua ({orders.length})
                 </button>
               </div>
             </div>
@@ -784,6 +743,23 @@ export function MoJobDeskPage() {
       {/* ========================================================================= */}
       {activeTab === "form" && (
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 space-y-4">
+          {/* Top Back Navigation Bar */}
+          <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+            <button
+              type="button"
+              onClick={() => setActiveTab("orders")}
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs border border-slate-200"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Kembali ke Daftar Pesanan
+            </button>
+            <span className="text-xs text-slate-500 font-medium hidden sm:inline-block">
+              {selectedOrderContext
+                ? `Konteks: ${selectedOrderContext.institutionName || selectedOrderContext.recipientName}`
+                : "Form Input Bebas"}
+            </span>
+          </div>
+
           {/* Order Context Banner */}
           {selectedOrderContext ? (
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -808,7 +784,10 @@ export function MoJobDeskPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSelectedOrderContext(null)}
+                  onClick={() => {
+                    setSelectedOrderContext(null);
+                    setActiveTab("orders");
+                  }}
                   className="text-xs font-semibold text-slate-500 hover:text-slate-800 underline cursor-pointer"
                 >
                   Ganti Pesanan
@@ -825,30 +804,23 @@ export function MoJobDeskPage() {
                   Isi baris tugas di bawah ini. Anda dapat menambah beberapa baris sekaligus.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab("orders")}
-                className="text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-200 px-3 py-1.5 rounded-lg cursor-pointer transition-colors"
-              >
-                ← Pilih dari Pesanan Admin
-              </button>
             </div>
           )}
 
           {/* Table Spreadsheet Editor */}
           <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-xs">
-            <table className="w-full text-left text-xs border-collapse min-w-[1300px]">
+            <table className="w-full text-left text-xs border-collapse min-w-[1400px]">
               <thead>
                 <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-700 font-semibold text-[11px]">
                   <th className="py-3 px-3 w-12 text-center text-slate-400">#</th>
-                  <th className="py-3 px-3 w-32">Hari</th>
-                  <th className="py-3 px-3 w-44">Tanggal</th>
-                  <th className="py-3 px-3 w-32 text-center">Start Time</th>
-                  <th className="py-3 px-3 w-40">PIC</th>
+                  <th className="py-3 px-3 min-w-[140px] w-36">Hari</th>
+                  <th className="py-3 px-3 min-w-[160px] w-44">Tanggal</th>
+                  <th className="py-3 px-3 min-w-[130px] w-36 text-center">Start Time</th>
+                  <th className="py-3 px-3 min-w-[220px] w-60">PIC</th>
                   <th className="py-3 px-3 min-w-[280px]">Kegiatan</th>
-                  <th className="py-3 px-3 min-w-[340px]">Keterangan (Wrap Text)</th>
-                  <th className="py-3 px-3 w-44">Key ID (Auto)</th>
-                  <th className="py-3 px-3 w-48">Terkait Pesanan</th>
+                  <th className="py-3 px-3 min-w-[320px]">Keterangan (Wrap Text)</th>
+                  <th className="py-3 px-3 min-w-[160px] w-44">Key ID (Auto)</th>
+                  <th className="py-3 px-3 min-w-[200px] w-52">Terkait Pesanan</th>
                   <th className="py-3 px-2 w-12 text-center"></th>
                 </tr>
               </thead>
@@ -859,11 +831,11 @@ export function MoJobDeskPage() {
                       {idx + 1}
                     </td>
                     {/* Hari */}
-                    <td className="py-2 px-2 align-top">
+                    <td className="py-2 px-2 align-top min-w-[140px]">
                       <select
                         value={row.hari}
                         onChange={(e) => handleRowChange(row.id, "hari", e.target.value)}
-                        className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white text-xs font-semibold focus:ring-2 focus:ring-slate-900 transition-colors cursor-pointer"
+                        className="w-full min-w-[120px] px-3 py-2 rounded-lg border border-slate-200 bg-white focus:bg-white text-xs font-semibold focus:ring-2 focus:ring-slate-900 transition-colors cursor-pointer"
                       >
                         {HARI_OPTIONS.map((h) => (
                           <option key={h} value={h}>
@@ -873,29 +845,29 @@ export function MoJobDeskPage() {
                       </select>
                     </td>
                     {/* Tanggal */}
-                    <td className="py-2 px-2 align-top">
+                    <td className="py-2 px-2 align-top min-w-[160px]">
                       <input
                         type="date"
                         value={row.tanggal}
                         onChange={(e) => handleRowChange(row.id, "tanggal", e.target.value)}
-                        className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white text-xs font-semibold focus:ring-2 focus:ring-slate-900 transition-colors"
+                        className="w-full min-w-[140px] px-2.5 py-2 rounded-lg border border-slate-200 bg-white focus:bg-white text-xs font-semibold focus:ring-2 focus:ring-slate-900 transition-colors"
                       />
                     </td>
                     {/* Start Time */}
-                    <td className="py-2 px-2 align-top">
+                    <td className="py-2 px-2 align-top min-w-[130px]">
                       <input
                         type="time"
                         value={row.startTime}
                         onChange={(e) => handleRowChange(row.id, "startTime", e.target.value)}
-                        className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white text-xs font-mono font-bold text-center focus:ring-2 focus:ring-slate-900 transition-colors"
+                        className="w-full min-w-[110px] px-2.5 py-2 rounded-lg border border-slate-200 bg-white focus:bg-white text-xs font-mono font-bold text-center focus:ring-2 focus:ring-slate-900 transition-colors"
                       />
                     </td>
                     {/* PIC */}
-                    <td className="py-2 px-2 align-top">
+                    <td className="py-2 px-2 align-top min-w-[220px]">
                       <select
                         value={row.pic}
                         onChange={(e) => handleRowChange(row.id, "pic", e.target.value as PicShortName)}
-                        className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-slate-100/80 font-bold text-slate-900 focus:bg-white text-xs focus:ring-2 focus:ring-slate-900 transition-colors cursor-pointer"
+                        className="w-full min-w-[200px] px-3 py-2 rounded-lg border border-slate-200 bg-white font-bold text-slate-900 focus:bg-white text-xs focus:ring-2 focus:ring-slate-900 transition-colors cursor-pointer"
                       >
                         {PIC_OPTIONS.map((p) => (
                           <option key={p} value={p}>
