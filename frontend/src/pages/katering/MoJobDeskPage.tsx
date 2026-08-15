@@ -173,33 +173,58 @@ export function MoJobDeskPage() {
 
   // Subscribe to all job desks, orders, and MBG data
   useEffect(() => {
+    let mounted = true;
+
+    // Safety fallback timeout to prevent infinite spinner
+    const timer = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 1200);
+
     const unsubDesks = subscribeAllJobDesks(
       (data) => {
+        if (!mounted) return;
         setJobDesks(data);
         setLoading(false);
       },
       (err) => {
         console.error("MO: failed to load job desks:", err);
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     );
 
     const unsubOrders = subscribeOrders(
-      (allOrders) => setOrders(allOrders),
-      (err) => console.error("MO: failed to load orders:", err)
+      (allOrders) => {
+        if (!mounted) return;
+        setOrders(allOrders);
+      },
+      (err) => {
+        console.error("MO: failed to load orders:", err);
+      }
     );
 
     const unsubBatches = subscribeBatches(
-      (batches) => setMbgBatches(batches),
-      (err) => console.error("MO: failed to load MBG batches:", err)
+      (batches) => {
+        if (!mounted) return;
+        setMbgBatches(batches);
+      },
+      (err) => {
+        console.error("MO: failed to load MBG batches:", err);
+      }
     );
 
     const unsubEntries = subscribeAllEntries(
-      (entries) => setMbgEntries(entries),
-      (err) => console.error("MO: failed to load MBG entries:", err)
+      (entries) => {
+        if (!mounted) return;
+        setMbgEntries(entries);
+      },
+      (err) => {
+        console.error("MO: failed to load MBG entries:", err);
+      }
     );
 
     return () => {
+      mounted = false;
+      clearTimeout(timer);
       unsubDesks();
       unsubOrders();
       unsubBatches();

@@ -301,17 +301,19 @@ export function subscribeAllJobDesks(
   onError?: (error: Error) => void,
   division?: JobDeskDivision
 ): () => void {
-  const q = query(
-    collection(db, COLLECTION),
-    orderBy("createdAt", "desc")
-  );
+  const collRef = collection(db, COLLECTION);
 
   return onSnapshot(
-    q,
+    collRef,
     (snapshot) => {
       let results = snapshot.docs.map((d) =>
         docToJobDesk(d.id, d.data() as Record<string, unknown>)
       );
+      results.sort((a, b) => {
+        const dateA = a.tanggal || "";
+        const dateB = b.tanggal || "";
+        return dateB.localeCompare(dateA);
+      });
       if (division) {
         results = results.filter((jd) => jd.division === division);
       }
@@ -330,18 +332,14 @@ export function subscribeJobDesksByOrder(
   onData: (jobDesks: CateringJobDesk[]) => void,
   onError?: (error: Error) => void
 ): () => void {
-  const q = query(
-    collection(db, COLLECTION),
-    where("orderId", "==", orderId),
-    orderBy("createdAt", "asc")
-  );
+  const collRef = collection(db, COLLECTION);
 
   return onSnapshot(
-    q,
+    collRef,
     (snapshot) => {
-      const results = snapshot.docs.map((d) =>
-        docToJobDesk(d.id, d.data() as Record<string, unknown>)
-      );
+      const results = snapshot.docs
+        .map((d) => docToJobDesk(d.id, d.data() as Record<string, unknown>))
+        .filter((jd) => jd.orderId === orderId);
       onData(results);
     },
     (error) => {
@@ -390,13 +388,10 @@ export function subscribeJobDesksByRole(
       emailLower.includes("distribusi2") ||
       emailLower.startsWith("wandi"));
 
-  const q = query(
-    collection(db, COLLECTION),
-    orderBy("createdAt", "desc")
-  );
+  const collRef = collection(db, COLLECTION);
 
   return onSnapshot(
-    q,
+    collRef,
     (snapshot) => {
       const results = snapshot.docs
         .map((d) => docToJobDesk(d.id, d.data() as Record<string, unknown>))
