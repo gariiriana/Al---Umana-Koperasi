@@ -337,24 +337,31 @@ export function MoJobDeskPage() {
     }
   }, []);
 
-  // Filtered orders list for Handover overview tab
+  // Filtered orders list for Handover overview tab (sorted newest first)
   const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
-      const orderLabel = (o.institutionName || o.recipientName || o.id).toLowerCase();
-      const matchSearch =
-        !orderSearchQuery.trim() ||
-        orderLabel.includes(orderSearchQuery.toLowerCase()) ||
-        (o.eventDate || "").includes(orderSearchQuery) ||
-        (o.foodDetails || "").toLowerCase().includes(orderSearchQuery.toLowerCase());
+    return orders
+      .filter((o) => {
+        const orderLabel = (o.institutionName || o.recipientName || o.id).toLowerCase();
+        const matchSearch =
+          !orderSearchQuery.trim() ||
+          orderLabel.includes(orderSearchQuery.toLowerCase()) ||
+          (o.eventDate || "").includes(orderSearchQuery) ||
+          (o.foodDetails || "").toLowerCase().includes(orderSearchQuery.toLowerCase());
 
-      const assignedDesks = jobDesksByOrderId.get(o.id) || [];
-      const hasJobDesks = assignedDesks.length > 0;
+        const assignedDesks = jobDesksByOrderId.get(o.id) || [];
+        const hasJobDesks = assignedDesks.length > 0;
 
-      if (orderHandoverFilter === "unassigned" && hasJobDesks) return false;
-      if (orderHandoverFilter === "assigned" && !hasJobDesks) return false;
+        if (orderHandoverFilter === "unassigned" && hasJobDesks) return false;
+        if (orderHandoverFilter === "assigned" && !hasJobDesks) return false;
 
-      return matchSearch;
-    });
+        return matchSearch;
+      })
+      .sort((a, b) => {
+        const timeB = new Date(b.createdAt || b.updatedAt || b.eventDate || 0).getTime() || 0;
+        const timeA = new Date(a.createdAt || a.updatedAt || a.eventDate || 0).getTime() || 0;
+        if (timeB !== timeA) return timeB - timeA;
+        return (b.id || "").localeCompare(a.id || "");
+      });
   }, [orders, orderSearchQuery, orderHandoverFilter, jobDesksByOrderId]);
 
   // Filtered job desks for table view
@@ -468,7 +475,13 @@ export function MoJobDeskPage() {
             <Plus className="h-3.5 w-3.5" />
             <span>Form Job Desk</span>
             {selectedOrderContext && (
-              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase bg-white/20 text-white leading-none">
+              <span
+                className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase leading-none transition-colors ${
+                  activeTab === "form"
+                    ? "bg-amber-400 text-slate-950 font-extrabold"
+                    : "bg-amber-100 text-amber-900 border border-amber-300"
+                }`}
+              >
                 1 Terpilih
               </span>
             )}
