@@ -10,7 +10,6 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy,
   onSnapshot,
   writeBatch,
   getDocs,
@@ -125,20 +124,21 @@ export function subscribeBatches(
   callback: (batches: MbgPmBatch[]) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
-  const q = query(
-    collection(db, BATCHES_COLLECTION),
-    orderBy('tanggal', 'desc')
-  );
+  const collRef = collection(db, BATCHES_COLLECTION);
   return onSnapshot(
-    q,
+    collRef,
     (snapshot) => {
       const batches = snapshot.docs.map((d) => ({
         id: d.id,
         ...d.data(),
       })) as MbgPmBatch[];
+      batches.sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
       callback(batches);
     },
-    (error) => onError?.(error)
+    (error) => {
+      console.error("subscribeBatches error:", error);
+      onError?.(error);
+    }
   );
 }
 
