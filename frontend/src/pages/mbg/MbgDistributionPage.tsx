@@ -18,8 +18,6 @@ import {
   Download,
   Save,
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { useToast } from '@/contexts/ToastContext';
 import type {
   MbgPmBatch,
@@ -43,8 +41,9 @@ import {
 } from '@/services/mbgDeliveryService';
 import { LiveCamera } from '@/components/LiveCamera';
 import { SearchableBatchSelector } from '@/components/mbg/SearchableBatchSelector';
-
-const MBG_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Badan_Gizi_Nasional.svg/1200px-Badan_Gizi_Nasional.svg.png';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { exportMbgDeliveryReportPdf } from '@/utils/mbgDeliveryReportPdfExporter';
 
 export function MbgDistributionPage() {
   const { showToast } = useToast();
@@ -502,174 +501,92 @@ export function MbgDistributionPage() {
     }
   };
 
-  // Re-generate PDF from kurir report data
+  // Re-generate PDF from kurir report data (Sesuai Layout Resmi Google Doc)
   const handleViewKurirReport = async (docMeta: MbgDeliveryDocument) => {
     showToast({ message: 'Menyiapkan PDF Laporan Distribusi...', variant: 'info' });
 
     try {
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageW = doc.internal.pageSize.getWidth();
-      const pageH = doc.internal.pageSize.getHeight();
+      let targetEntries: MbgPmEntry[] = [];
+      let targetTasks: MbgDeliveryTask[] = [];
 
-      // Load logo
-      let logoLoaded = false;
-      const logoImg = new Image();
-      logoImg.crossOrigin = 'anonymous';
-      await new Promise<void>((resolve) => {
-        logoImg.onload = () => { logoLoaded = true; resolve(); };
-        logoImg.onerror = () => resolve();
-        logoImg.src = MBG_LOGO_URL;
-      });
+      // Fetch the exact entries & tasks for this batch from Firestore
+      if (docMeta.batchId) {
+        if (selectedBatchId === docMeta.batchId && entries.length > 0) {
+          targetEntries = entries;
+          targetTasks = deliveryTasks;
+        } else {
+          const entriesSnap = await getDocs(
+            query(collection(db, 'mbg_pm_entries'), where('batchId', '==', docMeta.batchId))
+          );
+          targetEntries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgPmEntry));
+          targetEntries.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
-      // Cover
-      doc.setFillColor(255, 255, 255);
-      doc.rect(0, 0, pageW, pageH, 'F');
-      if (logoLoaded) doc.addImage(logoImg, 'PNG', pageW / 2 - 20, 30, 40, 40);
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(18);
-      doc.setTextColor(17, 24, 39);
-      doc.text('LAPORAN BUKTI DISTRIBUSI', pageW / 2, 85, { align: 'center' });
-      doc.text('MAKANAN BERGIZI GRATIS (MBG)', pageW / 2, 95, { align: 'center' });
-
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(100, 116, 139);
-      doc.text(`Tanggal: ${docMeta.tanggalBatch || '-'}`, pageW / 2, 110, { align: 'center' });
-      doc.text(`Petugas: ${docMeta.petugasName}`, pageW / 2, 117, { align: 'center' });
-      doc.text(`Total: ${docMeta.totalInstitusi} Institusi | ${docMeta.totalPorsi} Porsi | ${docMeta.completedCount}/${docMeta.totalInstitusi} Lengkap`, pageW / 2, 124, { align: 'center' });
-
-      doc.setDrawColor(226, 232, 240);
-      doc.line(30, 135, pageW - 30, 135);
-
-      doc.setFontSize(9);
-      doc.setTextColor(148, 163, 184);
-      doc.text('Dokumen ini dihasilkan secara otomatis oleh Sistem MBG Al-Umana', pageW / 2, 145, { align: 'center' });
-
-      // Get related entries for this petugas
-      const relatedEntries = entries.filter((e) => e.assignedPetugasName === docMeta.petugasName && !e.isSekolahLibur);
-
-      if (relatedEntries.length > 0) {
-        // Summary Page
-        doc.addPage();
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(17, 24, 39);
-        doc.text('RINGKASAN PENGIRIMAN', pageW / 2, 18, { align: 'center' });
-
-        const summaryHeaders = ['No', 'Institusi', 'Porsi', 'Menu ✓', 'Serah Terima ✓', 'Surat Jalan ✓', 'Status'];
-        const summaryRows = relatedEntries.map((entry, idx) => [
-          `${idx + 1}`,
-          entry.institutionName,
-          `${entry.jumlah}`,
-          entry.photoMenuUrl ? '✓' : '—',
-          entry.photoSerahTerimaUrl ? '✓' : '—',
-          entry.photoSuratJalanUrl ? '✓' : '—',
-          entry.photoMenuUrl && entry.photoSerahTerimaUrl && entry.photoSuratJalanUrl ? 'LENGKAP' : 'BELUM',
-        ]);
-
-        autoTable(doc, {
-          startY: 24,
-          head: [summaryHeaders],
-          body: summaryRows,
-          theme: 'grid',
-          headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
-          bodyStyles: { fontSize: 7.5, textColor: [15, 23, 42] },
-          styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
-        });
-
-        // Per-institution photo pages
-        for (const entry of relatedEntries) {
-          doc.addPage();
-          doc.setFontSize(13);
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(17, 24, 39);
-          doc.text(entry.institutionName, pageW / 2, 16, { align: 'center' });
-
-          doc.setFontSize(9);
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(100, 116, 139);
-          doc.text(`Jumlah Porsi: ${entry.jumlah} | Jadwal: ${entry.jadwalPengantaran || '-'}`, pageW / 2, 22, { align: 'center' });
-
-          doc.setDrawColor(226, 232, 240);
-          doc.line(14, 25, pageW - 14, 25);
-
-          const photoSlots = [
-            { label: '1. Foto Menu / Box', url: entry.photoMenuUrl, desc: entry.photoMenuDesc },
-            { label: '2. Foto Serah Terima', url: entry.photoSerahTerimaUrl, desc: entry.photoSerahTerimaDesc },
-            { label: '3. Foto Surat Jalan', url: entry.photoSuratJalanUrl, desc: entry.photoSuratJalanDesc },
-          ];
-
-          const slotW = (pageW - 28 - 10) / 3;
-          const startY = 30;
-
-          for (let i = 0; i < photoSlots.length; i++) {
-            const slot = photoSlots[i];
-            const x = 14 + i * (slotW + 5);
-
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(17, 24, 39);
-            doc.text(slot.label, x, startY);
-
-            const photoY = startY + 3;
-            const photoH = 55;
-
-            if (slot.url) {
-              try {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                await new Promise<void>((resolve) => {
-                  img.onload = () => resolve();
-                  img.onerror = () => resolve();
-                  img.src = slot.url!;
-                });
-                if (img.complete && img.naturalWidth > 0) {
-                  try {
-                    const isPng = slot.url.startsWith('data:image/png');
-                    doc.addImage(img, isPng ? 'PNG' : 'JPEG', x, photoY, slotW, photoH);
-                  } catch {
-                    doc.setDrawColor(203, 213, 225);
-                    doc.rect(x, photoY, slotW, photoH);
-                    doc.setFontSize(7);
-                    doc.setTextColor(148, 163, 184);
-                    doc.text('Foto gagal dirender', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
-                  }
-                } else {
-                  doc.setDrawColor(203, 213, 225);
-                  doc.rect(x, photoY, slotW, photoH);
-                  doc.setFontSize(7);
-                  doc.setTextColor(148, 163, 184);
-                  doc.text('Foto tidak tersedia', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
-                }
-              } catch {
-                doc.setDrawColor(203, 213, 225);
-                doc.rect(x, photoY, slotW, photoH);
-                doc.setFontSize(7);
-                doc.setTextColor(148, 163, 184);
-                doc.text('Foto gagal dimuat', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
-              }
-            } else {
-              doc.setDrawColor(203, 213, 225);
-              doc.rect(x, photoY, slotW, photoH);
-              doc.setFontSize(7);
-              doc.setTextColor(148, 163, 184);
-              doc.text('Belum diambil', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
-            }
-
-            if (slot.desc) {
-              doc.setFontSize(7);
-              doc.setFont('helvetica', 'italic');
-              doc.setTextColor(100, 116, 139);
-              const lines = doc.splitTextToSize(slot.desc, slotW);
-              doc.text(lines, x, photoY + photoH + 4);
-            }
-          }
+          const tasksSnap = await getDocs(
+            query(collection(db, 'mbg_delivery_tasks'), where('batchId', '==', docMeta.batchId))
+          );
+          targetTasks = tasksSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryTask));
         }
+      } else {
+        targetEntries = entries;
+        targetTasks = deliveryTasks;
       }
 
-      const fileName = `Laporan_Distribusi_MBG_${docMeta.petugasName.replace(/\s+/g, '_')}_${docMeta.tanggalBatch || 'undated'}.pdf`;
-      doc.save(fileName);
+      // Filter entries by petugasName or petugasId
+      const pNameLower = (docMeta.petugasName || '').toLowerCase().trim();
+      const pIdLower = (docMeta.petugasId || '').toLowerCase().trim();
+
+      let filteredEntries = targetEntries.filter((e) => {
+        const eName = (e.assignedPetugasName || '').toLowerCase().trim();
+        const eId = (e.assignedPetugasId || '').toLowerCase().trim();
+        if (!pNameLower && !pIdLower) return true;
+        return (
+          (pNameLower && (eName === pNameLower || eName.includes(pNameLower) || pNameLower.includes(eName))) ||
+          (pIdLower && eId === pIdLower)
+        );
+      });
+
+      if (filteredEntries.length === 0) {
+        filteredEntries = targetEntries;
+      }
+
+      // Merge proof photos from tasks if entry doesn't have them
+      const matchedTask = targetTasks.find((t) => {
+        const tName = (t.petugasName || '').toLowerCase().trim();
+        const tId = (t.petugasId || '').toLowerCase().trim();
+        return (
+          (pNameLower && (tName === pNameLower || tName.includes(pNameLower) || pNameLower.includes(tName))) ||
+          (pIdLower && tId === pIdLower)
+        );
+      });
+
+      const mergedEntries = filteredEntries.map((entry) => {
+        const proof = matchedTask?.schoolProofs?.[entry.id];
+        return {
+          ...entry,
+          photoMenuUrl: entry.photoMenuUrl || proof?.photoMenuUrl,
+          photoSerahTerimaUrl: entry.photoSerahTerimaUrl || proof?.photoSerahTerimaUrl,
+          photoPenerimaUrl: entry.photoPenerimaUrl || proof?.photoPenerimaUrl,
+          photoSuratJalanUrl: entry.photoSuratJalanUrl || proof?.photoSuratJalanUrl,
+        };
+      });
+
+      if (mergedEntries.length === 0) {
+        showToast({ message: 'Data institusi untuk laporan ini tidak ditemukan', variant: 'error' });
+        return;
+      }
+
+      const fileName =
+        docMeta.fileName ||
+        `Laporan_Distribusi_MBG_${(docMeta.petugasName || 'Kurir').replace(/\s+/g, '_')}_${docMeta.tanggalBatch || 'undated'}.pdf`;
+
+      await exportMbgDeliveryReportPdf({
+        docMeta,
+        entries: mergedEntries,
+        petugasName: docMeta.petugasName,
+        tanggalBatch: docMeta.tanggalBatch,
+        fileName,
+      });
+
       showToast({ message: 'PDF Laporan Distribusi berhasil diunduh!', variant: 'success' });
     } catch (err) {
       console.error('Failed to export delivery report PDF:', err);

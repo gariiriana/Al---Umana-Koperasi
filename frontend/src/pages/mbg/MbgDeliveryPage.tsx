@@ -22,8 +22,6 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { MbgPmBatch, MbgDeliveryTask, MbgPmEntry } from '@/types/mbg';
@@ -44,8 +42,9 @@ import {
 import { LiveCamera } from '@/components/LiveCamera';
 import { MBG_DELIVERY_STATUS_CONFIG } from '@/constants/mbgConstants';
 
-// MBG Logo local asset
-const MBG_LOGO_URL = '/logo_badan_gizi.png';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { exportMbgDeliveryReportPdf } from '@/utils/mbgDeliveryReportPdfExporter';
 
 export function MbgDeliveryPage() {
   const { user, profile } = useAuth();
@@ -437,207 +436,27 @@ export function MbgDeliveryPage() {
     document.body.removeChild(a);
   };
 
-  // ─── PDF Export ───
+  // ─── PDF Export (Sesuai Layout Resmi Google Doc) ───
   const handleExportDeliveryPdf = async () => {
     if (!activeTask || taskEntries.length === 0) return;
     showToast({ message: 'Menyiapkan PDF Laporan Distribusi...', variant: 'info' });
 
     try {
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageW = doc.internal.pageSize.getWidth();
-      const pageH = doc.internal.pageSize.getHeight();
-
-      // Load MBG logo
-      let logoLoaded = false;
-      const logoImg = new Image();
-      logoImg.crossOrigin = 'anonymous';
-      await new Promise<void>((resolve) => {
-        logoImg.onload = () => { logoLoaded = true; resolve(); };
-        logoImg.onerror = () => resolve();
-        logoImg.src = MBG_LOGO_URL;
-      });
-
-      // ─── Cover Page ───
-      doc.setFillColor(255, 255, 255);
-      doc.rect(0, 0, pageW, pageH, 'F');
-
-      if (logoLoaded) {
-        doc.addImage(logoImg, 'PNG', pageW / 2 - 20, 30, 40, 40);
-      }
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(18);
-      doc.setTextColor(17, 24, 39);
-      doc.text('LAPORAN BUKTI DISTRIBUSI', pageW / 2, 85, { align: 'center' });
-      doc.text('MAKANAN BERGIZI GRATIS (MBG)', pageW / 2, 95, { align: 'center' });
-
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(100, 116, 139);
-
       const batch = batches.find((b) => b.id === selectedBatchId);
-      doc.text(`Tanggal: ${batch?.tanggal || '-'}`, pageW / 2, 110, { align: 'center' });
-      doc.text(`Petugas: ${activeTask.petugasName}`, pageW / 2, 117, { align: 'center' });
-
       const activeEntries = taskEntries.filter((e) => !e.isSekolahLibur);
       const totalPorsi = activeEntries.reduce((s, e) => s + (e.jumlah || 0), 0);
-      const completedCount = activeEntries.filter((e) => e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl).length;
-      doc.text(`Total: ${activeEntries.length} Institusi | ${totalPorsi} Porsi | ${completedCount}/${activeEntries.length} Lengkap`, pageW / 2, 124, { align: 'center' });
+      const completedCount = activeEntries.filter(
+        (e) => e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl
+      ).length;
 
-      doc.setDrawColor(226, 232, 240);
-      doc.line(30, 135, pageW - 30, 135);
-
-      doc.setFontSize(9);
-      doc.setTextColor(148, 163, 184);
-      doc.text('Dokumen ini dihasilkan secara otomatis oleh Sistem MBG Al-Umana', pageW / 2, 145, { align: 'center' });
-
-      // ─── Summary Table Page ───
-      doc.addPage();
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(17, 24, 39);
-      doc.text('RINGKASAN PENGIRIMAN', pageW / 2, 18, { align: 'center' });
-
-      const summaryHeaders = ['No', 'Institusi', 'Porsi', 'Menu ✓', 'Serah Terima ✓', 'Surat Jalan ✓', 'Penerima/PJ ✓', 'Status'];
-      const summaryRows = activeEntries.map((entry, idx) => [
-        `${idx + 1}`,
-        entry.institutionName,
-        `${entry.jumlah}`,
-        entry.photoMenuUrl ? '✓' : '—',
-        entry.photoSerahTerimaUrl ? '✓' : '—',
-        entry.photoSuratJalanUrl ? '✓' : '—',
-        entry.photoPenerimaUrl ? '✓' : '—',
-        entry.photoMenuUrl && entry.photoSerahTerimaUrl && entry.photoSuratJalanUrl && entry.photoPenerimaUrl ? 'LENGKAP' : 'BELUM',
-      ]);
-
-      autoTable(doc, {
-        startY: 24,
-        head: [summaryHeaders],
-        body: summaryRows,
-        theme: 'grid',
-        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
-        bodyStyles: { fontSize: 7.5, textColor: [15, 23, 42] },
-        styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
-      });
-
-      // ─── Per-Institution Photo Pages (2x2 Grid) ───
-      for (const entry of activeEntries) {
-        doc.addPage();
-
-        if (logoLoaded) {
-          try {
-            doc.addImage(logoImg, 'PNG', 14, 8, 12, 12);
-          } catch { /* ignore */ }
-        }
-
-        doc.setFontSize(13);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(17, 24, 39);
-        doc.text(entry.institutionName, pageW / 2, 16, { align: 'center' });
-
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 116, 139);
-        doc.text(`Jumlah Porsi: ${entry.jumlah} | Jadwal: ${entry.jadwalPengantaran || '-'}`, pageW / 2, 22, { align: 'center' });
-
-        doc.setDrawColor(226, 232, 240);
-        doc.line(14, 25, pageW - 14, 25);
-
-        // Photo grid: 4 photos (2 rows x 2 columns)
-        const photoSlots: { label: string; url?: string; desc?: string }[] = [
-          { label: '1. Foto Menu / Box Makanan', url: entry.photoMenuUrl, desc: entry.photoMenuDesc },
-          { label: '2. Foto Serah Terima', url: entry.photoSerahTerimaUrl, desc: entry.photoSerahTerimaDesc },
-          { label: '3. Foto Surat Jalan / BAST', url: entry.photoSuratJalanUrl, desc: entry.photoSuratJalanDesc },
-          { label: '4. Foto Penanggung Jawab Penerima', url: entry.photoPenerimaUrl, desc: entry.photoPenerimaDesc },
-        ];
-
-        const slotW = 86; // 86mm width
-        const photoH = 55; // 55mm height
-
-        for (let i = 0; i < photoSlots.length; i++) {
-          const slot = photoSlots[i];
-          const col = i % 2;
-          const row = Math.floor(i / 2);
-          const x = 14 + col * (slotW + 10);
-          const y = 30 + row * (photoH + 25);
-
-          // Label
-          doc.setFontSize(8);
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(17, 24, 39);
-          doc.text(slot.label, x, y);
-
-          // Photo box
-          const photoY = y + 3;
-
-          if (slot.url) {
-            try {
-              const img = new Image();
-              img.crossOrigin = 'anonymous';
-              await new Promise<void>((resolve) => {
-                img.onload = () => resolve();
-                img.onerror = () => resolve();
-                img.src = slot.url!;
-              });
-              if (img.complete && img.naturalWidth > 0) {
-                try {
-                  const isPng = slot.url.startsWith('data:image/png');
-                  doc.addImage(img, isPng ? 'PNG' : 'JPEG', x, photoY, slotW, photoH);
-                } catch {
-                  doc.setDrawColor(203, 213, 225);
-                  doc.rect(x, photoY, slotW, photoH);
-                  doc.setFontSize(7);
-                  doc.setTextColor(148, 163, 184);
-                  doc.text('Foto gagal dirender', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
-                }
-              } else {
-                doc.setDrawColor(203, 213, 225);
-                doc.rect(x, photoY, slotW, photoH);
-                doc.setFontSize(7);
-                doc.setTextColor(148, 163, 184);
-                doc.text('Foto tidak tersedia', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
-              }
-            } catch {
-              doc.setDrawColor(203, 213, 225);
-              doc.rect(x, photoY, slotW, photoH);
-              doc.setFontSize(7);
-              doc.setTextColor(148, 163, 184);
-              doc.text('Foto gagal dimuat', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
-            }
-          } else {
-            doc.setDrawColor(203, 213, 225);
-            doc.rect(x, photoY, slotW, photoH);
-            doc.setFontSize(7);
-            doc.setTextColor(148, 163, 184);
-            doc.text('Belum diambil', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
-          }
-
-          // Description below photo
-          if (slot.desc) {
-            doc.setFontSize(7);
-            doc.setFont('helvetica', 'italic');
-            doc.setTextColor(100, 116, 139);
-            const lines = doc.splitTextToSize(slot.desc, slotW);
-            doc.text(lines, x, photoY + photoH + 4);
-          }
-        }
-
-        // Additional info below photos
-        const extraY = 195;
-        if (entry.photoPenerimaTimestamp || entry.photoSerahTerimaTimestamp) {
-          doc.setFontSize(7);
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(100, 116, 139);
-          doc.text(`Waktu Penyerahan: ${entry.photoPenerimaTimestamp || entry.photoSerahTerimaTimestamp}`, 14, extraY);
-        }
-        if (entry.photoPenerimaLocation || entry.photoSerahTerimaLocation) {
-          doc.text(`Lokasi: ${entry.photoPenerimaLocation || entry.photoSerahTerimaLocation}`, 14, extraY + 4);
-        }
-      }
-
-      // Save
       const fileName = `Laporan_Distribusi_MBG_${activeTask.petugasName.replace(/\s+/g, '_')}_${batch?.tanggal || 'undated'}.pdf`;
-      doc.save(fileName);
+
+      await exportMbgDeliveryReportPdf({
+        entries: taskEntries,
+        petugasName: activeTask.petugasName,
+        tanggalBatch: batch?.tanggal,
+        fileName,
+      });
 
       // Save document metadata to Firestore for arsip
       try {
@@ -663,7 +482,7 @@ export function MbgDeliveryPage() {
       showToast({ message: 'PDF Laporan Distribusi berhasil diunduh & diarsipkan!', variant: 'success' });
     } catch (err) {
       console.error('Failed to export delivery PDF:', err);
-      showToast({ message: 'Gagal mengekspor PDF', variant: 'error' });
+      showToast({ message: 'Gagal mengekspor PDF Laporan', variant: 'error' });
     }
   };
 
@@ -752,179 +571,92 @@ export function MbgDeliveryPage() {
     });
   }, [combinedArchiveDocs, archiveSearchQuery]);
 
-  // Re-export PDF for an archived document in MbgDeliveryPage
+  // Re-export PDF for an archived document in MbgDeliveryPage (Sesuai Layout Resmi Google Doc)
   const handleReExportArchivedDoc = async (docMeta: MbgDeliveryDocument) => {
     showToast({ message: 'Menyiapkan unduhan PDF Laporan...', variant: 'info' });
 
     try {
-      // Find entries matching docMeta.petugasName & docMeta.batchId
-      const targetEntries = entries.filter(
-        (e) => e.assignedPetugasName === docMeta.petugasName || (docMeta.batchId && e.batchId === docMeta.batchId)
-      );
+      let targetEntries: MbgPmEntry[] = [];
+      let targetTasks: MbgDeliveryTask[] = [];
 
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageW = doc.internal.pageSize.getWidth();
-      const pageH = doc.internal.pageSize.getHeight();
+      // Fetch the exact entries & tasks for this batch from Firestore
+      if (docMeta.batchId) {
+        if (selectedBatchId === docMeta.batchId && entries.length > 0) {
+          targetEntries = entries;
+          targetTasks = tasks;
+        } else {
+          const entriesSnap = await getDocs(
+            query(collection(db, 'mbg_pm_entries'), where('batchId', '==', docMeta.batchId))
+          );
+          targetEntries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgPmEntry));
+          targetEntries.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
-      // Load logo
-      let logoLoaded = false;
-      const logoImg = new Image();
-      logoImg.crossOrigin = 'anonymous';
-      await new Promise<void>((resolve) => {
-        logoImg.onload = () => { logoLoaded = true; resolve(); };
-        logoImg.onerror = () => resolve();
-        logoImg.src = MBG_LOGO_URL;
-      });
-
-      // Cover Page
-      doc.setFillColor(255, 255, 255);
-      doc.rect(0, 0, pageW, pageH, 'F');
-      if (logoLoaded) doc.addImage(logoImg, 'PNG', pageW / 2 - 20, 30, 40, 40);
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(18);
-      doc.setTextColor(17, 24, 39);
-      doc.text('LAPORAN BUKTI DISTRIBUSI', pageW / 2, 85, { align: 'center' });
-      doc.text('MAKANAN BERGIZI GRATIS (MBG)', pageW / 2, 95, { align: 'center' });
-
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(100, 116, 139);
-      doc.text(`Tanggal: ${docMeta.tanggalBatch || '-'}`, pageW / 2, 110, { align: 'center' });
-      doc.text(`Petugas: ${docMeta.petugasName}`, pageW / 2, 117, { align: 'center' });
-      doc.text(`Total: ${docMeta.totalInstitusi} Institusi | ${docMeta.totalPorsi} Porsi | ${docMeta.completedCount}/${docMeta.totalInstitusi} Lengkap`, pageW / 2, 124, { align: 'center' });
-
-      doc.setDrawColor(226, 232, 240);
-      doc.line(30, 135, pageW - 30, 135);
-
-      // Summary table page if entries found
-      const activeEntries = targetEntries.filter((e) => !e.isSekolahLibur);
-      if (activeEntries.length > 0) {
-        doc.addPage();
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(17, 24, 39);
-        doc.text('RINGKASAN PENGIRIMAN', pageW / 2, 18, { align: 'center' });
-
-        const summaryHeaders = ['No', 'Institusi', 'Porsi', 'Menu ✓', 'Penerima/PJ ✓', 'Serah Terima ✓', 'Surat Jalan ✓', 'Status'];
-        const summaryRows = activeEntries.map((entry, idx) => [
-          `${idx + 1}`,
-          entry.institutionName,
-          `${entry.jumlah}`,
-          entry.photoMenuUrl ? '✓' : '—',
-          entry.photoPenerimaUrl ? '✓' : '—',
-          entry.photoSerahTerimaUrl ? '✓' : '—',
-          entry.photoSuratJalanUrl ? '✓' : '—',
-          entry.photoMenuUrl && entry.photoPenerimaUrl && entry.photoSerahTerimaUrl && entry.photoSuratJalanUrl ? 'LENGKAP' : 'BELUM',
-        ]);
-
-        autoTable(doc, {
-          startY: 24,
-          head: [summaryHeaders],
-          body: summaryRows,
-          theme: 'grid',
-          headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
-          bodyStyles: { fontSize: 7.5, textColor: [15, 23, 42] },
-          styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
-        });
-
-        // Per-institution photo pages (2x2 Grid)
-        for (const entry of activeEntries) {
-          doc.addPage();
-          doc.setFontSize(13);
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(17, 24, 39);
-          doc.text(entry.institutionName, pageW / 2, 16, { align: 'center' });
-
-          doc.setFontSize(9);
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(100, 116, 139);
-          doc.text(`Jumlah Porsi: ${entry.jumlah} | Jadwal: ${entry.jadwalPengantaran || '-'}`, pageW / 2, 22, { align: 'center' });
-
-          doc.setDrawColor(226, 232, 240);
-          doc.line(14, 25, pageW - 14, 25);
-
-          const photoSlots: { label: string; url?: string; desc?: string }[] = [
-            { label: '1. Foto Menu / Box Makanan', url: entry.photoMenuUrl, desc: entry.photoMenuDesc },
-            { label: '2. Foto Penerima / Penanggung Jawab', url: entry.photoPenerimaUrl, desc: entry.photoPenerimaDesc },
-            { label: '3. Foto Serah Terima', url: entry.photoSerahTerimaUrl, desc: entry.photoSerahTerimaDesc },
-            { label: '4. Foto Surat Jalan / BAST', url: entry.photoSuratJalanUrl, desc: entry.photoSuratJalanDesc },
-          ];
-
-          const slotW = 86;
-          const photoH = 55;
-
-          for (let i = 0; i < photoSlots.length; i++) {
-            const slot = photoSlots[i];
-            const col = i % 2;
-            const row = Math.floor(i / 2);
-            const x = 14 + col * (slotW + 10);
-            const y = 30 + row * (photoH + 25);
-
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(17, 24, 39);
-            doc.text(slot.label, x, y);
-
-            const photoY = y + 3;
-
-            if (slot.url) {
-              try {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                await new Promise<void>((r) => {
-                  img.onload = () => r();
-                  img.onerror = () => r();
-                  img.src = slot.url!;
-                });
-                if (img.complete && img.naturalWidth > 0) {
-                  doc.addImage(img, 'JPEG', x, photoY, slotW, photoH);
-                } else {
-                  doc.setDrawColor(203, 213, 225);
-                  doc.rect(x, photoY, slotW, photoH);
-                  doc.setFontSize(7);
-                  doc.setTextColor(148, 163, 184);
-                  doc.text('Foto tidak tersedia', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
-                }
-              } catch {
-                doc.setDrawColor(203, 213, 225);
-                doc.rect(x, photoY, slotW, photoH);
-                doc.setFontSize(7);
-                doc.setTextColor(148, 163, 184);
-                doc.text('Foto gagal dimuat', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
-              }
-            } else {
-              doc.setDrawColor(203, 213, 225);
-              doc.rect(x, photoY, slotW, photoH);
-              doc.setFontSize(7);
-              doc.setTextColor(148, 163, 184);
-              doc.text('Belum diambil', x + slotW / 2, photoY + photoH / 2, { align: 'center' });
-            }
-
-            if (slot.desc) {
-              doc.setFontSize(7);
-              doc.setFont('helvetica', 'italic');
-              doc.setTextColor(100, 116, 139);
-              const lines = doc.splitTextToSize(slot.desc, slotW);
-              doc.text(lines, x, photoY + photoH + 4);
-            }
-          }
-
-          const extraY = 195;
-          if (entry.photoPenerimaTimestamp || entry.photoSerahTerimaTimestamp) {
-            doc.setFontSize(7);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(100, 116, 139);
-            doc.text(`Waktu Penyerahan: ${entry.photoPenerimaTimestamp || entry.photoSerahTerimaTimestamp}`, 14, extraY);
-          }
-          if (entry.photoPenerimaLocation || entry.photoSerahTerimaLocation) {
-            doc.text(`Lokasi: ${entry.photoPenerimaLocation || entry.photoSerahTerimaLocation}`, 14, extraY + 4);
-          }
+          const tasksSnap = await getDocs(
+            query(collection(db, 'mbg_delivery_tasks'), where('batchId', '==', docMeta.batchId))
+          );
+          targetTasks = tasksSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryTask));
         }
+      } else {
+        targetEntries = entries;
+        targetTasks = tasks;
       }
 
-      const fileName = docMeta.fileName || `Laporan_Distribusi_MBG_${docMeta.petugasName.replace(/\s+/g, '_')}_${docMeta.tanggalBatch || 'undated'}.pdf`;
-      doc.save(fileName);
+      // Filter entries by petugasName or petugasId
+      const pNameLower = (docMeta.petugasName || '').toLowerCase().trim();
+      const pIdLower = (docMeta.petugasId || '').toLowerCase().trim();
+
+      let filteredEntries = targetEntries.filter((e) => {
+        const eName = (e.assignedPetugasName || '').toLowerCase().trim();
+        const eId = (e.assignedPetugasId || '').toLowerCase().trim();
+        if (!pNameLower && !pIdLower) return true;
+        return (
+          (pNameLower && (eName === pNameLower || eName.includes(pNameLower) || pNameLower.includes(eName))) ||
+          (pIdLower && eId === pIdLower)
+        );
+      });
+
+      if (filteredEntries.length === 0) {
+        filteredEntries = targetEntries;
+      }
+
+      // Merge proof photos from tasks if entry doesn't have them
+      const matchedTask = targetTasks.find((t) => {
+        const tName = (t.petugasName || '').toLowerCase().trim();
+        const tId = (t.petugasId || '').toLowerCase().trim();
+        return (
+          (pNameLower && (tName === pNameLower || tName.includes(pNameLower) || pNameLower.includes(tName))) ||
+          (pIdLower && tId === pIdLower)
+        );
+      });
+
+      const mergedEntries = filteredEntries.map((entry) => {
+        const proof = matchedTask?.schoolProofs?.[entry.id];
+        return {
+          ...entry,
+          photoMenuUrl: entry.photoMenuUrl || proof?.photoMenuUrl,
+          photoSerahTerimaUrl: entry.photoSerahTerimaUrl || proof?.photoSerahTerimaUrl,
+          photoPenerimaUrl: entry.photoPenerimaUrl || proof?.photoPenerimaUrl,
+          photoSuratJalanUrl: entry.photoSuratJalanUrl || proof?.photoSuratJalanUrl,
+        };
+      });
+
+      if (mergedEntries.length === 0) {
+        showToast({ message: 'Data institusi untuk laporan ini tidak ditemukan', variant: 'error' });
+        return;
+      }
+
+      const fileName =
+        docMeta.fileName ||
+        `Laporan_Distribusi_MBG_${(docMeta.petugasName || 'Kurir').replace(/\s+/g, '_')}_${docMeta.tanggalBatch || 'undated'}.pdf`;
+
+      await exportMbgDeliveryReportPdf({
+        docMeta,
+        entries: mergedEntries,
+        petugasName: docMeta.petugasName,
+        tanggalBatch: docMeta.tanggalBatch,
+        fileName,
+      });
+
       showToast({ message: `PDF Laporan ${fileName} berhasil diunduh!`, variant: 'success' });
     } catch (err) {
       console.error('Failed to re-export PDF:', err);
