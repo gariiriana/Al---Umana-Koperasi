@@ -47,6 +47,7 @@ import {
   subscribeAllJobDesks,
   type CreateJobDeskInput,
 } from "@/services/cateringJobDeskService";
+import { seedOperationalData } from "@/services/operationalSeedService";
 import type { Order } from "@/types/order";
 import type { MbgPmBatch, MbgPmEntry } from "@/types/mbg";
 import type {
@@ -170,6 +171,21 @@ export function MoJobDeskPage() {
   ]);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+
+  // Manual seed trigger
+  const handleSeedData = useCallback(async () => {
+    setSeeding(true);
+    try {
+      const res = await seedOperationalData(user?.uid || "mo-user");
+      alert(`Berhasil memuat data contoh operasional:\n• ${res.ordersCount} Pesanan Katering\n• ${res.batchesCount} Batch MBG (${res.entriesCount} Sekolah/Lembaga)`);
+    } catch (err) {
+      console.error("Gagal memuat data contoh:", err);
+      alert("Gagal memuat data contoh operasional.");
+    } finally {
+      setSeeding(false);
+    }
+  }, [user?.uid]);
 
   // Subscribe to all job desks, orders, and MBG data
   useEffect(() => {
@@ -222,9 +238,21 @@ export function MoJobDeskPage() {
       }
     );
 
+    // Auto-seed if database is empty on first load
+    const autoSeedTimer = setTimeout(async () => {
+      if (mounted && orders.length === 0 && mbgBatches.length === 0) {
+        try {
+          await seedOperationalData(user?.uid || "mo-user");
+        } catch (e) {
+          console.warn("Auto-seed skipped:", e);
+        }
+      }
+    }, 2000);
+
     return () => {
       mounted = false;
       clearTimeout(timer);
+      clearTimeout(autoSeedTimer);
       unsubDesks();
       unsubOrders();
       unsubBatches();
@@ -900,7 +928,7 @@ export function MoJobDeskPage() {
       <div className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white p-6 sm:p-8 rounded-3xl shadow-xl border border-slate-800">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-amber-400 text-slate-950 shadow-xs">
                 <Sparkles className="h-3.5 w-3.5" />
                 Manager Operational (MO)
@@ -909,6 +937,15 @@ export function MoJobDeskPage() {
                 <CalendarDays className="h-3.5 w-3.5 text-amber-400" />
                 Sistem Job Desk Berbasis Tanggal (Per Tanggal)
               </span>
+              <button
+                type="button"
+                onClick={handleSeedData}
+                disabled={seeding}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-extrabold bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+              >
+                <Sparkles className="h-3 w-3" />
+                <span>{seeding ? "Mengisi Data..." : "🌱 Muat Data Contoh Katering & MBG"}</span>
+              </button>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
               Penyusunan & Distribusi Job Desk Harian
@@ -1077,8 +1114,19 @@ export function MoJobDeskPage() {
               {filteredCateringDateGroups.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center shadow-xs">
                   <CalendarDays className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm font-semibold text-slate-700">Tidak ada tanggal katering yang sesuai filter</p>
-                  <p className="text-xs text-slate-400 mt-1">Coba ubah kata kunci pencarian atau status filter</p>
+                  <p className="text-sm font-bold text-slate-800">Tidak ada tanggal pesanan katering yang sesuai</p>
+                  <p className="text-xs text-slate-400 mt-1">Belum ada pesanan katering di sistem atau sesuaikan filter Anda.</p>
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={handleSeedData}
+                      disabled={seeding}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-extrabold text-slate-950 bg-amber-400 hover:bg-amber-500 shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      <span>{seeding ? "Sedang Mengisi Data..." : "🌱 Isi Data Pesanan Katering & MBG Contoh"}</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1227,8 +1275,19 @@ export function MoJobDeskPage() {
               {filteredMbgDateGroups.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center shadow-xs">
                   <Milk className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm font-semibold text-slate-700">Tidak ada tanggal batch MBG yang sesuai filter</p>
-                  <p className="text-xs text-slate-400 mt-1">Admin MBG belum menambahkan batch jadwal atau sesuaikan filter Anda</p>
+                  <p className="text-sm font-bold text-slate-800">Tidak ada tanggal batch MBG yang sesuai</p>
+                  <p className="text-xs text-slate-400 mt-1">Admin MBG belum menambahkan batch jadwal atau sesuaikan filter Anda.</p>
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={handleSeedData}
+                      disabled={seeding}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      <span>{seeding ? "Sedang Mengisi Data..." : "🌱 Isi Data Pesanan Katering & MBG Contoh"}</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
