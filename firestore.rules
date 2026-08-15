@@ -50,6 +50,7 @@ service cloud.firestore {
         && (
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tim_produksi'
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_1'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_2'
         );
     }
 
@@ -59,6 +60,7 @@ service cloud.firestore {
         && (
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi'
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi_1'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi_2'
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distributor'
         );
     }
@@ -173,7 +175,7 @@ service cloud.firestore {
       // 1. The invoiceToken is a random UUID (unguessable)
       // 2. Listing without a filter still requires knowing document structure
       allow list: if request.auth != null
-        || true;
+        || (resource != null && resource.data.invoiceToken != null);
       allow create: if request.auth != null;
       allow update: if request.auth != null
         || (resource != null && resource.data.invoiceToken != null
@@ -379,9 +381,15 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------
-    // MBG Settings (Master Jadwal Menu Mingguan, dll)
+    // MBG Settings & Weekly Schedules (Master Jadwal Menu Mingguan, dll)
     // -------------------------------------------------------------------
     match /mbg_settings/{settingId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow delete: if request.auth != null && (isAdmin() || isAdminMbg());
+    }
+
+    match /mbg_weekly_schedules/{scheduleId} {
       allow read: if request.auth != null;
       allow create, update: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
       allow delete: if request.auth != null && (isAdmin() || isAdminMbg());
@@ -427,6 +435,14 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------
+    // MBG Sub Purchasing Tasks (tugas belanja pasar / sub-purchasing)
+    // -------------------------------------------------------------------
+    match /mbg_sub_purchasing_tasks/{taskId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+    }
+
+    // -------------------------------------------------------------------
     // MBG QC Checks (quality control barang masuk)
     // -------------------------------------------------------------------
     match /mbg_qc_checks/{checkId} {
@@ -454,6 +470,7 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create, update, delete: if request.auth != null;
     }
+
     // -------------------------------------------------------------------
     // MBG Custom Recipes (resep kustom buatan tim produksi)
     // -------------------------------------------------------------------
@@ -483,14 +500,6 @@ service cloud.firestore {
     // MBG Purchasing Documents (arsip dokumen PDF/Word purchasing)
     // -------------------------------------------------------------------
     match /mbg_purchasing_documents/{docId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null;
-    }
-
-    // -------------------------------------------------------------------
-    // Catering Operational Job Desks (MO, CO_MO, Joko, Dwi, Shifa, Wandi)
-    // -------------------------------------------------------------------
-    match /catering_jobdesks/{jobDeskId} {
       allow read: if request.auth != null;
       allow create, update, delete: if request.auth != null;
     }
