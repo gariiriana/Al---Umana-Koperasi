@@ -36,6 +36,7 @@ import type {
   CateringJobDesk,
   JobDeskAssignableRole,
   JobDeskStatus,
+  PicShortName,
 } from "@/types/cateringJobDesk";
 import { JOBDESK_ROLE_LABELS, ROLE_TO_PIC_NAME } from "@/types/cateringJobDesk";
 
@@ -43,10 +44,20 @@ import { JOBDESK_ROLE_LABELS, ROLE_TO_PIC_NAME } from "@/types/cateringJobDesk";
 function mapToAssignableRole(profileRole?: string, email?: string): JobDeskAssignableRole | null {
   if (email) {
     const em = email.toLowerCase();
-    if (em.includes("produksimbg2") || em.includes("produksimbg") || em.includes("joko")) {
+    // 1. Joko: ProduksiMBG2@alumana.id
+    if (em.includes("produksimbg2") || em.includes("produksi_mbg2") || em.includes("joko")) {
       return "produksi_1";
     }
-    if (em === "dstribusi2@alumana.id" || em.startsWith("wandi")) {
+    // 2. Hashifah Dzihniyah Zhafirah (Shifa): ProduksiMBG@alumana.id
+    if (em.includes("produksimbg") || em.includes("produksi_mbg") || em.includes("shifa") || em.includes("hashifah")) {
+      return "produksi_2";
+    }
+    // 3. Dwi: distribusimbg@alumana.id
+    if (em.includes("distribusimbg") || em.includes("distribusi_mbg") || em.includes("dwi")) {
+      return "distribusi_1";
+    }
+    // 4. Wandi: Dstribusi2@alumana.id
+    if (em === "dstribusi2@alumana.id" || em.includes("distribusi_2") || em.includes("distribusi2") || em.startsWith("wandi")) {
       return "distribusi_2";
     }
   }
@@ -57,11 +68,12 @@ function mapToAssignableRole(profileRole?: string, email?: string): JobDeskAssig
     distribusi_2: "distribusi_2",
     tim_produksi: "produksi_1", // Legacy alias for Ust. Joko
     distribusi: "distribusi_1", // Legacy alias for Dwi
-    MBG2: "MBG2",
-    mbg2: "MBG2",
-    produksi_mbg: "produksi_1", // Ust. Joko
-    produksi_mbg_2: "MBG2",
-    distribusi_mbg_2: "distribusi_2",
+    MBG2: "produksi_1", // Joko
+    mbg2: "produksi_1", // Joko
+    produksi_mbg: "produksi_2", // Shifa (Hashifah)
+    produksi_mbg_2: "produksi_1", // Joko
+    distribusi_mbg: "distribusi_1", // Dwi
+    distribusi_mbg_2: "distribusi_2", // Wandi
   };
   return profileRole ? mapping[profileRole] || null : null;
 }
@@ -83,19 +95,32 @@ export function OperationalJobDeskPage() {
   const [submittingRowId, setSubmittingRowId] = useState<string | null>(null);
 
   const emailLower = (profile?.email || user?.email || "").toLowerCase();
-  const isJokoAccount = emailLower.includes("produksimbg2") || emailLower.includes("produksimbg") || emailLower.includes("joko");
+  const isJokoAccount = emailLower.includes("produksimbg2") || emailLower.includes("produksi_mbg2") || emailLower.includes("joko");
+  const isShifaAccount = !isJokoAccount && (emailLower.includes("produksimbg") || emailLower.includes("produksi_mbg") || emailLower.includes("shifa") || emailLower.includes("hashifah"));
+  const isDwiAccount = emailLower.includes("distribusimbg") || emailLower.includes("distribusi_mbg") || emailLower.includes("dwi");
+  const isWandiAccount = emailLower === "dstribusi2@alumana.id" || emailLower.includes("distribusi2") || emailLower.startsWith("wandi");
 
   const assignableRole = isJokoAccount
     ? "produksi_1"
+    : isShifaAccount
+    ? "produksi_2"
+    : isDwiAccount
+    ? "distribusi_1"
+    : isWandiAccount
+    ? "distribusi_2"
     : mapToAssignableRole(profile?.role, profile?.email || user?.email || undefined);
-  const picShortName = isJokoAccount ? "Joko" : (assignableRole ? ROLE_TO_PIC_NAME[assignableRole] : "Joko");
 
-  const isDualScopeUser =
-    !isJokoAccount &&
-    ((profile?.email && profile.email.toLowerCase() === "dstribusi2@alumana.id") ||
-      (user?.email && user.email.toLowerCase() === "dstribusi2@alumana.id") ||
-      profile?.role === "distribusi_2" ||
-      profile?.role === "distribusi_mbg_2");
+  const picShortName: PicShortName = isJokoAccount
+    ? "Joko"
+    : isShifaAccount
+    ? "Shifa"
+    : isDwiAccount
+    ? "Dwi"
+    : isWandiAccount
+    ? "Wandi"
+    : (assignableRole ? ROLE_TO_PIC_NAME[assignableRole] : "Joko");
+
+  const isDualScopeUser = isWandiAccount || assignableRole === "distribusi_2";
 
   useEffect(() => {
     if (!assignableRole) {

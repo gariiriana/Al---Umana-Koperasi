@@ -361,16 +361,33 @@ export function subscribeJobDesksByRole(
   const emailLower = (userEmail || "").toLowerCase();
   const isJoko =
     emailLower.includes("produksimbg2") ||
-    emailLower.includes("produksimbg") ||
+    emailLower.includes("produksi_mbg2") ||
     emailLower.includes("joko") ||
-    role === "produksi_1";
+    role === "produksi_1" ||
+    role === "MBG2";
 
-  const picName = isJoko ? "Joko" : (ROLE_TO_PIC_NAME[role] || "Joko");
+  const isShifa =
+    !isJoko &&
+    (emailLower.includes("produksimbg") ||
+      emailLower.includes("produksi_mbg") ||
+      emailLower.includes("shifa") ||
+      emailLower.includes("hashifah") ||
+      role === "produksi_2");
+
+  const isDwi =
+    emailLower.includes("distribusimbg") ||
+    emailLower.includes("distribusi_mbg") ||
+    emailLower.includes("dwi") ||
+    role === "distribusi_1";
+
   const isDualDistribusi =
     !isJoko &&
+    !isShifa &&
+    !isDwi &&
     (role === "distribusi_2" ||
       role === "distribusi_mbg_2" ||
       emailLower === "dstribusi2@alumana.id" ||
+      emailLower.includes("distribusi2") ||
       emailLower.startsWith("wandi"));
 
   const q = query(
@@ -384,27 +401,60 @@ export function subscribeJobDesksByRole(
       const results = snapshot.docs
         .map((d) => docToJobDesk(d.id, d.data() as Record<string, unknown>))
         .filter((jd) => {
-          // Joko: match Joko tasks
+          // 1. Joko (ProduksiMBG2@alumana.id / Produksi 1):
           if (isJoko) {
-            if (jd.pic === "Joko" || jd.assignedRole === "produksi_1" || jd.pic?.toLowerCase().includes("joko")) return true;
+            if (
+              jd.pic === "Joko" ||
+              jd.pic === "MBG2" ||
+              jd.assignedRole === "produksi_1" ||
+              jd.assignedRole === "MBG2" ||
+              jd.pic?.toLowerCase().includes("joko")
+            ) {
+              return true;
+            }
             return false;
           }
 
-          // Dual-Scope Distribusi 2 (Wandi / Dstribusi2@alumana.id): matches both katering & mbg distribusi
+          // 2. Hashifah Dzihniyah Zhafirah / Shifa (ProduksiMBG@alumana.id / Produksi 2):
+          if (isShifa) {
+            if (
+              jd.pic === "Shifa" ||
+              jd.assignedRole === "produksi_2" ||
+              jd.pic?.toLowerCase().includes("shifa") ||
+              jd.pic?.toLowerCase().includes("hashifah")
+            ) {
+              return true;
+            }
+            return false;
+          }
+
+          // 3. Dwi (distribusimbg@alumana.id / Distribusi 1):
+          if (isDwi) {
+            if (
+              jd.pic === "Dwi" ||
+              jd.assignedRole === "distribusi_1" ||
+              jd.pic?.toLowerCase().includes("dwi")
+            ) {
+              return true;
+            }
+            return false;
+          }
+
+          // 4. Wandi (Dstribusi2@alumana.id / Distribusi 2 - Katering & MBG):
           if (isDualDistribusi) {
-            if (jd.assignedRole === "distribusi_2" || jd.assignedRole === "distribusi_mbg_2") return true;
-            if (jd.pic === "Wandi" || jd.pic === "Distribusi2" || jd.pic?.toLowerCase().includes("distribusi")) return true;
+            if (
+              jd.assignedRole === "distribusi_2" ||
+              jd.assignedRole === "distribusi_mbg_2" ||
+              jd.pic === "Wandi" ||
+              jd.pic === "Distribusi2" ||
+              jd.pic?.toLowerCase().includes("distribusi")
+            ) {
+              return true;
+            }
             return false;
-          }
-
-          if (role === "MBG2") {
-            return jd.assignedRole === "MBG2" || jd.pic === "MBG2" || jd.pic?.toLowerCase().includes("mbg 2");
           }
 
           if (jd.assignedRole === role) return true;
-          if (jd.pic === picName) return true;
-          if (role === "distribusi_1" && jd.pic === "Dwi") return true;
-          if (role === "produksi_2" && jd.pic === "Shifa") return true;
           return false;
         });
       onData(results);

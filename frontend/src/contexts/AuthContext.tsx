@@ -120,18 +120,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
               const email = nextUser.email || "";
               
               let defaultRole: UserProfile["role"] = "pelanggan";
-              if (email.toLowerCase() === "dstribusi2@alumana.id" || email.toLowerCase().startsWith("wandi")) {
-                defaultRole = "distribusi_2";
-              } else if (email.startsWith("produksimbg2") || email.startsWith("produksimbg") || email.startsWith("produksi_1") || email.startsWith("produksi_mbg")) {
+              let defaultDisplayName = nextUser.displayName || email.split("@")[0] || "Pelanggan Baru";
+
+              const em = email.toLowerCase();
+              if (em.includes("produksimbg2") || em.includes("produksi_mbg2") || em.includes("joko")) {
                 defaultRole = "produksi_1";
-              } else if (email.startsWith("produksi_mbg_2") || email.startsWith("mbg2") || email.startsWith("produksi2_mbg")) {
-                defaultRole = "MBG2";
+                defaultDisplayName = "Ust. Joko";
+              } else if (em.includes("produksimbg") || em.includes("produksi_mbg") || em.includes("shifa") || em.includes("hashifah")) {
+                defaultRole = "produksi_2";
+                defaultDisplayName = "Hashifah Dzihniyah Zhafirah";
+              } else if (em.includes("distribusimbg") || em.includes("distribusi_mbg") || em.includes("dwi")) {
+                defaultRole = "distribusi_1";
+                defaultDisplayName = "Dwi";
+              } else if (em === "dstribusi2@alumana.id" || em.includes("distribusi2") || em.startsWith("wandi")) {
+                defaultRole = "distribusi_2";
+                defaultDisplayName = "Wandi";
               } else if (email.startsWith("admin_mbg") || email.startsWith("adminmbg")) {
                 defaultRole = "admin_mbg";
               } else if (email.startsWith("purchasing_mbg") || email.startsWith("purchasingmbg")) {
                 defaultRole = "purchasing_mbg";
-              } else if (email.startsWith("distribusi_mbg") || email.startsWith("distribusimbg")) {
-                defaultRole = "distribusi_mbg";
               } else if (email.startsWith("kurir_mbg") || email.startsWith("kurirmbg")) {
                 defaultRole = "kurir_mbg";
               } else if (email.startsWith("mo_katering") || email.startsWith("mokatering") || email.startsWith("mo@")) {
@@ -142,7 +149,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
               const defaultProfile: UserProfile = {
                 email,
-                displayName: nextUser.displayName || email.split("@")[0] || "Pelanggan Baru",
+                displayName: defaultDisplayName,
                 role: defaultRole,
                 createdAt: new Date(),
               };

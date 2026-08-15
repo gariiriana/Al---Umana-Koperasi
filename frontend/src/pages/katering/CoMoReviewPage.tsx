@@ -45,11 +45,9 @@ type ReviewFilter = "all" | "pending_review" | "approved" | "rejected" | "not_su
 
 const PIC_OPTIONS: PicShortName[] = [
   "Joko",
-  "Dwi",
   "Shifa",
+  "Dwi",
   "Wandi",
-  "MBG2",
-  "Distribusi2",
 ];
 
 export function CoMoReviewPage() {

@@ -86,11 +86,9 @@ interface DraftRow {
 
 const PIC_OPTIONS: PicShortName[] = [
   "Joko",
-  "Dwi",
   "Shifa",
+  "Dwi",
   "Wandi",
-  "MBG2",
-  "Distribusi2",
 ];
 
 export function MoJobDeskPage() {
@@ -299,7 +297,7 @@ export function MoJobDeskPage() {
           hari: targetHari,
           tanggal: targetDate,
           startTime: "06:00",
-          pic: "MBG2",
+          pic: "Shifa",
           kegiatan: `Produksi MBG - ${entry.institutionName}`,
           keterangan: `Persiapan & porsi ${totalPortions} porsi (${entry.schoolLevel || entry.institutionType || "Sekolah"}) - Menu MBG`,
           keyId: computeKeyId(targetDate, 0, "mbg"),
@@ -315,7 +313,7 @@ export function MoJobDeskPage() {
           hari: targetHari,
           tanggal: targetDate,
           startTime: "08:30",
-          pic: "Wandi",
+          pic: "Dwi",
           kegiatan: `Pengantaran MBG - ${entry.institutionName}`,
           keterangan: `Distribusi & serah terima ${totalPortions} porsi ke ${entry.institutionName} ${entry.address ? `(${entry.address})` : ""}`,
           keyId: computeKeyId(targetDate, 1, "mbg"),
@@ -347,7 +345,7 @@ export function MoJobDeskPage() {
           hari: lastRow ? lastRow.hari : getHariFromDate(defaultDate),
           tanggal: defaultDate,
           startTime: lastRow ? lastRow.startTime : "07:00",
-          pic: defaultDivision === "mbg" ? "MBG2" : "Joko",
+          pic: defaultDivision === "mbg" ? "Shifa" : "Joko",
           kegiatan: "",
           keterangan: "",
           keyId: computeKeyId(defaultDate, nextIndex, defaultDivision),

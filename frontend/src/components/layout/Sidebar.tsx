@@ -349,10 +349,16 @@ export function Sidebar({
                 <span className="inline-block text-[10px] font-bold bg-[#F3F4F6] text-[#6B7280] rounded-full px-2 py-0.5 mt-0.5">
                   {(() => {
                     const em = (userEmail || userName || "").toLowerCase();
-                    if (em.includes("produksimbg2") || em.includes("produksimbg") || em.includes("joko")) {
-                      return "Ust. Joko (Produksi)";
+                    if (em.includes("produksimbg2") || em.includes("produksi_mbg2") || em.includes("joko")) {
+                      return "Ust. Joko (Produksi MBG 2)";
                     }
-                    if (em === "dstribusi2@alumana.id" || em.startsWith("wandi")) {
+                    if (em.includes("produksimbg") || em.includes("produksi_mbg") || em.includes("shifa") || em.includes("hashifah")) {
+                      return "Hashifah Dzihniyah Zhafirah (Produksi MBG)";
+                    }
+                    if (em.includes("distribusimbg") || em.includes("distribusi_mbg") || em.includes("dwi")) {
+                      return "Dwi (Distribusi MBG)";
+                    }
+                    if (em === "dstribusi2@alumana.id" || em.includes("distribusi2") || em.startsWith("wandi")) {
                       return "Wandi (Distribusi 2)";
                     }
                     return roleBadge[userRole] ?? userRole;

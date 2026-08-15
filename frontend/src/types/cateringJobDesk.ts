@@ -31,12 +31,46 @@ export type PicShortName =
 
 /** Display labels for assignable roles. */
 export const JOBDESK_ROLE_LABELS: Record<JobDeskAssignableRole, string> = {
-  produksi_1: 'Joko (Produksi 1 - Katering)',
-  distribusi_1: 'Dwi (Distribusi 1 - Katering)',
-  produksi_2: 'Shifa (Produksi 2 - Katering)',
+  produksi_1: 'Joko (Produksi 1 - Katering & MBG 2)',
+  distribusi_1: 'Dwi (Distribusi 1 - Katering & MBG)',
+  produksi_2: 'Shifa (Produksi 2 - Katering & Produksi MBG)',
   distribusi_2: 'Wandi (Distribusi 2 - Katering & MBG)',
-  MBG2: 'Produksi MBG 2 (MBG2)',
-  distribusi_mbg_2: 'Distribusi MBG 2 (Dstribusi2@alumana.id)',
+  MBG2: 'Joko (Produksi MBG 2)',
+  distribusi_mbg_2: 'Wandi (Distribusi 2)',
+};
+
+/** PIC details including account email and operational scope. */
+export const PIC_ACCOUNT_DETAILS: Record<PicShortName, { name: string; email: string; roleLabel: string }> = {
+  Joko: {
+    name: 'Ust. Joko',
+    email: 'ProduksiMBG2@alumana.id',
+    roleLabel: 'Produksi MBG 2 & Produksi 1 (Katering)',
+  },
+  Shifa: {
+    name: 'Hashifah Dzihniyah Zhafirah',
+    email: 'ProduksiMBG@alumana.id',
+    roleLabel: 'Produksi MBG & Produksi 2 (Katering)',
+  },
+  Dwi: {
+    name: 'Dwi',
+    email: 'distribusimbg@alumana.id',
+    roleLabel: 'Distribusi MBG & Distribusi 1 (Katering)',
+  },
+  Wandi: {
+    name: 'Wandi',
+    email: 'Dstribusi2@alumana.id',
+    roleLabel: 'Distribusi 2 (Katering & MBG)',
+  },
+  MBG2: {
+    name: 'Ust. Joko',
+    email: 'ProduksiMBG2@alumana.id',
+    roleLabel: 'Produksi MBG 2',
+  },
+  Distribusi2: {
+    name: 'Wandi',
+    email: 'Dstribusi2@alumana.id',
+    roleLabel: 'Distribusi 2 (Katering & MBG)',
+  },
 };
 
 /** Mapping from short PIC name to role ID and vice versa. */
@@ -54,8 +88,8 @@ export const ROLE_TO_PIC_NAME: Record<JobDeskAssignableRole, PicShortName> = {
   distribusi_1: 'Dwi',
   produksi_2: 'Shifa',
   distribusi_2: 'Wandi',
-  MBG2: 'MBG2',
-  distribusi_mbg_2: 'Distribusi2',
+  MBG2: 'Joko',
+  distribusi_mbg_2: 'Wandi',
 };
 
 /** Days of the week in Indonesian. */
