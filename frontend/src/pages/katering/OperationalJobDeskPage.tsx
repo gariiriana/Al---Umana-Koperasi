@@ -428,10 +428,10 @@ export function OperationalJobDeskPage() {
             <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
               <thead>
                 <tr className="bg-gray-100 border-b border-gray-200 text-gray-700 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-3.5 w-20">Divisi</th>
-                  <th className="py-3 px-3.5 w-20">Hari</th>
-                  <th className="py-3 px-3.5 w-24">Tanggal</th>
-                  <th className="py-3 px-3.5 w-20 text-center">Start Time</th>
+                  <th className="py-3 px-3.5 w-28 min-w-[100px]">Divisi</th>
+                  <th className="py-3 px-3.5 w-28 min-w-[95px]">Hari</th>
+                  <th className="py-3 px-3.5 w-28">Tanggal</th>
+                  <th className="py-3 px-3.5 w-24 text-center">Start Time</th>
                   <th className="py-3 px-3.5 w-24">PIC</th>
                   <th className="py-3 px-3.5 min-w-[200px]">Kegiatan</th>
                   <th className="py-3 px-3.5 min-w-[220px]">Keterangan</th>

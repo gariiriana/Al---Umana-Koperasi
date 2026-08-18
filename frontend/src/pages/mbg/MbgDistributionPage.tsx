@@ -43,7 +43,11 @@ import { LiveCamera } from '@/components/LiveCamera';
 import { SearchableBatchSelector } from '@/components/mbg/SearchableBatchSelector';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { exportMbgDeliveryReportPdf } from '@/utils/mbgDeliveryReportPdfExporter';
+import {
+  exportMbgDeliveryReportPdf,
+  exportMbgDailyDistributionReportPdf,
+  formatIndonesianDate,
+} from '@/utils/mbgDeliveryReportPdfExporter';
 
 export function MbgDistributionPage() {
   const { showToast } = useToast();
@@ -56,6 +60,7 @@ export function MbgDistributionPage() {
   const [kurirUsers, setKurirUsers] = useState<MbgKurirUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'assignment' | 'reports'>('assignment');
+  const [isExportingDailyPdf, setIsExportingDailyPdf] = useState(false);
 
   const selectedBatch = useMemo(
     () => batches.find((b) => b.id === selectedBatchId),
@@ -594,6 +599,65 @@ export function MbgDistributionPage() {
     }
   };
 
+  // Export combined daily report for ALL couriers on the active batch date
+  const handleExportDailyDistributionPdf = async (customBatchId?: string) => {
+    const targetBatchId = customBatchId || selectedBatchId;
+    const targetBatch = batches.find((b) => b.id === targetBatchId) || selectedBatch;
+    const batchDate = targetBatch?.tanggal || new Date().toISOString().split('T')[0];
+
+    setIsExportingDailyPdf(true);
+    showToast({ message: `Menyiapkan PDF Laporan Distribusi Harian (${batchDate})...`, variant: 'info' });
+
+    try {
+      let targetEntries: MbgPmEntry[] = [];
+      let targetTasks: MbgDeliveryTask[] = [];
+
+      if (targetBatchId) {
+        if (selectedBatchId === targetBatchId && entries.length > 0) {
+          targetEntries = entries;
+          targetTasks = deliveryTasks;
+        } else {
+          const entriesSnap = await getDocs(
+            query(collection(db, 'mbg_pm_entries'), where('batchId', '==', targetBatchId))
+          );
+          targetEntries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgPmEntry));
+          targetEntries.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+          const tasksSnap = await getDocs(
+            query(collection(db, 'mbg_delivery_tasks'), where('batchId', '==', targetBatchId))
+          );
+          targetTasks = tasksSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryTask));
+        }
+      } else {
+        targetEntries = entries;
+        targetTasks = deliveryTasks;
+      }
+
+      if (targetEntries.length === 0) {
+        showToast({ message: 'Tidak ada data institusi/sekolah untuk tanggal ini', variant: 'error' });
+        setIsExportingDailyPdf(false);
+        return;
+      }
+
+      const fileName = `Laporan_Distribusi_MBG_Harian_${batchDate}.pdf`;
+
+      await exportMbgDailyDistributionReportPdf({
+        tanggalBatch: batchDate,
+        batchName: targetBatch?.batchNotes || `Batch MBG ${batchDate}`,
+        entries: targetEntries,
+        deliveryTasks: targetTasks,
+        fileName,
+      });
+
+      showToast({ message: 'PDF Laporan Distribusi Harian (Semua Kurir) berhasil diunduh!', variant: 'success' });
+    } catch (err) {
+      console.error('Failed to export daily delivery report PDF:', err);
+      showToast({ message: 'Gagal mengekspor PDF laporan harian', variant: 'error' });
+    } finally {
+      setIsExportingDailyPdf(false);
+    }
+  };
+
   return (
     <div className="min-h-screen font-['Hanken_Grotesk',system-ui,sans-serif] p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -606,9 +670,26 @@ export function MbgDistributionPage() {
         </div>
 
         {selectedBatchId && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Daily Combined Export PDF (All Couriers) */}
+            <button
+              type="button"
+              onClick={() => handleExportDailyDistributionPdf()}
+              disabled={isExportingDailyPdf}
+              className="flex items-center gap-2 bg-[#111827] hover:bg-black text-white font-extrabold text-xs px-4 py-3 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all disabled:opacity-50"
+              title="Export PDF Laporan Distribusi Harian yang menggabungkan seluruh kurir pada tanggal ini"
+            >
+              {isExportingDailyPdf ? (
+                <Loader2 className="h-4 w-4 animate-spin text-[#FBBF24]" />
+              ) : (
+                <FileDown className="h-4 w-4 text-[#FBBF24]" />
+              )}
+              <span>{isExportingDailyPdf ? 'Memproses PDF...' : '📄 Export PDF Harian (Semua Kurir)'}</span>
+            </button>
+
             {activeTab === 'assignment' && (
               <button
+                type="button"
                 onClick={() => handleSyncDeliveryTasks()}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-3 rounded-xl cursor-pointer shadow-md active:scale-95 transition-all"
               >
@@ -883,13 +964,56 @@ export function MbgDistributionPage() {
                 </div>
               ) : (
                 /* Laporan Kurir Tab */
-                <div className="space-y-4 font-['Hanken_Grotesk']">
+                <div className="space-y-5 font-['Hanken_Grotesk']">
+                  {/* Daily Report Combined Export Banner */}
+                  <div className="bg-gradient-to-r from-[#111827] via-[#1E293B] to-[#0F172A] rounded-2xl p-5 sm:p-6 text-white shadow-md flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 bg-[#FBBF24] text-[#111827] text-[10px] font-black rounded-md uppercase tracking-wider">
+                          Laporan Harian
+                        </span>
+                        <h3 className="text-base font-extrabold text-white">
+                          Export Laporan Distribusi Harian (Semua Kurir)
+                        </h3>
+                      </div>
+                      <p className="text-xs text-gray-300 max-w-2xl leading-relaxed">
+                        Unduh 1 file PDF gabungan yang memuat rekapitulasi seluruh kurir, alokasi rute, serta dokumentasi foto (Menu, Serah Terima, & Surat Jalan) untuk tanggal{' '}
+                        <strong className="text-white font-bold">{selectedBatch?.tanggal ? formatIndonesianDate(selectedBatch.tanggal, true) : 'operasional'}</strong>.
+                      </p>
+                      <div className="flex flex-wrap gap-2 text-[11px] font-bold text-gray-400 pt-1">
+                        <span className="bg-white/10 px-2.5 py-1 rounded-lg text-white">
+                          👥 {Object.keys(groupedEntries).filter((k) => k !== 'Belum Ditugaskan').length || 1} Kurir Terdaftar
+                        </span>
+                        <span className="bg-white/10 px-2.5 py-1 rounded-lg text-white">
+                          🏫 {entries.filter((e) => !e.isSekolahLibur).length} Institusi Aktif
+                        </span>
+                        <span className="bg-white/10 px-2.5 py-1 rounded-lg text-white">
+                          🍱 {entries.filter((e) => !e.isSekolahLibur).reduce((acc, e) => acc + (e.jumlah || 0), 0)} Total Porsi
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleExportDailyDistributionPdf()}
+                      disabled={isExportingDailyPdf || entries.length === 0}
+                      className="shrink-0 flex items-center gap-2 bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] font-black text-xs px-5 py-3 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {isExportingDailyPdf ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-[#111827]" />
+                      ) : (
+                        <FileDown className="h-4 w-4 text-[#111827]" />
+                      )}
+                      <span>{isExportingDailyPdf ? 'Mengunduh PDF Harian...' : 'Download PDF Harian (Semua Kurir)'}</span>
+                    </button>
+                  </div>
+
                   {batchDeliveryDocs.length === 0 ? (
                     <div className="bg-white border border-[#E5E7EB] rounded-2xl p-12 text-center">
                       <FileText className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-                      <h3 className="text-lg font-bold text-[#111827]">Belum Ada Laporan</h3>
+                      <h3 className="text-lg font-bold text-[#111827]">Belum Ada Arsip Satuan</h3>
                       <p className="text-sm text-gray-500 mt-1 max-w-sm mx-auto">
-                        Laporan kurir akan muncul setelah kurir MBG atau kenek melakukan export PDF dari halaman delivery mereka.
+                        Anda tetap dapat mengekspor laporan harian gabungan di atas, atau menunggu kurir mengunggah laporan perorangan.
                       </p>
                     </div>
                   ) : (

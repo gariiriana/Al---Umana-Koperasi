@@ -192,14 +192,20 @@ export function extractTimeOnly(timeStr?: string, defaultTime = '07:00'): string
   let t = timeStr.trim();
   if (t.includes('T')) {
     t = t.split('T')[1];
+  } else if (t.includes(' ')) {
+    t = t.split(' ')[1];
   }
-  // If format is HH:mm:ss or HH:mm:ss.sss, extract HH:mm
-  if (/^\d{2}:\d{2}/.test(t)) {
-    return t.slice(0, 5);
+  // Remove trailing timezone info if present
+  t = t.replace(/Z|[+-]\d{2}:?\d{2}$/, '');
+  // If format is HH:mm or HH:mm:ss
+  if (/^\d{1,2}:\d{2}/.test(t)) {
+    const parts = t.split(':');
+    return `${parts[0].padStart(2, '0')}:${parts[1].slice(0, 2)}`;
   }
-  // If format is HH.mm, convert to HH:mm
-  if (/^\d{2}\.\d{2}/.test(t)) {
-    return t.slice(0, 5).replace('.', ':');
+  // If format is HH.mm
+  if (/^\d{1,2}\.\d{2}/.test(t)) {
+    const parts = t.split('.');
+    return `${parts[0].padStart(2, '0')}:${parts[1].slice(0, 2)}`;
   }
   return t || defaultTime;
 }

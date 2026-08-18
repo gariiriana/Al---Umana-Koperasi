@@ -314,7 +314,11 @@ export function MoJobDeskPage() {
       for (const ord of ordersList) {
         const portions = (ord.items || []).reduce((acc, it) => acc + (it.quantity || 0), 0);
         totalPortions += portions;
-        if (ord.deliveryTime) times.add(ord.deliveryTime);
+        const rawTime = ord.deliveryTime || ord.eventDate;
+        if (rawTime) {
+          const cleanTime = extractTimeOnly(rawTime);
+          if (cleanTime) times.add(cleanTime);
+        }
         const existingDesks = jobDesksByOrderId.get(ord.id) || [];
         if (existingDesks.length === 0) {
           unassignedOrdersCount++;
@@ -690,6 +694,48 @@ export function MoJobDeskPage() {
       ];
     });
   }, [selectedOperationalDate, todayStr, handoverDivision, computeKeyId]);
+
+  // Insert a new row directly below a specific row
+  const handleInsertRowBelow = useCallback(
+    (targetRowId: string) => {
+      setRows((prev) => {
+        const targetIndex = prev.findIndex((r) => r.id === targetRowId);
+        if (targetIndex === -1) return prev;
+
+        const currentRow = prev[targetIndex];
+        const targetDate = currentRow.tanggal || selectedOperationalDate || todayStr;
+        const targetDivision: JobDeskDivision = currentRow.division || handoverDivision;
+        const targetHari = currentRow.hari || getHariFromDate(targetDate);
+
+        const newRow: DraftRow = {
+          id: `row-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          division: targetDivision,
+          hari: targetHari,
+          tanggal: targetDate,
+          startTime: currentRow.startTime || "07:00",
+          pic: targetDivision === "mbg" ? "Shifa" : "Joko",
+          kegiatan: "",
+          keterangan: "",
+          keyId: "",
+          orderId: currentRow.orderId || "",
+          orderLabel: currentRow.orderLabel || "",
+          mbgBatchId: currentRow.mbgBatchId,
+          mbgInstitutionName: currentRow.mbgInstitutionName,
+          mbgPortionCount: currentRow.mbgPortionCount,
+        };
+
+        const updated = [...prev];
+        updated.splice(targetIndex + 1, 0, newRow);
+
+        // Re-index Key IDs for consistent sequence
+        return updated.map((r, idx) => ({
+          ...r,
+          keyId: computeKeyId(r.tanggal || targetDate, idx, r.division || "katering"),
+        }));
+      });
+    },
+    [selectedOperationalDate, todayStr, handoverDivision, computeKeyId]
+  );
 
   // Remove a row from draft form and re-index Key IDs
   const handleRemoveRow = useCallback(
@@ -1116,7 +1162,9 @@ export function MoJobDeskPage() {
                                 Total <strong className="text-slate-800">{group.totalOrders} Pesanan</strong> •{" "}
                                 <strong className="text-slate-800">{group.totalPortions} Porsi/Item</strong> • Jam Kirim:{" "}
                                 <span className="font-mono font-bold text-slate-700">
-                                  {group.deliveryTimes.length > 0 ? group.deliveryTimes.join(", ") : "-"}
+                                  {group.deliveryTimes.length > 0
+                                    ? group.deliveryTimes.map((t) => extractTimeOnly(t)).join(", ")
+                                    : "-"}
                                 </span>
                               </p>
                             </div>
@@ -1188,7 +1236,7 @@ export function MoJobDeskPage() {
                                       <span>
                                         Jam Kirim:{" "}
                                         <strong className="font-mono font-bold text-slate-700">
-                                          {ord.deliveryTime || "-"}
+                                          {extractTimeOnly(ord.deliveryTime || ord.eventDate, "-")}
                                         </strong>
                                       </span>
                                       <span className="truncate max-w-[180px]" title={ord.deliveryAddress}>
@@ -1407,33 +1455,33 @@ export function MoJobDeskPage() {
 
           {/* Interactive Spreadsheet Table */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
+            <table className="w-full text-left text-xs border-collapse min-w-[1150px]">
               <thead>
                 <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-3 w-28">Divisi</th>
-                  <th className="py-3 px-3 w-28">Hari</th>
-                  <th className="py-3 px-3 w-32">Tanggal</th>
-                  <th className="py-3 px-3 w-24 text-center">Start Time</th>
-                  <th className="py-3 px-3 w-52">PIC Penugasan</th>
+                  <th className="py-3 px-3 w-36 min-w-[130px]">Divisi</th>
+                  <th className="py-3 px-3 w-32 min-w-[115px]">Hari</th>
+                  <th className="py-3 px-3 w-36 min-w-[130px]">Tanggal</th>
+                  <th className="py-3 px-3 w-28 text-center">Start Time</th>
+                  <th className="py-3 px-3 w-48 min-w-[150px]">PIC Penugasan</th>
                   <th className="py-3 px-3 min-w-[220px]">Kegiatan</th>
                   <th className="py-3 px-3 min-w-[240px]">Keterangan</th>
                   <th className="py-3 px-3 w-36 font-mono">Key ID</th>
-                  <th className="py-3 px-3 w-36">Link Pesanan / MBG</th>
-                  <th className="py-3 px-2 w-12 text-center">Hapus</th>
+                  <th className="py-3 px-3 w-40 min-w-[140px]">Link Pesanan / MBG</th>
+                  <th className="py-3 px-3 w-28 min-w-[100px] text-center">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {rows.map((row) => (
                   <tr key={row.id} className="hover:bg-slate-50/60 transition-colors">
                     {/* Divisi */}
-                    <td className="py-2.5 px-3 align-top">
+                    <td className="py-2.5 px-3 w-36 min-w-[130px] align-top">
                       <select
                         value={row.division || "katering"}
                         onChange={(e) => handleRowChange(row.id, "division", e.target.value as JobDeskDivision)}
-                        className={`w-full px-2 py-1.5 rounded-lg border text-xs font-bold cursor-pointer ${
+                        className={`w-full min-w-[110px] px-2.5 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${
                           row.division === "mbg"
-                            ? "bg-emerald-50 text-emerald-900 border-emerald-300"
-                            : "bg-amber-50 text-amber-900 border-amber-300"
+                            ? "bg-emerald-50 text-emerald-900 border-emerald-300 focus:ring-2 focus:ring-emerald-500"
+                            : "bg-amber-50 text-amber-900 border-amber-300 focus:ring-2 focus:ring-amber-500"
                         }`}
                       >
                         <option value="katering">🍱 Katering</option>
@@ -1442,11 +1490,11 @@ export function MoJobDeskPage() {
                     </td>
 
                     {/* Hari */}
-                    <td className="py-2.5 px-3 align-top">
+                    <td className="py-2.5 px-3 w-32 min-w-[115px] align-top">
                       <select
                         value={row.hari}
                         onChange={(e) => handleRowChange(row.id, "hari", e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-slate-900 cursor-pointer"
+                        className="w-full min-w-[100px] px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-slate-900 cursor-pointer"
                       >
                         {HARI_OPTIONS.map((h) => (
                           <option key={h} value={h}>
@@ -1457,7 +1505,7 @@ export function MoJobDeskPage() {
                     </td>
 
                     {/* Tanggal */}
-                    <td className="py-2.5 px-3 align-top">
+                    <td className="py-2.5 px-3 w-36 min-w-[130px] align-top">
                       <input
                         type="date"
                         value={row.tanggal}
@@ -1467,7 +1515,7 @@ export function MoJobDeskPage() {
                     </td>
 
                     {/* Start Time */}
-                    <td className="py-2.5 px-3 align-top">
+                    <td className="py-2.5 px-3 w-28 align-top">
                       <input
                         type="time"
                         value={row.startTime}
@@ -1477,7 +1525,7 @@ export function MoJobDeskPage() {
                     </td>
 
                     {/* PIC Penugasan */}
-                    <td className="py-2.5 px-3 align-top">
+                    <td className="py-2.5 px-3 w-48 min-w-[150px] align-top">
                       <select
                         value={row.pic}
                         onChange={(e) => handleRowChange(row.id, "pic", e.target.value as PicShortName)}
@@ -1492,7 +1540,7 @@ export function MoJobDeskPage() {
                     </td>
 
                     {/* Kegiatan */}
-                    <td className="py-2.5 px-3 align-top">
+                    <td className="py-2.5 px-3 min-w-[220px] align-top">
                       <textarea
                         rows={2}
                         placeholder={
@@ -1507,7 +1555,7 @@ export function MoJobDeskPage() {
                     </td>
 
                     {/* Keterangan */}
-                    <td className="py-2.5 px-3 align-top">
+                    <td className="py-2.5 px-3 min-w-[240px] align-top">
                       <textarea
                         rows={2}
                         placeholder={
@@ -1522,7 +1570,7 @@ export function MoJobDeskPage() {
                     </td>
 
                     {/* Key ID */}
-                    <td className="py-2.5 px-3 whitespace-nowrap align-top">
+                    <td className="py-2.5 px-3 w-36 whitespace-nowrap align-top">
                       <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-slate-100 border border-slate-200">
                         <span className="text-xs font-mono font-bold text-slate-800">
                           {row.keyId}
@@ -1534,7 +1582,7 @@ export function MoJobDeskPage() {
                     </td>
 
                     {/* Link Order / MBG */}
-                    <td className="py-2.5 px-3 align-top">
+                    <td className="py-2.5 px-3 w-40 min-w-[140px] align-top">
                       <input
                         type="text"
                         placeholder="(Tugas Harian)"
@@ -1544,17 +1592,27 @@ export function MoJobDeskPage() {
                       />
                     </td>
 
-                    {/* Delete button */}
-                    <td className="py-2.5 px-2 text-center align-top pt-2">
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRow(row.id)}
-                        disabled={rows.length === 1}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg disabled:opacity-30 cursor-pointer transition-colors"
-                        title="Hapus baris"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                    {/* Aksi: Tambah Baris di Bawah & Hapus Baris */}
+                    <td className="py-2.5 px-3 w-28 min-w-[100px] text-center align-top pt-2">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleInsertRowBelow(row.id)}
+                          className="p-1.5 text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg cursor-pointer transition-all shadow-2xs active:scale-95"
+                          title="Tambah baris baru di bawah baris ini"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRow(row.id)}
+                          disabled={rows.length === 1}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg disabled:opacity-30 cursor-pointer transition-all active:scale-95"
+                          title="Hapus baris ini"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1696,10 +1754,10 @@ export function MoJobDeskPage() {
                 <table className="w-full text-left text-xs border-collapse min-w-[1000px]">
                   <thead>
                     <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider text-[10px]">
-                      <th className="py-3 px-3.5 w-20">Divisi</th>
-                      <th className="py-3 px-3.5 w-20">Hari</th>
-                      <th className="py-3 px-3.5 w-24">Tanggal</th>
-                      <th className="py-3 px-3.5 w-20 text-center">Start Time</th>
+                      <th className="py-3 px-3.5 w-28 min-w-[100px]">Divisi</th>
+                      <th className="py-3 px-3.5 w-28 min-w-[95px]">Hari</th>
+                      <th className="py-3 px-3.5 w-28">Tanggal</th>
+                      <th className="py-3 px-3.5 w-24 text-center">Start Time</th>
                       <th className="py-3 px-3.5 w-32">PIC</th>
                       <th className="py-3 px-3.5 min-w-[200px]">Kegiatan</th>
                       <th className="py-3 px-3.5 min-w-[220px]">Keterangan</th>

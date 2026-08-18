@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { MbgDeliveryDocument } from '@/services/mbgDeliveryService';
-import type { MbgPmEntry } from '@/types/mbg';
+import type { MbgPmEntry, MbgDeliveryTask } from '@/types/mbg';
 
 // Helper to load image as base64 with canvas fallback (supports transparent PNG)
 export const getBase64Image = async (url: string, format: 'image/png' | 'image/jpeg' = 'image/png'): Promise<string | null> => {
@@ -313,10 +313,432 @@ export async function exportMbgDeliveryReportPdf({
     });
   }
 
+  // ─── RUNNING FOOTER & PAGE NUMBERING ON ALL PAGES ───
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    if (i > 1) {
+      const footY = pageH - 9;
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.25);
+      doc.line(12, footY, pageW - 12, footY);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        'Laporan Distribusi MBG — SPPG Sukabumi Gunungguruh Kebonmanggu (Al Umanaa)',
+        12,
+        footY + 4.5
+      );
+
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Halaman ${i} dari ${totalPages}`, pageW - 12, footY + 4.5, { align: 'right' });
+    }
+  }
+
   const finalFileName =
     fileName ||
     docMeta?.fileName ||
     `Laporan_Distribusi_MBG_${effectivePetugas.replace(/\s+/g, '_')}_${effectiveTanggal}.pdf`;
+
+  doc.save(finalFileName);
+}
+
+// ─── 5. DAILY COMBINED REPORT EXPORTER (ALL COURIERS IN ONE PDF) ───
+export interface ExportDailyDeliveryPdfOptions {
+  tanggalBatch: string;
+  batchName?: string;
+  entries: MbgPmEntry[];
+  deliveryTasks?: MbgDeliveryTask[];
+  fileName?: string;
+}
+
+export async function exportMbgDailyDistributionReportPdf({
+  tanggalBatch,
+  batchName,
+  entries,
+  deliveryTasks = [],
+  fileName,
+}: ExportDailyDeliveryPdfOptions): Promise<void> {
+  const activeEntries = entries.filter((e) => !e.isSekolahLibur && (e.institutionName?.trim() || e.id));
+  const effectiveTanggal = tanggalBatch || new Date().toISOString().split('T')[0];
+  const formattedHeaderDate = formatIndonesianDate(effectiveTanggal, true);
+
+  // Group entries by Courier / Petugas Name
+  const courierMap = new Map<string, { kenekName?: string; entries: MbgPmEntry[] }>();
+
+  // Helper to find task proof
+  const findTaskProof = (petugasName: string, entryId: string) => {
+    const pNameLower = petugasName.toLowerCase().trim();
+    const task = deliveryTasks.find((t) => {
+      const tName = (t.petugasName || '').toLowerCase().trim();
+      return pNameLower && (tName === pNameLower || tName.includes(pNameLower) || pNameLower.includes(tName));
+    });
+    return task?.schoolProofs?.[entryId];
+  };
+
+  for (const entry of activeEntries) {
+    const pName = entry.assignedPetugasName?.trim() || 'Belum Ditugaskan';
+    const proof = findTaskProof(pName, entry.id);
+    const enrichedEntry: MbgPmEntry = {
+      ...entry,
+      photoMenuUrl: entry.photoMenuUrl || proof?.photoMenuUrl,
+      photoSerahTerimaUrl: entry.photoSerahTerimaUrl || proof?.photoSerahTerimaUrl,
+      photoPenerimaUrl: entry.photoPenerimaUrl || proof?.photoPenerimaUrl,
+      photoSuratJalanUrl: entry.photoSuratJalanUrl || proof?.photoSuratJalanUrl,
+    };
+
+    const existing = courierMap.get(pName) || { kenekName: entry.assignedKenekName, entries: [] };
+    if (entry.assignedKenekName && !existing.kenekName) {
+      existing.kenekName = entry.assignedKenekName;
+    }
+    existing.entries.push(enrichedEntry);
+    courierMap.set(pName, existing);
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+
+  // Colors
+  const slateDark: [number, number, number] = [17, 24, 39];
+  const mutedGray: [number, number, number] = [100, 116, 139];
+
+  // ─── 1. Load Logo ───
+  let logoBase64: string | null = null;
+  try {
+    logoBase64 = await getBase64Image('/logo_badan_gizi.png');
+  } catch {
+    logoBase64 = null;
+  }
+
+  // ─── 2. COVER PAGE ───
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, pageW, pageH, 'F');
+
+  // Top Header Text
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(0, 0, 0);
+  doc.text('BADAN GIZI NASIONAL', pageW / 2, 30, { align: 'center' });
+
+  doc.setFontSize(11);
+  doc.text('SPPG SUKABUMI GUNUNGGURUH KEBONMANGGU', pageW / 2, 38, { align: 'center' });
+  doc.text('YAYASAN LEMBAGA AL UMANAA', pageW / 2, 46, { align: 'center' });
+
+  // Title & Period
+  doc.setFontSize(13);
+  doc.text('LAPORAN KEGIATAN DISTRIBUSI HARIAN', pageW / 2, 70, { align: 'center' });
+  doc.setFontSize(10.5);
+  doc.text('(SELURUH KURIR & RUTE PENGIRIMAN)', pageW / 2, 77, { align: 'center' });
+
+  doc.setFontSize(11.5);
+  doc.text(`PERIODE ${formattedHeaderDate.toUpperCase()}`, pageW / 2, 86, { align: 'center' });
+
+  // Centered BGN Logo (Diameter 72mm)
+  const logoSize = 72;
+  const logoX = (pageW - logoSize) / 2;
+  const logoY = 100;
+
+  if (logoBase64) {
+    doc.addImage(logoBase64, 'PNG', logoX, logoY, logoSize, logoSize);
+  }
+
+  const totalPortions = activeEntries.reduce((acc, e) => acc + (e.jumlah || 0), 0);
+  const totalCouriers = Array.from(courierMap.keys()).filter((k) => k !== 'Belum Ditugaskan').length || courierMap.size;
+
+  // Summary / Keterangan Table
+  autoTable(doc, {
+    startY: 190,
+    head: [['NO', 'KETERANGAN DOKUMEN']],
+    body: [
+      ['1.', 'Rekapitulasi Penugasan & Rute Seluruh Kurir'],
+      ['2.', 'Laporan Dokumentasi Pengiriman Per Kurir'],
+      ['3.', 'Lampiran Surat Jalan & Bukti Serah Terima'],
+    ],
+    theme: 'grid',
+    headStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [0, 0, 0],
+      fontStyle: 'bold',
+      fontSize: 9.5,
+      halign: 'left',
+      lineWidth: 0.3,
+      lineColor: [0, 0, 0],
+    },
+    bodyStyles: {
+      fontSize: 9,
+      textColor: [0, 0, 0],
+      lineWidth: 0.3,
+      lineColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { cellWidth: 16, halign: 'left' },
+      1: { cellWidth: 80 },
+    },
+    margin: { left: (pageW - 96) / 2 },
+  });
+
+  // Summary stats banner at bottom of cover
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(71, 85, 105);
+  doc.text(
+    `Total: ${totalCouriers} Kurir  •  ${activeEntries.length} Sekolah/Institusi  •  ${totalPortions.toLocaleString('id-ID')} Porsi`,
+    pageW / 2,
+    260,
+    { align: 'center' }
+  );
+
+  // ─── 3. PRELOAD ALL ENTRY PHOTOS ───
+  const loadedPhotos: Record<string, string> = {};
+  const photoUrlsToFetch = new Set<string>();
+
+  for (const entry of activeEntries) {
+    if (entry.photoMenuUrl) photoUrlsToFetch.add(entry.photoMenuUrl);
+    if (entry.photoSerahTerimaUrl) photoUrlsToFetch.add(entry.photoSerahTerimaUrl);
+    if (entry.photoPenerimaUrl) photoUrlsToFetch.add(entry.photoPenerimaUrl);
+    if (entry.photoSuratJalanUrl) photoUrlsToFetch.add(entry.photoSuratJalanUrl);
+  }
+
+  await Promise.all(
+    Array.from(photoUrlsToFetch).map(async (url) => {
+      const b64 = await getBase64Image(url);
+      if (b64) loadedPhotos[url] = b64;
+    })
+  );
+
+  // ─── 4. PAGE 2: REKAPITULASI PENUGASAN KURIR ───
+  doc.addPage();
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...slateDark);
+  doc.text('REKAPITULASI PENUGASAN DISTRIBUSI HARIAN', 12, 16);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...mutedGray);
+  doc.text(`${formattedHeaderDate} | ${batchName || 'SPPG Sukabumi'}`, 12, 22);
+
+  const rekapRows: (string | { content: string; styles?: Record<string, unknown> })[][] = [];
+  let courierIdx = 1;
+
+  courierMap.forEach((groupData, courierName) => {
+    const cPortions = groupData.entries.reduce((acc, e) => acc + (e.jumlah || 0), 0);
+    const completeCount = groupData.entries.filter(
+      (e) => e.photoMenuUrl && (e.photoSerahTerimaUrl || e.photoPenerimaUrl) && e.photoSuratJalanUrl
+    ).length;
+    const completeness = `${completeCount}/${groupData.entries.length} Selesai`;
+
+    rekapRows.push([
+      `${courierIdx++}.`,
+      courierName,
+      groupData.kenekName || '-',
+      `${groupData.entries.length} Sekolah`,
+      `${cPortions.toLocaleString('id-ID')} Porsi`,
+      completeness,
+    ]);
+  });
+
+  autoTable(doc, {
+    startY: 27,
+    head: [['NO', 'NAMA KURIR', 'KENEK', 'INSTITUSI', 'TOTAL PORSI', 'STATUS DOKUMENTASI']],
+    body: rekapRows,
+    foot: [
+      [
+        {
+          content: 'TOTAL KESELURUHAN',
+          colSpan: 3,
+          styles: { halign: 'left', fontStyle: 'bold', fontSize: 8.5 },
+        },
+        {
+          content: `${activeEntries.length} Sekolah`,
+          styles: { halign: 'center', fontStyle: 'bold', fontSize: 8.5 },
+        },
+        {
+          content: `${totalPortions.toLocaleString('id-ID')} Porsi`,
+          styles: { halign: 'center', fontStyle: 'bold', fontSize: 8.5 },
+        },
+        {
+          content: `${totalCouriers} Kurir Aktif`,
+          styles: { halign: 'center', fontStyle: 'bold', fontSize: 8.5 },
+        },
+      ],
+    ],
+    theme: 'grid',
+    headStyles: {
+      fillColor: [17, 24, 39],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8.5,
+      halign: 'center',
+    },
+    bodyStyles: {
+      fontSize: 8.5,
+      textColor: [17, 24, 39],
+      valign: 'middle',
+    },
+    footStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [15, 23, 42],
+      fontStyle: 'bold',
+      fontSize: 8.5,
+    },
+    columnStyles: {
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 42, fontStyle: 'bold' },
+      2: { cellWidth: 36 },
+      3: { cellWidth: 26, halign: 'center' },
+      4: { cellWidth: 32, halign: 'center', fontStyle: 'bold' },
+      5: { cellWidth: 40, halign: 'center' },
+    },
+    margin: { left: 12, right: 12, bottom: 16 },
+  });
+
+  // ─── 5. DOKUMENTASI FOTO PER KURIR ───
+  courierMap.forEach((groupData, courierName) => {
+    doc.addPage();
+
+    const cPortions = groupData.entries.reduce((acc, e) => acc + (e.jumlah || 0), 0);
+
+    // Courier Header Section Banner
+    doc.setFillColor(17, 24, 39);
+    doc.rect(12, 12, pageW - 24, 12, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(251, 191, 36); // Amber Gold
+    doc.text(`DOKUMENTASI PENGIRIMAN: ${courierName.toUpperCase()}`, 16, 19.5);
+
+    doc.setFontSize(8.5);
+    doc.setTextColor(255, 255, 255);
+    const subText = `Kenek: ${groupData.kenekName || '-'} | ${groupData.entries.length} Sekolah • ${cPortions.toLocaleString('id-ID')} Porsi`;
+    doc.text(subText, pageW - 16, 19.5, { align: 'right' });
+
+    // Table of photo proofs
+    const tableRows = groupData.entries.map((entry, idx) => {
+      const scheduleText = entry.jadwalPengantaran ? `\nJam: ${entry.jadwalPengantaran}` : '';
+      return [
+        `${idx + 1}.`,
+        `${entry.institutionName || '-'}\n(${entry.jumlah || 0} Porsi)${scheduleText}`,
+        '', // MENU photo cell
+        '', // SERAH TERIMA photo cell
+        '', // SURAT JALAN photo cell
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 28,
+      head: [['NO', 'SEKOLAH / INSTITUSI', 'MENU', 'SERAH TERIMA', 'SURAT JALAN']],
+      body: tableRows,
+      theme: 'grid',
+      showHead: 'everyPage',
+      headStyles: {
+        fillColor: [248, 250, 252],
+        textColor: [17, 24, 39],
+        fontStyle: 'bold',
+        fontSize: 8.5,
+        halign: 'center',
+        valign: 'middle',
+        lineWidth: 0.2,
+        lineColor: [203, 213, 225],
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: [17, 24, 39],
+        minCellHeight: 33,
+        lineWidth: 0.2,
+        lineColor: [203, 213, 225],
+        valign: 'middle',
+      },
+      columnStyles: {
+        0: { cellWidth: 10, halign: 'center', valign: 'middle' },
+        1: { cellWidth: 38, fontStyle: 'bold', valign: 'middle' },
+        2: { cellWidth: 46, halign: 'center', valign: 'middle' },
+        3: { cellWidth: 46, halign: 'center', valign: 'middle' },
+        4: { cellWidth: 46, halign: 'center', valign: 'middle' },
+      },
+      margin: { left: 12, right: 12, bottom: 16 },
+      didDrawCell: (data) => {
+        if (data.section === 'body') {
+          const entry = groupData.entries[data.row.index];
+          if (!entry) return;
+
+          const pad = 1.5;
+          const targetW = data.column.width - pad * 2;
+          const targetH = data.row.height - pad * 2;
+          const cellX = data.cell.x + pad;
+          const cellY = data.cell.y + pad;
+
+          let photoUrl: string | undefined;
+
+          if (data.column.index === 2) {
+            photoUrl = entry.photoMenuUrl;
+          } else if (data.column.index === 3) {
+            photoUrl = entry.photoSerahTerimaUrl || entry.photoPenerimaUrl;
+          } else if (data.column.index === 4) {
+            photoUrl = entry.photoSuratJalanUrl;
+          }
+
+          if (photoUrl && loadedPhotos[photoUrl]) {
+            try {
+              doc.addImage(
+                loadedPhotos[photoUrl],
+                'JPEG',
+                cellX,
+                cellY,
+                targetW,
+                targetH
+              );
+            } catch (err) {
+              console.warn('Failed to render photo in cell:', err);
+            }
+          } else if ([2, 3, 4].includes(data.column.index)) {
+            doc.setDrawColor(226, 232, 240);
+            doc.setFillColor(248, 250, 252);
+            doc.rect(cellX, cellY, targetW, targetH, 'FD');
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(148, 163, 184);
+            doc.text('Belum ada foto', cellX + targetW / 2, cellY + targetH / 2, { align: 'center' });
+          }
+        }
+      },
+    });
+  });
+
+  // ─── 6. RUNNING FOOTER & PAGE NUMBERING ON ALL PAGES ───
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    // Add running footer for page 2 onwards
+    if (i > 1) {
+      const footY = pageH - 9;
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.25);
+      doc.line(12, footY, pageW - 12, footY);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        'Laporan Distribusi MBG — SPPG Sukabumi Gunungguruh Kebonmanggu (Al Umanaa)',
+        12,
+        footY + 4.5
+      );
+
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Halaman ${i} dari ${totalPages}`, pageW - 12, footY + 4.5, { align: 'right' });
+    }
+  }
+
+  const finalFileName =
+    fileName ||
+    `Laporan_Distribusi_MBG_Harian_${effectiveTanggal}.pdf`;
 
   doc.save(finalFileName);
 }
