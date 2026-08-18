@@ -881,12 +881,14 @@ export function MbgDeliveryPage() {
 
               {/* Table / Card Container */}
               <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
-                <div className="px-4 md:px-6 py-4 bg-[#111827] text-white flex items-center justify-between rounded-t-2xl">
-                  <div className="flex items-center gap-2">
-                    <FolderOpen className="h-4.5 w-4.5 text-[#FBBF24]" />
-                    <span className="text-sm font-extrabold uppercase tracking-wider">Arsip Laporan Distribusi</span>
+                <div className="px-3.5 md:px-6 py-3 md:py-4 bg-[#111827] text-white flex items-center justify-between gap-2 rounded-t-2xl">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FolderOpen className="h-4 w-4 text-[#FBBF24] shrink-0" />
+                    <span className="text-xs md:text-sm font-extrabold uppercase tracking-wide truncate">
+                      Arsip Laporan Distribusi
+                    </span>
                   </div>
-                  <span className="text-xs font-bold bg-white/15 px-3 py-1.5 rounded-full">
+                  <span className="text-[10px] md:text-xs font-bold bg-white/15 px-2.5 py-1 rounded-full shrink-0 whitespace-nowrap">
                     {filteredArchiveDocs.length} Dokumen
                   </span>
                 </div>
@@ -1172,10 +1174,13 @@ export function MbgDeliveryPage() {
 
               {/* Task Details - Mobile Card Layout + Desktop Table */}
               <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
-                <div className="px-4 md:px-6 py-4 bg-[#F9FAFB] border-b border-[#E5E7EB] flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-gray-700 uppercase tracking-wider flex items-center gap-2">
-                    <ClipboardList className="h-4.5 w-4.5 text-gray-400" />
+                <div className="px-3.5 md:px-6 py-3 md:py-4 bg-[#F9FAFB] border-b border-[#E5E7EB] flex items-center justify-between gap-2">
+                  <span className="text-xs font-extrabold text-gray-700 uppercase tracking-wide flex items-center gap-2 truncate">
+                    <ClipboardList className="h-4 w-4 text-gray-400 shrink-0" />
                     Daftar Institusi Pengantaran
+                  </span>
+                  <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap">
+                    {taskEntries.length} Institusi
                   </span>
                 </div>
 
