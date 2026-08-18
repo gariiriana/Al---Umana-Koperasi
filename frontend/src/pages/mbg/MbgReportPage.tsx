@@ -218,7 +218,7 @@ export function MbgReportPage() {
 
       doc.setFontSize(11);
       doc.setTextColor(...brandAmberDark);
-      doc.text('YAYASAN LEMBAGA AL UMANAA', pageW / 2, 84, { align: 'center' });
+      doc.text('YAYASAN LEMBAGA WAKAF AL UMANAA', pageW / 2, 84, { align: 'center' });
 
       doc.setFontSize(16);
       doc.setTextColor(...slateDark);

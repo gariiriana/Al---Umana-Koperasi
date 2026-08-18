@@ -24,6 +24,7 @@ import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
 import {
   subscribeBatches,
   subscribeEntries,
+  subscribeAllEntries,
   createBatch,
   updateBatchStatus,
   addEntry,
@@ -43,6 +44,27 @@ import { subscribeCustomRecipes } from '@/services/mbgProductionService';
 import resepStandardData from '@/constants/standarResep.json';
 import { MBG_BATCH_STATUS_CONFIG, MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
 
+// ---- Helper: Check if institution name is a Posyandu ----
+export function isPosyanduName(name: string): boolean {
+  if (!name) return false;
+  const lower = name.toLowerCase().trim();
+  const posyanduKeywords = [
+    'posyandu', 'balita', 'bumil', 'busui', 'b3b', '3b', 'paket 3b', 'paket3b',
+    'cempaka', 'mawar', 'melati', 'anggrek', 'dahlia', 'flamboyan', 'kenanga',
+    'teratai', 'kamboja', 'kasih ibu', 'matahari', 'tulip', 'bougenville',
+    'nusa indah', 'asoka', 'kemuning', 'pmt', 'kader'
+  ];
+  const isExplicitSchool =
+    lower.includes('sd ') || lower.startsWith('sd') || lower.includes('smp') ||
+    lower.includes('sma') || lower.includes('smk') || lower.includes('sps') ||
+    lower.includes('tk ') || lower.startsWith('tk') || lower.includes('paud');
+
+  if (isExplicitSchool && !lower.includes('posyandu') && !lower.includes('balita') && !lower.includes('bumil') && !lower.includes('busui') && !lower.includes('cempaka')) {
+    return false;
+  }
+  return posyanduKeywords.some((k) => lower.includes(k));
+}
+
 // ---- Helper: Auto-calculate portion suggestions based on levels and inputs ----
 function getAutoPortions(entry: Partial<MbgPmEntry>) {
   let qtPorsiBalita = 0;
@@ -51,9 +73,11 @@ function getAutoPortions(entry: Partial<MbgPmEntry>) {
   let qtPorsiBumilBusui = 0;
 
   if (entry.institutionType === 'posyandu') {
-    qtPorsiBalita = entry.qtSiswaBalita || 0;
+    const balita = (entry.qtPorsiKecilL || 0) + (entry.qtPorsiKecilP || 0) || entry.qtSiswaBalita || entry.qtPorsiBalita || 0;
+    qtPorsiBalita = balita;
     qtPorsiBumilBusui = (entry.qtBumil || 0) + (entry.qtBusui || 0) || entry.qtBumilBusui || 0;
     qtPorsiBesar = entry.qtGuruKader || 0;
+    qtPorsiKecil = 0;
   } else {
     // sekolah
     if (entry.schoolLevel === 'tk_paud') {
@@ -84,21 +108,58 @@ function calcJumlah(entry: Partial<MbgPmEntry>): number {
 }
 
 // ---- New Batch Modal ----
+// ---- New Batch Modal ----
 function NewBatchModal({
   isOpen,
   onClose,
   onSubmit,
   batches,
+  allEntries = [],
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (tanggal: string, copyFromId?: string) => void;
+  onSubmit: (tanggal: string, copyFromId?: string, autoPopulateMaster?: boolean) => void;
   batches: MbgPmBatch[];
+  allEntries?: MbgPmEntry[];
 }) {
   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
+  const [creationMode, setCreationMode] = useState<'copy' | 'master' | 'blank'>('copy');
   const [copyFrom, setCopyFrom] = useState('');
 
+  // Calculate actual portions for each batch dynamically from allEntries
+  const batchPortionMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    allEntries.forEach((e) => {
+      if (e.batchId && !e.isSekolahLibur) {
+        map[e.batchId] = (map[e.batchId] || 0) + (e.jumlah || 0);
+      }
+    });
+    return map;
+  }, [allEntries]);
+
+  // Sort batches descending by date
+  const sortedBatches = useMemo(() => {
+    return [...batches].sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
+  }, [batches]);
+
+  // Find first batch with > 0 portions as default copy candidate if available
+  useEffect(() => {
+    if (!copyFrom && sortedBatches.length > 0) {
+      const best = sortedBatches.find((b) => (batchPortionMap[b.id] || b.totalJumlah || 0) > 0);
+      if (best) {
+        setCopyFrom(best.id);
+      } else {
+        setCopyFrom(sortedBatches[0].id);
+      }
+    }
+  }, [sortedBatches, batchPortionMap, copyFrom]);
+
   if (!isOpen) return null;
+
+  const selectedCopyBatch = sortedBatches.find((b) => b.id === copyFrom);
+  const selectedCopyPortions = selectedCopyBatch
+    ? (batchPortionMap[selectedCopyBatch.id] ?? selectedCopyBatch.totalJumlah ?? 0)
+    : 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -106,10 +167,13 @@ function NewBatchModal({
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 font-['Hanken_Grotesk',system-ui,sans-serif]"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 font-['Hanken_Grotesk',system-ui,sans-serif]"
       >
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-lg font-extrabold text-[#111827]">Batch Baru</h3>
+          <div>
+            <h3 className="text-lg font-extrabold text-[#111827]">Batch Baru</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Pilih tanggal dan metode pengisian data institusi</p>
+          </div>
           <button onClick={onClose} title="Tutup Modal" aria-label="Tutup Modal" className="p-1.5 rounded-full hover:bg-gray-100 cursor-pointer">
             <X className="h-5 w-5 text-gray-400" />
           </button>
@@ -127,28 +191,118 @@ function NewBatchModal({
               placeholder="Tanggal Pengiriman"
               value={tanggal}
               onChange={(e) => setTanggal(e.target.value)}
-              className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent"
+              className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent font-bold"
             />
           </div>
 
           <div>
-            <label htmlFor="copy-from-select" className="block text-xs font-bold text-[#374151] mb-1.5">
-              Salin dari Batch Sebelumnya (opsional)
+            <label className="block text-xs font-bold text-[#374151] mb-2">
+              Sumber Data Institusi & Porsi
             </label>
-            <select
-              id="copy-from-select"
-              title="Salin dari Batch Sebelumnya"
-              value={copyFrom}
-              onChange={(e) => setCopyFrom(e.target.value)}
-              className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent"
-            >
-              <option value="">— Tidak menyalin —</option>
-              {batches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.tanggal} ({b.totalJumlah} porsi)
-                </option>
-              ))}
-            </select>
+            
+            <div className="space-y-2">
+              {/* Option 1: Salin dari Batch Sebelumnya */}
+              <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                creationMode === 'copy'
+                  ? 'border-[#FBBF24] bg-amber-50/60 ring-1 ring-[#FBBF24]'
+                  : 'border-gray-200 hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="creationMode"
+                  value="copy"
+                  checked={creationMode === 'copy'}
+                  onChange={() => setCreationMode('copy')}
+                  className="mt-0.5 text-[#FBBF24] focus:ring-[#FBBF24]"
+                />
+                <div className="flex-1">
+                  <span className="text-xs font-bold text-[#111827]">📋 Salin dari Batch Sebelumnya</span>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    Menyalin seluruh data sekolah, kuantitas siswa/guru, serta alokasi kurir dari tanggal lain.
+                  </p>
+                  {creationMode === 'copy' && (
+                    <div className="mt-2.5">
+                      <select
+                        id="copy-from-select"
+                        title="Salin dari Batch Sebelumnya"
+                        value={copyFrom}
+                        onChange={(e) => setCopyFrom(e.target.value)}
+                        className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
+                      >
+                        {sortedBatches.length === 0 ? (
+                          <option value="">(Belum ada batch sebelumnya)</option>
+                        ) : (
+                          sortedBatches.map((b) => {
+                            const porsi = batchPortionMap[b.id] ?? b.totalJumlah ?? 0;
+                            const statusBadge = b.status === 'DRAFT' ? 'Draft' : 'Final';
+                            return (
+                              <option key={b.id} value={b.id}>
+                                {b.tanggal} — {statusBadge} ({porsi.toLocaleString('id-ID')} porsi)
+                              </option>
+                            );
+                          })
+                        )}
+                      </select>
+
+                      {selectedCopyBatch && selectedCopyPortions === 0 && (
+                        <p className="text-[10px] text-amber-700 font-semibold mt-1.5 flex items-center gap-1">
+                          ⚠️ Batch sumber ini belum memiliki data porsi (0 porsi). Jika ingin data standar, pilih opsi "Isi Otomatis 27 Institusi Master" di bawah.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </label>
+
+              {/* Option 2: Isi Otomatis 27 Master Institutions */}
+              <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                creationMode === 'master'
+                  ? 'border-[#FBBF24] bg-amber-50/60 ring-1 ring-[#FBBF24]'
+                  : 'border-gray-200 hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="creationMode"
+                  value="master"
+                  checked={creationMode === 'master'}
+                  onChange={() => setCreationMode('master')}
+                  className="mt-0.5 text-[#FBBF24] focus:ring-[#FBBF24]"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#111827]">🏫 Isi Otomatis 27 Institusi Master</span>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full">
+                      Standar BGN (~2.800 Porsi)
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    Membuat batch dengan 27 daftar sekolah & posyandu resmi lengkap dengan porsi standar dan pembagian rute kurir.
+                  </p>
+                </div>
+              </label>
+
+              {/* Option 3: Batch Kosong */}
+              <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                creationMode === 'blank'
+                  ? 'border-[#FBBF24] bg-amber-50/60 ring-1 ring-[#FBBF24]'
+                  : 'border-gray-200 hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="creationMode"
+                  value="blank"
+                  checked={creationMode === 'blank'}
+                  onChange={() => setCreationMode('blank')}
+                  className="mt-0.5 text-[#FBBF24] focus:ring-[#FBBF24]"
+                />
+                <div className="flex-1">
+                  <span className="text-xs font-bold text-[#111827]">📄 Buat Batch Kosong</span>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    Buat template kosong untuk kemudian diisi dengan "Import Excel / CSV PM" atau tambah baris manual.
+                  </p>
+                </div>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -161,10 +315,16 @@ function NewBatchModal({
           </button>
           <button
             onClick={() => {
-              onSubmit(tanggal, copyFrom || undefined);
+              if (creationMode === 'copy') {
+                onSubmit(tanggal, copyFrom || undefined, false);
+              } else if (creationMode === 'master') {
+                onSubmit(tanggal, undefined, true);
+              } else {
+                onSubmit(tanggal, undefined, false);
+              }
               onClose();
             }}
-            className="flex-1 py-2.5 rounded-xl bg-[#FBBF24] text-sm font-bold text-[#111827] hover:bg-[#F59E0B] cursor-pointer transition-colors"
+            className="flex-1 py-2.5 rounded-xl bg-[#FBBF24] text-sm font-extrabold text-[#111827] hover:bg-[#F59E0B] cursor-pointer transition-colors shadow-sm active:scale-95"
           >
             Buat Batch
           </button>
@@ -320,45 +480,136 @@ function PmEntryRow({
     const updates: Partial<MbgPmEntry> = { [field]: value };
     const tempEntry = { ...entry, [field]: value };
 
-    // Auto-update qtBumilBusui if we changed qtBumil or qtBusui
-    if (field === 'qtBumil' || field === 'qtBusui') {
-      const b = field === 'qtBumil' ? (value as number) : (entry.qtBumil || 0);
-      const s = field === 'qtBusui' ? (value as number) : (entry.qtBusui || 0);
-      updates.qtBumil = field === 'qtBumil' ? (value as number) : (entry.qtBumil || 0);
-      updates.qtBusui = field === 'qtBusui' ? (value as number) : (entry.qtBusui || 0);
-      updates.qtBumilBusui = b + s;
-      updates.qtPorsiBumilBusui = b + s;
-      tempEntry.qtBumil = updates.qtBumil;
-      tempEntry.qtBusui = updates.qtBusui;
-      tempEntry.qtBumilBusui = b + s;
-      tempEntry.qtPorsiBumilBusui = b + s;
+    // Auto-detect Posyandu on institutionName change
+    if (field === 'institutionName') {
+      const nameStr = String(value);
+      if (isPosyanduName(nameStr) && entry.institutionType !== 'posyandu') {
+        updates.institutionType = 'posyandu';
+        updates.schoolLevel = undefined;
+        tempEntry.institutionType = 'posyandu';
+        tempEntry.schoolLevel = undefined;
+
+        // Smart migration if numbers were already entered in the 4 boxes
+        const pbl = entry.qtPorsiBesarL || 0;
+        const pbp = entry.qtPorsiBesarP || 0;
+        const pkl = entry.qtPorsiKecilL || 0;
+        const pkp = entry.qtPorsiKecilP || 0;
+
+        if (pbl || pbp) {
+          updates.qtPorsiKecilL = pbl;
+          updates.qtPorsiKecilP = pbp;
+          updates.qtBumil = pkl;
+          updates.qtBusui = pkp;
+          updates.qtPorsiBesarL = 0;
+          updates.qtPorsiBesarP = 0;
+          updates.qtPorsiBalita = pbl + pbp;
+          updates.qtBumilBusui = pkl + pkp;
+          updates.qtPorsiBumilBusui = pkl + pkp;
+          updates.qtSiswaBalita = pbl + pbp;
+          updates.qtPorsiKecil = 0;
+          updates.qtPorsiBesar = entry.qtGuruKader || 0;
+        } else if (pkl || pkp) {
+          updates.qtPorsiBalita = pkl + pkp;
+          updates.qtSiswaBalita = pkl + pkp;
+          updates.qtPorsiKecil = 0;
+          updates.qtPorsiBesar = entry.qtGuruKader || 0;
+        }
+        Object.assign(tempEntry, updates);
+      }
     }
 
-    // Auto-update qtSiswaBalita if directly edited (e.g. for Posyandu Porsi Balita)
-    if (field === 'qtSiswaBalita') {
-      const val = value as number;
-      updates.qtSiswaBalita = val;
-      updates.qtPorsiBalita = val;
-      updates.qtPorsiKecil = val;
-      tempEntry.qtSiswaBalita = val;
-      tempEntry.qtPorsiBalita = val;
-      tempEntry.qtPorsiKecil = val;
+    // Explicit institutionType switch
+    if (field === 'institutionType') {
+      if (value === 'posyandu') {
+        updates.institutionType = 'posyandu';
+        updates.schoolLevel = undefined;
+        tempEntry.institutionType = 'posyandu';
+        tempEntry.schoolLevel = undefined;
+
+        const pbl = entry.qtPorsiBesarL || 0;
+        const pbp = entry.qtPorsiBesarP || 0;
+        const pkl = entry.qtPorsiKecilL || 0;
+        const pkp = entry.qtPorsiKecilP || 0;
+
+        if (pbl || pbp) {
+          updates.qtPorsiKecilL = pbl;
+          updates.qtPorsiKecilP = pbp;
+          updates.qtBumil = pkl;
+          updates.qtBusui = pkp;
+          updates.qtPorsiBesarL = 0;
+          updates.qtPorsiBesarP = 0;
+          updates.qtPorsiBalita = pbl + pbp;
+          updates.qtBumilBusui = pkl + pkp;
+          updates.qtPorsiBumilBusui = pkl + pkp;
+          updates.qtSiswaBalita = pbl + pbp;
+          updates.qtPorsiKecil = 0;
+          updates.qtPorsiBesar = entry.qtGuruKader || 0;
+        } else if (pkl || pkp) {
+          updates.qtPorsiBalita = pkl + pkp;
+          updates.qtSiswaBalita = pkl + pkp;
+          updates.qtPorsiKecil = 0;
+          updates.qtPorsiBesar = entry.qtGuruKader || 0;
+        }
+        Object.assign(tempEntry, updates);
+      } else {
+        updates.institutionType = 'sekolah';
+        updates.schoolLevel = 'sd';
+        updates.qtBumil = 0;
+        updates.qtBusui = 0;
+        updates.qtBumilBusui = 0;
+        updates.qtPorsiBumilBusui = 0;
+        updates.qtPorsiBalita = 0;
+        updates.qtPorsiKecil = (entry.qtPorsiKecilL || 0) + (entry.qtPorsiKecilP || 0);
+        updates.qtSiswaBalita = updates.qtPorsiKecil;
+        updates.qtPorsiBesar = entry.qtGuruKader || 0;
+        tempEntry.institutionType = 'sekolah';
+        tempEntry.schoolLevel = 'sd';
+        Object.assign(tempEntry, updates);
+      }
     }
 
-    // Auto-update qtSiswaBalita if we changed any Porsi L/P
-    if (['qtPorsiKecilL', 'qtPorsiKecilP', 'qtPorsiBesarL', 'qtPorsiBesarP'].includes(field)) {
-      const pkl = field === 'qtPorsiKecilL' ? (value as number) : (entry.qtPorsiKecilL || 0);
-      const pkp = field === 'qtPorsiKecilP' ? (value as number) : (entry.qtPorsiKecilP || 0);
-      const pbl = field === 'qtPorsiBesarL' ? (value as number) : (entry.qtPorsiBesarL || 0);
-      const pbp = field === 'qtPorsiBesarP' ? (value as number) : (entry.qtPorsiBesarP || 0);
+    // Auto-update for Posyandu fields
+    if (tempEntry.institutionType === 'posyandu') {
+      if (['qtPorsiKecilL', 'qtPorsiKecilP'].includes(field)) {
+        const pkl = field === 'qtPorsiKecilL' ? (value as number) : (entry.qtPorsiKecilL || 0);
+        const pkp = field === 'qtPorsiKecilP' ? (value as number) : (entry.qtPorsiKecilP || 0);
+        updates.qtPorsiBalita = pkl + pkp;
+        updates.qtSiswaBalita = pkl + pkp;
+        updates.qtPorsiKecil = 0;
+        updates.qtPorsiBesar = entry.qtGuruKader || 0;
+        tempEntry.qtPorsiBalita = pkl + pkp;
+        tempEntry.qtSiswaBalita = pkl + pkp;
+        tempEntry.qtPorsiKecil = 0;
+        tempEntry.qtPorsiBesar = entry.qtGuruKader || 0;
+      }
+      if (field === 'qtBumil' || field === 'qtBusui') {
+        const b = field === 'qtBumil' ? (value as number) : (entry.qtBumil || 0);
+        const s = field === 'qtBusui' ? (value as number) : (entry.qtBusui || 0);
+        updates.qtBumil = b;
+        updates.qtBusui = s;
+        updates.qtBumilBusui = b + s;
+        updates.qtPorsiBumilBusui = b + s;
+        tempEntry.qtBumil = b;
+        tempEntry.qtBusui = s;
+        tempEntry.qtBumilBusui = b + s;
+        tempEntry.qtPorsiBumilBusui = b + s;
+      }
+    } else {
+      // For Sekolah fields
+      if (['qtPorsiKecilL', 'qtPorsiKecilP', 'qtPorsiBesarL', 'qtPorsiBesarP'].includes(field)) {
+        const pkl = field === 'qtPorsiKecilL' ? (value as number) : (entry.qtPorsiKecilL || 0);
+        const pkp = field === 'qtPorsiKecilP' ? (value as number) : (entry.qtPorsiKecilP || 0);
+        const pbl = field === 'qtPorsiBesarL' ? (value as number) : (entry.qtPorsiBesarL || 0);
+        const pbp = field === 'qtPorsiBesarP' ? (value as number) : (entry.qtPorsiBesarP || 0);
 
-      const newSiswa = pkl + pkp + pbl + pbp;
-      updates.qtSiswaBalita = newSiswa;
-      updates.qtPorsiKecil = pkl + pkp;
-      updates.qtPorsiBesar = pbl + pbp;
-      tempEntry.qtSiswaBalita = newSiswa;
-      tempEntry.qtPorsiKecil = pkl + pkp;
-      tempEntry.qtPorsiBesar = pbl + pbp;
+        const newSiswa = pkl + pkp + pbl + pbp;
+        updates.qtSiswaBalita = newSiswa;
+        updates.qtPorsiKecil = pkl + pkp;
+        updates.qtPorsiBesar = pbl + pbp + (entry.qtGuruKader || 0);
+        tempEntry.qtSiswaBalita = newSiswa;
+        tempEntry.qtPorsiKecil = pkl + pkp;
+        tempEntry.qtPorsiBesar = updates.qtPorsiBesar;
+      }
     }
 
     // Auto-update qtGuruKader if we changed any Guru/Tendik L/P
@@ -371,22 +622,9 @@ function PmEntryRow({
       const newGuruKader = gl + gp + tl + tp;
       updates.qtGuruKader = newGuruKader;
       tempEntry.qtGuruKader = newGuruKader;
-    }
-
-    // Reset bumil/busui and set default schoolLevel when switching to sekolah
-    if (field === 'institutionType') {
-      if (value === 'sekolah') {
-        updates.qtBumilBusui = 0;
-        updates.qtBumil = 0;
-        updates.qtBusui = 0;
-        updates.schoolLevel = 'sd';
-        tempEntry.qtBumilBusui = 0;
-        tempEntry.qtBumil = 0;
-        tempEntry.qtBusui = 0;
-        tempEntry.schoolLevel = 'sd';
-      } else {
-        updates.schoolLevel = undefined;
-        tempEntry.schoolLevel = undefined;
+      if (tempEntry.institutionType === 'posyandu') {
+        updates.qtPorsiBesar = newGuruKader;
+        tempEntry.qtPorsiBesar = newGuruKader;
       }
     }
 
@@ -824,6 +1062,8 @@ export function MbgAdminPage() {
   const { showToast } = useToast();
 
   const [batches, setBatches] = useState<MbgPmBatch[]>([]);
+  const [allBatches, setAllBatches] = useState<MbgPmBatch[]>([]);
+  const [allEntries, setAllEntries] = useState<MbgPmEntry[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [entries, setEntries] = useState<MbgPmEntry[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
@@ -1042,10 +1282,19 @@ export function MbgAdminPage() {
     return unsub;
   }, [selectedPortionClassification]);
 
+  // Subscribe to all entries globally for cross-batch portion tracking & copying
+  useEffect(() => {
+    const unsub = subscribeAllEntries((e) => {
+      setAllEntries(e);
+    });
+    return unsub;
+  }, []);
+
   // Subscribe to batches and auto-create today's batch
   useEffect(() => {
     const unsub = subscribeBatches(
       async (b) => {
+        setAllBatches(b);
         // Only show DRAFT batches on the active input page
         const draftBatches = b.filter((batch) => batch.status === 'DRAFT');
         setBatches(draftBatches);
@@ -1138,6 +1387,11 @@ export function MbgAdminPage() {
     );
   }, [entries, searchQuery]);
 
+  // Check for misclassified Posyandu entries in active batch
+  const misclassifiedPosyanduCount = useMemo(() => {
+    return entries.filter((e) => isPosyanduName(e.institutionName) && e.institutionType !== 'posyandu').length;
+  }, [entries]);
+
   // Grand totals
   const grandTotals = useMemo(() => {
     const active = entries.filter((e) => !e.isSekolahLibur);
@@ -1145,30 +1399,137 @@ export function MbgAdminPage() {
     active.forEach((e) => {
       if (e.assignedPetugasName) petugasSet.add(e.assignedPetugasName.trim());
     });
+
+    const posyanduActive = active.filter((e) => e.institutionType === 'posyandu');
+    const sekolahActive = active.filter((e) => e.institutionType !== 'posyandu');
+
+    // Porsi Besar (Sekolah)
+    const porsiBesarL = sekolahActive.reduce((s, e) => s + (e.qtPorsiBesarL || 0), 0);
+    const porsiBesarP = sekolahActive.reduce((s, e) => s + (e.qtPorsiBesarP || 0), 0);
+
+    // Porsi Kecil (Sekolah)
+    const porsiKecilL = sekolahActive.reduce((s, e) => s + (e.qtPorsiKecilL || 0), 0);
+    const porsiKecilP = sekolahActive.reduce((s, e) => s + (e.qtPorsiKecilP || 0), 0);
+
+    // Porsi Balita (Posyandu)
+    const porsiBalitaL = posyanduActive.reduce((s, e) => s + (e.qtPorsiKecilL || e.qtSiswaBalita || 0), 0);
+    const porsiBalitaP = posyanduActive.reduce((s, e) => s + (e.qtPorsiKecilP || 0), 0);
+
+    // Porsi Bumil & Busui (Posyandu)
+    const porsiBumil = posyanduActive.reduce((s, e) => s + (e.qtBumil ?? (e.institutionName.toLowerCase().includes('bumil') ? e.qtBumilBusui || 0 : 0)), 0);
+    const porsiBusui = posyanduActive.reduce((s, e) => s + (e.qtBusui ?? (e.institutionName.toLowerCase().includes('busui') ? e.qtBumilBusui || 0 : 0)), 0);
+
+    // Total Siswa
+    const totalSiswaL = porsiBesarL + porsiKecilL + porsiBalitaL;
+    const totalSiswaP = porsiBesarP + porsiKecilP + porsiBalitaP + porsiBumil + porsiBusui;
+    const totalSiswaJml = totalSiswaL + totalSiswaP;
+
+    // Guru
+    const guruL = active.reduce((s, e) => s + (e.qtGuruL || 0), 0);
+    const guruP = active.reduce((s, e) => s + (e.qtGuruP || 0), 0);
+
+    // Kader
+    const kaderL = posyanduActive.reduce((s, e) => s + (e.qtGuruL || 0), 0);
+    const kaderP = posyanduActive.reduce((s, e) => s + (e.qtGuruP || 0), 0);
+
+    // Tendik
+    const tendikL = active.reduce((s, e) => s + (e.qtTendikL || 0), 0);
+    const tendikP = active.reduce((s, e) => s + (e.qtTendikP || 0), 0);
+
+    const totalStafKader = active.reduce((s, e) => s + (e.qtGuruKader || 0), 0);
+    const totalKeseluruhan = active.reduce((s, e) => s + (e.jumlah || 0), 0);
+
     return {
+      porsiBesarL,
+      porsiBesarP,
+      porsiKecilL,
+      porsiKecilP,
+      porsiBalitaL,
+      porsiBalitaP,
+      porsiBumil,
+      porsiBusui,
+      totalSiswaL,
+      totalSiswaP,
+      totalSiswaJml,
+      guruL,
+      guruP,
+      kaderL,
+      kaderP,
+      tendikL,
+      tendikP,
+      totalStafKader,
+      totalKeseluruhan,
+
+      // Summary
       siswa: active.reduce((s, e) => s + (e.qtSiswaBalita || 0), 0),
       bumil: active.reduce((s, e) => s + (e.qtBumilBusui || 0), 0),
-      guru: active.reduce((s, e) => s + (e.qtGuruKader || 0), 0),
+      guru: totalStafKader,
       pobia: active.reduce((s, e) => s + (e.qtPobiaNasi || 0), 0),
       alergi: active.reduce((s, e) => s + (e.qtAlergi || 0), 0),
       tidakAlergi: active.reduce((s, e) => s + (e.qtTidakAlergi ?? Math.max(0, (e.jumlah || 0) - (e.qtAlergi || 0))), 0),
-      jumlah: active.reduce((s, e) => s + (e.jumlah || 0), 0),
-
-      // Detailed L/P breakdown
-      porsiKecilL: active.reduce((s, e) => s + (e.qtPorsiKecilL || 0), 0),
-      porsiKecilP: active.reduce((s, e) => s + (e.qtPorsiKecilP || 0), 0),
-      porsiBesarL: active.reduce((s, e) => s + (e.qtPorsiBesarL || 0), 0),
-      porsiBesarP: active.reduce((s, e) => s + (e.qtPorsiBesarP || 0), 0),
-      guruL: active.reduce((s, e) => s + (e.qtGuruL || 0), 0),
-      guruP: active.reduce((s, e) => s + (e.qtGuruP || 0), 0),
-      tendikL: active.reduce((s, e) => s + (e.qtTendikL || 0), 0),
-      tendikP: active.reduce((s, e) => s + (e.qtTendikP || 0), 0),
-      totalGuruTendik: active.reduce((s, e) => s + (e.qtGuruL || 0) + (e.qtGuruP || 0) + (e.qtTendikL || 0) + (e.qtTendikP || 0), 0),
-
+      jumlah: totalKeseluruhan,
       totalInstitusi: entries.length,
       totalPetugas: petugasSet.size,
     };
   }, [entries]);
+
+  const handleAutoFixPosyanduEntries = async () => {
+    if (!selectedBatchId) return;
+    try {
+      setSaving(true);
+      const updatesList: Promise<void>[] = [];
+      entries.forEach((e) => {
+        if (isPosyanduName(e.institutionName) && e.institutionType !== 'posyandu') {
+          const pbl = e.qtPorsiBesarL || 0;
+          const pbp = e.qtPorsiBesarP || 0;
+          const pkl = e.qtPorsiKecilL || 0;
+          const pkp = e.qtPorsiKecilP || 0;
+
+          const balitaL = pbl || pkl;
+          const balitaP = pbp || pkp;
+          const bumil = pbl ? pkl : (e.qtBumil || 0);
+          const busui = pbp ? pkp : (e.qtBusui || 0);
+          const totalBalita = balitaL + balitaP;
+          const totalBumilBusui = bumil + busui;
+          const totalKader = (e.qtGuruL || 0) + (e.qtGuruP || 0) + (e.qtTendikL || 0) + (e.qtTendikP || 0) || e.qtGuruKader || 0;
+          const jumlah = totalBalita + totalBumilBusui + totalKader;
+
+          updatesList.push(
+            updateEntry(e.id, {
+              institutionType: 'posyandu',
+              schoolLevel: undefined,
+              qtPorsiBesarL: 0,
+              qtPorsiBesarP: 0,
+              qtPorsiKecilL: balitaL,
+              qtPorsiKecilP: balitaP,
+              qtBumil: bumil,
+              qtBusui: busui,
+              qtBumilBusui: totalBumilBusui,
+              qtPorsiBalita: totalBalita,
+              qtPorsiBumilBusui: totalBumilBusui,
+              qtSiswaBalita: totalBalita,
+              qtPorsiKecil: 0,
+              qtPorsiBesar: totalKader,
+              qtGuruKader: totalKader,
+              jumlah,
+              qtTidakAlergi: Math.max(0, jumlah - (e.qtAlergi || 0)),
+            })
+          );
+        }
+      });
+      await Promise.all(updatesList);
+      await recalculateBatchTotals(selectedBatchId);
+      showToast({
+        message: `Berhasil mengonversi ${updatesList.length} data Posyandu (Cempaka dll) ke porsi Balita, Bumil, dan Busui!`,
+        variant: 'success',
+      });
+    } catch (err) {
+      console.error('Failed to auto-fix posyandu entries:', err);
+      showToast({ message: 'Gagal memperbaiki klasifikasi posyandu', variant: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // ---- Handlers ----
   const handleApplyScheduleMenuToBatch = async () => {
@@ -1211,18 +1572,27 @@ export function MbgAdminPage() {
     }
   };
 
-  const handleCreateBatch = async (tanggal: string, copyFromId?: string) => {
+  const handleCreateBatch = async (tanggal: string, copyFromId?: string, autoPopulateMaster?: boolean) => {
     if (!user) return;
     try {
-      const newId = await createBatch(tanggal, user.uid, false, weeklySchedule);
+      setSaving(true);
+      const newId = await createBatch(tanggal, user.uid, autoPopulateMaster || false, weeklySchedule);
       if (copyFromId) {
         await copyFromBatch(copyFromId, newId, user.uid);
       }
       setSelectedBatchId(newId);
-      showToast({ message: 'Batch baru berhasil dibuat! Silakan klik "Import Excel / CSV PM" untuk mengisi data PM.', variant: 'success' });
-    } catch (err) {
+      const successMsg = copyFromId
+        ? `Batch ${tanggal} berhasil dibuat dengan menyalin data dari batch sebelumnya!`
+        : autoPopulateMaster
+        ? `Batch ${tanggal} berhasil dibuat dengan 27 Institusi Master otomatis!`
+        : `Batch ${tanggal} baru berhasil dibuat! Silakan klik "Import Excel / CSV PM" untuk mengisi data PM.`;
+      showToast({ message: successMsg, variant: 'success' });
+    } catch (err: unknown) {
       console.error(err);
-      showToast({ message: 'Gagal membuat batch', variant: 'error' });
+      const errObj = err as { message?: string };
+      showToast({ message: errObj?.message || 'Gagal membuat batch', variant: 'error' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1595,6 +1965,31 @@ export function MbgAdminPage() {
                 </div>
               </div>
 
+              {/* Alert Banner: Misclassified Posyandu */}
+              {misclassifiedPosyanduCount > 0 && (
+                <div className="mb-4 bg-purple-50 border border-purple-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-in fade-in">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xl">👶</span>
+                    <div>
+                      <h4 className="text-xs font-extrabold text-purple-950">
+                        Terdeteksi {misclassifiedPosyanduCount} Institusi Posyandu (Cempaka dll) masih terdaftar sebagai Sekolah
+                      </h4>
+                      <p className="text-[11px] text-purple-700 mt-0.5">
+                        Porsi saat ini masih masuk ke Porsi Besar/Kecil. Klik tombol di samping untuk otomatis memindahkan ke kolom Balita, Bumil, dan Busui!
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAutoFixPosyanduEntries}
+                    disabled={saving}
+                    className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-extrabold flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    <span>⚡ Perbaiki Otomatis ke Posyandu</span>
+                  </button>
+                </div>
+              )}
+
               {/* Single Unified Table */}
               {loadingEntries ? (
                 <div className="flex items-center justify-center py-12">
@@ -1609,8 +2004,8 @@ export function MbgAdminPage() {
                           <th rowSpan={2} className="px-2 py-1.5 border-r border-slate-300 text-left min-w-[140px] max-w-[170px]">SEKOLAH / POSYANDU</th>
                           <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI BESAR</th>
                           <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI KECIL</th>
-                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI BALITA</th>
-                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI BUMIL & BUSUI</th>
+                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300 bg-amber-50 text-amber-950">PORSI BALITA</th>
+                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300 bg-purple-50 text-purple-950">PORSI BUMIL & BUSUI</th>
                           <th colSpan={3} className="px-1 py-1 border-r border-slate-300 bg-slate-300/60 font-black">TOTAL SISWA</th>
                           <th colSpan={2} className="px-1 py-1 border-r border-slate-300">GURU</th>
                           <th colSpan={2} className="px-1 py-1 border-r border-slate-300">KADER</th>
@@ -1627,11 +2022,11 @@ export function MbgAdminPage() {
                           <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
                           <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
                           {/* Porsi Balita (3) */}
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8 bg-amber-50/70">L</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-8 bg-amber-50/70">P</th>
                           {/* Porsi Bumil & Busui (4) */}
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-10 bg-purple-50/70 text-[7.5px] text-purple-900">BUMIL</th>
+                          <th className="px-1 py-0.5 border-r border-slate-300 w-10 bg-purple-50/70 text-[7.5px] text-purple-900">BUSUI</th>
                           {/* Total Siswa */}
                           <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">L</th>
                           <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">P</th>
@@ -1667,20 +2062,51 @@ export function MbgAdminPage() {
                         )}
                         {/* Total Row */}
                         {filteredEntries.length > 0 && (
-                          <tr className="bg-slate-800 text-white text-xs font-bold border-t border-slate-700">
-                            <td className="px-3 py-3 font-semibold" colSpan={2}>TOTAL (AKTIF)</td>
-                            <td className="px-3 py-3 text-center font-semibold">{grandTotals.siswa}</td>
-                            <td className="px-3 py-3 text-center font-semibold">{grandTotals.bumil}</td>
-                            <td className="px-3 py-3 text-center font-semibold">{grandTotals.guru}</td>
-                            <td className="px-3 py-3 text-center font-semibold">{grandTotals.pobia}</td>
-                            <td className="px-3 py-3 text-center font-bold text-red-300">{grandTotals.alergi}</td>
-                            <td className="px-3 py-3 text-center font-bold text-emerald-300">{grandTotals.tidakAlergi}</td>
-                            <td className="px-3 py-3 text-center">
-                              <span className="inline-flex items-center justify-center rounded bg-white text-slate-900 font-extrabold px-3 py-0.5 text-xs shadow-xs">
-                                {grandTotals.jumlah}
-                              </span>
+                          <tr className="bg-slate-800 text-white text-xs font-bold border-t border-slate-700 text-center">
+                            {/* 1. SEKOLAH / POSYANDU */}
+                            <td className="px-3 py-3 text-left font-black tracking-wide">TOTAL (AKTIF)</td>
+                            {/* 2. PORSI BESAR L */}
+                            <td className="px-1 py-3 text-center">{grandTotals.porsiBesarL || '—'}</td>
+                            {/* 3. PORSI BESAR P */}
+                            <td className="px-1 py-3 text-center">{grandTotals.porsiBesarP || '—'}</td>
+                            {/* 4. PORSI KECIL L */}
+                            <td className="px-1 py-3 text-center">{grandTotals.porsiKecilL || '—'}</td>
+                            {/* 5. PORSI KECIL P */}
+                            <td className="px-1 py-3 text-center">{grandTotals.porsiKecilP || '—'}</td>
+                            {/* 6. PORSI BALITA L */}
+                            <td className="px-1 py-3 text-center font-bold text-amber-300">{grandTotals.porsiBalitaL || '—'}</td>
+                            {/* 7. PORSI BALITA P */}
+                            <td className="px-1 py-3 text-center font-bold text-amber-300">{grandTotals.porsiBalitaP || '—'}</td>
+                            {/* 8. PORSI BUMIL */}
+                            <td className="px-1 py-3 text-center font-bold text-purple-300">{grandTotals.porsiBumil || '—'}</td>
+                            {/* 9. PORSI BUSUI */}
+                            <td className="px-1 py-3 text-center font-bold text-purple-300">{grandTotals.porsiBusui || '—'}</td>
+                            {/* 10. TOTAL SISWA L */}
+                            <td className="px-1 py-3 text-center bg-slate-700">{grandTotals.totalSiswaL || '—'}</td>
+                            {/* 11. TOTAL SISWA P */}
+                            <td className="px-1 py-3 text-center bg-slate-700">{grandTotals.totalSiswaP || '—'}</td>
+                            {/* 12. TOTAL SISWA JML */}
+                            <td className="px-1 py-3 text-center bg-slate-600 font-black">{grandTotals.totalSiswaJml || '—'}</td>
+                            {/* 13. GURU L */}
+                            <td className="px-1 py-3 text-center">{grandTotals.guruL || '—'}</td>
+                            {/* 14. GURU P */}
+                            <td className="px-1 py-3 text-center">{grandTotals.guruP || '—'}</td>
+                            {/* 15. KADER L */}
+                            <td className="px-1 py-3 text-center">{grandTotals.kaderL || '—'}</td>
+                            {/* 16. KADER P */}
+                            <td className="px-1 py-3 text-center">{grandTotals.kaderP || '—'}</td>
+                            {/* 17. TENDIK L */}
+                            <td className="px-1 py-3 text-center">{grandTotals.tendikL || '—'}</td>
+                            {/* 18. TENDIK P */}
+                            <td className="px-1 py-3 text-center">{grandTotals.tendikP || '—'}</td>
+                            {/* 19. STAF/KADER JML */}
+                            <td className="px-1 py-3 text-center bg-slate-700 font-black">{grandTotals.totalStafKader || '—'}</td>
+                            {/* 20. TOTAL KESELURUHAN */}
+                            <td className="px-2 py-3 text-center bg-amber-400 text-slate-950 font-black text-sm">
+                              {grandTotals.totalKeseluruhan}
                             </td>
-                            <td className="px-3 py-3" colSpan={2}></td>
+                            {/* 21. AKSI */}
+                            <td className="px-1 py-3"></td>
                           </tr>
                         )}
                       </tbody>
@@ -1791,7 +2217,8 @@ export function MbgAdminPage() {
           isOpen={showNewBatchModal}
           onClose={() => setShowNewBatchModal(false)}
           onSubmit={handleCreateBatch}
-          batches={batches}
+          batches={allBatches.length > 0 ? allBatches : batches}
+          allEntries={allEntries}
         />
       </AnimatePresence>
 

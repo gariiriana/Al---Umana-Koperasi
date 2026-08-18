@@ -374,6 +374,10 @@ export async function copyFromBatch(
     where('batchId', '==', sourceBatchId)
   );
   const snapshot = await getDocs(q);
+  if (snapshot.empty) {
+    throw new Error('Batch sumber tidak memiliki data penerima manfaat (0 porsi). Silakan gunakan opsi "Isi Otomatis 27 Institusi Master" atau pilih batch lain.');
+  }
+
   const now = new Date().toISOString();
   const batch = writeBatch(db);
 
@@ -384,6 +388,15 @@ export async function copyFromBatch(
       ...data,
       batchId: targetBatchId,
       isSekolahLibur: false,
+      photoMenuUrl: undefined,
+      photoSerahTerimaUrl: undefined,
+      photoPenerimaUrl: undefined,
+      photoSuratJalanUrl: undefined,
+      photoMenuTimestamp: undefined,
+      photoSerahTerimaTimestamp: undefined,
+      photoPenerimaTimestamp: undefined,
+      photoSerahTerimaLocation: undefined,
+      photoPenerimaLocation: undefined,
       createdBy,
       createdAt: now,
       updatedAt: now,
@@ -391,6 +404,7 @@ export async function copyFromBatch(
   });
 
   await batch.commit();
+  await recalculateBatchTotals(targetBatchId);
 }
 
 /**

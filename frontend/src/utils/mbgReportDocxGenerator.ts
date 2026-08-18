@@ -103,7 +103,7 @@ export async function generateMbgDistributionDocx(
       spacing: { before: 0, after: 400 },
       children: [
         new TextRun({
-          text: 'YAYASAN LEMBAGA AL UMANAA',
+          text: 'YAYASAN LEMBAGA WAKAF AL UMANAA',
           bold: true,
           size: 22, // 11pt
           font: 'Arial',

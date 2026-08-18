@@ -3,10 +3,34 @@ import autoTable from 'jspdf-autotable';
 import type { MbgDeliveryDocument } from '@/services/mbgDeliveryService';
 import type { MbgPmEntry, MbgDeliveryTask } from '@/types/mbg';
 
-// Helper to load image as base64 with canvas fallback (supports transparent PNG)
-export const getBase64Image = async (url: string, format: 'image/png' | 'image/jpeg' = 'image/png'): Promise<string | null> => {
+export interface LoadedImageInfo {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
+// Helper to load image as base64 with natural dimensions (supports transparent PNG & JPEG)
+export const getBase64ImageWithDimensions = async (
+  url: string,
+  format: 'image/png' | 'image/jpeg' = 'image/jpeg'
+): Promise<LoadedImageInfo | null> => {
   if (!url) return null;
-  if (url.startsWith('data:image')) return url;
+  if (url.startsWith('data:image')) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        resolve({
+          dataUrl: url,
+          width: img.naturalWidth || 4,
+          height: img.naturalHeight || 3,
+        });
+      };
+      img.onerror = () => {
+        resolve({ dataUrl: url, width: 4, height: 3 });
+      };
+      img.src = url;
+    });
+  }
 
   try {
     const img = new Image();
@@ -26,7 +50,11 @@ export const getBase64Image = async (url: string, format: 'image/png' | 'image/j
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(img, 0, 0);
-        return canvas.toDataURL(format, 0.95);
+        return {
+          dataUrl: canvas.toDataURL(format, 0.92),
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+        };
       }
     }
   } catch {
@@ -35,11 +63,27 @@ export const getBase64Image = async (url: string, format: 'image/png' | 'image/j
       const res = await fetch(url);
       if (!res.ok) return null;
       const blob = await res.blob();
-      return await new Promise<string | null>((resolve) => {
+      const dataUrl = await new Promise<string | null>((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
         reader.onerror = () => resolve(null);
         reader.readAsDataURL(blob);
+      });
+      if (!dataUrl) return null;
+
+      return await new Promise<LoadedImageInfo | null>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          resolve({
+            dataUrl,
+            width: img.naturalWidth || 4,
+            height: img.naturalHeight || 3,
+          });
+        };
+        img.onerror = () => {
+          resolve({ dataUrl, width: 4, height: 3 });
+        };
+        img.src = dataUrl;
       });
     } catch {
       return null;
@@ -47,6 +91,54 @@ export const getBase64Image = async (url: string, format: 'image/png' | 'image/j
   }
   return null;
 };
+
+// Helper to load image as base64 string
+export const getBase64Image = async (
+  url: string,
+  format: 'image/png' | 'image/jpeg' = 'image/png'
+): Promise<string | null> => {
+  const info = await getBase64ImageWithDimensions(url, format);
+  return info ? info.dataUrl : null;
+};
+
+/**
+ * Menghitung ukuran dan posisi foto agar 'object-fit: contain' (tidak gepeng / terdistorsi)
+ * dan selalu terpusat (center) di dalam kotak sel target.
+ */
+export function calculateFitDimensions(
+  imgW: number,
+  imgH: number,
+  boxX: number,
+  boxY: number,
+  boxW: number,
+  boxH: number
+): { x: number; y: number; w: number; h: number } {
+  if (!imgW || !imgH || imgW <= 0 || imgH <= 0 || boxW <= 0 || boxH <= 0) {
+    return { x: boxX, y: boxY, w: Math.max(1, boxW), h: Math.max(1, boxH) };
+  }
+
+  const imgRatio = imgW / imgH;
+  const boxRatio = boxW / boxH;
+
+  let renderW: number;
+  let renderH: number;
+
+  if (imgRatio > boxRatio) {
+    // Foto lebih lebar dibanding kotak -> lebarnya penuhi boxW, tingginya menyesuaikan rasio
+    renderW = boxW;
+    renderH = boxW / imgRatio;
+  } else {
+    // Foto lebih tinggi dibanding kotak -> tingginya penuhi boxH, lebarnya menyesuaikan rasio
+    renderH = boxH;
+    renderW = boxH * imgRatio;
+  }
+
+  // Posisikan tepat di tengah-tengah kotak sel (centered)
+  const renderX = boxX + (boxW - renderW) / 2;
+  const renderY = boxY + (boxH - renderH) / 2;
+
+  return { x: renderX, y: renderY, w: renderW, h: renderH };
+}
 
 // Format date string to Indonesian format (e.g. "Senin, 03 Agustus 2026" or "03 AGUSTUS 2026")
 export const formatIndonesianDate = (dateStr?: string, includeDayName = true): string => {
@@ -74,6 +166,53 @@ export const formatIndonesianDate = (dateStr?: string, includeDayName = true): s
     return dateStr;
   }
 };
+
+/**
+ * Helper untuk memeriksa apakah nama institusi adalah Posyandu
+ */
+export function isPosyanduName(name?: string): boolean {
+  if (!name) return false;
+  const lower = name.toLowerCase().trim();
+  const posyanduKeywords = [
+    'posyandu', 'balita', 'bumil', 'busui', 'b3b', '3b', 'paket 3b', 'paket3b',
+    'cempaka', 'mawar', 'melati', 'anggrek', 'dahlia', 'flamboyan', 'kenanga',
+    'teratai', 'kamboja', 'kasih ibu', 'matahari', 'tulip', 'bougenville',
+    'nusa indah', 'asoka', 'kemuning', 'pmt', 'kader'
+  ];
+  const isExplicitSchool =
+    lower.includes('sd ') || lower.startsWith('sd') || lower.includes('smp') ||
+    lower.includes('sma') || lower.includes('smk') || lower.includes('sps') ||
+    lower.includes('tk ') || lower.startsWith('tk') || lower.includes('paud');
+
+  if (isExplicitSchool && !lower.includes('posyandu') && !lower.includes('balita') && !lower.includes('bumil') && !lower.includes('busui') && !lower.includes('cempaka')) {
+    return false;
+  }
+  return posyanduKeywords.some((k) => lower.includes(k));
+}
+
+/**
+ * Helper untuk memformat rincian institusi secara otomatis:
+ * Contoh: "13 Sekolah, 4 Posyandu" atau "17 Sekolah" atau "8 Posyandu"
+ */
+export function formatInstitutionBreakdown(entries: MbgPmEntry[]): string {
+  let sekolahCount = 0;
+  let posyanduCount = 0;
+
+  for (const e of entries) {
+    if (e.institutionType === 'posyandu' || isPosyanduName(e.institutionName)) {
+      posyanduCount++;
+    } else {
+      sekolahCount++;
+    }
+  }
+
+  const parts: string[] = [];
+  if (sekolahCount > 0) parts.push(`${sekolahCount} Sekolah`);
+  if (posyanduCount > 0) parts.push(`${posyanduCount} Posyandu`);
+
+  if (parts.length === 0) return '0 Institusi';
+  return parts.join(', ');
+}
 
 /**
  * Menentukan bobot urutan kurir untuk Distribusi MBG:
@@ -159,7 +298,7 @@ export async function exportMbgDeliveryReportPdf({
   const activeEntries = entries.filter((e) => !e.isSekolahLibur && (e.institutionName?.trim() || e.id));
   const effectivePetugas = petugasName || docMeta?.petugasName || activeEntries[0]?.assignedPetugasName || 'Semua Petugas';
   const effectiveTanggal = tanggalBatch || docMeta?.tanggalBatch || new Date().toISOString().split('T')[0];
-  
+
   const formattedHeaderDate = formatIndonesianDate(effectiveTanggal, true);
   const effectivePeriode = periodeText || docMeta?.tanggalBatch || formattedHeaderDate;
 
@@ -187,31 +326,31 @@ export async function exportMbgDeliveryReportPdf({
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(0, 0, 0);
-  doc.text('BADAN GIZI NASIONAL', pageW / 2, 32, { align: 'center' });
+  doc.text('BADAN GIZI NASIONAL', pageW / 2, 28, { align: 'center' });
 
   doc.setFontSize(11);
-  doc.text('SPPG SUKABUMI GUNUNGGURUH KEBONMANGGU', pageW / 2, 40, { align: 'center' });
-  doc.text('YAYASAN LEMBAGA AL UMANAA', pageW / 2, 48, { align: 'center' });
+  doc.text('SPPG SUKABUMI GUNUNGGURUH KEBONMANGGU', pageW / 2, 36, { align: 'center' });
+  doc.text('YAYASAN LEMBAGA WAKAF AL UMANAA', pageW / 2, 44, { align: 'center' });
 
-  // Title & Period
-  doc.setFontSize(12.5);
-  doc.text('LAPORAN KEGIATAN DISTRIBUSI', pageW / 2, 74, { align: 'center' });
-
-  doc.setFontSize(11);
-  doc.text(`PERIODE ${effectivePeriode.toUpperCase()}`, pageW / 2, 82, { align: 'center' });
-
-  // Big Centered BGN Logo (Diameter 76mm)
-  const logoSize = 76;
+  // Centered BGN Logo (Diameter 72mm) - Placed in the middle between Header and Title
+  const logoSize = 72;
   const logoX = (pageW - logoSize) / 2;
-  const logoY = 100;
+  const logoY = 56;
 
   if (logoBase64) {
     doc.addImage(logoBase64, 'PNG', logoX, logoY, logoSize, logoSize);
   }
 
-  // Summary / Keterangan Table (Placed below center logo)
+  // Title & Period (Placed below Center Logo)
+  doc.setFontSize(13);
+  doc.text('LAPORAN DISTRIBUSI', pageW / 2, 142, { align: 'center' });
+
+  doc.setFontSize(11);
+  doc.text(`PERIODE ${effectivePeriode.toUpperCase()}`, pageW / 2, 150, { align: 'center' });
+
+  // Summary / Keterangan Table (Placed below title)
   autoTable(doc, {
-    startY: 194,
+    startY: 172,
     head: [['NO', 'KETERANGAN']],
     body: [
       ['1.', 'Laporan Dokumentasi'],
@@ -241,7 +380,7 @@ export async function exportMbgDeliveryReportPdf({
   });
 
   // ─── 3. PRELOAD ENTRY PHOTOS ───
-  const loadedPhotos: Record<string, string> = {};
+  const loadedPhotos: Record<string, LoadedImageInfo> = {};
   const photoUrlsToFetch = new Set<string>();
 
   for (const entry of activeEntries) {
@@ -251,11 +390,11 @@ export async function exportMbgDeliveryReportPdf({
     if (entry.photoSuratJalanUrl) photoUrlsToFetch.add(entry.photoSuratJalanUrl);
   }
 
-  // Preload all in parallel
+  // Preload all in parallel with natural dimensions
   await Promise.all(
     Array.from(photoUrlsToFetch).map(async (url) => {
-      const b64 = await getBase64Image(url);
-      if (b64) loadedPhotos[url] = b64;
+      const imgInfo = await getBase64ImageWithDimensions(url);
+      if (imgInfo) loadedPhotos[url] = imgInfo;
     })
   );
 
@@ -272,7 +411,7 @@ export async function exportMbgDeliveryReportPdf({
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...mutedGray);
-  doc.text(`Petugas: ${effectivePetugas} | ${activeEntries.length} Institusi`, 12, curY + 5);
+  doc.text(`Petugas: ${effectivePetugas} | ${formatInstitutionBreakdown(activeEntries)}`, 12, curY + 5);
 
   curY += 9;
 
@@ -299,6 +438,7 @@ export async function exportMbgDeliveryReportPdf({
       body: tableRows,
       theme: 'grid',
       showHead: 'everyPage',
+      rowPageBreak: 'avoid',
       headStyles: {
         fillColor: [248, 250, 252],
         textColor: [17, 24, 39],
@@ -312,7 +452,7 @@ export async function exportMbgDeliveryReportPdf({
       bodyStyles: {
         fontSize: 8,
         textColor: [17, 24, 39],
-        minCellHeight: 33,
+        minCellHeight: 34,
         lineWidth: 0.2,
         lineColor: [203, 213, 225],
         valign: 'middle',
@@ -324,7 +464,7 @@ export async function exportMbgDeliveryReportPdf({
         3: { cellWidth: 46, halign: 'center', valign: 'middle' },
         4: { cellWidth: 46, halign: 'center', valign: 'middle' },
       },
-      margin: { left: 12, right: 12 },
+      margin: { top: 12, left: 12, right: 12, bottom: 18 },
       didDrawCell: (data) => {
         if (data.section === 'body') {
           const entry = activeEntries[data.row.index];
@@ -335,6 +475,8 @@ export async function exportMbgDeliveryReportPdf({
           const targetH = data.row.height - pad * 2;
           const cellX = data.cell.x + pad;
           const cellY = data.cell.y + pad;
+
+          if (targetH <= 5 || targetW <= 5) return;
 
           let photoUrl: string | undefined;
 
@@ -351,13 +493,27 @@ export async function exportMbgDeliveryReportPdf({
 
           if (photoUrl && loadedPhotos[photoUrl]) {
             try {
-              doc.addImage(
-                loadedPhotos[photoUrl],
-                'JPEG',
+              const photoInfo = loadedPhotos[photoUrl];
+              const fit = calculateFitDimensions(
+                photoInfo.width,
+                photoInfo.height,
                 cellX,
                 cellY,
                 targetW,
                 targetH
+              );
+
+              // Background fill in cell box to keep clean border & white backdrop
+              doc.setFillColor(248, 250, 252);
+              doc.rect(cellX, cellY, targetW, targetH, 'F');
+
+              doc.addImage(
+                photoInfo.dataUrl,
+                'JPEG',
+                fit.x,
+                fit.y,
+                fit.w,
+                fit.h
               );
             } catch (err) {
               console.warn('Failed to render photo in cell:', err);
@@ -486,36 +642,36 @@ export async function exportMbgDailyDistributionReportPdf({
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(0, 0, 0);
-  doc.text('BADAN GIZI NASIONAL', pageW / 2, 30, { align: 'center' });
+  doc.text('BADAN GIZI NASIONAL', pageW / 2, 28, { align: 'center' });
 
   doc.setFontSize(11);
-  doc.text('SPPG SUKABUMI GUNUNGGURUH KEBONMANGGU', pageW / 2, 38, { align: 'center' });
-  doc.text('YAYASAN LEMBAGA AL UMANAA', pageW / 2, 46, { align: 'center' });
+  doc.text('SPPG SUKABUMI GUNUNGGURUH KEBONMANGGU', pageW / 2, 36, { align: 'center' });
+  doc.text('YAYASAN LEMBAGA WAKAF AL UMANAA', pageW / 2, 44, { align: 'center' });
 
-  // Title & Period
-  doc.setFontSize(13);
-  doc.text('LAPORAN KEGIATAN DISTRIBUSI HARIAN', pageW / 2, 70, { align: 'center' });
-  doc.setFontSize(10.5);
-  doc.text('(SELURUH KURIR & RUTE PENGIRIMAN)', pageW / 2, 77, { align: 'center' });
-
-  doc.setFontSize(11.5);
-  doc.text(`PERIODE ${formattedHeaderDate.toUpperCase()}`, pageW / 2, 86, { align: 'center' });
-
-  // Centered BGN Logo (Diameter 72mm)
+  // Centered BGN Logo (Diameter 72mm) - Placed in the middle between Header and Title
   const logoSize = 72;
   const logoX = (pageW - logoSize) / 2;
-  const logoY = 100;
+  const logoY = 56;
 
   if (logoBase64) {
     doc.addImage(logoBase64, 'PNG', logoX, logoY, logoSize, logoSize);
   }
+
+  // Title & Period (Placed below Logo)
+  doc.setFontSize(13);
+  doc.text('LAPORAN DISTRIBUSI HARIAN', pageW / 2, 142, { align: 'center' });
+  doc.setFontSize(10.5);
+  doc.text('(SELURUH KURIR & RUTE PENGIRIMAN)', pageW / 2, 149, { align: 'center' });
+
+  doc.setFontSize(11);
+  doc.text(`PERIODE ${formattedHeaderDate.toUpperCase()}`, pageW / 2, 157, { align: 'center' });
 
   const totalPortions = activeEntries.reduce((acc, e) => acc + (e.jumlah || 0), 0);
   const totalCouriers = Array.from(courierMap.keys()).filter((k) => k !== 'Belum Ditugaskan').length || courierMap.size;
 
   // Summary / Keterangan Table
   autoTable(doc, {
-    startY: 190,
+    startY: 172,
     head: [['NO', 'KETERANGAN DOKUMEN']],
     body: [
       ['1.', 'Rekapitulasi Penugasan & Rute Seluruh Kurir'],
@@ -550,14 +706,14 @@ export async function exportMbgDailyDistributionReportPdf({
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
   doc.text(
-    `Total: ${totalCouriers} Kurir  •  ${activeEntries.length} Sekolah/Institusi  •  ${totalPortions.toLocaleString('id-ID')} Porsi`,
+    `Total: ${totalCouriers} Kurir  •  ${formatInstitutionBreakdown(activeEntries)}  •  ${totalPortions.toLocaleString('id-ID')} Porsi`,
     pageW / 2,
     260,
     { align: 'center' }
   );
 
   // ─── 3. PRELOAD ALL ENTRY PHOTOS ───
-  const loadedPhotos: Record<string, string> = {};
+  const loadedPhotos: Record<string, LoadedImageInfo> = {};
   const photoUrlsToFetch = new Set<string>();
 
   for (const entry of activeEntries) {
@@ -569,8 +725,8 @@ export async function exportMbgDailyDistributionReportPdf({
 
   await Promise.all(
     Array.from(photoUrlsToFetch).map(async (url) => {
-      const b64 = await getBase64Image(url);
-      if (b64) loadedPhotos[url] = b64;
+      const imgInfo = await getBase64ImageWithDimensions(url);
+      if (imgInfo) loadedPhotos[url] = imgInfo;
     })
   );
 
@@ -615,7 +771,7 @@ export async function exportMbgDailyDistributionReportPdf({
       `${courierIdx++}.`,
       courierName,
       groupData.kenekName || '-',
-      `${groupData.entries.length} Sekolah`,
+      formatInstitutionBreakdown(groupData.entries),
       `${cPortions.toLocaleString('id-ID')} Porsi`,
       completeness,
     ]);
@@ -633,7 +789,7 @@ export async function exportMbgDailyDistributionReportPdf({
           styles: { halign: 'left', fontStyle: 'bold', fontSize: 8.5 },
         },
         {
-          content: `${activeEntries.length} Sekolah`,
+          content: formatInstitutionBreakdown(activeEntries),
           styles: { halign: 'center', fontStyle: 'bold', fontSize: 8.5 },
         },
         {
@@ -669,11 +825,11 @@ export async function exportMbgDailyDistributionReportPdf({
       0: { cellWidth: 10, halign: 'center' },
       1: { cellWidth: 42, fontStyle: 'bold' },
       2: { cellWidth: 36 },
-      3: { cellWidth: 26, halign: 'center' },
-      4: { cellWidth: 32, halign: 'center', fontStyle: 'bold' },
-      5: { cellWidth: 40, halign: 'center' },
+      3: { cellWidth: 34, halign: 'center' },
+      4: { cellWidth: 28, halign: 'center', fontStyle: 'bold' },
+      5: { cellWidth: 36, halign: 'center' },
     },
-    margin: { left: 12, right: 12, bottom: 16 },
+    margin: { top: 12, left: 12, right: 12, bottom: 18 },
   });
 
   // ─── 5. DOKUMENTASI FOTO PER KURIR ───
@@ -694,7 +850,7 @@ export async function exportMbgDailyDistributionReportPdf({
 
     doc.setFontSize(8.5);
     doc.setTextColor(255, 255, 255);
-    const subText = `Kenek: ${groupData.kenekName || '-'} | ${groupData.entries.length} Sekolah • ${cPortions.toLocaleString('id-ID')} Porsi`;
+    const subText = `Kenek: ${groupData.kenekName || '-'} | ${formatInstitutionBreakdown(groupData.entries)} • ${cPortions.toLocaleString('id-ID')} Porsi`;
     doc.text(subText, pageW - 16, 19.5, { align: 'right' });
 
     // Table of photo proofs
@@ -715,6 +871,7 @@ export async function exportMbgDailyDistributionReportPdf({
       body: tableRows,
       theme: 'grid',
       showHead: 'everyPage',
+      rowPageBreak: 'avoid',
       headStyles: {
         fillColor: [248, 250, 252],
         textColor: [17, 24, 39],
@@ -728,7 +885,7 @@ export async function exportMbgDailyDistributionReportPdf({
       bodyStyles: {
         fontSize: 8,
         textColor: [17, 24, 39],
-        minCellHeight: 33,
+        minCellHeight: 34,
         lineWidth: 0.2,
         lineColor: [203, 213, 225],
         valign: 'middle',
@@ -740,7 +897,7 @@ export async function exportMbgDailyDistributionReportPdf({
         3: { cellWidth: 46, halign: 'center', valign: 'middle' },
         4: { cellWidth: 46, halign: 'center', valign: 'middle' },
       },
-      margin: { left: 12, right: 12, bottom: 16 },
+      margin: { top: 12, left: 12, right: 12, bottom: 18 },
       didDrawCell: (data) => {
         if (data.section === 'body') {
           const entry = groupData.entries[data.row.index];
@@ -751,6 +908,8 @@ export async function exportMbgDailyDistributionReportPdf({
           const targetH = data.row.height - pad * 2;
           const cellX = data.cell.x + pad;
           const cellY = data.cell.y + pad;
+
+          if (targetH <= 5 || targetW <= 5) return;
 
           let photoUrl: string | undefined;
 
@@ -764,13 +923,27 @@ export async function exportMbgDailyDistributionReportPdf({
 
           if (photoUrl && loadedPhotos[photoUrl]) {
             try {
-              doc.addImage(
-                loadedPhotos[photoUrl],
-                'JPEG',
+              const photoInfo = loadedPhotos[photoUrl];
+              const fit = calculateFitDimensions(
+                photoInfo.width,
+                photoInfo.height,
                 cellX,
                 cellY,
                 targetW,
                 targetH
+              );
+
+              // Background fill in cell box to keep clean border & white backdrop
+              doc.setFillColor(248, 250, 252);
+              doc.rect(cellX, cellY, targetW, targetH, 'F');
+
+              doc.addImage(
+                photoInfo.dataUrl,
+                'JPEG',
+                fit.x,
+                fit.y,
+                fit.w,
+                fit.h
               );
             } catch (err) {
               console.warn('Failed to render photo in cell:', err);

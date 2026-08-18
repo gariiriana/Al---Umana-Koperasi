@@ -743,11 +743,10 @@ export function MbgDistributionPage() {
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`flex-1 py-2.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
-                      activeTab === tab
+                    className={`flex-1 py-2.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${activeTab === tab
                         ? 'bg-white text-[#111827] shadow-sm'
                         : 'text-[#6B7280] hover:text-[#111827]'
-                    }`}
+                      }`}
                   >
                     {tab === 'assignment' ? '🚚 Penugasan Kurir' : '📄 Laporan Kurir'}
                   </button>
@@ -884,11 +883,9 @@ export function MbgDistributionPage() {
                               {entriesList.map((entry) => (
                                 <tr
                                   key={entry.id}
-                                  className={`hover:bg-gray-50/50 ${
-                                    selectedEntryIds.includes(entry.id) ? 'bg-amber-50/60' : ''
-                                  } ${
-                                    entry.isSekolahLibur ? 'bg-red-50/40 text-red-500 line-through' : ''
-                                  }`}
+                                  className={`hover:bg-gray-50/50 ${selectedEntryIds.includes(entry.id) ? 'bg-amber-50/60' : ''
+                                    } ${entry.isSekolahLibur ? 'bg-red-50/40 text-red-500 line-through' : ''
+                                    }`}
                                 >
                                   <td className="py-3 px-3 text-center w-10">
                                     <input
@@ -931,20 +928,18 @@ export function MbgDistributionPage() {
                                     {entry.jadwalPengantaran || '-'}
                                   </td>
                                   <td className="py-3 px-4">
-                                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                                      entry.assignedPetugasName
+                                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${entry.assignedPetugasName
                                         ? 'bg-emerald-50 text-emerald-700'
                                         : 'bg-gray-100 text-gray-500'
-                                    }`}>
+                                      }`}>
                                       {entry.assignedPetugasName || '-'}
                                     </span>
                                   </td>
                                   <td className="py-3 px-4">
-                                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                                      entry.assignedKenekName
+                                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${entry.assignedKenekName
                                         ? 'bg-blue-50 text-blue-700'
                                         : 'bg-gray-100 text-gray-400'
-                                    }`}>
+                                      }`}>
                                       {entry.assignedKenekName || '-'}
                                     </span>
                                   </td>
@@ -1107,11 +1102,10 @@ export function MbgDistributionPage() {
                                     <td className="py-3 px-6 text-center font-bold">{docItem.totalInstitusi}</td>
                                     <td className="py-3 px-6 text-center font-bold">{docItem.totalPorsi}</td>
                                     <td className="py-3 px-6 text-center">
-                                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                                        docItem.completedCount === docItem.totalInstitusi
+                                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${docItem.completedCount === docItem.totalInstitusi
                                           ? 'bg-emerald-50 text-emerald-700'
                                           : 'bg-amber-50 text-amber-700'
-                                      }`}>
+                                        }`}>
                                         {docItem.completedCount}/{docItem.totalInstitusi} Lengkap
                                       </span>
                                     </td>
@@ -1203,11 +1197,10 @@ export function MbgDistributionPage() {
                         key={name}
                         type="button"
                         onClick={() => setAssignKurirName(name)}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                          assignKurirName === name
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${assignKurirName === name
                             ? 'bg-[#111827] text-white border-[#111827]'
                             : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-400'
-                        }`}
+                          }`}
                       >
                         {name}
                       </button>
@@ -1233,11 +1226,10 @@ export function MbgDistributionPage() {
                         key={name}
                         type="button"
                         onClick={() => setAssignKenekName(name)}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                          assignKenekName === name
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${assignKenekName === name
                             ? 'bg-blue-600 text-white border-blue-600'
                             : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-400'
-                        }`}
+                          }`}
                       >
                         {name}
                       </button>
@@ -1374,11 +1366,10 @@ export function MbgDistributionPage() {
                         key={name}
                         type="button"
                         onClick={() => setBulkKurirName(name)}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                          bulkKurirName === name
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${bulkKurirName === name
                             ? 'bg-[#111827] text-white border-[#111827]'
                             : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-400'
-                        }`}
+                          }`}
                       >
                         {name}
                       </button>
@@ -1406,11 +1397,10 @@ export function MbgDistributionPage() {
                         key={name}
                         type="button"
                         onClick={() => setBulkKenekName(name)}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                          bulkKenekName === name
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${bulkKenekName === name
                             ? 'bg-blue-600 text-white border-blue-600'
                             : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-400'
-                        }`}
+                          }`}
                       >
                         {name}
                       </button>
