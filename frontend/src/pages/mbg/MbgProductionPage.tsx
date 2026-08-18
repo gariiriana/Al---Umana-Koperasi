@@ -94,7 +94,7 @@ export function MbgProductionPage() {
 
   // Google Sheets & Excel Import States
   const [showSheetsImportModal, setShowSheetsImportModal] = useState(false);
-  const [sheetsUrlInput, setSheetsUrlInput] = useState('');
+  const [sheetsUrlInput, setSheetsUrlInput] = useState('https://docs.google.com/spreadsheets/d/1uvsEHj7p11l0tZZqWB_t9khlzUpNZM5okGyVswH4_8U/edit?usp=sharing');
   const [importingSheets, setImportingSheets] = useState(false);
   const [availableSheetNames, setAvailableSheetNames] = useState<string[]>([]);
   const [sheetWorkbook, setSheetWorkbook] = useState<XLSX.WorkBook | null>(null);
