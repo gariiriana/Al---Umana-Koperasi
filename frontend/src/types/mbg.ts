@@ -396,11 +396,15 @@ export interface MbgCookingSession {
 export interface MbgSchoolProof {
   institutionName: string;
   photoMenuUrl?: string;
+  photoMenuDesc?: string;
   photoSerahTerimaUrl?: string;
+  photoSerahTerimaDesc?: string;
   photoSerahTerimaTimestamp?: string;
   photoSerahTerimaLocation?: string;
   photoSuratJalanUrl?: string;
+  photoSuratJalanDesc?: string;
   photoPenerimaUrl?: string;
+  photoPenerimaDesc?: string;
   photoPenerimaTimestamp?: string;
   photoPenerimaLocation?: string;
   updatedAt?: string;

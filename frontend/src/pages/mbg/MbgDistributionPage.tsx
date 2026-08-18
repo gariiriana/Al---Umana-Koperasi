@@ -480,7 +480,7 @@ export function MbgDistributionPage() {
           (t) => t.petugasName === kName || t.petugasId === kId || t.petugasName.toLowerCase() === kName.toLowerCase()
         );
 
-        const taskDeadline = deadlines[kName] || existingTask?.deadlineAt || (selectedBatch ? `${selectedBatch.tanggal}T11:00` : undefined);
+        const taskDeadline = deadlines[kName] || existingTask?.deadlineAt || (selectedBatch ? `${selectedBatch.tanggal}T15:00` : undefined);
 
         if (existingTask) {
           await updateDeliveryTask(existingTask.id, {
@@ -816,7 +816,7 @@ export function MbgDistributionPage() {
                                     value={
                                       deadlines[petugasName] ||
                                       deliveryTasks.find((t) => t.petugasName === petugasName)?.deadlineAt ||
-                                      (selectedBatch ? `${selectedBatch.tanggal}T11:00` : '')
+                                      (selectedBatch ? `${selectedBatch.tanggal}T15:00` : '')
                                     }
                                     onChange={(e) => {
                                       const val = e.target.value;

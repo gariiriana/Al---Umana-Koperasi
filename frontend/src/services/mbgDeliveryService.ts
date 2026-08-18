@@ -151,9 +151,9 @@ export async function addDeliveryPhoto(
 
 export async function compressImageBase64(
   dataUrl: string,
-  maxWidth = 800,
-  maxHeight = 800,
-  quality = 0.75
+  maxWidth = 640,
+  maxHeight = 640,
+  quality = 0.65
 ): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -196,7 +196,7 @@ export async function updateSchoolDeliveryProof(
   taskId?: string,
   extraMeta?: { timestamp?: string; location?: string; description?: string }
 ): Promise<string> {
-  const compressedPhoto = await compressImageBase64(rawPhotoDataUrl, 800, 800, 0.75);
+  const compressedPhoto = await compressImageBase64(rawPhotoDataUrl, 640, 640, 0.65);
 
   const entryUpdates: Record<string, unknown> = {
     updatedAt: new Date().toISOString(),

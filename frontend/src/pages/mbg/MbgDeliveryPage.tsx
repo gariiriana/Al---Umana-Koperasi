@@ -82,14 +82,13 @@ export function MbgDeliveryPage() {
   // Subscribe active batches
   useEffect(() => {
     const unsub = subscribeBatches((data) => {
-      const activeBatches = data.filter((b) => b.status !== 'DRAFT');
-      setBatches(activeBatches);
+      setBatches(data);
       const savedBatchId = sessionStorage.getItem('mbg_delivery_selected_batch');
-      if (savedBatchId && activeBatches.some((b) => b.id === savedBatchId)) {
+      if (savedBatchId && data.some((b) => b.id === savedBatchId)) {
         setSelectedBatchId(savedBatchId);
-      } else if (activeBatches.length > 0) {
-        setSelectedBatchId(activeBatches[0].id);
-        sessionStorage.setItem('mbg_delivery_selected_batch', activeBatches[0].id);
+      } else if (data.length > 0) {
+        setSelectedBatchId(data[0].id);
+        sessionStorage.setItem('mbg_delivery_selected_batch', data[0].id);
       }
       setLoading(false);
     });
@@ -223,21 +222,43 @@ export function MbgDeliveryPage() {
   // Get full entries detail for the current task
   const taskEntries = useMemo(() => {
     if (!activeTask) return [];
+    let rawList: MbgPmEntry[] = [];
     // 1. Direct match by task.entryIds if present
     if (activeTask.entryIds && activeTask.entryIds.length > 0) {
-      const byIds = entries.filter((e) => activeTask.entryIds.includes(e.id));
-      if (byIds.length > 0) return byIds;
+      rawList = entries.filter((e) => activeTask.entryIds.includes(e.id));
     }
-    // 2. Match by assignedPetugasName
-    const tNameLower = (activeTask.petugasName || '').toLowerCase().trim();
-    return entries.filter((e) => {
-      const eNameLower = (e.assignedPetugasName || '').toLowerCase().trim();
-      if (!eNameLower) return false;
-      return (
-        eNameLower === tNameLower ||
-        eNameLower.includes(tNameLower) ||
-        tNameLower.includes(eNameLower)
-      );
+    if (rawList.length === 0) {
+      // 2. Match by assignedPetugasName
+      const tNameLower = (activeTask.petugasName || '').toLowerCase().trim();
+      rawList = entries.filter((e) => {
+        const eNameLower = (e.assignedPetugasName || '').toLowerCase().trim();
+        if (!eNameLower) return false;
+        return (
+          eNameLower === tNameLower ||
+          eNameLower.includes(tNameLower) ||
+          tNameLower.includes(eNameLower)
+        );
+      });
+    }
+
+    // Merge proofs from activeTask.schoolProofs to ensure all photos appear seamlessly
+    return rawList.map((entry) => {
+      const taskProof = activeTask.schoolProofs?.[entry.id];
+      return {
+        ...entry,
+        photoMenuUrl: entry.photoMenuUrl || taskProof?.photoMenuUrl,
+        photoMenuDesc: entry.photoMenuDesc || taskProof?.photoMenuDesc,
+        photoSerahTerimaUrl: entry.photoSerahTerimaUrl || taskProof?.photoSerahTerimaUrl,
+        photoSerahTerimaDesc: entry.photoSerahTerimaDesc || taskProof?.photoSerahTerimaDesc,
+        photoSerahTerimaTimestamp: entry.photoSerahTerimaTimestamp || taskProof?.photoSerahTerimaTimestamp,
+        photoSerahTerimaLocation: entry.photoSerahTerimaLocation || taskProof?.photoSerahTerimaLocation,
+        photoSuratJalanUrl: entry.photoSuratJalanUrl || taskProof?.photoSuratJalanUrl,
+        photoSuratJalanDesc: entry.photoSuratJalanDesc || taskProof?.photoSuratJalanDesc,
+        photoPenerimaUrl: entry.photoPenerimaUrl || taskProof?.photoPenerimaUrl,
+        photoPenerimaDesc: entry.photoPenerimaDesc || taskProof?.photoPenerimaDesc,
+        photoPenerimaTimestamp: entry.photoPenerimaTimestamp || taskProof?.photoPenerimaTimestamp,
+        photoPenerimaLocation: entry.photoPenerimaLocation || taskProof?.photoPenerimaLocation,
+      };
     });
   }, [activeTask, entries]);
 
@@ -328,13 +349,32 @@ export function MbgDeliveryPage() {
           try {
             const dataUrl = reader.result as string;
             const timestampStr = new Date().toLocaleString('id-ID');
-            await updateSchoolDeliveryProof(
+            const compressedUrl = await updateSchoolDeliveryProof(
               selectedEntryForDeliveryPhoto.id,
               selectedEntryForDeliveryPhoto.institutionName,
               targetProofType,
               dataUrl,
               activeTaskId,
               { timestamp: timestampStr, location: 'SPPG Sukabumi' }
+            );
+
+            // Immediately update local entries state
+            setEntries((prev) =>
+              prev.map((item) => {
+                if (item.id === selectedEntryForDeliveryPhoto.id) {
+                  return {
+                    ...item,
+                    [targetProofType === 'menu'
+                      ? 'photoMenuUrl'
+                      : targetProofType === 'serah_terima'
+                      ? 'photoSerahTerimaUrl'
+                      : targetProofType === 'surat_jalan'
+                      ? 'photoSuratJalanUrl'
+                      : 'photoPenerimaUrl']: compressedUrl,
+                  };
+                }
+                return item;
+              })
             );
 
             await addDeliveryPhoto(activeTaskId, activeTask?.deliveryPhotos || [], {
@@ -387,7 +427,7 @@ export function MbgDeliveryPage() {
         try {
           const dataUrl = reader.result as string;
           const timestampStr = new Date().toLocaleString('id-ID');
-          await updateSchoolDeliveryProof(
+          const compressedUrl = await updateSchoolDeliveryProof(
             entry.id,
             entry.institutionName,
             proofType,
@@ -395,6 +435,26 @@ export function MbgDeliveryPage() {
             activeTask.id,
             { timestamp: timestampStr, location: 'Upload Device' }
           );
+
+          // Immediately update local entries state
+          setEntries((prev) =>
+            prev.map((item) => {
+              if (item.id === entry.id) {
+                return {
+                  ...item,
+                  [proofType === 'menu'
+                    ? 'photoMenuUrl'
+                    : proofType === 'serah_terima'
+                    ? 'photoSerahTerimaUrl'
+                    : proofType === 'surat_jalan'
+                    ? 'photoSuratJalanUrl'
+                    : 'photoPenerimaUrl']: compressedUrl,
+                };
+              }
+              return item;
+            })
+          );
+
           showToast({
             message: `Foto ${proofType.replace('_', ' ')} untuk ${entry.institutionName} berhasil diunggah`,
             variant: 'success',
@@ -871,7 +931,10 @@ export function MbgDeliveryPage() {
             {batches.map((b) => (
               <button
                 key={b.id}
-                onClick={() => setSelectedBatchId(b.id)}
+                onClick={() => {
+                  setSelectedBatchId(b.id);
+                  sessionStorage.setItem('mbg_delivery_selected_batch', b.id);
+                }}
                 className={`shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all ${
                   selectedBatchId === b.id
                     ? 'bg-[#111827] text-white shadow-lg'
@@ -909,23 +972,14 @@ export function MbgDeliveryPage() {
                     <p className="text-xs text-gray-500 mt-0.5">
                       Status Tugas: {MBG_DELIVERY_STATUS_CONFIG[activeTask.status]?.label}
                     </p>
-                    {activeTask.deadlineAt && (() => {
-                      const isOverdue = new Date().getTime() > new Date(activeTask.deadlineAt).getTime() && activeTask.status !== 'delivered';
-                      return (
-                        <div className={`mt-2 px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 ${
-                          isOverdue
-                            ? 'bg-red-600 text-white animate-bounce shadow-md'
-                            : 'bg-amber-100 text-amber-900 border border-amber-300'
-                        }`}>
-                          <span>⚠️</span>
-                          <span>
-                            {isOverdue
-                              ? `MELEWATI DEADLINE! (Harus Sampai: ${new Date(activeTask.deadlineAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB)`
-                              : `Deadline Pengantaran: ${new Date(activeTask.deadlineAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB`}
-                          </span>
-                        </div>
-                      );
-                    })()}
+                    {activeTask.deadlineAt && (
+                      <div className="mt-2 px-3 py-1 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 bg-gray-100 text-gray-700 border border-gray-200">
+                        <span>🕒</span>
+                        <span>
+                          Target Sampai: {new Date(activeTask.deadlineAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

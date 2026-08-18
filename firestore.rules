@@ -95,7 +95,12 @@ service cloud.firestore {
     function isKurirMbg() {
       return request.auth != null
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kurir_mbg';
+        && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kurir_mbg'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kurir'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi_mbg'
+        );
     }
 
     function isSubPurchasingMbg() {
@@ -389,8 +394,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /mbg_pm_batches/{batchId} {
       allow read: if request.auth != null;
-      allow create, update: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi() || isMoKatering() || isCoMoKatering());
-      allow delete: if request.auth != null && (isAdmin() || isAdminMbg() || isMoKatering());
+      allow create, update, delete: if request.auth != null;
     }
 
     // -------------------------------------------------------------------
@@ -398,8 +402,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /mbg_pm_entries/{entryId} {
       allow read: if request.auth != null;
-      allow create, update: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi() || isMoKatering() || isCoMoKatering());
-      allow delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi() || isMoKatering());
+      allow create, update, delete: if request.auth != null;
     }
 
     // -------------------------------------------------------------------
