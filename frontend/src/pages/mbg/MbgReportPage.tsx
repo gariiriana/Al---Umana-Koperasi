@@ -17,6 +17,7 @@ import type { MbgPmBatch, MbgPmEntry } from '@/types/mbg';
 import { subscribeBatches, subscribeEntries } from '@/services/mbgAdminService';
 
 import { generateMbgDistributionDocx } from '@/utils/mbgReportDocxGenerator';
+import { compareCouriers } from '@/utils/mbgDeliveryReportPdfExporter';
 
 const chunkArray = <T,>(arr: T[], size: number): T[][] => {
   const chunks: T[][] = [];
@@ -151,6 +152,20 @@ export function MbgReportPage() {
           );
           const entriesSnap = await getDocs(entriesQ);
           const entries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgPmEntry));
+
+          // Sort entries by operational courier sequence (1. Andi & Dede, 2. Yusep & Erik, 3. Agus & Firdi)
+          entries.sort((a, b) => {
+            const courierOrder = compareCouriers(
+              a.assignedPetugasName || '',
+              a.assignedKenekName,
+              b.assignedPetugasName || '',
+              b.assignedKenekName
+            );
+            if (courierOrder !== 0) return courierOrder;
+            const diff = (a.sortOrder || 0) - (b.sortOrder || 0);
+            if (diff !== 0) return diff;
+            return (a.institutionName || '').localeCompare(b.institutionName || '');
+          });
 
           groups.push({
             tanggal: batch.tanggal,

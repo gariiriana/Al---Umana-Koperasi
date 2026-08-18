@@ -47,6 +47,7 @@ import {
   exportMbgDeliveryReportPdf,
   exportMbgDailyDistributionReportPdf,
   formatIndonesianDate,
+  compareCouriers,
 } from '@/utils/mbgDeliveryReportPdfExporter';
 
 export function MbgDistributionPage() {
@@ -248,9 +249,10 @@ export function MbgDistributionPage() {
 
   const kurirOptions = useMemo(() => {
     if (kurirUsers.length > 0) {
-      return kurirUsers.map((u) => u.name);
+      const names = kurirUsers.map((u) => u.name);
+      return names.sort((a, b) => compareCouriers(a, undefined, b, undefined));
     }
-    return ['Dede Kurir', 'Andi Kurir', 'Erik Kurir', 'Yusep Kurir', 'Agus Kurir', 'Firdi Kurir'];
+    return ['Andi Kurir', 'Dede Kurir', 'Yusep Kurir', 'Erik Kurir', 'Agus Kurir', 'Firdi Kurir'];
   }, [kurirUsers]);
 
   // Subscribe batches
@@ -345,7 +347,9 @@ export function MbgDistributionPage() {
       });
     }
 
-    return Array.from(docMap.values());
+    const docs = Array.from(docMap.values());
+    docs.sort((a, b) => compareCouriers(a.petugasName, undefined, b.petugasName, undefined));
+    return docs;
   }, [deliveryDocs, deliveryTasks, entries, selectedBatch, selectedBatchId]);
 
   const filteredBatchDeliveryDocs = useMemo(() => {
@@ -359,7 +363,7 @@ export function MbgDistributionPage() {
     });
   }, [batchDeliveryDocs, distribSearchQuery]);
 
-  // Group PM entries by petugas
+  // Group PM entries by petugas and sort by operational courier sequence
   const groupedEntries = useMemo(() => {
     const groups: Record<string, MbgPmEntry[]> = {};
     entries.forEach((e) => {
@@ -367,7 +371,22 @@ export function MbgDistributionPage() {
       if (!groups[key]) groups[key] = [];
       groups[key].push(e);
     });
-    return groups;
+
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
+      const kenekA = groups[a].find((e) => e.assignedKenekName)?.assignedKenekName;
+      const kenekB = groups[b].find((e) => e.assignedKenekName)?.assignedKenekName;
+      return compareCouriers(a, kenekA, b, kenekB);
+    });
+
+    const sortedGroups: Record<string, MbgPmEntry[]> = {};
+    sortedKeys.forEach((k) => {
+      sortedGroups[k] = [...groups[k]].sort((x, y) => {
+        const diff = (x.sortOrder || 0) - (y.sortOrder || 0);
+        if (diff !== 0) return diff;
+        return (x.institutionName || '').localeCompare(y.institutionName || '');
+      });
+    });
+    return sortedGroups;
   }, [entries]);
 
   // Check if any entry has menu keringan

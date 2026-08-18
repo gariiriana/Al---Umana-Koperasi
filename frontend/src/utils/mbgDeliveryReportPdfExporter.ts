@@ -75,6 +75,70 @@ export const formatIndonesianDate = (dateStr?: string, includeDayName = true): s
   }
 };
 
+/**
+ * Menentukan bobot urutan kurir untuk Distribusi MBG:
+ * 1. Andi & Dede (Order 10 - 19)
+ * 2. Yusep & Erik (Order 20 - 29)
+ * 3. Agus & Firdi (Order 30 - 39)
+ * 4. Kurir Lainnya (Order 100+)
+ * 5. Belum Ditugaskan / Unassigned (Order 999)
+ */
+export function getCourierGroupOrder(courierName?: string, kenekName?: string): number {
+  const cName = (courierName || '').toLowerCase().trim();
+  const kName = (kenekName || '').toLowerCase().trim();
+  const combined = `${cName} ${kName}`.trim();
+
+  if (!cName || cName === 'belum ditugaskan' || cName === 'unassigned' || cName === '-') {
+    return 999;
+  }
+
+  // 1. Andi & Dede
+  const hasAndi = combined.includes('andi');
+  const hasDede = combined.includes('dede');
+  if (hasAndi && hasDede) return 10;
+  if (hasAndi) return 11;
+  if (hasDede) return 12;
+
+  // 2. Yusep & Erik
+  const hasYusep = combined.includes('yusep');
+  const hasErik = combined.includes('erik');
+  if (hasYusep && hasErik) return 20;
+  if (hasYusep) return 21;
+  if (hasErik) return 22;
+
+  // 3. Agus & Firdi
+  const hasAgus = combined.includes('agus');
+  const hasFirdi = combined.includes('firdi');
+  if (hasAgus && hasFirdi) return 30;
+  if (hasAgus) return 31;
+  if (hasFirdi) return 32;
+
+  // Other named couriers
+  return 100;
+}
+
+/**
+ * Comparator function untuk mengurutkan kurir MBG sesuai standar operasional:
+ * 1. Andi & Dede
+ * 2. Yusep & Erik
+ * 3. Agus & Firdi
+ */
+export function compareCouriers(
+  aName?: string,
+  aKenek?: string,
+  bName?: string,
+  bKenek?: string
+): number {
+  const orderA = getCourierGroupOrder(aName, aKenek);
+  const orderB = getCourierGroupOrder(bName, bKenek);
+
+  if (orderA !== orderB) {
+    return orderA - orderB;
+  }
+
+  return (aName || '').localeCompare(bName || '');
+}
+
 export interface ExportDeliveryPdfOptions {
   docMeta?: Partial<MbgDeliveryDocument>;
   entries: MbgPmEntry[];
@@ -523,10 +587,24 @@ export async function exportMbgDailyDistributionReportPdf({
   doc.setTextColor(...mutedGray);
   doc.text(`${formattedHeaderDate} | ${batchName || 'SPPG Sukabumi'}`, 12, 22);
 
+  // Convert and sort couriers by operational order (1. Andi & Dede, 2. Yusep & Erik, 3. Agus & Firdi)
+  const sortedCourierList = Array.from(courierMap.entries())
+    .map(([courierName, groupData]) => ({
+      courierName,
+      kenekName: groupData.kenekName,
+      entries: [...groupData.entries].sort((a, b) => {
+        const diff = (a.sortOrder || 0) - (b.sortOrder || 0);
+        if (diff !== 0) return diff;
+        return (a.institutionName || '').localeCompare(b.institutionName || '');
+      }),
+    }))
+    .sort((a, b) => compareCouriers(a.courierName, a.kenekName, b.courierName, b.kenekName));
+
   const rekapRows: (string | { content: string; styles?: Record<string, unknown> })[][] = [];
   let courierIdx = 1;
 
-  courierMap.forEach((groupData, courierName) => {
+  sortedCourierList.forEach((groupData) => {
+    const courierName = groupData.courierName;
     const cPortions = groupData.entries.reduce((acc, e) => acc + (e.jumlah || 0), 0);
     const completeCount = groupData.entries.filter(
       (e) => e.photoMenuUrl && (e.photoSerahTerimaUrl || e.photoPenerimaUrl) && e.photoSuratJalanUrl
@@ -599,7 +677,8 @@ export async function exportMbgDailyDistributionReportPdf({
   });
 
   // ─── 5. DOKUMENTASI FOTO PER KURIR ───
-  courierMap.forEach((groupData, courierName) => {
+  sortedCourierList.forEach((groupData) => {
+    const courierName = groupData.courierName;
     doc.addPage();
 
     const cPortions = groupData.entries.reduce((acc, e) => acc + (e.jumlah || 0), 0);
