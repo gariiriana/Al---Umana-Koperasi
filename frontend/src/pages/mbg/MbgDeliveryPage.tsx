@@ -101,17 +101,24 @@ export function MbgDeliveryPage() {
     return unsub;
   }, []);
 
+  // Role detection: Kurir vs Admin/Supervisor
+  const isAdminOrSupervisor = useMemo(() => {
+    return ['admin', 'admin_mbg', 'superadmin', 'manager'].includes(profile?.role || '');
+  }, [profile?.role]);
+
   // Determine petugasId/name based on logged in user profile
   useEffect(() => {
     if (profile) {
-      if (['kurir_mbg', 'kurir', 'distribusi_mbg', 'distribusi', 'admin', 'admin_mbg'].includes(profile.role)) {
-        setDetectedPetugasId(user?.uid || '');
-        if (!selectedPetugasName) {
-          setSelectedPetugasName(profile.displayName || (user?.email ? user.email.split('@')[0] : ''));
-        }
+      setDetectedPetugasId(user?.uid || '');
+      // If user is a courier, STRICTLY lock to their own account name
+      if (!isAdminOrSupervisor) {
+        const myName = profile.displayName || (user?.email ? user.email.split('@')[0] : '');
+        setSelectedPetugasName(myName);
+      } else if (!selectedPetugasName) {
+        setSelectedPetugasName(profile.displayName || (user?.email ? user.email.split('@')[0] : ''));
       }
     }
-  }, [profile, user, selectedPetugasName]);
+  }, [profile, user, isAdminOrSupervisor, selectedPetugasName]);
 
   // Subscribe to tasks for the selected batch & petugas
   useEffect(() => {
@@ -123,8 +130,8 @@ export function MbgDeliveryPage() {
 
     const unsubTasks = subscribeKurirTasks(
       selectedBatchId,
-      selectedPetugasName ? '' : uUid,
-      selectedPetugasName ? '' : uEmail,
+      isAdminOrSupervisor && selectedPetugasName ? '' : uUid,
+      isAdminOrSupervisor && selectedPetugasName ? '' : uEmail,
       uName,
       (data) => {
         setTasks(data);
@@ -137,7 +144,7 @@ export function MbgDeliveryPage() {
       unsubTasks();
       unsubEntries();
     };
-  }, [selectedBatchId, selectedPetugasName, profile?.displayName, user]);
+  }, [selectedBatchId, selectedPetugasName, profile?.displayName, user, isAdminOrSupervisor]);
 
   // Keep proofModalEntry in sync with live entries snapshot
   useEffect(() => {
@@ -480,6 +487,51 @@ export function MbgDeliveryPage() {
     if (!activeTask) return;
     try {
       await deleteSchoolDeliveryProof(entryId, proofType, activeTask.id);
+
+      const fieldKey =
+        proofType === 'menu'
+          ? 'photoMenuUrl'
+          : proofType === 'serah_terima'
+          ? 'photoSerahTerimaUrl'
+          : proofType === 'surat_jalan'
+          ? 'photoSuratJalanUrl'
+          : 'photoPenerimaUrl';
+
+      const descKey =
+        proofType === 'menu'
+          ? 'photoMenuDesc'
+          : proofType === 'serah_terima'
+          ? 'photoSerahTerimaDesc'
+          : proofType === 'surat_jalan'
+          ? 'photoSuratJalanDesc'
+          : 'photoPenerimaDesc';
+
+      // Immediately clear in local entries state
+      setEntries((prev) =>
+        prev.map((item) => {
+          if (item.id === entryId) {
+            return {
+              ...item,
+              [fieldKey]: '',
+              [descKey]: '',
+            };
+          }
+          return item;
+        })
+      );
+
+      // Immediately clear in proofModalEntry if active
+      setProofModalEntry((prev) => {
+        if (prev && prev.id === entryId) {
+          return {
+            ...prev,
+            [fieldKey]: '',
+            [descKey]: '',
+          };
+        }
+        return prev;
+      });
+
       showToast({ message: 'Foto berhasil dihapus', variant: 'success' });
     } catch {
       showToast({ message: 'Gagal menghapus foto', variant: 'error' });
@@ -725,58 +777,60 @@ export function MbgDeliveryPage() {
   };
 
   return (
-    <div className="min-h-screen font-['Hanken_Grotesk',system-ui,sans-serif] p-6 max-w-7xl mx-auto">
+    <div className="min-h-screen font-['Hanken_Grotesk',system-ui,sans-serif] px-3 py-4 md:p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="mb-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-[#111827] tracking-tight">Kurir MBG</h1>
-          <p className="text-sm text-[#6B7280] mt-1">
+          <p className="text-xs sm:text-sm text-[#6B7280] mt-0.5">
             Lihat daftar pengantaran hari ini, catat serah terima dan foto bukti sampai
           </p>
         </div>
 
-        {/* Petugas Selector for preview / simulation */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-gray-500">Pilih Petugas:</span>
-          <select
-            title="Pilih Petugas"
-            value={selectedPetugasName}
-            onChange={(e) => setSelectedPetugasName(e.target.value)}
-            className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] transition-all cursor-pointer"
-          >
-            <option value="">-- Semua / Akun Saya --</option>
-            {uniqueKurirNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Petugas Selector — ONLY for Admin/Supervisor preview */}
+        {isAdminOrSupervisor && (
+          <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl">
+            <span className="text-xs font-bold text-amber-800 shrink-0">Admin Switch:</span>
+            <select
+              title="Pilih Petugas"
+              value={selectedPetugasName}
+              onChange={(e) => setSelectedPetugasName(e.target.value)}
+              className="rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] transition-all cursor-pointer"
+            >
+              <option value="">-- Semua / Akun Saya --</option>
+              {uniqueKurirNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Page Tab: Tugas Aktif / Arsip Dokumen */}
-      <div className="flex gap-1 mb-6 bg-[#F3F4F6] rounded-xl p-1 max-w-md">
+      <div className="flex gap-1 mb-5 bg-[#F3F4F6] rounded-2xl p-1 w-full max-w-md">
         <button
           onClick={() => setPageTab('active')}
-          className={`flex-1 py-2.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
             pageTab === 'active'
               ? 'bg-white text-[#111827] shadow-sm'
               : 'text-[#6B7280] hover:text-[#111827]'
           }`}
         >
-          <ClipboardList className="h-3.5 w-3.5" /> Tugas Aktif
+          <ClipboardList className="h-4 w-4" /> Tugas Aktif
         </button>
         <button
           onClick={() => setPageTab('archive')}
-          className={`flex-1 py-2.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
             pageTab === 'archive'
               ? 'bg-white text-[#111827] shadow-sm'
               : 'text-[#6B7280] hover:text-[#111827]'
           }`}
         >
-          <FolderOpen className="h-3.5 w-3.5" /> Arsip Dokumen
+          <FolderOpen className="h-4 w-4" /> Arsip Dokumen
           {archiveDocs.length > 0 && (
-            <span className="bg-[#FBBF24] text-[#111827] text-[9px] font-extrabold px-1.5 py-0.5 rounded-full">
+            <span className="bg-[#FBBF24] text-[#111827] text-[10px] font-extrabold px-2 py-0.5 rounded-full ml-1">
               {archiveDocs.length}
             </span>
           )}
@@ -825,9 +879,9 @@ export function MbgDeliveryPage() {
                 </div>
               </div>
 
-              {/* Table Container */}
+              {/* Table / Card Container */}
               <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
-                <div className="px-6 py-4 bg-[#111827] text-white flex items-center justify-between rounded-t-2xl">
+                <div className="px-4 md:px-6 py-4 bg-[#111827] text-white flex items-center justify-between rounded-t-2xl">
                   <div className="flex items-center gap-2">
                     <FolderOpen className="h-4.5 w-4.5 text-[#FBBF24]" />
                     <span className="text-sm font-extrabold uppercase tracking-wider">Arsip Laporan Distribusi</span>
@@ -836,7 +890,54 @@ export function MbgDeliveryPage() {
                     {filteredArchiveDocs.length} Dokumen
                   </span>
                 </div>
-                <div className="overflow-x-auto">
+
+                {/* ===== MOBILE ARCHIVE CARD VIEW ===== */}
+                <div className="md:hidden divide-y divide-gray-100">
+                  {filteredArchiveDocs.length === 0 ? (
+                    <div className="p-8 text-center text-gray-400 font-bold text-xs">
+                      Tidak ada arsip yang cocok dengan pencarian "{archiveSearchQuery}"
+                    </div>
+                  ) : (
+                    filteredArchiveDocs.map((d) => (
+                      <div key={d.id} className="p-4 space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-1.5 font-extrabold text-sm text-[#111827]">
+                              <Calendar className="h-4 w-4 text-gray-400" />
+                              {d.tanggalBatch || '-'}
+                            </div>
+                            <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5 font-medium">
+                              <User className="h-3.5 w-3.5 text-gray-400" />
+                              {d.petugasName}
+                            </div>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full font-extrabold text-[10px] ${
+                            d.completedCount === d.totalInstitusi
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {d.completedCount}/{d.totalInstitusi} Institusi
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1">
+                          <span>Total Porsi: <strong className="text-[#92400E] bg-[#FBBF24]/20 px-2 py-0.5 rounded-full">{d.totalPorsi}</strong></span>
+                          <span>{new Date(d.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleReExportArchivedDoc(d)}
+                          className="w-full mt-2 inline-flex items-center justify-center gap-2 bg-[#111827] hover:bg-black text-white text-xs font-extrabold py-2.5 rounded-xl shadow-xs cursor-pointer active:scale-95"
+                        >
+                          <FileDown className="h-4 w-4 text-[#FBBF24]" />
+                          <span>Unduh PDF Laporan</span>
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* ===== DESKTOP ARCHIVE TABLE VIEW ===== */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-xs text-left min-w-[800px]">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-bold uppercase text-[9px] tracking-wider">
@@ -926,8 +1027,27 @@ export function MbgDeliveryPage() {
           <Loader2 className="h-6 w-6 animate-spin text-[#FBBF24]" />
         </div>
       ) : (
-        <>
-          <div className="flex gap-2 overflow-x-auto pb-3 mb-6 scrollbar-hide">
+        <div className="mb-6">
+          {/* Mobile: dropdown select */}
+          <div className="md:hidden">
+            <select
+              title="Pilih Tanggal Batch"
+              value={selectedBatchId || ''}
+              onChange={(e) => {
+                setSelectedBatchId(e.target.value);
+                sessionStorage.setItem('mbg_delivery_selected_batch', e.target.value);
+              }}
+              className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] cursor-pointer"
+            >
+              {batches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  📅 {b.tanggal} {b.status === 'DRAFT' ? '(Draft)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Desktop: horizontal pills */}
+          <div className="hidden md:flex gap-2 overflow-x-auto pb-3 scrollbar-hide">
             {batches.map((b) => (
               <button
                 key={b.id}
@@ -948,11 +1068,10 @@ export function MbgDeliveryPage() {
               </button>
             ))}
           </div>
-
           {selectedBatchId && activeTask ? (
             <div className="space-y-6">
               {/* Task Summary Card */}
-              <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 md:p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-6">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
                     <User className="h-6 w-6" />
@@ -963,12 +1082,12 @@ export function MbgDeliveryPage() {
                     </span>
                     <h3 className="text-base font-extrabold text-[#111827]">
                       {activeTask.petugasName}
-                      {activeTask.kenekName && (
-                        <span className="ml-2 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
-                          Kenek: {activeTask.kenekName}
-                        </span>
-                      )}
                     </h3>
+                    {activeTask.kenekName && (
+                      <span className="mt-1 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 inline-block">
+                        Kenek: {activeTask.kenekName}
+                      </span>
+                    )}
                     <p className="text-xs text-gray-500 mt-0.5">
                       Status Tugas: {MBG_DELIVERY_STATUS_CONFIG[activeTask.status]?.label}
                     </p>
@@ -1051,16 +1170,99 @@ export function MbgDeliveryPage() {
                 </div>
               </div>
 
-              {/* Task Details - Table Format per reference image */}
+              {/* Task Details - Mobile Card Layout + Desktop Table */}
               <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
-                <div className="px-6 py-4 bg-[#F9FAFB] border-b border-[#E5E7EB] flex items-center justify-between">
+                <div className="px-4 md:px-6 py-4 bg-[#F9FAFB] border-b border-[#E5E7EB] flex items-center justify-between">
                   <span className="text-xs font-extrabold text-gray-700 uppercase tracking-wider flex items-center gap-2">
                     <ClipboardList className="h-4.5 w-4.5 text-gray-400" />
                     Daftar Institusi Pengantaran
                   </span>
                 </div>
 
-                <div className="overflow-x-auto">
+                {/* ===== MOBILE CARD VIEW ===== */}
+                <div className="md:hidden divide-y divide-gray-100">
+                  {taskEntries.map((entry) => {
+                    const hasMenu = !!entry.photoMenuUrl;
+                    const hasSerahTerima = !!entry.photoSerahTerimaUrl;
+                    const hasSuratJalan = !!entry.photoSuratJalanUrl;
+                    const hasPenerima = !!entry.photoPenerimaUrl;
+                    const proofCount = (hasMenu ? 1 : 0) + (hasSerahTerima ? 1 : 0) + (hasSuratJalan ? 1 : 0) + (hasPenerima ? 1 : 0);
+
+                    return (
+                      <div
+                        key={entry.id}
+                        className={`p-4 space-y-3 ${entry.isSekolahLibur ? 'bg-red-50/40' : ''}`}
+                      >
+                        {/* Institution name + porsi */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <Building className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold text-gray-900 truncate">{entry.institutionName}</div>
+                              <div className="text-[10px] text-gray-400">Jadwal: {entry.jadwalPengantaran || '-'}</div>
+                              {entry.isSekolahLibur && (
+                                <span className="text-[9px] text-red-600 bg-red-100 px-1.5 py-0.5 rounded font-extrabold uppercase mt-1 inline-block">Libur</span>
+                              )}
+                            </div>
+                          </div>
+                          <span className="shrink-0 px-2.5 py-1 bg-[#FBBF24]/20 text-[#92400E] rounded-full font-extrabold text-[11px]">
+                            {entry.jumlah} porsi
+                          </span>
+                        </div>
+
+                        {/* Photo grid 2x2 */}
+                        {!entry.isSekolahLibur && (
+                          <div className="grid grid-cols-4 gap-2">
+                            {[
+                              { key: 'menu' as const, url: entry.photoMenuUrl, has: hasMenu, label: '🚐' },
+                              { key: 'serah_terima' as const, url: entry.photoSerahTerimaUrl, has: hasSerahTerima, label: '🤝' },
+                              { key: 'surat_jalan' as const, url: entry.photoSuratJalanUrl, has: hasSuratJalan, label: '📄' },
+                              { key: 'penerima' as const, url: entry.photoPenerimaUrl, has: hasPenerima, label: '📦' },
+                            ].map((slot) =>
+                              slot.has ? (
+                                <img
+                                  key={slot.key}
+                                  src={slot.url}
+                                  alt={slot.key}
+                                  className="w-full aspect-square object-cover rounded-xl border-2 border-green-300"
+                                />
+                              ) : (
+                                <button
+                                  key={slot.key}
+                                  onClick={() => handleStartProofCapture(entry, slot.key)}
+                                  className="w-full aspect-square bg-gray-100 rounded-xl flex flex-col items-center justify-center text-gray-400 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors border border-dashed border-gray-300"
+                                >
+                                  <span className="text-lg">{slot.label}</span>
+                                  <Camera className="h-3 w-3 mt-0.5" />
+                                </button>
+                              )
+                            )}
+                          </div>
+                        )}
+
+                        {/* Action row */}
+                        {!entry.isSekolahLibur && (
+                          <button
+                            onClick={() => setProofModalEntry(entry)}
+                            className={`w-full py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-xs ${
+                              proofCount === 4
+                                ? 'bg-green-600 text-white hover:bg-green-700'
+                                : 'bg-[#111827] text-white hover:bg-black'
+                            }`}
+                          >
+                            {proofCount === 4 ? '✓ Lengkap (4/4)' : `Kelola Bukti (${proofCount}/4)`}
+                          </button>
+                        )}
+                        {entry.isSekolahLibur && (
+                          <span className="text-gray-400 text-[10px] block text-center">Skip (Libur)</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* ===== DESKTOP TABLE VIEW ===== */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-xs text-left min-w-[900px]">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-bold uppercase text-[9px] tracking-wider">
@@ -1114,16 +1316,9 @@ export function MbgDeliveryPage() {
                             {/* Foto Kedatangan Ompreng */}
                             <td className="py-3 px-4 text-center">
                               {hasMenu ? (
-                                <img
-                                  src={entry.photoMenuUrl}
-                                  alt="Kedatangan Ompreng"
-                                  className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs"
-                                />
+                                <img src={entry.photoMenuUrl} alt="Kedatangan Ompreng" className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs" />
                               ) : (
-                                <button
-                                  onClick={() => handleStartProofCapture(entry, 'menu')}
-                                  className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto"
-                                >
+                                <button onClick={() => handleStartProofCapture(entry, 'menu')} className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto">
                                   <Camera className="h-3 w-3" /> Ambil
                                 </button>
                               )}
@@ -1132,16 +1327,9 @@ export function MbgDeliveryPage() {
                             {/* Foto Serah Terima PJ Sekolah */}
                             <td className="py-3 px-4 text-center">
                               {hasSerahTerima ? (
-                                <img
-                                  src={entry.photoSerahTerimaUrl}
-                                  alt="Serah Terima"
-                                  className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs"
-                                />
+                                <img src={entry.photoSerahTerimaUrl} alt="Serah Terima" className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs" />
                               ) : (
-                                <button
-                                  onClick={() => handleStartProofCapture(entry, 'serah_terima')}
-                                  className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto"
-                                >
+                                <button onClick={() => handleStartProofCapture(entry, 'serah_terima')} className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto">
                                   <Camera className="h-3 w-3" /> Geotag
                                 </button>
                               )}
@@ -1150,16 +1338,9 @@ export function MbgDeliveryPage() {
                             {/* Foto Surat Jalan */}
                             <td className="py-3 px-4 text-center">
                               {hasSuratJalan ? (
-                                <img
-                                  src={entry.photoSuratJalanUrl}
-                                  alt="Surat Jalan"
-                                  className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs"
-                                />
+                                <img src={entry.photoSuratJalanUrl} alt="Surat Jalan" className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs" />
                               ) : (
-                                <button
-                                  onClick={() => handleStartProofCapture(entry, 'surat_jalan')}
-                                  className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto"
-                                >
+                                <button onClick={() => handleStartProofCapture(entry, 'surat_jalan')} className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto">
                                   <Camera className="h-3 w-3" /> Ambil
                                 </button>
                               )}
@@ -1168,16 +1349,9 @@ export function MbgDeliveryPage() {
                             {/* Foto Pengambilan Ompreng Kosong */}
                             <td className="py-3 px-4 text-center">
                               {hasPenerima ? (
-                                <img
-                                  src={entry.photoPenerimaUrl}
-                                  alt="Pengambilan Ompreng Kosong"
-                                  className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs"
-                                />
+                                <img src={entry.photoPenerimaUrl} alt="Pengambilan Ompreng Kosong" className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs" />
                               ) : (
-                                <button
-                                  onClick={() => handleStartProofCapture(entry, 'penerima')}
-                                  className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto"
-                                >
+                                <button onClick={() => handleStartProofCapture(entry, 'penerima')} className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto">
                                   <Camera className="h-3 w-3" /> Geotag
                                 </button>
                               )}
@@ -1216,15 +1390,15 @@ export function MbgDeliveryPage() {
                   const tPobia = activeEntries.reduce((s, e) => s + (e.qtPobiaNasi || 0), 0);
                   const tJumlah = activeEntries.reduce((s, e) => s + (e.jumlah || 0), 0);
                   return (
-                    <div className="px-6 py-4 bg-[#111827] text-white flex flex-wrap items-center gap-x-6 gap-y-2 rounded-b-2xl">
+                    <div className="px-4 md:px-6 py-3 md:py-4 bg-[#111827] text-white flex flex-wrap items-center gap-x-4 md:gap-x-6 gap-y-2 rounded-b-2xl">
                       <span className="text-xs font-extrabold uppercase tracking-wider">Total</span>
-                      <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs font-bold">
-                        <span>Siswa/Balita: <strong className="text-[#FBBF24]">{tSiswa}</strong></span>
-                        <span>Bumil/Busui: <strong className="text-[#FBBF24]">{tBumil}</strong></span>
-                        <span>Guru/Kader: <strong className="text-[#FBBF24]">{tGuru}</strong></span>
-                        <span>Pobia Nasi: <strong className="text-[#FBBF24]">{tPobia}</strong></span>
+                      <div className="flex flex-wrap gap-x-3 md:gap-x-5 gap-y-1 text-[11px] md:text-xs font-bold">
+                        <span>Siswa: <strong className="text-[#FBBF24]">{tSiswa}</strong></span>
+                        <span>Bumil: <strong className="text-[#FBBF24]">{tBumil}</strong></span>
+                        <span>Guru: <strong className="text-[#FBBF24]">{tGuru}</strong></span>
+                        {tPobia > 0 && <span>Pobia: <strong className="text-[#FBBF24]">{tPobia}</strong></span>}
                         <span className="bg-[#FBBF24] text-[#111827] px-2.5 py-0.5 rounded-full font-extrabold">
-                          Jumlah: {tJumlah}
+                          Total: {tJumlah}
                         </span>
                       </div>
                     </div>
@@ -1241,13 +1415,13 @@ export function MbgDeliveryPage() {
               </p>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* 4-Proof Management Modal with LiveCamera & Description */}
       {proofModalEntry && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end md:items-center justify-center md:p-4">
+          <div className="bg-white rounded-t-3xl md:rounded-3xl w-full md:max-w-lg md:w-full p-4 md:p-6 shadow-2xl space-y-4 md:space-y-5 animate-in fade-in slide-in-from-bottom-4 md:zoom-in duration-200 max-h-[95vh] md:max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start border-b border-gray-100 pb-4">
               <div>
                 <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">
@@ -1413,36 +1587,38 @@ function ProofSlot({
         }}
       />
 
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3">
+        {/* Top row: photo/emoji + label */}
         <div className="flex items-center gap-3">
           {photoUrl ? (
             <img
               src={photoUrl}
               alt={label}
-              className="w-14 h-14 object-cover rounded-xl border border-green-400 cursor-pointer shadow-xs hover:opacity-90"
+              className="w-14 h-14 object-cover rounded-xl border border-green-400 cursor-pointer shadow-xs hover:opacity-90 shrink-0"
               onClick={onDownload}
               title="Klik untuk lihat / download"
             />
           ) : (
-            <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center text-xl font-bold">
+            <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center text-xl font-bold shrink-0">
               {emoji}
             </div>
           )}
-          <div>
-            <h4 className="text-xs font-bold text-gray-900">{label}</h4>
+          <div className="min-w-0">
+            <h4 className="text-xs font-bold text-gray-900 leading-tight">{label}</h4>
             <p className="text-[10px] text-gray-500 mt-0.5">
               {photoUrl ? '✓ Foto tersimpan' : sublabel}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Action buttons — wrap on mobile */}
+        <div className="flex flex-wrap items-center gap-1.5">
           {/* Camera live button */}
           <button
             type="button"
             onClick={onCapture}
             title="Ambil foto dengan Kamera Live"
-            className={`px-2.5 py-1.5 text-[10px] font-extrabold rounded-xl cursor-pointer flex items-center gap-1 ${
+            className={`px-3 py-2 text-[10px] font-extrabold rounded-xl cursor-pointer flex items-center gap-1 ${
               isGeotag
                 ? 'bg-[#FBBF24] text-[#111827] hover:bg-[#F59E0B]'
                 : 'bg-[#111827] text-white hover:bg-black'
@@ -1457,7 +1633,7 @@ function ProofSlot({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             title="Upload foto dari Device"
-            className="px-2.5 py-1.5 text-[10px] font-extrabold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-xl cursor-pointer flex items-center gap-1"
+            className="px-3 py-2 text-[10px] font-extrabold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-xl cursor-pointer flex items-center gap-1"
           >
             <Upload className="h-3 w-3" />
             Upload
@@ -1471,7 +1647,7 @@ function ProofSlot({
                   type="button"
                   onClick={onDownload}
                   title="Download foto"
-                  className="p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl cursor-pointer transition-colors"
+                  className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl cursor-pointer transition-colors"
                 >
                   <Download className="h-3.5 w-3.5" />
                 </button>
@@ -1481,7 +1657,7 @@ function ProofSlot({
                   type="button"
                   onClick={onDelete}
                   title="Hapus foto ini"
-                  className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl cursor-pointer transition-colors"
+                  className="p-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl cursor-pointer transition-colors"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
