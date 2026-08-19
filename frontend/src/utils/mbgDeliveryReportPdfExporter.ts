@@ -184,7 +184,7 @@ export function isPosyanduName(name?: string): boolean {
     lower.includes('sma') || lower.includes('smk') || lower.includes('sps') ||
     lower.includes('tk ') || lower.startsWith('tk') || lower.includes('paud');
 
-  if (isExplicitSchool && !lower.includes('posyandu') && !lower.includes('balita') && !lower.includes('bumil') && !lower.includes('busui') && !lower.includes('cempaka')) {
+  if (isExplicitSchool && !lower.includes('posyandu') && !lower.includes('balita') && !lower.includes('bumil') && !lower.includes('busui')) {
     return false;
   }
   return posyanduKeywords.some((k) => lower.includes(k));

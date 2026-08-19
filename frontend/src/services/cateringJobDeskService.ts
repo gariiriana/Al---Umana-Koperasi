@@ -30,6 +30,7 @@ import {
   ROLE_TO_PIC_NAME,
   generateKeyId,
   getHariFromDate,
+  compareJobDeskTime,
 } from "@/types/cateringJobDesk";
 
 const COLLECTION = "catering_jobdesks";
@@ -312,7 +313,10 @@ export function subscribeAllJobDesks(
       results.sort((a, b) => {
         const dateA = a.tanggal || "";
         const dateB = b.tanggal || "";
-        return dateB.localeCompare(dateA);
+        if (dateA !== dateB) {
+          return dateB.localeCompare(dateA);
+        }
+        return compareJobDeskTime(a.startTime, b.startTime);
       });
       if (division) {
         results = results.filter((jd) => jd.division === division);
@@ -452,6 +456,16 @@ export function subscribeJobDesksByRole(
           if (jd.assignedRole === role) return true;
           return false;
         });
+
+      results.sort((a, b) => {
+        const dateA = a.tanggal || "";
+        const dateB = b.tanggal || "";
+        if (dateA !== dateB) {
+          return dateB.localeCompare(dateA);
+        }
+        return compareJobDeskTime(a.startTime, b.startTime);
+      });
+
       onData(results);
     },
     (error) => {

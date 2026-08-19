@@ -38,7 +38,7 @@ import type {
   JobDeskStatus,
   PicShortName,
 } from "@/types/cateringJobDesk";
-import { JOBDESK_ROLE_LABELS, ROLE_TO_PIC_NAME } from "@/types/cateringJobDesk";
+import { JOBDESK_ROLE_LABELS, ROLE_TO_PIC_NAME, compareJobDeskTime } from "@/types/cateringJobDesk";
 
 /** Map user profile role to job desk assignable role. */
 function mapToAssignableRole(profileRole?: string, email?: string): JobDeskAssignableRole | null {
@@ -214,7 +214,12 @@ export function OperationalJobDeskPage() {
       );
     }
 
-    return result;
+    return [...result].sort((a, b) => {
+      const dateA = a.tanggal || "";
+      const dateB = b.tanggal || "";
+      if (dateA !== dateB) return dateB.localeCompare(dateA);
+      return compareJobDeskTime(a.startTime, b.startTime);
+    });
   }, [jobDesks, divisionFilter, selectedDate, statusFilter, searchQuery]);
 
   // Stats

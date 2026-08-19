@@ -34,6 +34,7 @@ import {
   RotateCcw,
   CalendarDays,
   ListTodo,
+  ArrowUpDown,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeOrders } from "@/services/realtimeService";
@@ -64,6 +65,7 @@ import {
   extractTimeOnly,
   formatIndoDate,
   formatIndoTime,
+  compareJobDeskTime,
 } from "@/types/cateringJobDesk";
 
 interface DraftRow {
@@ -311,7 +313,14 @@ export function MoJobDeskPage() {
       const times = new Set<string>();
       let unassignedOrdersCount = 0;
 
-      for (const ord of ordersList) {
+      // Sort orders chronologically from earliest delivery time to latest
+      const sortedOrders = [...ordersList].sort((a, b) => {
+        const timeA = extractTimeOnly(a.deliveryTime || a.eventDate, "00:00");
+        const timeB = extractTimeOnly(b.deliveryTime || b.eventDate, "00:00");
+        return compareJobDeskTime(timeA, timeB);
+      });
+
+      for (const ord of sortedOrders) {
         const portions = (ord.items || []).reduce((acc, it) => acc + (it.quantity || 0), 0);
         totalPortions += portions;
         const rawTime = ord.deliveryTime || ord.eventDate;
@@ -325,17 +334,17 @@ export function MoJobDeskPage() {
         }
       }
 
-      const dateJobDesks = jobDesks.filter(
-        (jd) => jd.tanggal === date && (jd.division === "katering" || !jd.division)
-      );
+      const dateJobDesks = jobDesks
+        .filter((jd) => jd.tanggal === date && (jd.division === "katering" || !jd.division))
+        .sort((a, b) => compareJobDeskTime(a.startTime, b.startTime));
 
       groups.push({
         date,
         hari: getHariFromDate(date),
-        orders: ordersList,
+        orders: sortedOrders,
         totalPortions,
-        totalOrders: ordersList.length,
-        deliveryTimes: Array.from(times).sort(),
+        totalOrders: sortedOrders.length,
+        deliveryTimes: Array.from(times).sort((a, b) => compareJobDeskTime(a, b)),
         jobDesks: dateJobDesks,
         isAssigned: unassignedOrdersCount === 0 && dateJobDesks.length > 0,
         unassignedOrdersCount,
@@ -381,9 +390,9 @@ export function MoJobDeskPage() {
           (entry.qtPobiaNasi || 0);
       }
 
-      const dateJobDesks = jobDesks.filter(
-        (jd) => jd.tanggal === date && jd.division === "mbg"
-      );
+      const dateJobDesks = jobDesks
+        .filter((jd) => jd.tanggal === date && jd.division === "mbg")
+        .sort((a, b) => compareJobDeskTime(a.startTime, b.startTime));
 
       groups.push({
         date,
@@ -448,7 +457,7 @@ export function MoJobDeskPage() {
   // ACTIONS: GENERATE FULL-DAY JOB DESK FOR A SELECTED DATE
   // =========================================================================
 
-  // 1. Generate full-day catering job desk for a selected date
+  // 1. Generate full-day catering job desk for a selected date (Sorted Paling Pagi di Atas)
   const handleGenerateCateringJobDesksForDate = useCallback(
     (group: CateringDateGroup) => {
       setSelectedOperationalDate(group.date);
@@ -458,7 +467,14 @@ export function MoJobDeskPage() {
       const newRows: DraftRow[] = [];
       let seqIndex = 0;
 
-      group.orders.forEach((order) => {
+      // First sort the orders chronologically by delivery time
+      const sortedOrders = [...group.orders].sort((a, b) => {
+        const tA = extractTimeOnly(a.deliveryTime || a.eventDate, "09:00");
+        const tB = extractTimeOnly(b.deliveryTime || b.eventDate, "09:00");
+        return compareJobDeskTime(tA, tB);
+      });
+
+      sortedOrders.forEach((order) => {
         const orderLabel =
           order.institutionName ||
           order.customerName ||
@@ -488,7 +504,7 @@ export function MoJobDeskPage() {
           pic: "Joko",
           kegiatan: `Produksi: ${orderLabel}`,
           keterangan: `Menu: ${itemsSummary || "Menu Standar Katering"}${order.recipientNotes ? ` | Note: ${order.recipientNotes}` : ""}`,
-          keyId: computeKeyId(targetDate, newRows.length, "katering"),
+          keyId: "",
           orderId: order.id,
           orderLabel,
         });
@@ -503,14 +519,32 @@ export function MoJobDeskPage() {
           pic: "Dwi",
           kegiatan: `Pengiriman: ${orderLabel}`,
           keterangan: `Alamat: ${order.deliveryAddress || "-"} | Penerima: ${order.recipientName} (${order.recipientPhone || "-"})`,
-          keyId: computeKeyId(targetDate, newRows.length, "katering"),
+          keyId: "",
           orderId: order.id,
           orderLabel,
         });
       });
 
-      if (newRows.length === 0) {
-        newRows.push({
+      // Sort ALL generated rows chronologically by startTime (paling pagi posisi paling atas)
+      newRows.sort((a, b) => {
+        const timeDiff = compareJobDeskTime(a.startTime, b.startTime);
+        if (timeDiff !== 0) return timeDiff;
+        // Prioritize Produksi before Pengiriman if startTime is the same
+        const aIsProd = a.kegiatan.toLowerCase().includes("produksi");
+        const bIsProd = b.kegiatan.toLowerCase().includes("produksi");
+        if (aIsProd && !bIsProd) return -1;
+        if (!aIsProd && bIsProd) return 1;
+        return 0;
+      });
+
+      // Re-index sequential keyId after sorting so CAT-YYYYMMDD-001 corresponds to earliest task
+      const finalRows = newRows.map((r, idx) => ({
+        ...r,
+        keyId: computeKeyId(targetDate, idx, "katering"),
+      }));
+
+      if (finalRows.length === 0) {
+        finalRows.push({
           id: `row-${Date.now()}-1`,
           division: "katering",
           hari: targetHari,
@@ -523,13 +557,13 @@ export function MoJobDeskPage() {
         });
       }
 
-      setRows(newRows);
+      setRows(finalRows);
       setActiveTab("form");
     },
     [computeKeyId]
   );
 
-  // 2. Generate full-day MBG job desk for a selected date
+  // 2. Generate full-day MBG job desk for a selected date (Sorted Paling Pagi di Atas)
   const handleGenerateMbgJobDesksForDate = useCallback(
     (group: MbgDateGroup) => {
       setSelectedOperationalDate(group.date);
@@ -551,7 +585,7 @@ export function MoJobDeskPage() {
         pic: "Shifa",
         kegiatan: `Produksi MBG (${group.menuName || "Menu MBG"})`,
         keterangan: `Persiapan & porsi total ${group.totalPortions} porsi (${entries.length} sekolah/lembaga)`,
-        keyId: computeKeyId(targetDate, newRows.length, "mbg"),
+        keyId: "",
         mbgBatchId: batch?.id,
         orderLabel: `Batch MBG ${formatIndoDate(targetDate)}`,
         mbgPortionCount: group.totalPortions,
@@ -568,7 +602,7 @@ export function MoJobDeskPage() {
           pic: "Joko",
           kegiatan: `Produksi MBG Dapur 2 - Masak & Porsi Nasi/Lauk`,
           keterangan: `Dukungan porsi porsi besar batch ${formatIndoDate(targetDate)}`,
-          keyId: computeKeyId(targetDate, newRows.length, "mbg"),
+          keyId: "",
           mbgBatchId: batch?.id,
           orderLabel: `Batch MBG ${formatIndoDate(targetDate)}`,
           mbgPortionCount: group.totalPortions,
@@ -594,7 +628,7 @@ export function MoJobDeskPage() {
           pic: assignedPic,
           kegiatan: `Pengantaran MBG - ${entry.institutionName}`,
           keterangan: `Antar ${entryPortions} porsi ke ${entry.institutionName} (${entry.address || "-"})`,
-          keyId: computeKeyId(targetDate, newRows.length, "mbg"),
+          keyId: "",
           orderId: entry.id,
           orderLabel: `MBG: ${entry.institutionName}`,
           mbgBatchId: entry.batchId,
@@ -603,8 +637,25 @@ export function MoJobDeskPage() {
         });
       });
 
-      if (newRows.length === 0) {
-        newRows.push({
+      // Sort MBG rows chronologically by startTime
+      newRows.sort((a, b) => {
+        const timeDiff = compareJobDeskTime(a.startTime, b.startTime);
+        if (timeDiff !== 0) return timeDiff;
+        const aIsProd = a.kegiatan.toLowerCase().includes("produksi");
+        const bIsProd = b.kegiatan.toLowerCase().includes("produksi");
+        if (aIsProd && !bIsProd) return -1;
+        if (!aIsProd && bIsProd) return 1;
+        return 0;
+      });
+
+      // Re-index sequential keyId after sorting
+      const finalRows = newRows.map((r, idx) => ({
+        ...r,
+        keyId: computeKeyId(targetDate, idx, "mbg"),
+      }));
+
+      if (finalRows.length === 0) {
+        finalRows.push({
           id: `row-${Date.now()}-1`,
           division: "mbg",
           hari: targetHari,
@@ -617,11 +668,33 @@ export function MoJobDeskPage() {
         });
       }
 
-      setRows(newRows);
+      setRows(finalRows);
       setActiveTab("form");
     },
     [computeKeyId]
   );
+
+  // Manually sort draft rows in Tab 2 by date and start time (earliest morning first)
+  const handleSortRowsByTime = useCallback(() => {
+    setRows((prev) => {
+      const sorted = [...prev].sort((a, b) => {
+        const dateDiff = (a.tanggal || "").localeCompare(b.tanggal || "");
+        if (dateDiff !== 0) return dateDiff;
+        const timeDiff = compareJobDeskTime(a.startTime, b.startTime);
+        if (timeDiff !== 0) return timeDiff;
+        const aIsProd = a.kegiatan.toLowerCase().includes("produksi");
+        const bIsProd = b.kegiatan.toLowerCase().includes("produksi");
+        if (aIsProd && !bIsProd) return -1;
+        if (!aIsProd && bIsProd) return 1;
+        return 0;
+      });
+
+      return sorted.map((r, idx) => ({
+        ...r,
+        keyId: computeKeyId(r.tanggal || selectedOperationalDate || todayStr, idx, r.division || "katering"),
+      }));
+    });
+  }, [computeKeyId, selectedOperationalDate, todayStr]);
 
   // Reload template for selectedOperationalDate
   const handleReloadTemplateForSelectedDate = useCallback(() => {
@@ -851,9 +924,9 @@ export function MoJobDeskPage() {
     }
   }, []);
 
-  // Filtered job desks for Tab 3 (Table)
+  // Filtered job desks for Tab 3 (Table) - Sorted Newest Date first, then earliest startTime first
   const filteredJobDesks = useMemo(() => {
-    return jobDesks.filter((jd) => {
+    const list = jobDesks.filter((jd) => {
       if (tableDivisionFilter !== "all" && (jd.division || "katering") !== tableDivisionFilter) {
         return false;
       }
@@ -879,6 +952,13 @@ export function MoJobDeskPage() {
         );
       }
       return true;
+    });
+
+    return [...list].sort((a, b) => {
+      const dateA = a.tanggal || "";
+      const dateB = b.tanggal || "";
+      if (dateA !== dateB) return dateB.localeCompare(dateA);
+      return compareJobDeskTime(a.startTime, b.startTime);
     });
   }, [jobDesks, tableDivisionFilter, selectedPic, selectedDate, searchQuery]);
 
@@ -1443,6 +1523,16 @@ export function MoJobDeskPage() {
 
               <button
                 type="button"
+                onClick={handleSortRowsByTime}
+                className="flex items-center gap-1.5 px-3 py-2 mt-4 rounded-xl text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 cursor-pointer transition-colors"
+                title="Urutkan seluruh baris tugas berdasarkan jam (paling pagi di paling atas)"
+              >
+                <ArrowUpDown className="h-3.5 w-3.5" />
+                <span>Urutkan Jam (Paling Pagi di Atas)</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleReloadTemplateForSelectedDate}
                 className="flex items-center gap-1 px-3 py-2 mt-4 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors"
                 title="Muat ulang template dari data pesanan/batch pada tanggal ini"
@@ -1621,15 +1711,27 @@ export function MoJobDeskPage() {
           </div>
 
           {/* Action Bar */}
-          <div className="flex items-center justify-between pt-2">
-            <button
-              type="button"
-              onClick={handleAddRow}
-              className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Tambah Baris Tugas Baru</span>
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleAddRow}
+                className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Tambah Baris Tugas Baru</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSortRowsByTime}
+                className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xl transition-colors cursor-pointer"
+                title="Urutkan seluruh baris tugas berdasarkan jam (paling pagi di paling atas)"
+              >
+                <ArrowUpDown className="h-3.5 w-3.5" />
+                <span>Urutkan Jam (Paling Pagi di Atas)</span>
+              </button>
+            </div>
 
             <button
               type="button"

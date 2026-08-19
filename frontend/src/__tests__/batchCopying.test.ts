@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { MbgPmEntry } from '@/types/mbg';
-import { isPosyanduName } from '@/pages/mbg/MbgAdminPage';
+import { isPosyanduName } from '@/utils/mbgDeliveryReportPdfExporter';
 
 function computeBatchPortions(
   allEntries: MbgPmEntry[]
@@ -81,12 +81,19 @@ describe('MBG Batch Portion & Copy Logic', () => {
   it('accurately identifies posyandu names (including Cempaka 1-13) and differentiates from schools', () => {
     expect(isPosyanduName('CEMPAKA 6')).toBe(true);
     expect(isPosyanduName('CEMPAKA 10')).toBe(true);
+    expect(isPosyanduName('Balita Cempaka')).toBe(true);
+    expect(isPosyanduName('Bumil Cempaka')).toBe(true);
+    expect(isPosyanduName('Busui Cempaka')).toBe(true);
     expect(isPosyanduName('Posyandu Mawar')).toBe(true);
     expect(isPosyanduName('Balita & Bumil RW 02')).toBe(true);
     expect(isPosyanduName('Paket 3B Melati')).toBe(true);
 
+    expect(isPosyanduName('SPS CEMPAKA')).toBe(false);
+    expect(isPosyanduName('SPS CEMPAKA 10')).toBe(false);
+    expect(isPosyanduName('TK CEMPAKA')).toBe(false);
     expect(isPosyanduName('SDN 1 Cibadak')).toBe(false);
     expect(isPosyanduName('SMPN 2 Sukabumi')).toBe(false);
     expect(isPosyanduName('TK Pembina')).toBe(false);
   });
 });
+

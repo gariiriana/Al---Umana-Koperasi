@@ -277,3 +277,10 @@ export function getHariFromDate(dateStr: string): string {
   return days[d.getDay()] || '';
 }
 
+/** Helper to compare two time strings chronologically (ascending: earliest morning first) */
+export function compareJobDeskTime(timeA?: string, timeB?: string): number {
+  const tA = extractTimeOnly(timeA, '00:00');
+  const tB = extractTimeOnly(timeB, '00:00');
+  return tA.localeCompare(tB);
+}
+

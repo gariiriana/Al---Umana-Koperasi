@@ -39,6 +39,7 @@ import type { CateringJobDesk, PicShortName } from "@/types/cateringJobDesk";
 import {
   JOBDESK_ROLE_LABELS,
   PIC_NAME_TO_ROLE,
+  compareJobDeskTime,
 } from "@/types/cateringJobDesk";
 
 type ReviewFilter = "all" | "pending_review" | "approved" | "rejected" | "not_submitted";
@@ -169,7 +170,12 @@ export function CoMoReviewPage() {
       });
     }
 
-    return result;
+    return [...result].sort((a, b) => {
+      const dateA = a.tanggal || "";
+      const dateB = b.tanggal || "";
+      if (dateA !== dateB) return dateB.localeCompare(dateA);
+      return compareJobDeskTime(a.startTime, b.startTime);
+    });
   }, [allJobDesks, divisionFilter, selectedPic, selectedOrder, selectedDate, reviewFilter, searchQuery]);
 
   // Handle approve

@@ -44,26 +44,8 @@ import { subscribeCustomRecipes } from '@/services/mbgProductionService';
 import resepStandardData from '@/constants/standarResep.json';
 import { MBG_BATCH_STATUS_CONFIG, MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
 
-// ---- Helper: Check if institution name is a Posyandu ----
-export function isPosyanduName(name: string): boolean {
-  if (!name) return false;
-  const lower = name.toLowerCase().trim();
-  const posyanduKeywords = [
-    'posyandu', 'balita', 'bumil', 'busui', 'b3b', '3b', 'paket 3b', 'paket3b',
-    'cempaka', 'mawar', 'melati', 'anggrek', 'dahlia', 'flamboyan', 'kenanga',
-    'teratai', 'kamboja', 'kasih ibu', 'matahari', 'tulip', 'bougenville',
-    'nusa indah', 'asoka', 'kemuning', 'pmt', 'kader'
-  ];
-  const isExplicitSchool =
-    lower.includes('sd ') || lower.startsWith('sd') || lower.includes('smp') ||
-    lower.includes('sma') || lower.includes('smk') || lower.includes('sps') ||
-    lower.includes('tk ') || lower.startsWith('tk') || lower.includes('paud');
+import { isPosyanduName } from '@/utils/mbgDeliveryReportPdfExporter';
 
-  if (isExplicitSchool && !lower.includes('posyandu') && !lower.includes('balita') && !lower.includes('bumil') && !lower.includes('busui') && !lower.includes('cempaka')) {
-    return false;
-  }
-  return posyanduKeywords.some((k) => lower.includes(k));
-}
 
 // ---- Helper: Auto-calculate portion suggestions based on levels and inputs ----
 function getAutoPortions(entry: Partial<MbgPmEntry>) {
