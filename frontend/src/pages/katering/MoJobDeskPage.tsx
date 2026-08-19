@@ -41,6 +41,8 @@ import { subscribeOrders } from "@/services/realtimeService";
 import {
   subscribeBatches,
   subscribeAllEntries,
+  subscribeWeeklySchedule,
+  getMenuForDate,
 } from "@/services/mbgAdminService";
 import {
   batchCreateJobDesks,
@@ -49,7 +51,7 @@ import {
   type CreateJobDeskInput,
 } from "@/services/cateringJobDeskService";
 import type { Order } from "@/types/order";
-import type { MbgPmBatch, MbgPmEntry } from "@/types/mbg";
+import type { MbgPmBatch, MbgPmEntry, MbgDayMenu } from "@/types/mbg";
 import type {
   CateringJobDesk,
   JobDeskDivision,
@@ -67,6 +69,66 @@ import {
   formatIndoTime,
   compareJobDeskTime,
 } from "@/types/cateringJobDesk";
+
+/**
+ * Helper to produce a comprehensive menu description from a Catering Order.
+ * Combines order.items, custom foodDetails, drinkDetails, and recipient notes.
+ */
+export function formatCateringOrderMenu(order: Order): string {
+  const parts: string[] = [];
+
+  if (order.items && order.items.length > 0) {
+    const itemsStr = order.items
+      .map((it) => `${it.itemName} (x${it.quantity}${it.unit ? ` ${it.unit}` : ""})`)
+      .join(", ");
+    parts.push(itemsStr);
+  }
+
+  if (order.foodDetails && order.foodDetails.trim()) {
+    const fd = order.foodDetails.trim();
+    const alreadyIncluded = parts.some((p) => p.toLowerCase().includes(fd.toLowerCase()));
+    if (!alreadyIncluded) {
+      parts.push(`Rincian: ${fd}`);
+    }
+  }
+
+  if (order.drinkDetails && order.drinkDetails.trim()) {
+    parts.push(`Minuman: ${order.drinkDetails.trim()}`);
+  }
+
+  return parts.length > 0 ? parts.join(" | ") : (order.foodDetails?.trim() || "Menu Standar Katering");
+}
+
+/**
+ * Helper to resolve the correct MBG menu name for a date/batch.
+ * Prioritizes batch notes, then non-empty entry menu items, then Master Weekly Menu schedule.
+ */
+export function resolveMbgMenuName(
+  date: string,
+  batch?: MbgPmBatch,
+  entries?: MbgPmEntry[],
+  weeklySchedule?: MbgDayMenu[]
+): string {
+  if (batch?.batchNotes && batch.batchNotes.trim()) {
+    return batch.batchNotes.trim();
+  }
+
+  const entryMenus = (entries || [])
+    .flatMap((e) => e.menuItems || [])
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const uniqueEntryMenus = Array.from(new Set(entryMenus));
+  if (uniqueEntryMenus.length > 0) {
+    return uniqueEntryMenus.join(", ");
+  }
+
+  const scheduleRes = getMenuForDate(date, weeklySchedule);
+  if (scheduleRes.menuItems && scheduleRes.menuItems.length > 0) {
+    return scheduleRes.menuItems.join(", ");
+  }
+
+  return "Menu MBG";
+}
 
 interface DraftRow {
   id: string;
@@ -123,6 +185,7 @@ export function MoJobDeskPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [mbgBatches, setMbgBatches] = useState<MbgPmBatch[]>([]);
   const [mbgEntries, setMbgEntries] = useState<MbgPmEntry[]>([]);
+  const [weeklySchedule, setWeeklySchedule] = useState<MbgDayMenu[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"dates" | "form" | "table">("dates");
 
@@ -224,6 +287,17 @@ export function MoJobDeskPage() {
       }
     );
 
+    const unsubSchedule = subscribeWeeklySchedule(
+      (days) => {
+        if (!mounted) return;
+        setWeeklySchedule(days);
+      },
+      "porsi_besar",
+      (err) => {
+        console.error("MO: failed to load weekly schedule:", err);
+      }
+    );
+
     return () => {
       mounted = false;
       clearTimeout(timer);
@@ -231,6 +305,7 @@ export function MoJobDeskPage() {
       unsubOrders();
       unsubBatches();
       unsubEntries();
+      unsubSchedule();
     };
   }, []);
 
@@ -401,14 +476,14 @@ export function MoJobDeskPage() {
         entries: item.entries,
         totalPortions,
         totalSchools: item.entries.length,
-        menuName: item.batch?.batchNotes || (item.entries[0]?.menuItems?.join(", ")) || "Menu MBG",
+        menuName: resolveMbgMenuName(date, item.batch, item.entries, weeklySchedule),
         jobDesks: dateJobDesks,
         isAssigned: dateJobDesks.length > 0,
       });
     });
 
     return groups.sort((a, b) => b.date.localeCompare(a.date));
-  }, [mbgBatches, mbgEntries, batchMap, todayStr, jobDesks]);
+  }, [mbgBatches, mbgEntries, batchMap, todayStr, jobDesks, weeklySchedule]);
 
   // Filtered Catering Date Groups
   const filteredCateringDateGroups = useMemo(() => {
@@ -481,9 +556,12 @@ export function MoJobDeskPage() {
           order.recipientName ||
           `Pesanan #${order.id.slice(-6).toUpperCase()}`;
 
-        const itemsSummary = (order.items || [])
-          .map((it) => `${it.itemName} (${it.quantity} ${it.unit || "porsi"})`)
-          .join(", ");
+        const fullMenu = formatCateringOrderMenu(order);
+        const orderNotes = order.recipientNotes
+          ? ` | Note: ${order.recipientNotes}`
+          : order.additionalNotes
+          ? ` | Note: ${order.additionalNotes}`
+          : "";
 
         const deliveryTime = extractTimeOnly(order.deliveryTime || order.eventDate, "09:00");
         let prodTime = "06:00";
@@ -503,7 +581,7 @@ export function MoJobDeskPage() {
           startTime: prodTime,
           pic: "Joko",
           kegiatan: `Produksi: ${orderLabel}`,
-          keterangan: `Menu: ${itemsSummary || "Menu Standar Katering"}${order.recipientNotes ? ` | Note: ${order.recipientNotes}` : ""}`,
+          keterangan: `Menu: ${fullMenu}${orderNotes}`,
           keyId: "",
           orderId: order.id,
           orderLabel,
@@ -584,7 +662,7 @@ export function MoJobDeskPage() {
         startTime: "05:30",
         pic: "Shifa",
         kegiatan: `Produksi MBG (${group.menuName || "Menu MBG"})`,
-        keterangan: `Persiapan & porsi total ${group.totalPortions} porsi (${entries.length} sekolah/lembaga)`,
+        keterangan: `Menu: ${group.menuName || "Menu MBG"} | Persiapan & porsi total ${group.totalPortions} porsi (${entries.length} sekolah/lembaga)`,
         keyId: "",
         mbgBatchId: batch?.id,
         orderLabel: `Batch MBG ${formatIndoDate(targetDate)}`,
@@ -601,7 +679,7 @@ export function MoJobDeskPage() {
           startTime: "06:00",
           pic: "Joko",
           kegiatan: `Produksi MBG Dapur 2 - Masak & Porsi Nasi/Lauk`,
-          keterangan: `Dukungan porsi porsi besar batch ${formatIndoDate(targetDate)}`,
+          keterangan: `Menu: ${group.menuName || "Menu MBG"} | Dukungan porsi porsi besar batch ${formatIndoDate(targetDate)}`,
           keyId: "",
           mbgBatchId: batch?.id,
           orderLabel: `Batch MBG ${formatIndoDate(targetDate)}`,
@@ -1284,32 +1362,41 @@ export function MoJobDeskPage() {
                                 return (
                                   <div
                                     key={ord.id}
-                                    className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2"
+                                    className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2 hover:border-slate-300 transition-colors"
                                   >
                                     <div className="flex items-start justify-between gap-2">
-                                      <div>
+                                      <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-1.5">
                                           <span className="text-[10px] font-mono font-bold text-slate-400">
                                             #{oIdx + 1}
                                           </span>
-                                          <span className="text-xs font-extrabold text-slate-900">
+                                          <span className="text-xs font-extrabold text-slate-900 truncate">
                                             {ord.institutionName || ord.recipientName || "Pesanan"}
                                           </span>
                                         </div>
-                                        <p className="text-[11px] text-slate-600 mt-0.5 line-clamp-1">
-                                          Menu: <strong className="text-slate-800">{(ord.items || []).map((it) => `${it.itemName} (x${it.quantity})`).join(", ") || "Menu Katering Standar"}</strong>
+                                        <p className="text-[11px] text-slate-600 mt-0.5 line-clamp-2">
+                                          Menu: <strong className="text-slate-800">{formatCateringOrderMenu(ord)}</strong>
                                         </p>
                                       </div>
 
-                                      <span
-                                        className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                                          isOrdAssigned
-                                            ? "bg-emerald-100 text-emerald-800"
-                                            : "bg-amber-100 text-amber-800"
-                                        }`}
-                                      >
-                                        {isOrdAssigned ? "Ada Job Desk" : "Belum Dibuat"}
-                                      </span>
+                                      <div className="flex flex-col items-end gap-1 shrink-0">
+                                        <span
+                                          className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                            isOrdAssigned
+                                              ? "bg-emerald-100 text-emerald-800"
+                                              : "bg-amber-100 text-amber-800"
+                                          }`}
+                                        >
+                                          {isOrdAssigned ? "Ada Job Desk" : "Belum Dibuat"}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setDetailOrderModal(ord)}
+                                          className="text-[10px] font-semibold text-amber-600 hover:text-amber-800 cursor-pointer underline"
+                                        >
+                                          Detail
+                                        </button>
+                                      </div>
                                     </div>
 
                                     <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100">
@@ -2068,7 +2155,7 @@ export function MoJobDeskPage() {
                     Daftar Menu & Jumlah Porsi
                   </h4>
                   {detailOrderModal.items && detailOrderModal.items.length > 0 ? (
-                    <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <div className="border border-slate-200 rounded-xl overflow-hidden mb-3">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
                           <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
@@ -2092,9 +2179,34 @@ export function MoJobDeskPage() {
                         </tbody>
                       </table>
                     </div>
-                  ) : (
-                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-slate-700">
-                      {detailOrderModal.foodDetails || "Rincian menu katering standar"}
+                  ) : null}
+
+                  {detailOrderModal.foodDetails && (
+                    <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200/80 mb-2">
+                      <p className="text-[10px] font-bold text-amber-900 uppercase tracking-wider mb-0.5">
+                        Rincian Makanan (Inputan Admin):
+                      </p>
+                      <p className="text-xs text-slate-800 font-medium">{detailOrderModal.foodDetails}</p>
+                    </div>
+                  )}
+
+                  {detailOrderModal.drinkDetails && (
+                    <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-200/80 mb-2">
+                      <p className="text-[10px] font-bold text-blue-900 uppercase tracking-wider mb-0.5">
+                        Rincian Minuman:
+                      </p>
+                      <p className="text-xs text-slate-800 font-medium">{detailOrderModal.drinkDetails}</p>
+                    </div>
+                  )}
+
+                  {(detailOrderModal.recipientNotes || detailOrderModal.additionalNotes) && (
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">
+                        Catatan Khusus Pesanan:
+                      </p>
+                      <p className="text-xs text-slate-700">
+                        {[detailOrderModal.recipientNotes, detailOrderModal.additionalNotes].filter(Boolean).join(" | ")}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -2176,6 +2288,15 @@ export function MoJobDeskPage() {
                     <p className="text-[10px] font-semibold text-slate-400">Alamat Pengantaran:</p>
                     <p className="font-semibold text-slate-900">{detailMbgModal.entry.address || "-"}</p>
                   </div>
+                </div>
+
+                <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200/80">
+                  <p className="text-[10px] font-bold text-emerald-900 uppercase tracking-wider mb-1">
+                    Menu Terjadwal MBG:
+                  </p>
+                  <p className="text-xs font-bold text-slate-900">
+                    {resolveMbgMenuName(detailMbgModal.batch?.tanggal || todayStr, detailMbgModal.batch, [detailMbgModal.entry], weeklySchedule)}
+                  </p>
                 </div>
 
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">

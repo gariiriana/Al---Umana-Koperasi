@@ -367,7 +367,9 @@ export async function recalculateBatchTotals(batchId: string): Promise<void> {
 export async function copyFromBatch(
   sourceBatchId: string,
   targetBatchId: string,
-  createdBy: string
+  createdBy: string,
+  targetDate?: string,
+  scheduleDays?: MbgDayMenu[]
 ): Promise<void> {
   const q = query(
     collection(db, ENTRIES_COLLECTION),
@@ -376,6 +378,15 @@ export async function copyFromBatch(
   const snapshot = await getDocs(q);
   if (snapshot.empty) {
     throw new Error('Batch sumber tidak memiliki data penerima manfaat (0 porsi). Silakan gunakan opsi "Isi Otomatis 27 Institusi Master" atau pilih batch lain.');
+  }
+
+  // Calculate new menu for targetDate if provided
+  let newMenuItems: string[] | undefined;
+  let newMenuKeringanItems: string[] | undefined;
+  if (targetDate) {
+    const res = getMenuForDate(targetDate, scheduleDays);
+    newMenuItems = res.menuItems;
+    newMenuKeringanItems = res.menuKeringanItems;
   }
 
   const now = new Date().toISOString();
@@ -387,6 +398,8 @@ export async function copyFromBatch(
     batch.set(ref, cleanUndefined({
       ...data,
       batchId: targetBatchId,
+      menuItems: (newMenuItems && newMenuItems.length > 0) ? [...newMenuItems] : (data.menuItems || []),
+      menuKeringanItems: (newMenuKeringanItems && newMenuKeringanItems.length > 0) ? [...newMenuKeringanItems] : (data.menuKeringanItems || []),
       isSekolahLibur: false,
       photoMenuUrl: undefined,
       photoSerahTerimaUrl: undefined,

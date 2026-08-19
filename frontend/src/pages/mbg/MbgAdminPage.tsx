@@ -1560,7 +1560,7 @@ export function MbgAdminPage() {
       setSaving(true);
       const newId = await createBatch(tanggal, user.uid, autoPopulateMaster || false, weeklySchedule);
       if (copyFromId) {
-        await copyFromBatch(copyFromId, newId, user.uid);
+        await copyFromBatch(copyFromId, newId, user.uid, tanggal, weeklySchedule);
       }
       setSelectedBatchId(newId);
       const successMsg = copyFromId
