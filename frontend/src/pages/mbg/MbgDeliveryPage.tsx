@@ -79,16 +79,21 @@ export function MbgDeliveryPage() {
   // Description edit state (per entry per proof type)
   const descTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // Subscribe active batches
+  // Subscribe active batches with smart fallback to today's batch or active tasks batch
   useEffect(() => {
     const unsub = subscribeBatches((data) => {
       setBatches(data);
+      const todayStr = new Date().toISOString().split('T')[0];
       const savedBatchId = sessionStorage.getItem('mbg_delivery_selected_batch');
       if (savedBatchId && data.some((b) => b.id === savedBatchId)) {
         setSelectedBatchId(savedBatchId);
-      } else if (data.length > 0) {
-        setSelectedBatchId(data[0].id);
-        sessionStorage.setItem('mbg_delivery_selected_batch', data[0].id);
+      } else {
+        const todayBatch = data.find((b) => b.tanggal === todayStr);
+        const initialBatch = todayBatch || data[0];
+        if (initialBatch) {
+          setSelectedBatchId(initialBatch.id);
+          sessionStorage.setItem('mbg_delivery_selected_batch', initialBatch.id);
+        }
       }
       setLoading(false);
     });
@@ -110,10 +115,9 @@ export function MbgDeliveryPage() {
   useEffect(() => {
     if (profile) {
       setDetectedPetugasId(user?.uid || '');
-      // If user is a courier, STRICTLY lock to their own account name
       if (!isAdminOrSupervisor) {
         const myName = profile.displayName || (user?.email ? user.email.split('@')[0] : '');
-        setSelectedPetugasName(myName);
+        setSelectedPetugasName((prev) => prev || myName);
       } else if (!selectedPetugasName) {
         setSelectedPetugasName(profile.displayName || (user?.email ? user.email.split('@')[0] : ''));
       }
@@ -156,51 +160,70 @@ export function MbgDeliveryPage() {
     }
   }, [entries, proofModalEntry]);
 
-  const uniqueKurirNames = useMemo(() => {
-    const fromEntries = entries.map((e) => e.assignedPetugasName).filter(Boolean);
-    const fromTasks = tasks.map((t) => t.petugasName).filter(Boolean);
-    return Array.from(new Set([...fromEntries, ...fromTasks]));
+  const uniqueKurirNames = useMemo<string[]>(() => {
+    const fromEntries = entries.map((e) => e.assignedPetugasName).filter((n): n is string => Boolean(n));
+    const fromKeneks = entries.map((e) => e.assignedKenekName).filter((n): n is string => Boolean(n));
+    const fromTasks = tasks.map((t) => t.petugasName).filter((n): n is string => Boolean(n));
+    const fromTaskKeneks = tasks.map((t) => t.kenekName).filter((n): n is string => Boolean(n));
+    return Array.from(new Set([...fromEntries, ...fromKeneks, ...fromTasks, ...fromTaskKeneks]));
   }, [entries, tasks]);
 
   // Current active task (with auto-fallback synthesis from entries if admin hasn't submitted delivery tasks yet)
   const activeTask = useMemo<MbgDeliveryTask | null>(() => {
-    const targetPetugas = selectedPetugasName || profile?.displayName || (user?.email ? user.email.split('@')[0] : '');
+    const myDisplayName = profile?.displayName || '';
+    const myEmailHandle = user?.email ? user.email.split('@')[0] : '';
+    const targetPetugas = selectedPetugasName || myDisplayName || myEmailHandle;
     const tLower = targetPetugas.toLowerCase().trim();
     const uUid = (user?.uid || '').toLowerCase().trim();
+    const userTokens: string[] = Array.from(
+      new Set([
+        ...myDisplayName.toLowerCase().split(/[\s,+/&|()_\-.]+/).filter((t: string) => t.length >= 2),
+        ...myEmailHandle.toLowerCase().split(/[\s,+/&|()_\-.]+/).filter((t: string) => t.length >= 2),
+        ...tLower.split(/[\s,+/&|()_\-.]+/).filter((t: string) => t.length >= 2),
+      ])
+    );
+
+    // Helper matcher function
+    const isMatchingPetugas = (name?: string, id?: string, kenekName?: string, kenekId?: string): boolean => {
+      const nLower = (name || '').toLowerCase().trim();
+      const iLower = (id || '').toLowerCase().trim();
+      const kLower = (kenekName || '').toLowerCase().trim();
+      const kiLower = (kenekId || '').toLowerCase().trim();
+
+      // 1. Direct UID match
+      if (uUid && (iLower === uUid || kiLower === uUid || iLower.includes(uUid))) return true;
+
+      // 2. Selected petugas exact / partial match
+      if (selectedPetugasName) {
+        if (nLower === tLower || kLower === tLower || nLower.includes(tLower) || tLower.includes(nLower)) return true;
+        const targetTokens = tLower.split(/[\s,+/&|()_\-.]+/).filter((t: string) => t.length >= 2);
+        if (targetTokens.some((tok: string) => nLower.includes(tok) || kLower.includes(tok))) return true;
+      }
+
+      // 3. User name / email match
+      if (tLower && (nLower === tLower || kLower === tLower || nLower.includes(tLower) || tLower.includes(nLower))) return true;
+
+      // 4. Token-level matching (e.g. "Dwi" in "Dwi & Wandi", "Andi" in "Andi & Dede")
+      const allText = `${nLower} ${iLower} ${kLower} ${kiLower}`;
+      if (userTokens.some((tok: string) => tok.length >= 3 && allText.includes(tok))) return true;
+
+      return false;
+    };
 
     // 1. Try finding from real tasks collection first
     if (tasks.length > 0) {
-      if (selectedPetugasName) {
-        const match = tasks.find(
-          (t) =>
-            t.petugasName.toLowerCase().trim().includes(tLower) ||
-            tLower.includes(t.petugasName.toLowerCase().trim())
-        );
-        if (match) return match;
-      } else {
-        // Try matching logged-in user's name, email, or uid in tasks first
-        const match = tasks.find(
-          (t) =>
-            (t.petugasId && uUid && t.petugasId.toLowerCase().trim() === uUid) ||
-            (t.petugasName && tLower && (t.petugasName.toLowerCase().trim().includes(tLower) || tLower.includes(t.petugasName.toLowerCase().trim())))
-        );
-        if (match) return match;
-      }
+      const match = tasks.find((t) => isMatchingPetugas(t.petugasName, t.petugasId, t.kenekName, t.kenekId));
+      if (match) return match;
     }
 
     // 2. Fallback: Synthesize virtual task from assigned entries directly so courier never loses task!
-    if (entries.length > 0 && targetPetugas) {
-      const assignedEntries = entries.filter((e) => {
-        const pName = (e.assignedPetugasName || '').toLowerCase().trim();
-        const pId = (e.assignedPetugasId || '').toLowerCase().trim();
-        return (
-          (pName && (pName === tLower || pName.includes(tLower) || tLower.includes(pName))) ||
-          (pId && uUid && pId === uUid)
-        );
-      });
+    if (entries.length > 0) {
+      const assignedEntries = entries.filter((e) =>
+        isMatchingPetugas(e.assignedPetugasName, e.assignedPetugasId, e.assignedKenekName, e.assignedKenekId)
+      );
 
       if (assignedEntries.length > 0) {
-        const matchedName = assignedEntries[0].assignedPetugasName || targetPetugas;
+        const matchedName = assignedEntries[0].assignedPetugasName || targetPetugas || 'Kurir MBG';
         const totalPorsi = assignedEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
         const firstKenek = assignedEntries.find((e) => e.assignedKenekName)?.assignedKenekName;
 
@@ -223,6 +246,12 @@ export function MbgDeliveryPage() {
       }
     }
 
+    // 3. Fallback: If user explicitly selected a petugas name, find best task
+    if (selectedPetugasName && tasks.length > 0) {
+      const direct = tasks.find((t) => t.petugasName.toLowerCase().includes(tLower) || tLower.includes(t.petugasName.toLowerCase()));
+      if (direct) return direct;
+    }
+
     return tasks[0] || null;
   }, [tasks, selectedPetugasName, profile?.displayName, user, entries, selectedBatchId]);
 
@@ -235,16 +264,30 @@ export function MbgDeliveryPage() {
       rawList = entries.filter((e) => activeTask.entryIds.includes(e.id));
     }
     if (rawList.length === 0) {
-      // 2. Match by assignedPetugasName
+      // 2. Match by assignedPetugasName or assignedKenekName or tokens
       const tNameLower = (activeTask.petugasName || '').toLowerCase().trim();
+      const kNameLower = (activeTask.kenekName || '').toLowerCase().trim();
+      const tTokens = Array.from(
+        new Set([
+          ...tNameLower.split(/[\s,+/&|()_\-.]+/).filter((t) => t.length >= 2),
+          ...kNameLower.split(/[\s,+/&|()_\-.]+/).filter((t) => t.length >= 2),
+        ])
+      );
+
       rawList = entries.filter((e) => {
         const eNameLower = (e.assignedPetugasName || '').toLowerCase().trim();
-        if (!eNameLower) return false;
-        return (
+        const eKenekLower = (e.assignedKenekName || '').toLowerCase().trim();
+        if (!eNameLower && !eKenekLower) return false;
+        if (
           eNameLower === tNameLower ||
           eNameLower.includes(tNameLower) ||
-          tNameLower.includes(eNameLower)
-        );
+          tNameLower.includes(eNameLower) ||
+          (kNameLower && (eKenekLower === kNameLower || eKenekLower.includes(kNameLower)))
+        ) {
+          return true;
+        }
+        const entryText = `${eNameLower} ${eKenekLower}`;
+        return tTokens.some((tok) => tok.length >= 3 && entryText.includes(tok));
       });
     }
 
@@ -787,17 +830,19 @@ export function MbgDeliveryPage() {
           </p>
         </div>
 
-        {/* Petugas Selector — ONLY for Admin/Supervisor preview */}
-        {isAdminOrSupervisor && (
-          <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl">
-            <span className="text-xs font-bold text-amber-800 shrink-0">Admin Switch:</span>
+        {/* Petugas / Tim Kurir Selector */}
+        {uniqueKurirNames.length > 0 && (
+          <div className="flex items-center gap-2 bg-amber-50/90 border border-amber-200 px-3 py-1.5 rounded-xl shadow-2xs">
+            <span className="text-xs font-extrabold text-amber-900 shrink-0">
+              {isAdminOrSupervisor ? "Admin Switch:" : "Tim/Kurir:"}
+            </span>
             <select
-              title="Pilih Petugas"
+              title="Pilih Petugas / Tim Kurir"
               value={selectedPetugasName}
               onChange={(e) => setSelectedPetugasName(e.target.value)}
-              className="rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] transition-all cursor-pointer"
+              className="rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#FBBF24] transition-all cursor-pointer"
             >
-              <option value="">-- Semua / Akun Saya --</option>
+              <option value="">-- {profile?.displayName || user?.email?.split('@')[0] || "Semua / Otomatis"} --</option>
               {uniqueKurirNames.map((name) => (
                 <option key={name} value={name}>
                   {name}
@@ -1412,12 +1457,57 @@ export function MbgDeliveryPage() {
               </div>
             </div>
           ) : (
-            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-12 text-center">
-              <ClipboardList className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-              <h3 className="text-lg font-bold text-[#111827]">Tidak ada tugas pengiriman</h3>
-              <p className="text-sm text-gray-500 mt-1 max-w-sm mx-auto">
-                Silakan pilih batch pengiriman lain di atas, atau pastikan petugas Anda ditugaskan pada batch terpilih.
-              </p>
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-8 md:p-12 text-center space-y-4">
+              <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto text-amber-600">
+                <ClipboardList className="h-8 w-8" />
+              </div>
+              <div>
+                <h3 className="text-base md:text-lg font-bold text-[#111827]">
+                  {selectedPetugasName
+                    ? `Tidak ada tugas pengiriman untuk "${selectedPetugasName}"`
+                    : 'Belum ada tugas aktif yang terdeteksi untuk akun Anda'}
+                </h3>
+                <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
+                  Pastikan institusi telah ditugaskan ke nama Anda di menu Distribusi MBG, atau pilih tim penugasan Anda di bawah ini:
+                </p>
+              </div>
+
+              {uniqueKurirNames.length > 0 ? (
+                <div className="pt-2 max-w-lg mx-auto">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400 block mb-2.5">
+                    Pilih Penugasan Tim di Batch Ini:
+                  </span>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {uniqueKurirNames.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setSelectedPetugasName(name)}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-extrabold cursor-pointer transition-all border ${
+                          selectedPetugasName === name
+                            ? 'bg-[#111827] text-white border-[#111827] shadow-sm'
+                            : 'bg-white text-gray-800 border-gray-200 hover:border-amber-400 hover:bg-amber-50/50'
+                        }`}
+                      >
+                        🚚 {name}
+                      </button>
+                    ))}
+                    {selectedPetugasName && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPetugasName('')}
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors"
+                      >
+                        ✕ Reset Pilihan
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 text-xs text-amber-800 font-medium max-w-md mx-auto">
+                  Batch ini belum memiliki institusi yang ditugaskan ke Kurir MBG oleh Admin Distribusi.
+                </div>
+              )}
             </div>
           )}
         </div>

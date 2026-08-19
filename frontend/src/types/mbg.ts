@@ -89,8 +89,10 @@ export interface MbgPmEntry {
   assignedPetugasId: string;
   /** Display name kurir */
   assignedPetugasName: string;
-  /** Display name kenek (asisten kurir) — display only, no login */
+  /** Display name kenek (asisten kurir) */
   assignedKenekName?: string;
+  /** UID kenek jika ada akun */
+  assignedKenekId?: string;
   /** Daftar menu reguler */
   menuItems: string[];
   /** Daftar menu keringan untuk pobia nasi */

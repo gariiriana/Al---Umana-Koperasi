@@ -37,7 +37,12 @@ export function subscribeKurirTasks(
     const emailLower = (userEmail || '').toLowerCase().trim();
     const emailHandle = emailLower ? emailLower.split('@')[0] : '';
     const nameLower = (userDisplayName || '').toLowerCase().trim();
-    const nameTokens = nameLower.split(/\s+/).filter((t) => t.length >= 3);
+    const nameTokens = Array.from(
+      new Set([
+        ...nameLower.split(/[\s,+/&|()_\-.]+/).filter((t) => t.length >= 2),
+        ...emailHandle.split(/[\s,+/&|()_\-.]+/).filter((t) => t.length >= 2),
+      ])
+    );
 
     // Scoring-based matching: higher score = better match
     const matchScore = (tName: string, tId: string): number => {
@@ -46,23 +51,25 @@ export function subscribeKurirTasks(
       const targetId = (tId || '').toLowerCase().trim();
 
       // Exact UID match = highest priority
-      if (uidLower && targetId === uidLower) return 100;
+      if (uidLower && (targetId === uidLower || targetId.includes(uidLower))) return 100;
 
       // Exact full name match
       if (nameLower && targetName === nameLower) return 90;
 
-      // Exact petugasId contains UID
-      if (uidLower && targetId && targetName.includes(uidLower)) return 80;
-
       // Name contains or is contained (partial match)
-      if (nameLower && (targetName.includes(nameLower) || nameLower.includes(targetName))) return 70;
+      if (nameLower && (targetName.includes(nameLower) || nameLower.includes(targetName))) return 80;
 
       // Email handle match
-      if (emailHandle && emailHandle.length >= 3 && (targetName.includes(emailHandle) || targetId.includes(emailHandle))) return 60;
+      if (emailHandle && (targetName.includes(emailHandle) || targetId.includes(emailHandle) || emailHandle.includes(targetName))) return 75;
 
-      // Token-level match (individual name words)
-      if (nameTokens.some((tok) => targetName.includes(tok))) return 50;
-      if (nameTokens.some((tok) => targetId.includes(tok))) return 40;
+      // Token-level match (individual name words e.g. "Dwi" in "Dwi & Wandi", "Andi" in "Andi & Dede")
+      const targetTokens = targetName.split(/[\s,+/&|()_\-.]+/).filter((t) => t.length >= 2);
+      const hasTokenMatch = nameTokens.some((tok) =>
+        targetTokens.some((tTok) => tTok === tok || (tok.length >= 3 && (tTok.includes(tok) || tok.includes(tTok))))
+      );
+      if (hasTokenMatch) return 70;
+
+      if (nameTokens.some((tok) => targetName.includes(tok) || targetId.includes(tok))) return 60;
 
       return 0;
     };
@@ -78,24 +85,22 @@ export function subscribeKurirTasks(
       .sort((a, b) => b.score - a.score)
       .map((s) => s.task);
 
-    // Debug log for troubleshooting
+    // If user specified identity but nothing matched, and there are tasks in batch
     if (filtered.length === 0 && list.length > 0) {
       console.warn(
-        `[subscribeKurirTasks] No match for user (uid=${uidLower}, name=${nameLower}, email=${emailHandle}) in ${list.length} tasks:`,
-        list.map((t) => ({ petugasName: t.petugasName, petugasId: t.petugasId }))
+        `[subscribeKurirTasks] No direct match for user (uid=${uidLower}, name=${nameLower}, email=${emailHandle}) in ${list.length} tasks:`,
+        list.map((t) => ({ petugasName: t.petugasName, petugasId: t.petugasId, kenekName: t.kenekName }))
       );
 
-      // Fallback: broad word-level matching
+      // Fallback: broad word-level / token matching
       const fallbackMatches = list.filter((t) => {
         const pName = (t.petugasName || '').toLowerCase();
         const pId = (t.petugasId || '').toLowerCase();
         const kName = (t.kenekName || '').toLowerCase();
-        return (
-          (nameLower && pName.split(/\s+/).some((w) => w.length >= 3 && nameLower.includes(w))) ||
-          (nameLower && kName.split(/\s+/).some((w) => w.length >= 3 && nameLower.includes(w))) ||
-          (emailHandle && pId.includes(emailHandle))
-        );
+        const allText = `${pName} ${pId} ${kName}`;
+        return nameTokens.some((tok) => allText.includes(tok));
       });
+
       if (fallbackMatches.length > 0) {
         console.log(`[subscribeKurirTasks] Fallback matched ${fallbackMatches.length} tasks`);
         callback(fallbackMatches);

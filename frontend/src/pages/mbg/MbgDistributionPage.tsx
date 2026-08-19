@@ -216,23 +216,51 @@ export function MbgDistributionPage() {
     if (selectedEntryIds.length === 0) return;
 
     setIsSubmittingBulk(true);
+    const cleanKurir = bulkKurirName.trim();
+    const cleanKenek = bulkKenekName.trim();
+
+    const matched = kurirUsers.find(
+      (u) =>
+        u.name.toLowerCase() === cleanKurir.toLowerCase() ||
+        u.email.toLowerCase().includes(cleanKurir.toLowerCase()) ||
+        u.name.toLowerCase().includes(cleanKurir.toLowerCase()) ||
+        cleanKurir.toLowerCase().includes(u.name.toLowerCase())
+    );
+    const kurirId = matched ? matched.uid : cleanKurir.toLowerCase().replace(/\s+/g, '-');
+    const finalKurirName = matched ? matched.name : cleanKurir;
+
+    const matchedKenek = kurirUsers.find(
+      (u) =>
+        u.name.toLowerCase() === cleanKenek.toLowerCase() ||
+        u.email.toLowerCase().includes(cleanKenek.toLowerCase()) ||
+        u.name.toLowerCase().includes(cleanKenek.toLowerCase()) ||
+        cleanKenek.toLowerCase().includes(u.name.toLowerCase())
+    );
+    const kenekId = matchedKenek ? matchedKenek.uid : cleanKenek ? cleanKenek.toLowerCase().replace(/\s+/g, '-') : undefined;
+    const finalKenekName = matchedKenek ? matchedKenek.name : cleanKenek;
+
     try {
       await Promise.all(
         selectedEntryIds.map((id) =>
           updateEntry(id, {
-            assignedPetugasName: bulkKurirName,
-            assignedKenekName: bulkKenekName,
+            assignedPetugasName: finalKurirName,
+            assignedPetugasId: kurirId,
+            assignedKenekName: finalKenekName || undefined,
+            assignedKenekId: kenekId || undefined,
           })
         )
       );
       showToast({
-        message: `Penugasan ${selectedEntryIds.length} institusi ke ${bulkKurirName} berhasil!`,
+        message: `Penugasan ${selectedEntryIds.length} institusi ke ${finalKurirName} berhasil!`,
         variant: 'success',
       });
       setSelectedEntryIds([]);
       setIsBulkAssignOpen(false);
       setBulkKurirName('');
       setBulkKenekName('');
+
+      // Automatically sync delivery tasks for this courier
+      await handleSyncDeliveryTasks(finalKurirName);
     } catch (err) {
       console.error('Bulk assign error:', err);
       showToast({ message: 'Gagal memperbarui penugasan institusi', variant: 'error' });
@@ -416,17 +444,31 @@ export function MbgDistributionPage() {
     const kurirId = matched ? matched.uid : cleanKurir.toLowerCase().replace(/\s+/g, '-');
     const finalKurirName = matched ? matched.name : cleanKurir;
 
+    const matchedKenek = kurirUsers.find(
+      (u) =>
+        u.name.toLowerCase() === cleanKenek.toLowerCase() ||
+        u.email.toLowerCase().includes(cleanKenek.toLowerCase()) ||
+        u.name.toLowerCase().includes(cleanKenek.toLowerCase()) ||
+        cleanKenek.toLowerCase().includes(u.name.toLowerCase())
+    );
+    const kenekId = matchedKenek ? matchedKenek.uid : cleanKenek ? cleanKenek.toLowerCase().replace(/\s+/g, '-') : undefined;
+    const finalKenekName = matchedKenek ? matchedKenek.name : cleanKenek;
+
     try {
       await updateEntry(assignModalEntry.id, {
         assignedPetugasName: finalKurirName,
         assignedPetugasId: kurirId,
-        assignedKenekName: cleanKenek || undefined,
+        assignedKenekName: finalKenekName || undefined,
+        assignedKenekId: kenekId || undefined,
       });
       showToast({
-        message: `${assignModalEntry.institutionName} ditugaskan ke ${finalKurirName}${cleanKenek ? ` + ${cleanKenek}` : ''}`,
+        message: `${assignModalEntry.institutionName} ditugaskan ke ${finalKurirName}${finalKenekName ? ` + ${finalKenekName}` : ''}`,
         variant: 'success',
       });
       setAssignModalEntry(null);
+
+      // Automatically sync delivery tasks for this courier
+      await handleSyncDeliveryTasks(finalKurirName);
     } catch {
       showToast({ message: 'Gagal menugaskan petugas', variant: 'error' });
     }
