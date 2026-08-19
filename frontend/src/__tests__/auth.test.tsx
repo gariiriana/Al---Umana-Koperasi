@@ -51,11 +51,17 @@ vi.mock("@/contexts/ToastContext", () => ({
   ToastProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
+vi.mock("firebase/storage", () => ({
+  getStorage: vi.fn(() => ({})),
+}));
+
 vi.mock("firebase/firestore", () => ({
   getFirestore: vi.fn(() => ({})),
   initializeFirestore: vi.fn(() => ({})),
+  memoryLocalCache: vi.fn(() => ({})),
   persistentLocalCache: vi.fn(() => ({})),
   persistentMultipleTabManager: vi.fn(() => ({})),
+
   doc: vi.fn(() => ({})),
   setDoc: vi.fn(),
   collection: vi.fn(() => ({})),

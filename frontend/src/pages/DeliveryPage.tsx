@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft, AlertCircle, Loader2, Navigation, Phone, Search, X } from "lucide-react";
+import { MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft, AlertCircle, Loader2, Navigation, Phone, Search, X, FileDown, FolderOpen } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -11,6 +11,7 @@ import { ProofModal } from "@/components/delivery/ProofModal";
 import { ProductImage } from "@/components/ProductImage";
 import { LiveCamera } from "@/components/LiveCamera";
 import { Camera, Trash2 } from "lucide-react";
+import { exportCateringDeliveryProofPdf } from "@/utils/cateringDeliveryReceiptPdfExporter";
 
 import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
@@ -607,6 +608,17 @@ export function DeliveryPage() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, [activeEnRouteOrderIds]);
 
+  const handleExportProofPdf = async (order: Order) => {
+    try {
+      showToast({ message: "Menyiapkan PDF Bukti Pengantaran...", variant: "info" });
+      await exportCateringDeliveryProofPdf(order, profile?.displayName);
+      showToast({ message: "PDF Bukti Pengantaran berhasil diunduh!", variant: "success" });
+    } catch (err) {
+      console.error("Gagal mengekspor PDF bukti:", err);
+      showToast({ message: "Gagal mengunduh PDF bukti pengantaran", variant: "error" });
+    }
+  };
+
   const reset = () => {
     setActiveId(null);
     setStep("list");
@@ -621,6 +633,7 @@ export function DeliveryPage() {
       setStep("proof");
     }
   };
+
 
   return (
     <div className="space-y-5">
@@ -671,25 +684,38 @@ export function DeliveryPage() {
           <div className="flex border-b border-[#E5E7EB] mb-4">
             <button
               onClick={() => setActiveTab("active")}
-              className={`flex-1 py-2.5 text-center text-xs font-bold font-['Hanken_Grotesk',system-ui,sans-serif] transition-all border-b-2 ${
+              className={`flex-1 py-2.5 text-center text-xs font-bold font-['Hanken_Grotesk',system-ui,sans-serif] transition-all border-b-2 flex items-center justify-center gap-1.5 ${
                 activeTab === "active"
                   ? "border-[#FBBF24] text-[#111827]"
                   : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
               }`}
             >
-              Tugas Aktif ({myDeliveries.length})
+              <Package className="h-3.5 w-3.5" />
+              <span>Tugas Aktif</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                activeTab === "active" ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-600"
+              }`}>
+                {myDeliveries.length}
+              </span>
             </button>
             <button
               onClick={() => setActiveTab("history")}
-              className={`flex-1 py-2.5 text-center text-xs font-bold font-['Hanken_Grotesk',system-ui,sans-serif] transition-all border-b-2 ${
+              className={`flex-1 py-2.5 text-center text-xs font-bold font-['Hanken_Grotesk',system-ui,sans-serif] transition-all border-b-2 flex items-center justify-center gap-1.5 ${
                 activeTab === "history"
                   ? "border-[#FBBF24] text-[#111827]"
                   : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
               }`}
             >
-              Riwayat Selesai ({myCompletedDeliveries.length})
+              <FolderOpen className="h-3.5 w-3.5 text-amber-500" />
+              <span>Arsip Dokumen Selesai</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                activeTab === "history" ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"
+              }`}>
+                {myCompletedDeliveries.length}
+              </span>
             </button>
           </div>
+
 
           {/* Search bar */}
           <div className="relative mb-4">
@@ -938,25 +964,38 @@ export function DeliveryPage() {
                                 </div>
                               ))}
                             </div>
-                            {o.proofFileIds && o.proofFileIds.length > 0 && (
-                              <div className="pt-2 border-t border-[#E5E7EB] flex items-center justify-between gap-2">
-                                <span className="text-[10px] font-bold text-emerald-800 shrink-0">
-                                  ✓ Bukti & TTD Tersimpan
-                                </span>
+                            <div className="pt-2 border-t border-[#E5E7EB] flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-[10px] font-bold text-emerald-800 shrink-0 flex items-center gap-1">
+                                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                <span>Telah Diterima & Diarsipkan</span>
+                              </span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {o.proofFileIds && o.proofFileIds.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedProofFiles(o.proofFileIds || []);
+                                      setSelectedStartPhotoId(o.deliveryStartPhotoId || undefined);
+                                      setSelectedKitchenSignatures(o.kitchenSignatures || undefined);
+                                      setIsProofModalOpen(true);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[10px] rounded-lg transition cursor-pointer border border-emerald-200"
+                                  >
+                                    Lihat Foto
+                                  </button>
+                                )}
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setSelectedProofFiles(o.proofFileIds || []);
-                                    setSelectedStartPhotoId(o.deliveryStartPhotoId || undefined);
-                                    setSelectedKitchenSignatures(o.kitchenSignatures || undefined);
-                                    setIsProofModalOpen(true);
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[10px] rounded-lg transition cursor-pointer border border-emerald-200"
+                                  onClick={() => handleExportProofPdf(o)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#111827] hover:bg-black text-white font-bold text-[10px] rounded-lg transition cursor-pointer shadow-xs active:scale-95"
+                                  title="Unduh file PDF bukti pengantaran ini"
                                 >
-                                  Lihat Bukti Foto
+                                  <FileDown className="h-3 w-3 text-[#FBBF24]" />
+                                  <span>Unduh Bukti PDF</span>
                                 </button>
                               </div>
-                            )}
+                            </div>
+
                           </div>
                         </div>
                       </motion.div>

@@ -3,12 +3,14 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   Truck, RotateCcw, AlertCircle, MapPin, Clock,
   User, Package, Loader2, Navigation, ChevronDown,
-  History, Eye, ChevronUp
+  History, Eye, ChevronUp, FileDown
 } from "lucide-react";
 import { ApiError } from "@/services/apiClient";
 import { transitionOrder, assignCourier } from "@/services/orderService";
 import { subscribeOrders } from "@/services/realtimeService";
 import type { Order, KitchenSignature } from "@/types/order";
+import { exportCateringDeliveryProofPdf } from "@/utils/cateringDeliveryReceiptPdfExporter";
+import { useToast } from "@/contexts/ToastContext";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
@@ -98,6 +100,7 @@ const getOrderDeadline = (order: Order): number => {
 };
 
 export function HandoverPage() {
+  const { showToast } = useToast();
   const { profile } = useAuth();
   const userRole = profile?.role || "";
   const isReadOnly = ["tim_produksi", "produksi_1", "produksi_2", "monitoring"].includes(userRole);
@@ -109,6 +112,19 @@ export function HandoverPage() {
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
   const watcherRef = useRef<number | null>(null);
   const gpsThrottleRef = useRef<number>(0);
+
+  const handleExportProofPdf = async (order: Order) => {
+    try {
+      showToast({ message: "Menyiapkan PDF Bukti Pengantaran...", variant: "info" });
+      const cName = availableCouriers.find((c) => c.uid === order.assignedCourierId)?.displayName;
+      await exportCateringDeliveryProofPdf(order, cName);
+      showToast({ message: "PDF Bukti Pengantaran berhasil diunduh!", variant: "success" });
+    } catch (err) {
+      console.error("Gagal mengekspor PDF bukti:", err);
+      showToast({ message: "Gagal mengunduh PDF bukti pengantaran", variant: "error" });
+    }
+  };
+
 
   const [activeTab, setActiveTab] = useState<"ready" | "preparation" | "enroute" | "completed">("preparation");
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
@@ -960,22 +976,34 @@ export function HandoverPage() {
                           </div>
                         </div>
 
-                        {(hasProof || o.deliveryStartPhotoId) && (
-                          <div className="px-5 pb-5 pt-1 flex justify-end">
+                        <div className="px-5 pb-5 pt-1 flex flex-wrap justify-between items-center gap-2 border-t border-neutral-100 mt-2">
+                          <span className="text-[10px] font-bold text-emerald-700">✓ Selesai Diantar</span>
+                          <div className="flex items-center gap-2">
+                            {(hasProof || o.deliveryStartPhotoId) && (
+                              <button
+                                onClick={() => {
+                                  setSelectedProofFiles(o.proofFileIds || []);
+                                  setSelectedStartPhotoId(o.deliveryStartPhotoId || undefined);
+                                  setSelectedKitchenSignatures(o.kitchenSignatures || undefined);
+                                  setIsProofModalOpen(true);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ECFDF5] hover:bg-[#D1FAE5] text-emerald-700 font-bold text-xs rounded-lg transition cursor-pointer"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                Lihat Foto & TTD
+                              </button>
+                            )}
                             <button
-                              onClick={() => {
-                                setSelectedProofFiles(o.proofFileIds || []);
-                                setSelectedStartPhotoId(o.deliveryStartPhotoId || undefined);
-                                setSelectedKitchenSignatures(o.kitchenSignatures || undefined);
-                                setIsProofModalOpen(true);
-                              }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ECFDF5] hover:bg-[#D1FAE5] text-emerald-700 font-bold text-xs rounded-lg transition cursor-pointer"
+                              onClick={() => handleExportProofPdf(o)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-lg transition cursor-pointer shadow-xs active:scale-95"
+                              title="Unduh file PDF bukti pengantaran ini"
                             >
-                              <Eye className="h-3.5 w-3.5" />
-                              Lihat Bukti Foto & TTD
+                              <FileDown className="h-3.5 w-3.5 text-[#FBBF24]" />
+                              Unduh PDF
                             </button>
                           </div>
-                        )}
+                        </div>
+
                       </div>
                     );
                   })}

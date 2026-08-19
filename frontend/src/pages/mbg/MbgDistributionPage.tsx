@@ -417,7 +417,43 @@ export function MbgDistributionPage() {
     return sortedGroups;
   }, [entries]);
 
+  // Distribution status filter for Penugasan Kurir
+  const [distributionStatusFilter, setDistributionStatusFilter] = useState<'all' | 'pending' | 'completed'>('all');
+
+  const totalPendingEntries = useMemo(() => {
+    return entries.filter(
+      (e) => !e.isSekolahLibur && !(e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl && e.photoPenerimaUrl)
+    ).length;
+  }, [entries]);
+
+  const totalCompletedEntries = useMemo(() => {
+    return entries.filter(
+      (e) => !e.isSekolahLibur && Boolean(e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl && e.photoPenerimaUrl)
+    ).length;
+  }, [entries]);
+
+  const filteredGroupedEntries = useMemo(() => {
+    const res: Record<string, MbgPmEntry[]> = {};
+    Object.entries(groupedEntries).forEach(([pName, pEntries]) => {
+      let filtered = pEntries;
+      if (distributionStatusFilter === 'pending') {
+        filtered = pEntries.filter(
+          (e) => !e.isSekolahLibur && !(e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl && e.photoPenerimaUrl)
+        );
+      } else if (distributionStatusFilter === 'completed') {
+        filtered = pEntries.filter(
+          (e) => !e.isSekolahLibur && Boolean(e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl && e.photoPenerimaUrl)
+        );
+      }
+      if (filtered.length > 0) {
+        res[pName] = filtered;
+      }
+    });
+    return res;
+  }, [groupedEntries, distributionStatusFilter]);
+
   // Check if any entry has menu keringan
+
   const hasMenuKeringan = useMemo(() => {
     return entries.some((e) => e.menuKeringanItems && e.menuKeringanItems.length > 0);
   }, [entries]);
@@ -823,13 +859,70 @@ export function MbgDistributionPage() {
                     </div>
                   )}
 
-                  {Object.entries(groupedEntries).map(([petugasName, entriesList]) => {
-                    const activeEntries = entriesList.filter((e) => !e.isSekolahLibur);
-                    const totalSiswa = activeEntries.reduce((sum, e) => sum + (e.qtSiswaBalita || 0), 0);
-                    const totalBumil = activeEntries.reduce((sum, e) => sum + (e.qtBumilBusui || 0), 0);
-                    const totalGuru = activeEntries.reduce((sum, e) => sum + (e.qtGuruKader || 0), 0);
-                    const totalPobia = activeEntries.reduce((sum, e) => sum + (e.qtPobiaNasi || 0), 0);
-                    const totalPorsi = activeEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
+                  {/* Status Filter Bar for Penugasan Kurir */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-[#E5E7EB] shadow-xs">
+                    <div className="flex items-center gap-2">
+                      <Truck className="h-4 w-4 text-[#FBBF24]" />
+                      <span className="text-xs font-black text-gray-900 uppercase tracking-wide">
+                        Filter Status Institusi:
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setDistributionStatusFilter('all')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                          distributionStatusFilter === 'all'
+                            ? 'bg-[#111827] text-white shadow-xs'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        Semua Institusi ({entries.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDistributionStatusFilter('pending')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                          distributionStatusFilter === 'pending'
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                        }`}
+                      >
+                        ⏳ Belum Selesai ({totalPendingEntries})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDistributionStatusFilter('completed')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                          distributionStatusFilter === 'completed'
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                        }`}
+                      >
+                        ✓ Selesai / Diarsipkan ({totalCompletedEntries})
+                      </button>
+                    </div>
+                  </div>
+
+                  {Object.keys(filteredGroupedEntries).length === 0 ? (
+                    <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center space-y-2">
+                      <Truck className="h-10 w-10 mx-auto text-gray-300" />
+                      <p className="text-sm font-bold text-gray-700">Tidak ada institusi pada filter ini</p>
+                      <p className="text-xs text-gray-400">Silakan ubah filter status institusi di atas.</p>
+                    </div>
+                  ) : (
+                    Object.entries(filteredGroupedEntries).map(([petugasName, entriesList]) => {
+                      const activeEntries = entriesList.filter((e) => !e.isSekolahLibur);
+                      const totalSiswa = activeEntries.reduce((sum, e) => sum + (e.qtSiswaBalita || 0), 0);
+                      const totalBumil = activeEntries.reduce((sum, e) => sum + (e.qtBumilBusui || 0), 0);
+                      const totalGuru = activeEntries.reduce((sum, e) => sum + (e.qtGuruKader || 0), 0);
+                      const totalPobia = activeEntries.reduce((sum, e) => sum + (e.qtPobiaNasi || 0), 0);
+                      const totalPorsi = activeEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
+                      const allGroupCompleted = activeEntries.length > 0 && activeEntries.every(
+                        (e) => e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl && e.photoPenerimaUrl
+                      );
+
                     return (
                       <div
                         key={petugasName}
@@ -837,11 +930,16 @@ export function MbgDistributionPage() {
                       >
                         {/* Header */}
                         <div className="px-6 py-4 bg-[#111827] text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 flex-wrap">
                             <Truck className="h-5 w-5 text-[#FBBF24]" />
                             <span className="text-sm font-extrabold uppercase tracking-wider">
                               PETUGAS: {petugasName}
                             </span>
+                            {allGroupCompleted && (
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500 text-white shadow-xs">
+                                ✓ Selesai & Diarsipkan
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-3">
                             <div className="flex gap-3 text-xs font-bold text-white bg-white/10 px-3.5 py-1.5 rounded-full items-center">
@@ -849,6 +947,7 @@ export function MbgDistributionPage() {
                               <span>•</span>
                               <span>{totalPorsi} Porsi</span>
                             </div>
+
                             {petugasName !== 'Belum Ditugaskan' && (
                               <>
                                 <div className="flex items-center gap-1 bg-white/10 px-2.5 py-1 rounded-lg">
@@ -1016,9 +1115,10 @@ export function MbgDistributionPage() {
                         </div>
                       </div>
                     );
-                  })}
+                  }))}
                 </div>
               ) : (
+
                 /* Laporan Kurir Tab */
                 <div className="space-y-5 font-['Hanken_Grotesk']">
                   {/* Daily Report Combined Export Banner */}

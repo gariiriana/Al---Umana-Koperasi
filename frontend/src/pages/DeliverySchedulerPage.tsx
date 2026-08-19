@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Calendar, Clock, CheckSquare, Square, Truck, Check, MapPin, AlertCircle, FileDown, Image, Search, X, Eye } from "lucide-react";
+import { Loader2, Calendar, Clock, CheckSquare, Square, Truck, Check, MapPin, AlertCircle, FileDown, Image, Search, X, Eye, FolderOpen, CheckCircle2, User } from "lucide-react";
+
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { subscribeOrders } from "@/services/realtimeService";
 import { assignMultipleOrders } from "@/services/orderService";
-import type { Order } from "@/types/order";
+import type { Order, KitchenSignature } from "@/types/order";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/Card";
@@ -15,6 +16,8 @@ import { ProductImage } from "@/components/ProductImage";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas-pro";
+import { exportCateringDeliveryProofPdf } from "@/utils/cateringDeliveryReceiptPdfExporter";
+import { ProofModal } from "@/components/delivery/ProofModal";
 
 const formatSimpleAddress = (address: string) => {
   if (!address) return "";
@@ -94,11 +97,30 @@ export function DeliverySchedulerPage() {
   const isReadOnly = ["tim_produksi", "produksi_1", "produksi_2", "monitoring"].includes(userRole);
 
   // Scheduler States
+  const [activeTab, setActiveTab] = useState<"assignment" | "archive">("assignment");
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [selectedCourierId, setSelectedCourierId] = useState("");
   const [filterDate, setFilterDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [searchQuery, setSearchQuery] = useState("");
   const [exportingJpg, setExportingJpg] = useState(false);
+
+  // Proof Modal States
+  const [isProofModalOpen, setIsProofModalOpen] = useState(false);
+  const [selectedProofFiles, setSelectedProofFiles] = useState<string[]>([]);
+  const [selectedStartPhotoId, setSelectedStartPhotoId] = useState<string | undefined>(undefined);
+  const [selectedKitchenSignatures, setSelectedKitchenSignatures] = useState<KitchenSignature[] | undefined>(undefined);
+
+  const handleExportSingleProofPdf = async (order: Order) => {
+    try {
+      showToast({ message: "Menyiapkan PDF Bukti Pengantaran...", variant: "info" });
+      const cName = couriers.find((c) => c.uid === order.assignedCourierId)?.displayName;
+      await exportCateringDeliveryProofPdf(order, cName);
+      showToast({ message: "PDF Bukti Pengantaran berhasil diunduh!", variant: "success" });
+    } catch (err) {
+      console.error("Gagal mengekspor PDF bukti:", err);
+      showToast({ message: "Gagal mengunduh PDF bukti pengantaran", variant: "error" });
+    }
+  };
 
   useEffect(() => {
     // 1. Subscribe to orders
@@ -133,37 +155,69 @@ export function DeliverySchedulerPage() {
     return unsubscribe;
   }, [showToast]);
 
-  const readyOrders = orders.filter(o => {
-    const isUnassignedActive = 
-      (o.status === "PENDING" || o.status === "IN_PRODUCTION" || o.status === "READY_TO_DELIVER") &&
-      !o.assignedCourierId;
-    if (!isUnassignedActive) return false;
-    
-    if (filterDate) {
-      const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
-      if (oDate !== filterDate) return false;
-    }
-    
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const match = 
-        o.institutionName?.toLowerCase().includes(q) ||
-        o.customerName?.toLowerCase().includes(q) ||
-        o.recipientName?.toLowerCase().includes(q) ||
-        o.id.toLowerCase().includes(q) ||
-        o.items.some(it => it.itemName.toLowerCase().includes(q));
-      if (!match) return false;
-    }
-    
-    return true;
-  }).sort((a, b) => {
-    const deadlineA = getOrderDeadline(a);
-    const deadlineB = getOrderDeadline(b);
-    if (deadlineA !== deadlineB) {
-      return deadlineA - deadlineB;
-    }
-    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-  });
+  const readyOrders = useMemo(() => {
+    return orders.filter(o => {
+      const isUnassignedActive = 
+        (o.status === "PENDING" || o.status === "IN_PRODUCTION" || o.status === "READY_TO_DELIVER") &&
+        !o.assignedCourierId;
+      if (!isUnassignedActive) return false;
+      
+      if (filterDate) {
+        const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
+        if (oDate !== filterDate) return false;
+      }
+      
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const match = 
+          o.institutionName?.toLowerCase().includes(q) ||
+          o.customerName?.toLowerCase().includes(q) ||
+          o.recipientName?.toLowerCase().includes(q) ||
+          o.id.toLowerCase().includes(q) ||
+          o.items.some(it => it.itemName.toLowerCase().includes(q));
+        if (!match) return false;
+      }
+      
+      return true;
+    }).sort((a, b) => {
+      const deadlineA = getOrderDeadline(a);
+      const deadlineB = getOrderDeadline(b);
+      if (deadlineA !== deadlineB) {
+        return deadlineA - deadlineB;
+      }
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+  }, [orders, filterDate, searchQuery]);
+
+  const completedOrders = useMemo(() => {
+    return orders.filter(o => {
+      const isCompleted = o.status === "DELIVERED" || o.status === "COMPLETED";
+      if (!isCompleted) return false;
+      
+      if (filterDate) {
+        const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
+        if (oDate !== filterDate) return false;
+      }
+      
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const match = 
+          o.institutionName?.toLowerCase().includes(q) ||
+          o.customerName?.toLowerCase().includes(q) ||
+          o.recipientName?.toLowerCase().includes(q) ||
+          o.id.toLowerCase().includes(q) ||
+          o.items.some(it => it.itemName.toLowerCase().includes(q));
+        if (!match) return false;
+      }
+      
+      return true;
+    }).sort((a, b) => {
+      const timeA = a.deliveredAt ? new Date(a.deliveredAt).getTime() : 0;
+      const timeB = b.deliveredAt ? new Date(b.deliveredAt).getTime() : 0;
+      return timeB - timeA;
+    });
+  }, [orders, filterDate, searchQuery]);
+
 
   const handleSelectOrder = (id: string) => {
     if (isReadOnly) return;
@@ -470,8 +524,47 @@ export function DeliverySchedulerPage() {
         </Card>
       ) : (
         <>
+          {/* Top Tab Bar: Active Assignments vs Archive Documents */}
+          <div className="flex gap-2 bg-[#F3F4F6] p-1.5 rounded-2xl max-w-xl font-['Hanken_Grotesk'] mb-4 shadow-3xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab("assignment")}
+              className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                activeTab === "assignment"
+                  ? "bg-white text-[#111827] shadow-xs"
+                  : "text-[#6B7280] hover:text-[#111827]"
+              }`}
+            >
+              <Truck className="h-4 w-4 text-[#D97706]" />
+              <span>Penugasan Kurir (Aktif)</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                activeTab === "assignment" ? "bg-amber-100 text-amber-800" : "bg-gray-200 text-gray-700"
+              }`}>
+                {readyOrders.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("archive")}
+              className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                activeTab === "archive"
+                  ? "bg-white text-[#111827] shadow-xs"
+                  : "text-[#6B7280] hover:text-[#111827]"
+              }`}
+            >
+              <FolderOpen className="h-4 w-4 text-emerald-600" />
+              <span>Arsip Pengantaran Selesai</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                activeTab === "archive" ? "bg-emerald-100 text-emerald-800" : "bg-gray-200 text-gray-700"
+              }`}>
+                {completedOrders.length}
+              </span>
+            </button>
+          </div>
+
           {/* Filter and Export Toolbar */}
           <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4 font-['Hanken_Grotesk']">
+
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
               <div className="flex items-center gap-2">
                 <label htmlFor="scheduler-date" className="text-xs font-bold text-[#4B5563] shrink-0">
@@ -528,290 +621,425 @@ export function DeliverySchedulerPage() {
                 <Image className="h-4 w-4 shrink-0 text-blue-500" />
                 <span>Ekspor JPG Rekap</span>
               </button>
+
             </div>
           </div>
+          {activeTab === "assignment" ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* List of ready orders to assign (Left Columns) */}
+              <div className="lg:col-span-2 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
+                    Pesanan Siap Dikirim ({readyOrders.length})
+                  </h3>
+                  {!isReadOnly && readyOrders.length > 0 && (
+                    <button
+                      onClick={handleSelectAll}
+                      className="text-xs font-bold text-[#B45309] hover:underline flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {selectedOrderIds.length === readyOrders.length ? "Batal Pilih Semua" : "Pilih Semua"}
+                    </button>
+                  )}
+                </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* List of ready orders to assign (Left Columns) */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
-                Pesanan Siap Dikirim ({readyOrders.length})
-              </h3>
-              {!isReadOnly && readyOrders.length > 0 && (
-                <button
-                  onClick={handleSelectAll}
-                  className="text-xs font-bold text-[#B45309] hover:underline flex items-center gap-1.5 cursor-pointer"
-                >
-                  {selectedOrderIds.length === readyOrders.length ? "Batal Pilih Semua" : "Pilih Semua"}
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 max-h-[70vh] overflow-y-auto pr-2">
-              {readyOrders.map((o, idx) => {
-                const isSelected = selectedOrderIds.includes(o.id);
-                const shortId = o.id.slice(-6).toUpperCase();
-                
-                return (
-                  <div
-                    key={o.id}
-                    onClick={() => handleSelectOrder(o.id)}
-                    className={`p-2.5 xs:p-4 bg-white border rounded-2xl transition-all duration-200 flex items-start gap-2 xs:gap-4 ${
-                      !isReadOnly ? "cursor-pointer" : ""
-                    } ${
-                      isSelected 
-                        ? "border-[#FDE047] bg-[#FFFDF5] ring-2 ring-[#FEF08A]/40" 
-                        : "border-[#E5E7EB] hover:border-[#FBBF24]"
-                    }`}
-                  >
-                    {!isReadOnly ? (
-                      <div className="pt-0.5 shrink-0">
-                        {isSelected ? (
-                          <CheckSquare className="w-4 h-4 xs:w-5 xs:h-5 text-[#D97706]" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 max-h-[70vh] overflow-y-auto pr-2">
+                  {readyOrders.map((o, idx) => {
+                    const isSelected = selectedOrderIds.includes(o.id);
+                    const shortId = o.id.slice(-6).toUpperCase();
+                    
+                    return (
+                      <div
+                        key={o.id}
+                        onClick={() => handleSelectOrder(o.id)}
+                        className={`p-2.5 xs:p-4 bg-white border rounded-2xl transition-all duration-200 flex items-start gap-2 xs:gap-4 ${
+                          !isReadOnly ? "cursor-pointer" : ""
+                        } ${
+                          isSelected 
+                            ? "border-[#FDE047] bg-[#FFFDF5] ring-2 ring-[#FEF08A]/40" 
+                            : "border-[#E5E7EB] hover:border-[#FBBF24]"
+                        }`}
+                      >
+                        {!isReadOnly ? (
+                          <div className="pt-0.5 shrink-0">
+                            {isSelected ? (
+                              <CheckSquare className="w-4 h-4 xs:w-5 xs:h-5 text-[#D97706]" />
+                            ) : (
+                              <Square className="w-4 h-4 xs:w-5 xs:h-5 text-[#9CA3AF]" />
+                            )}
+                          </div>
                         ) : (
-                          <Square className="w-4 h-4 xs:w-5 xs:h-5 text-[#9CA3AF]" />
+                          <div className="pt-0.5 shrink-0">
+                            <div className="w-6 h-6 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                              {idx + 1}
+                            </div>
+                          </div>
                         )}
-                      </div>
-                    ) : (
-                      <div className="pt-0.5 shrink-0">
-                        <div className="w-6 h-6 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
-                          {idx + 1}
-                        </div>
-                      </div>
-                    )}
 
-                    <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-2 xs:gap-4">
-                      <div>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-mono font-bold text-[9px] xs:text-xs text-[#9CA3AF]">#{shortId}</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] xs:text-[10px] font-bold ${
-                            o.status === "READY_TO_DELIVER" 
-                              ? "bg-emerald-100 text-emerald-800" 
-                              : o.status === "IN_PRODUCTION" 
-                                ? "bg-amber-100 text-amber-800" 
-                                : "bg-blue-100 text-blue-800"
-                          }`}>
-                            {o.status === "READY_TO_DELIVER" 
-                              ? "Siap Kirim" 
-                              : o.status === "IN_PRODUCTION" 
-                                ? "Masak" 
-                                : "Antri"}
-                          </span>
-                          {o.courierSickReported && (
-                            <span className="px-1.5 py-0.5 rounded text-[8px] xs:text-[10px] font-extrabold bg-red-100 text-red-700 border border-red-300">
-                              Batal/Sakit
-                            </span>
-                          )}
-                          {(() => {
-                            const deadline = getOrderDeadline(o);
-                            const isPast = deadline !== Infinity && Date.now() > deadline;
-                            return isPast ? (
-                              <span className="px-1.5 py-0.5 rounded text-[8px] xs:text-[10px] font-black bg-red-100 text-red-700 animate-pulse border border-red-300 flex items-center gap-0.5">
-                                <AlertCircle className="h-2.5 w-2.5 text-red-600" /> TERLEWAT
+                        <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-2 xs:gap-4">
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-mono font-bold text-[9px] xs:text-xs text-[#9CA3AF]">#{shortId}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[8px] xs:text-[10px] font-bold ${
+                                o.status === "READY_TO_DELIVER" 
+                                  ? "bg-emerald-100 text-emerald-800" 
+                                  : o.status === "IN_PRODUCTION" 
+                                    ? "bg-amber-100 text-amber-800" 
+                                    : "bg-blue-100 text-blue-800"
+                              }`}>
+                                {o.status === "READY_TO_DELIVER" 
+                                  ? "Siap Kirim" 
+                                  : o.status === "IN_PRODUCTION" 
+                                    ? "Masak" 
+                                    : "Antri"}
                               </span>
-                            ) : null;
-                          })()}
+                              {o.courierSickReported && (
+                                <span className="px-1.5 py-0.5 rounded text-[8px] xs:text-[10px] font-extrabold bg-red-100 text-red-700 border border-red-300">
+                                  Batal/Sakit
+                                </span>
+                              )}
+                              {(() => {
+                                const deadline = getOrderDeadline(o);
+                                const isPast = deadline !== Infinity && Date.now() > deadline;
+                                return isPast ? (
+                                  <span className="px-1.5 py-0.5 rounded text-[8px] xs:text-[10px] font-black bg-red-100 text-red-700 animate-pulse border border-red-300 flex items-center gap-0.5">
+                                    <AlertCircle className="h-2.5 w-2.5 text-red-600" /> TERLEWAT
+                                  </span>
+                                ) : null;
+                              })()}
+                            </div>
+                            <div className="font-extrabold text-xs xs:text-base text-[#111827] mt-0.5 truncate">{o.institutionName}</div>
+                            {o.customerName ? (
+                              <>
+                                <div className="text-[10px] xs:text-xs text-[#6B7280] font-medium mt-1 truncate">Pemesan: {o.customerName}</div>
+                                <div className="text-[10px] xs:text-xs text-[#6B7280] font-medium mt-0.5 truncate">Penerima: {o.recipientName}</div>
+                              </>
+                            ) : (
+                              <div className="text-[10px] xs:text-xs text-[#6B7280] font-medium mt-1 truncate">Pemesan: {o.recipientName}</div>
+                            )}
+                            <div className="text-[10px] xs:text-xs text-[#6B7280] font-mono mt-0.5 truncate">{o.recipientPhone}</div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="text-[10px] xs:text-xs text-[#374151] flex items-center gap-1">
+                              <Calendar className="w-3 h-3 xs:w-3.5 xs:h-3.5 text-[#9CA3AF] shrink-0" />
+                              <span className="truncate">Tgl: {new Date(o.eventDate).toLocaleDateString("id-ID")}</span>
+                            </div>
+                            <div className="text-[10px] xs:text-xs text-[#374151] flex items-center gap-1">
+                              <Clock className="w-3 h-3 xs:w-3.5 xs:h-3.5 text-[#9CA3AF] shrink-0" />
+                              <span className="truncate">Jam: {o.deliveryTime}</span>
+                            </div>
+                            <div className="text-[10px] xs:text-xs text-[#374151] flex items-start gap-1 truncate" title={o.deliveryAddress}>
+                              <MapPin className="w-3 h-3 xs:w-3.5 xs:h-3.5 text-[#9CA3AF] shrink-0 mt-0.5" />
+                              <span>{o.deliveryAddress.split(" | ")[0]}</span>
+                            </div>
+                            <div className="text-xs xs:text-sm font-black text-amber-700 pt-1">
+                              {formatIDR(o.totalPrice)}
+                            </div>
+                          </div>
+
+                          {/* Detail Pesanan Makanan/Minuman */}
+                          {o.items && o.items.length > 0 && (
+                            <div className="sm:col-span-2 pt-2.5 border-t border-[#F3F4F6] space-y-1.5">
+                              <span className="font-extrabold text-[#111827] block text-[10px] uppercase tracking-wider">
+                                Detail Pesanan
+                              </span>
+                              <div className="space-y-1">
+                                {o.items.map((it) => (
+                                  <div key={it.itemId} className="flex flex-col gap-1 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg p-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-6 h-6 bg-white rounded border border-[#E5E7EB] shrink-0 overflow-hidden flex items-center justify-center">
+                                        <ProductImage
+                                          imageUrl={it.imageUrl}
+                                          alt={it.itemName}
+                                          className="w-full h-full object-cover"
+                                          fallbackClassName="w-3 h-3 text-[#9CA3AF]"
+                                        />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-[10px] xs:text-xs font-bold text-[#111827] truncate">{it.itemName}</div>
+                                      </div>
+                                      <div className="text-[10px] xs:text-xs font-black text-[#111827] shrink-0 px-1">
+                                        {it.quantity}x
+                                      </div>
+                                    </div>
+                                    {(it.deliveryAddress || it.deliveryTime || it.recipientName) && (
+                                      <div className="text-[9px] text-[#4B5563] border-t border-[#E5E7EB] pt-1 mt-0.5 space-y-0.5 font-medium leading-tight">
+                                        {it.recipientName && (
+                                          <p className="truncate"><strong className="text-neutral-500">Penerima:</strong> {it.recipientName}</p>
+                                        )}
+                                        {it.deliveryTime && (
+                                          <p className="truncate"><strong className="text-neutral-500">Jadwal:</strong> {it.deliveryTime.replace("T", " ")}</p>
+                                        )}
+                                        {it.deliveryAddress && (
+                                          <p className="break-words line-clamp-2" title={it.deliveryAddress}>
+                                            <strong className="text-neutral-500">Alamat:</strong> {it.deliveryAddress.split(" | ")[0]}
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="font-extrabold text-xs xs:text-base text-[#111827] mt-0.5 truncate">{o.institutionName}</div>
-                        {o.customerName ? (
-                          <>
-                            <div className="text-[10px] xs:text-xs text-[#6B7280] font-medium mt-1 truncate">Pemesan: {o.customerName}</div>
-                            <div className="text-[10px] xs:text-xs text-[#6B7280] font-medium mt-0.5 truncate">Penerima: {o.recipientName}</div>
-                          </>
-                        ) : (
-                          <div className="text-[10px] xs:text-xs text-[#6B7280] font-medium mt-1 truncate">Pemesan: {o.recipientName}</div>
-                        )}
-                        <div className="text-[10px] xs:text-xs text-[#6B7280] font-mono mt-0.5 truncate">{o.recipientPhone}</div>
+                      </div>
+                    );
+                  })}
+
+                  {readyOrders.length === 0 && (
+                    <div className="col-span-full bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center space-y-3">
+                      <Truck className="h-12 w-12 mx-auto text-emerald-400 bg-emerald-50 rounded-full p-3" />
+                      <p className="font-['Manrope'] font-bold text-[#111827]">Tidak Ada Pesanan Aktif</p>
+                      <p className="text-xs text-[#6B7280] max-w-sm mx-auto">
+                        Belum ada pesanan aktif yang terkonfirmasi untuk dikirim pada tanggal ini.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Scheduler panel (Right Column) */}
+              <div className="space-y-6">
+                {!isReadOnly ? (
+                  <Card className="p-6 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm space-y-4">
+                    <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827] border-b border-[#F3F4F6] pb-3">
+                      Form Penugasan Masal
+                    </h3>
+
+                    <form onSubmit={handleBatchAssign} className="space-y-4">
+                      <div className="space-y-1">
+                        <label className="block text-xs font-semibold text-[#6B7280]">
+                          Jumlah Terpilih
+                        </label>
+                        <div className="text-lg font-black text-[#111827]">
+                          {selectedOrderIds.length} Pesanan
+                        </div>
                       </div>
 
                       <div className="space-y-1">
-                        <div className="text-[10px] xs:text-xs text-[#374151] flex items-center gap-1">
-                          <Calendar className="w-3 h-3 xs:w-3.5 xs:h-3.5 text-[#9CA3AF] shrink-0" />
-                          <span className="truncate">Tgl: {new Date(o.eventDate).toLocaleDateString("id-ID")}</span>
-                        </div>
-                        <div className="text-[10px] xs:text-xs text-[#374151] flex items-center gap-1">
-                          <Clock className="w-3 h-3 xs:w-3.5 xs:h-3.5 text-[#9CA3AF] shrink-0" />
-                          <span className="truncate">Jam: {o.deliveryTime}</span>
-                        </div>
-                        <div className="text-[10px] xs:text-xs text-[#374151] flex items-start gap-1 truncate" title={o.deliveryAddress}>
-                          <MapPin className="w-3 h-3 xs:w-3.5 xs:h-3.5 text-[#9CA3AF] shrink-0 mt-0.5" />
-                          <span>{o.deliveryAddress.split(" | ")[0]}</span>
-                        </div>
-                        <div className="text-xs xs:text-sm font-black text-amber-700 pt-1">
-                          {formatIDR(o.totalPrice)}
-                        </div>
+                        <label htmlFor="scheduler-courier" className="block text-xs font-semibold text-[#6B7280]">
+                          Pilih Kurir
+                        </label>
+                        <select
+                          id="scheduler-courier"
+                          className="w-full rounded-lg border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-[#111827] focus:border-[#FBBF24] focus:outline-none"
+                          value={selectedCourierId}
+                          onChange={(e) => setSelectedCourierId(e.target.value)}
+                        >
+                          <option value="">-- Pilih Kurir --</option>
+                          {couriers.map((c) => {
+                            const count = getCourierActiveCount(c.uid);
+                            return (
+                              <option key={c.uid} value={c.uid}>
+                                {c.displayName} ({count} Tugas Aktif)
+                              </option>
+                            );
+                          })}
+                        </select>
                       </div>
 
-                      {/* Detail Pesanan Makanan/Minuman */}
-                      {o.items && o.items.length > 0 && (
-                        <div className="sm:col-span-2 pt-2.5 border-t border-[#F3F4F6] space-y-1.5">
-                          <span className="font-extrabold text-[#111827] block text-[10px] uppercase tracking-wider">
-                            Detail Pesanan
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        loading={assigning}
+                        leftIcon={<Check className="w-4 h-4" />}
+                        className="w-full py-2.5 bg-[#D97706] hover:bg-[#B45309] text-white border-none rounded-xl font-bold shadow-md shadow-amber-700/10 flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        Tugaskan Sekarang
+                      </Button>
+                    </form>
+                  </Card>
+                ) : (
+                  <Card className="p-6 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm space-y-3">
+                    <div className="flex items-center gap-2 text-amber-800">
+                      <Eye className="w-5 h-5 text-amber-600 shrink-0" />
+                      <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
+                        Info Penugasan Kurir
+                      </h3>
+                    </div>
+                    <p className="text-xs text-[#6B7280] leading-relaxed">
+                      Sebagai <strong>Tim Produksi Katering</strong>, Anda dapat memantau pesanan yang siap dikirim, jadwal keberangkatan, dan status tugas kurir secara real-time.
+                    </p>
+                    <div className="pt-2 border-t border-[#F3F4F6] flex items-center justify-between text-xs font-semibold text-[#374151]">
+                      <span>Total Pesanan Siap Kirim:</span>
+                      <span className="text-sm font-bold text-[#111827]">{readyOrders.length}</span>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Courier active tasks list */}
+                <Card className="p-6 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm space-y-4">
+                  <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827] border-b border-[#F3F4F6] pb-3">
+                    Status Tugas Kurir
+                  </h3>
+                  <div className="space-y-3">
+                    {couriers.map((c) => {
+                      const activeTasks = orders.filter(o => 
+                        o.assignedCourierId === c.uid && 
+                        (o.status === "PENDING" || o.status === "IN_PRODUCTION" || o.status === "READY_TO_DELIVER" || o.status === "OUT_FOR_DELIVERY")
+                      );
+                      
+                      return (
+                        <div key={c.uid} className="flex justify-between items-center text-xs pb-2 border-b border-[#F3F4F6] last:border-0 last:pb-0">
+                          <div>
+                            <span className="font-bold text-[#374151]">{c.displayName}</span>
+                            <p className="text-[10px] text-[#6B7280]">{c.email}</p>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full font-bold font-mono ${
+                            activeTasks.length > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+                          }`}>
+                            {activeTasks.length} Tugas
                           </span>
-                          <div className="flex flex-wrap gap-2">
-                            {o.items.map((it) => (
-                              <div key={it.itemId} className="flex flex-col gap-1 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-1.5 w-full sm:w-auto sm:max-w-[200px]">
-                                <div className="flex items-center gap-1.5">
-                                  <div className="w-6 h-6 bg-neutral-100 rounded-md overflow-hidden border border-neutral-200 shrink-0 flex items-center justify-center">
-                                    <ProductImage
-                                      imageUrl={it.imageUrl || ""}
-                                      alt={it.itemName}
-                                      className="h-full w-full object-cover"
-                                      fallbackClassName="h-2.5 w-2.5 text-neutral-400"
-                                    />
-                                  </div>
-                                  <span className="text-[10px] font-bold text-neutral-700 truncate max-w-[100px]">{it.itemName}</span>
-                                  <span className="text-[10px] font-black text-neutral-800 shrink-0 px-0.5">x{it.quantity}</span>
-                                </div>
-                                {(it.deliveryAddress || it.deliveryTime || it.recipientName) && (
-                                  <div className="text-[9px] text-[#4B5563] border-t border-[#E5E7EB] pt-1 mt-0.5 space-y-0.5 font-medium leading-tight">
-                                    {it.recipientName && (
-                                      <p className="truncate"><strong className="text-neutral-500">Penerima:</strong> {it.recipientName}</p>
-                                    )}
-                                    {it.deliveryTime && (
-                                      <p className="truncate"><strong className="text-neutral-500">Jadwal:</strong> {it.deliveryTime.replace("T", " ")}</p>
-                                    )}
-                                    {it.deliveryAddress && (
-                                      <p className="break-words line-clamp-2" title={it.deliveryAddress}>
-                                        <strong className="text-neutral-500">Alamat:</strong> {it.deliveryAddress.split(" | ")[0]}
-                                      </p>
-                                    )}
-                                  </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              </div>
+            </div>
+          ) : (
+            /* ── ARCHIVE TAB: COMPLETED DELIVERIES ────────────────────── */
+            <div className="space-y-4 font-['Hanken_Grotesk']">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="h-5 w-5 text-emerald-600" />
+                  <h3 className="font-['Manrope'] text-base font-extrabold text-[#111827]">
+                    Arsip Pengantaran Selesai ({completedOrders.length})
+                  </h3>
+                </div>
+                <span className="text-xs text-neutral-500 font-bold bg-gray-100 px-3 py-1 rounded-xl">
+                  {filterDate ? `Tanggal: ${new Date(filterDate).toLocaleDateString("id-ID")}` : "Semua Tanggal"}
+                </span>
+              </div>
+
+              {completedOrders.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center space-y-3">
+                  <FolderOpen className="h-12 w-12 mx-auto text-gray-300 bg-gray-50 rounded-full p-3" />
+                  <p className="font-['Manrope'] font-bold text-[#111827]">Belum Ada Arsip Pengantaran Selesai</p>
+                  <p className="text-xs text-[#6B7280] max-w-sm mx-auto">
+                    Pesanan yang telah berhasil diantarkan oleh kurir beserta bukti serah terima akan otomatis tersimpan di sini.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {completedOrders.map((o) => {
+                    const shortId = o.id.slice(-6).toUpperCase();
+                    const courierName = couriers.find((c) => c.uid === o.assignedCourierId)?.displayName || o.assignedCourierId || "Kurir Katering";
+                    const hasProof = o.proofFileIds && o.proofFileIds.length > 0;
+
+                    return (
+                      <div key={o.id} className="bg-white rounded-2xl border border-[#E5E7EB] shadow-xs hover:border-[#FBBF24] transition overflow-hidden flex flex-col justify-between">
+                        <div>
+                          <div className="h-1.5 bg-gradient-to-r from-emerald-500 to-teal-400" />
+                          <div className="p-4 space-y-3">
+                            <div className="flex justify-between items-start gap-2">
+                              <div className="min-w-0">
+                                <span className="font-mono font-bold text-[9px] text-[#9CA3AF]">#{shortId}</span>
+                                <h4 className="font-['Manrope'] font-black text-sm text-[#111827] truncate">
+                                  {o.institutionName}
+                                </h4>
+                                {o.customerName ? (
+                                  <p className="text-[11px] text-[#4B5563] font-bold mt-0.5 truncate">
+                                    Pemesan: {o.customerName}
+                                  </p>
+                                ) : (
+                                  <p className="text-[11px] text-[#4B5563] font-bold mt-0.5 truncate">
+                                    Penerima: {o.recipientName || "—"}
+                                  </p>
                                 )}
                               </div>
-                            ))}
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-700 uppercase tracking-wide shrink-0">
+                                Selesai
+                              </span>
+                            </div>
+
+                            <div className="space-y-1 text-xs text-[#374151]">
+                              <div className="flex items-center gap-1.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-2.5 py-1.5">
+                                <User className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
+                                <span>Kurir: <strong>{courierName}</strong></span>
+                              </div>
+                              {o.deliveredAt && (
+                                <div className="flex items-center gap-1.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-2.5 py-1.5">
+                                  <Clock className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
+                                  <span>Tiba: <strong>{new Date(o.deliveredAt).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })} WIB</strong></span>
+                                </div>
+                              )}
+                              <div className="flex items-start gap-1.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-2.5 py-1.5">
+                                <MapPin className="h-3.5 w-3.5 text-neutral-400 shrink-0 mt-0.5" />
+                                <span className="truncate" title={o.deliveryAddress}>{o.deliveryAddress.split(" | ")[0]}</span>
+                              </div>
+                            </div>
+
+                            {/* Detail Pesanan Items */}
+                            {o.items && o.items.length > 0 && (
+                              <div className="pt-2 border-t border-[#F3F4F6] space-y-1">
+                                <span className="font-extrabold text-[#111827] block text-[9px] uppercase tracking-wider">
+                                  Menu Pesanan
+                                </span>
+                                <div className="max-h-20 overflow-y-auto space-y-1 pr-1">
+                                  {o.items.map((it) => (
+                                    <div key={it.itemId} className="flex items-center justify-between text-[11px] bg-neutral-50 p-1 rounded-lg">
+                                      <span className="font-bold text-neutral-800 truncate mr-2">{it.itemName}</span>
+                                      <span className="font-black text-neutral-700 shrink-0">{it.quantity}x</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
-                      )}
 
-                      {/* Courier Sick Remark */}
-                      {o.courierSickReported && o.courierSickRemark && (
-                        <div className="sm:col-span-2 pt-2 border-t border-[#F3F4F6]">
-                          <div className="bg-red-50 border border-red-200 rounded-xl px-2.5 py-1.5 text-[10px] xs:text-xs text-red-800 leading-relaxed font-semibold">
-                            <span className="font-black block uppercase text-[9px] tracking-wide text-red-700 mb-0.5">Alasan Kurir Batal Tugas:</span>
-                            {o.courierSickRemark}
+                        {/* Footer Card Actions */}
+                        <div className="px-4 pb-4 pt-1 flex flex-wrap justify-between items-center gap-2 border-t border-neutral-100 mt-2">
+                          <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span>Diarsipkan</span>
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {(hasProof || o.deliveryStartPhotoId) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedProofFiles(o.proofFileIds || []);
+                                  setSelectedStartPhotoId(o.deliveryStartPhotoId || undefined);
+                                  setSelectedKitchenSignatures(o.kitchenSignatures || undefined);
+                                  setIsProofModalOpen(true);
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-xl transition cursor-pointer border border-emerald-200"
+                              >
+                                <Eye className="h-3 w-3" />
+                                <span>Foto</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleExportSingleProofPdf(o)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-xs active:scale-95"
+                              title="Unduh file PDF bukti pengantaran ini"
+                            >
+                              <FileDown className="h-3 w-3 text-[#FBBF24]" />
+                              <span>Unduh PDF</span>
+                            </button>
                           </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {readyOrders.length === 0 && (
-                <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center space-y-3">
-                  <Truck className="h-12 w-12 mx-auto text-emerald-400 bg-emerald-50 rounded-full p-3" />
-                  <p className="font-['Manrope'] font-bold text-[#111827]">Tidak Ada Pesanan Aktif</p>
-                  <p className="text-xs text-[#6B7280] max-w-sm mx-auto">
-                    Belum ada pesanan aktif yang terkonfirmasi untuk dikirim.
-                  </p>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
-          </div>
+          )}
+        </>
+      )}
 
-          {/* Scheduler panel (Right Column) */}
-          <div className="space-y-6">
-            {!isReadOnly ? (
-              <Card className="p-6 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm space-y-4">
-                <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827] border-b border-[#F3F4F6] pb-3">
-                  Form Penugasan Masal
-                </h3>
-
-                <form onSubmit={handleBatchAssign} className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="block text-xs font-semibold text-[#6B7280]">
-                      Jumlah Terpilih
-                    </label>
-                    <div className="text-lg font-black text-[#111827]">
-                      {selectedOrderIds.length} Pesanan
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label htmlFor="scheduler-courier" className="block text-xs font-semibold text-[#6B7280]">
-                      Pilih Kurir
-                    </label>
-                    <select
-                      id="scheduler-courier"
-                      className="w-full rounded-lg border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-[#111827] focus:border-[#FBBF24] focus:outline-none"
-                      value={selectedCourierId}
-                      onChange={(e) => setSelectedCourierId(e.target.value)}
-                    >
-                      <option value="">-- Pilih Kurir --</option>
-                      {couriers.map((c) => {
-                        const count = getCourierActiveCount(c.uid);
-                        return (
-                          <option key={c.uid} value={c.uid}>
-                            {c.displayName} ({count} Tugas Aktif)
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    loading={assigning}
-                    leftIcon={<Check className="w-4 h-4" />}
-                    className="w-full py-2.5 bg-[#D97706] hover:bg-[#B45309] text-white border-none rounded-xl font-bold shadow-md shadow-amber-700/10 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    Tugaskan Sekarang
-                  </Button>
-                </form>
-              </Card>
-            ) : (
-              <Card className="p-6 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm space-y-3">
-                <div className="flex items-center gap-2 text-amber-800">
-                  <Eye className="w-5 h-5 text-amber-600 shrink-0" />
-                  <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
-                    Info Penugasan Kurir
-                  </h3>
-                </div>
-                <p className="text-xs text-[#6B7280] leading-relaxed">
-                  Sebagai <strong>Tim Produksi Katering</strong>, Anda dapat memantau pesanan yang siap dikirim, jadwal keberangkatan, dan status tugas kurir secara real-time.
-                </p>
-                <div className="pt-2 border-t border-[#F3F4F6] flex items-center justify-between text-xs font-semibold text-[#374151]">
-                  <span>Total Pesanan Siap Kirim:</span>
-                  <span className="text-sm font-bold text-[#111827]">{readyOrders.length}</span>
-                </div>
-              </Card>
-            )}
-
-            {/* Courier active tasks list */}
-            <Card className="p-6 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm space-y-4">
-              <h3 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827] border-b border-[#F3F4F6] pb-3">
-                Status Tugas Kurir
-              </h3>
-              <div className="space-y-3">
-                {couriers.map((c) => {
-                  const activeTasks = orders.filter(o => 
-                    o.assignedCourierId === c.uid && 
-                    (o.status === "PENDING" || o.status === "IN_PRODUCTION" || o.status === "READY_TO_DELIVER" || o.status === "OUT_FOR_DELIVERY")
-                  );
-                  
-                  return (
-                    <div key={c.uid} className="flex justify-between items-center text-xs pb-2 border-b border-[#F3F4F6] last:border-0 last:pb-0">
-                      <div>
-                        <span className="font-bold text-[#374151]">{c.displayName}</span>
-                        <p className="text-[10px] text-[#6B7280]">{c.email}</p>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full font-bold font-mono ${
-                        activeTasks.length > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
-                      }`}>
-                        {activeTasks.length} Tugas
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          </div>
-        </div>
-      </>
-    )}
+      <ProofModal
+        isOpen={isProofModalOpen}
+        onClose={() => setIsProofModalOpen(false)}
+        proofFileIds={selectedProofFiles}
+        deliveryStartPhotoId={selectedStartPhotoId}
+        kitchenSignatures={selectedKitchenSignatures}
+      />
 
       {/* Hidden print-ready container for html2canvas JPG export */}
       {exportingJpg && (

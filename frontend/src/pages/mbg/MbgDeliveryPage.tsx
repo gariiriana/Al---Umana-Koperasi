@@ -327,6 +327,28 @@ export function MbgDeliveryPage() {
     return completedInstitutionsCount === activeNonLiburEntries.length;
   }, [activeNonLiburEntries, completedInstitutionsCount]);
 
+  // Status Filter for Task Institutions
+  const [institutionFilter, setInstitutionFilter] = useState<'all' | 'pending' | 'completed'>('all');
+
+  const pendingTaskEntries = useMemo(() => {
+    return taskEntries.filter(
+      (e) => !e.isSekolahLibur && !(e.photoMenuUrl && e.photoPenerimaUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl)
+    );
+  }, [taskEntries]);
+
+  const completedTaskEntries = useMemo(() => {
+    return taskEntries.filter(
+      (e) => !e.isSekolahLibur && Boolean(e.photoMenuUrl && e.photoPenerimaUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl)
+    );
+  }, [taskEntries]);
+
+  const displayedTaskEntries = useMemo(() => {
+    if (institutionFilter === 'pending') return pendingTaskEntries;
+    if (institutionFilter === 'completed') return completedTaskEntries;
+    return taskEntries;
+  }, [taskEntries, pendingTaskEntries, completedTaskEntries, institutionFilter]);
+
+
   // Real-time GPS tracking when activeTask is in 'delivering' status
   useEffect(() => {
     if (!activeTask || activeTask.status !== 'delivering' || !user) return;
@@ -634,7 +656,17 @@ export function MbgDeliveryPage() {
         console.warn('Failed to save document archive:', archiveErr);
       }
 
+      // Automatically update task status to 'delivered' and mark completed
+      if (activeTask && !activeTask.id.startsWith('virt-task-')) {
+        try {
+          await updateTaskStatus(activeTask.id, 'delivered');
+        } catch (taskErr) {
+          console.warn('Failed to update task status to delivered:', taskErr);
+        }
+      }
+
       showToast({ message: 'PDF Laporan Distribusi berhasil diunduh & diarsipkan!', variant: 'success' });
+
     } catch (err) {
       console.error('Failed to export delivery PDF:', err);
       showToast({ message: 'Gagal mengekspor PDF Laporan', variant: 'error' });
@@ -1219,96 +1251,138 @@ export function MbgDeliveryPage() {
 
               {/* Task Details - Mobile Card Layout + Desktop Table */}
               <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
-                <div className="px-3.5 md:px-6 py-3 md:py-4 bg-[#F9FAFB] border-b border-[#E5E7EB] flex items-center justify-between gap-2">
-                  <span className="text-xs font-extrabold text-gray-700 uppercase tracking-wide flex items-center gap-2 truncate">
+                <div className="px-3.5 md:px-6 py-3 md:py-4 bg-[#F9FAFB] border-b border-[#E5E7EB] flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
                     <ClipboardList className="h-4 w-4 text-gray-400 shrink-0" />
-                    Daftar Institusi Pengantaran
-                  </span>
-                  <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap">
-                    {taskEntries.length} Institusi
-                  </span>
+                    <span className="text-xs font-extrabold text-gray-700 uppercase tracking-wide truncate">
+                      Daftar Institusi Pengantaran
+                    </span>
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setInstitutionFilter('all')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        institutionFilter === 'all'
+                          ? 'bg-neutral-900 text-white shadow-xs'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      Semua ({taskEntries.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInstitutionFilter('pending')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        institutionFilter === 'pending'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                      }`}
+                    >
+                      ⏳ Belum Selesai ({pendingTaskEntries.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInstitutionFilter('completed')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        institutionFilter === 'completed'
+                          ? 'bg-green-600 text-white shadow-xs'
+                          : 'bg-green-50 text-green-800 border border-green-200 hover:bg-green-100'
+                      }`}
+                    >
+                      ✓ Selesai ({completedTaskEntries.length})
+                    </button>
+                  </div>
                 </div>
 
                 {/* ===== MOBILE CARD VIEW ===== */}
                 <div className="md:hidden divide-y divide-gray-100">
-                  {taskEntries.map((entry) => {
-                    const hasMenu = !!entry.photoMenuUrl;
-                    const hasSerahTerima = !!entry.photoSerahTerimaUrl;
-                    const hasSuratJalan = !!entry.photoSuratJalanUrl;
-                    const hasPenerima = !!entry.photoPenerimaUrl;
-                    const proofCount = (hasMenu ? 1 : 0) + (hasSerahTerima ? 1 : 0) + (hasSuratJalan ? 1 : 0) + (hasPenerima ? 1 : 0);
+                  {displayedTaskEntries.length === 0 ? (
+                    <div className="p-8 text-center text-gray-400 font-bold text-xs">
+                      Tidak ada institusi pada filter ini.
+                    </div>
+                  ) : (
+                    displayedTaskEntries.map((entry) => {
+                      const hasMenu = !!entry.photoMenuUrl;
+                      const hasSerahTerima = !!entry.photoSerahTerimaUrl;
+                      const hasSuratJalan = !!entry.photoSuratJalanUrl;
+                      const hasPenerima = !!entry.photoPenerimaUrl;
+                      const proofCount = (hasMenu ? 1 : 0) + (hasSerahTerima ? 1 : 0) + (hasSuratJalan ? 1 : 0) + (hasPenerima ? 1 : 0);
 
-                    return (
-                      <div
-                        key={entry.id}
-                        className={`p-4 space-y-3 ${entry.isSekolahLibur ? 'bg-red-50/40' : ''}`}
-                      >
-                        {/* Institution name + porsi */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-2 min-w-0">
-                            <Building className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
-                            <div className="min-w-0">
-                              <div className="text-sm font-bold text-gray-900 truncate">{entry.institutionName}</div>
-                              <div className="text-[10px] text-gray-400">Jadwal: {entry.jadwalPengantaran || '-'}</div>
-                              {entry.isSekolahLibur && (
-                                <span className="text-[9px] text-red-600 bg-red-100 px-1.5 py-0.5 rounded font-extrabold uppercase mt-1 inline-block">Libur</span>
+                      return (
+                        <div
+                          key={entry.id}
+                          className={`p-4 space-y-3 ${entry.isSekolahLibur ? 'bg-red-50/40' : ''}`}
+                        >
+                          {/* Institution name + porsi */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-2 min-w-0">
+                              <Building className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+                              <div className="min-w-0">
+                                <div className="text-sm font-bold text-gray-900 truncate">{entry.institutionName}</div>
+                                <div className="text-[10px] text-gray-400">Jadwal: {entry.jadwalPengantaran || '-'}</div>
+                                {entry.isSekolahLibur && (
+                                  <span className="text-[9px] text-red-600 bg-red-100 px-1.5 py-0.5 rounded font-extrabold uppercase mt-1 inline-block">Libur</span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="shrink-0 px-2.5 py-1 bg-[#FBBF24]/20 text-[#92400E] rounded-full font-extrabold text-[11px]">
+                              {entry.jumlah} porsi
+                            </span>
+                          </div>
+
+                          {/* Photo grid 2x2 */}
+                          {!entry.isSekolahLibur && (
+                            <div className="grid grid-cols-4 gap-2">
+                              {[
+                                { key: 'menu' as const, url: entry.photoMenuUrl, has: hasMenu, label: '🚐' },
+                                { key: 'serah_terima' as const, url: entry.photoSerahTerimaUrl, has: hasSerahTerima, label: '🤝' },
+                                { key: 'surat_jalan' as const, url: entry.photoSuratJalanUrl, has: hasSuratJalan, label: '📄' },
+                                { key: 'penerima' as const, url: entry.photoPenerimaUrl, has: hasPenerima, label: '📦' },
+                              ].map((slot) =>
+                                slot.has ? (
+                                  <img
+                                    key={slot.key}
+                                    src={slot.url}
+                                    alt={slot.key}
+                                    className="w-full aspect-square object-cover rounded-xl border-2 border-green-300"
+                                  />
+                                ) : (
+                                  <button
+                                    key={slot.key}
+                                    onClick={() => handleStartProofCapture(entry, slot.key)}
+                                    className="w-full aspect-square bg-gray-100 rounded-xl flex flex-col items-center justify-center text-gray-400 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors border border-dashed border-gray-300"
+                                  >
+                                    <span className="text-lg">{slot.label}</span>
+                                    <Camera className="h-3 w-3 mt-0.5" />
+                                  </button>
+                                )
                               )}
                             </div>
-                          </div>
-                          <span className="shrink-0 px-2.5 py-1 bg-[#FBBF24]/20 text-[#92400E] rounded-full font-extrabold text-[11px]">
-                            {entry.jumlah} porsi
-                          </span>
+                          )}
+
+                          {/* Action row */}
+                          {!entry.isSekolahLibur && (
+                            <button
+                              onClick={() => setProofModalEntry(entry)}
+                              className={`w-full py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-xs ${
+                                proofCount === 4
+                                  ? 'bg-green-600 text-white hover:bg-green-700'
+                                  : 'bg-[#111827] text-white hover:bg-black'
+                              }`}
+                            >
+                              {proofCount === 4 ? '✓ Lengkap (4/4)' : `Kelola Bukti (${proofCount}/4)`}
+                            </button>
+                          )}
+                          {entry.isSekolahLibur && (
+                            <span className="text-gray-400 text-[10px] block text-center">Skip (Libur)</span>
+                          )}
                         </div>
-
-                        {/* Photo grid 2x2 */}
-                        {!entry.isSekolahLibur && (
-                          <div className="grid grid-cols-4 gap-2">
-                            {[
-                              { key: 'menu' as const, url: entry.photoMenuUrl, has: hasMenu, label: '🚐' },
-                              { key: 'serah_terima' as const, url: entry.photoSerahTerimaUrl, has: hasSerahTerima, label: '🤝' },
-                              { key: 'surat_jalan' as const, url: entry.photoSuratJalanUrl, has: hasSuratJalan, label: '📄' },
-                              { key: 'penerima' as const, url: entry.photoPenerimaUrl, has: hasPenerima, label: '📦' },
-                            ].map((slot) =>
-                              slot.has ? (
-                                <img
-                                  key={slot.key}
-                                  src={slot.url}
-                                  alt={slot.key}
-                                  className="w-full aspect-square object-cover rounded-xl border-2 border-green-300"
-                                />
-                              ) : (
-                                <button
-                                  key={slot.key}
-                                  onClick={() => handleStartProofCapture(entry, slot.key)}
-                                  className="w-full aspect-square bg-gray-100 rounded-xl flex flex-col items-center justify-center text-gray-400 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors border border-dashed border-gray-300"
-                                >
-                                  <span className="text-lg">{slot.label}</span>
-                                  <Camera className="h-3 w-3 mt-0.5" />
-                                </button>
-                              )
-                            )}
-                          </div>
-                        )}
-
-                        {/* Action row */}
-                        {!entry.isSekolahLibur && (
-                          <button
-                            onClick={() => setProofModalEntry(entry)}
-                            className={`w-full py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-xs ${
-                              proofCount === 4
-                                ? 'bg-green-600 text-white hover:bg-green-700'
-                                : 'bg-[#111827] text-white hover:bg-black'
-                            }`}
-                          >
-                            {proofCount === 4 ? '✓ Lengkap (4/4)' : `Kelola Bukti (${proofCount}/4)`}
-                          </button>
-                        )}
-                        {entry.isSekolahLibur && (
-                          <span className="text-gray-400 text-[10px] block text-center">Skip (Libur)</span>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
 
                 {/* ===== DESKTOP TABLE VIEW ===== */}
@@ -1326,107 +1400,172 @@ export function MbgDeliveryPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {taskEntries.map((entry) => {
-                        const hasMenu = !!entry.photoMenuUrl;
-                        const hasSerahTerima = !!entry.photoSerahTerimaUrl;
-                        const hasSuratJalan = !!entry.photoSuratJalanUrl;
-                        const hasPenerima = !!entry.photoPenerimaUrl;
-                        const proofCount = (hasMenu ? 1 : 0) + (hasSerahTerima ? 1 : 0) + (hasSuratJalan ? 1 : 0) + (hasPenerima ? 1 : 0);
+                      {displayedTaskEntries.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-gray-400 font-bold">
+                            Tidak ada institusi pada filter ini.
+                          </td>
+                        </tr>
+                      ) : (
+                        displayedTaskEntries.map((entry) => {
+                          const hasMenu = !!entry.photoMenuUrl;
+                          const hasSerahTerima = !!entry.photoSerahTerimaUrl;
+                          const hasSuratJalan = !!entry.photoSuratJalanUrl;
+                          const hasPenerima = !!entry.photoPenerimaUrl;
+                          const proofCount = (hasMenu ? 1 : 0) + (hasSerahTerima ? 1 : 0) + (hasSuratJalan ? 1 : 0) + (hasPenerima ? 1 : 0);
 
-                        return (
-                          <tr
-                            key={entry.id}
-                            className={`hover:bg-gray-50/50 ${
-                              entry.isSekolahLibur ? 'bg-red-50/40 text-red-500' : ''
-                            }`}
-                          >
-                            <td className="py-3 px-6 font-bold">
-                              <div className="flex items-center gap-2">
-                                <Building className="h-4 w-4 text-gray-400 shrink-0" />
-                                <div>
-                                  <div className="text-gray-900">{entry.institutionName}</div>
-                                  <div className="text-[10px] text-gray-400 font-normal">
-                                    Jadwal: {entry.jadwalPengantaran || '-'}
+                          return (
+                            <tr
+                              key={entry.id}
+                              className={`hover:bg-gray-50/50 ${
+                                entry.isSekolahLibur ? 'bg-red-50/40 text-red-500' : ''
+                              }`}
+                            >
+                              <td className="py-3 px-6 font-bold">
+                                <div className="flex items-center gap-2">
+                                  <Building className="h-4 w-4 text-gray-400 shrink-0" />
+                                  <div>
+                                    <div className="text-gray-900">{entry.institutionName}</div>
+                                    <div className="text-[10px] text-gray-400 font-normal">
+                                      Jadwal: {entry.jadwalPengantaran || '-'}
+                                    </div>
+                                    {entry.isSekolahLibur && (
+                                      <span className="text-[9px] text-red-600 bg-red-100 px-1.5 py-0.5 rounded font-extrabold uppercase mt-1 inline-block">
+                                        Libur
+                                      </span>
+                                    )}
                                   </div>
-                                  {entry.isSekolahLibur && (
-                                    <span className="text-[9px] text-red-600 bg-red-100 px-1.5 py-0.5 rounded font-extrabold uppercase mt-1 inline-block">
-                                      Libur
-                                    </span>
-                                  )}
                                 </div>
-                              </div>
-                            </td>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span className="bg-[#FBBF24]/20 text-[#92400E] px-2.5 py-1 rounded-full font-extrabold text-[11px]">
+                                  {entry.jumlah}
+                                </span>
+                              </td>
 
-                            <td className="py-3 px-4 text-center">
-                              <span className="px-2 py-0.5 bg-[#FBBF24]/20 text-[#92400E] rounded-full font-extrabold text-[10px]">
-                                {entry.jumlah} porsi
-                              </span>
-                            </td>
+                              {/* Slot 1: Foto Menu / Kedatangan */}
+                              <td className="py-3 px-4 text-center">
+                                {entry.isSekolahLibur ? (
+                                  <span className="text-gray-300">-</span>
+                                ) : hasMenu ? (
+                                  <div className="inline-flex items-center justify-center">
+                                    <img
+                                      src={entry.photoMenuUrl}
+                                      alt="Menu"
+                                      className="h-10 w-10 object-cover rounded-lg border-2 border-green-400 shadow-2xs hover:scale-110 transition-transform"
+                                    />
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleStartProofCapture(entry, 'menu')}
+                                    className="p-2 rounded-lg bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors"
+                                    title="Ambil Foto Kedatangan Ompreng"
+                                  >
+                                    <Camera className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </td>
 
-                            {/* Foto Kedatangan Ompreng */}
-                            <td className="py-3 px-4 text-center">
-                              {hasMenu ? (
-                                <img src={entry.photoMenuUrl} alt="Kedatangan Ompreng" className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs" />
-                              ) : (
-                                <button onClick={() => handleStartProofCapture(entry, 'menu')} className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto">
-                                  <Camera className="h-3 w-3" /> Ambil
-                                </button>
-                              )}
-                            </td>
+                              {/* Slot 2: Foto Serah Terima PJ */}
+                              <td className="py-3 px-4 text-center">
+                                {entry.isSekolahLibur ? (
+                                  <span className="text-gray-300">-</span>
+                                ) : hasSerahTerima ? (
+                                  <div className="inline-flex items-center justify-center">
+                                    <img
+                                      src={entry.photoSerahTerimaUrl}
+                                      alt="Serah Terima"
+                                      className="h-10 w-10 object-cover rounded-lg border-2 border-green-400 shadow-2xs hover:scale-110 transition-transform"
+                                    />
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleStartProofCapture(entry, 'serah_terima')}
+                                    className="p-2 rounded-lg bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors"
+                                    title="Ambil Foto Serah Terima PJ Sekolah"
+                                  >
+                                    <Camera className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </td>
 
-                            {/* Foto Serah Terima PJ Sekolah */}
-                            <td className="py-3 px-4 text-center">
-                              {hasSerahTerima ? (
-                                <img src={entry.photoSerahTerimaUrl} alt="Serah Terima" className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs" />
-                              ) : (
-                                <button onClick={() => handleStartProofCapture(entry, 'serah_terima')} className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto">
-                                  <Camera className="h-3 w-3" /> Geotag
-                                </button>
-                              )}
-                            </td>
+                              {/* Slot 3: Foto Surat Jalan */}
+                              <td className="py-3 px-4 text-center">
+                                {entry.isSekolahLibur ? (
+                                  <span className="text-gray-300">-</span>
+                                ) : hasSuratJalan ? (
+                                  <div className="inline-flex items-center justify-center">
+                                    <img
+                                      src={entry.photoSuratJalanUrl}
+                                      alt="Surat Jalan"
+                                      className="h-10 w-10 object-cover rounded-lg border-2 border-green-400 shadow-2xs hover:scale-110 transition-transform"
+                                    />
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleStartProofCapture(entry, 'surat_jalan')}
+                                    className="p-2 rounded-lg bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors"
+                                    title="Ambil Foto Surat Jalan"
+                                  >
+                                    <Camera className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </td>
 
-                            {/* Foto Surat Jalan */}
-                            <td className="py-3 px-4 text-center">
-                              {hasSuratJalan ? (
-                                <img src={entry.photoSuratJalanUrl} alt="Surat Jalan" className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs" />
-                              ) : (
-                                <button onClick={() => handleStartProofCapture(entry, 'surat_jalan')} className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto">
-                                  <Camera className="h-3 w-3" /> Ambil
-                                </button>
-                              )}
-                            </td>
+                              {/* Slot 4: Foto Pengambilan Ompreng Kosong */}
+                              <td className="py-3 px-4 text-center">
+                                {entry.isSekolahLibur ? (
+                                  <span className="text-gray-300">-</span>
+                                ) : hasPenerima ? (
+                                  <div className="inline-flex items-center justify-center">
+                                    <img
+                                      src={entry.photoPenerimaUrl}
+                                      alt="Ompreng Kosong"
+                                      className="h-10 w-10 object-cover rounded-lg border-2 border-green-400 shadow-2xs hover:scale-110 transition-transform"
+                                    />
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleStartProofCapture(entry, 'penerima')}
+                                    className="p-2 rounded-lg bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors"
+                                    title="Ambil Foto Pengambilan Ompreng Kosong"
+                                  >
+                                    <Camera className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </td>
 
-                            {/* Foto Pengambilan Ompreng Kosong */}
-                            <td className="py-3 px-4 text-center">
-                              {hasPenerima ? (
-                                <img src={entry.photoPenerimaUrl} alt="Pengambilan Ompreng Kosong" className="w-12 h-12 object-cover rounded-lg border border-green-300 mx-auto shadow-xs" />
-                              ) : (
-                                <button onClick={() => handleStartProofCapture(entry, 'penerima')} className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer flex items-center gap-1 mx-auto">
-                                  <Camera className="h-3 w-3" /> Geotag
-                                </button>
-                              )}
-                            </td>
-
-                            {/* Kelola Bukti Button */}
-                            <td className="py-3 px-6 text-center">
-                              {entry.isSekolahLibur ? (
-                                <span className="text-gray-400 text-[10px]">Skip (Libur)</span>
-                              ) : (
-                                <button
-                                  onClick={() => setProofModalEntry(entry)}
-                                  className={`py-1.5 px-3 rounded-xl text-[10px] font-extrabold transition-all cursor-pointer shadow-xs ${
-                                    proofCount === 4
-                                      ? 'bg-green-600 text-white hover:bg-green-700'
-                                      : 'bg-[#111827] text-white hover:bg-black'
-                                  }`}
-                                >
-                                  {proofCount === 4 ? '✓ Complete (4/4)' : `Kelola (${proofCount}/4)`}
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                              {/* Action: Manage / Modal */}
+                              <td className="py-3 px-6 text-center">
+                                {!entry.isSekolahLibur ? (
+                                  <button
+                                    onClick={() => setProofModalEntry(entry)}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold text-[11px] cursor-pointer transition-all shadow-xs ${
+                                      proofCount === 4
+                                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                                        : 'bg-[#111827] hover:bg-black text-white'
+                                    }`}
+                                  >
+                                    {proofCount === 4 ? (
+                                      <>
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                        <span>Lengkap (4/4)</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Camera className="h-3.5 w-3.5" />
+                                        <span>Kelola Bukti ({proofCount}/4)</span>
+                                      </>
+                                    )}
+                                  </button>
+                                ) : (
+                                  <span className="text-gray-400 font-bold text-[10px]">Libur</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1435,6 +1574,7 @@ export function MbgDeliveryPage() {
                 {(() => {
                   const activeEntries = taskEntries.filter((e) => !e.isSekolahLibur);
                   const tSiswa = activeEntries.reduce((s, e) => s + (e.qtSiswaBalita || 0), 0);
+
                   const tBumil = activeEntries.reduce((s, e) => s + (e.qtBumilBusui || 0), 0);
                   const tGuru = activeEntries.reduce((s, e) => s + (e.qtGuruKader || 0), 0);
                   const tPobia = activeEntries.reduce((s, e) => s + (e.qtPobiaNasi || 0), 0);
