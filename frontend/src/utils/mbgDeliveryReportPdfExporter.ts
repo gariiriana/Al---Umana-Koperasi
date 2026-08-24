@@ -341,12 +341,12 @@ export async function exportMbgDeliveryReportPdf({
     doc.addImage(logoBase64, 'PNG', logoX, logoY, logoSize, logoSize);
   }
 
-  // Title & Period (Placed below Center Logo)
+  // Title & Date (Placed below Center Logo)
   doc.setFontSize(13);
   doc.text('LAPORAN DISTRIBUSI', pageW / 2, 142, { align: 'center' });
 
   doc.setFontSize(11);
-  doc.text(`PERIODE ${effectivePeriode.toUpperCase()}`, pageW / 2, 150, { align: 'center' });
+  doc.text(effectivePeriode.toUpperCase(), pageW / 2, 150, { align: 'center' });
 
   // Summary / Keterangan Table (Placed below title)
   autoTable(doc, {
@@ -657,14 +657,14 @@ export async function exportMbgDailyDistributionReportPdf({
     doc.addImage(logoBase64, 'PNG', logoX, logoY, logoSize, logoSize);
   }
 
-  // Title & Period (Placed below Logo)
+  // Title & Date (Placed below Logo)
   doc.setFontSize(13);
   doc.text('LAPORAN DISTRIBUSI HARIAN', pageW / 2, 142, { align: 'center' });
   doc.setFontSize(10.5);
   doc.text('(SELURUH KURIR & RUTE PENGIRIMAN)', pageW / 2, 149, { align: 'center' });
 
   doc.setFontSize(11);
-  doc.text(`PERIODE ${formattedHeaderDate.toUpperCase()}`, pageW / 2, 157, { align: 'center' });
+  doc.text(formattedHeaderDate.toUpperCase(), pageW / 2, 157, { align: 'center' });
 
   const totalPortions = activeEntries.reduce((acc, e) => acc + (e.jumlah || 0), 0);
   const totalCouriers = Array.from(courierMap.keys()).filter((k) => k !== 'Belum Ditugaskan').length || courierMap.size;
