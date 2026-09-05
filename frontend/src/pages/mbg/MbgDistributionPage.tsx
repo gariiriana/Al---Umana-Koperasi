@@ -286,7 +286,7 @@ export function MbgDistributionPage() {
   // Subscribe batches
   useEffect(() => {
     const unsub = subscribeBatches((data) => {
-      const activeBatches = data.filter((b) => b.status !== 'DRAFT');
+      const activeBatches = data.filter((b) => b.status !== 'DRAFT' || ((b.totalJumlah ?? 0) > 0));
       setBatches(activeBatches);
       if (activeBatches.length > 0 && !selectedBatchId) {
         setSelectedBatchId(activeBatches[0].id);

@@ -65,8 +65,8 @@ export function MbgReportPage() {
   useEffect(() => {
     const unsub = subscribeBatches(
       (b) => {
-        // Show all batches that have been submitted / processed
-        const active = b.filter((batch) => batch.status !== 'DRAFT');
+        // Show all batches that have been submitted / processed or have portions
+        const active = b.filter((batch) => batch.status !== 'DRAFT' || ((batch.totalJumlah ?? 0) > 0));
         setBatches(active);
         setLoadingBatches(false);
         if (active.length > 0) {
@@ -136,7 +136,7 @@ export function MbgReportPage() {
         const snap = await getDocs(q);
         const rangeBatches = snap.docs
           .map((d) => ({ id: d.id, ...d.data() } as MbgPmBatch))
-          .filter((b) => b.status !== 'DRAFT');
+          .filter((b) => b.status !== 'DRAFT' || ((b.totalJumlah ?? 0) > 0));
 
         const groups: {
           tanggal: string;
