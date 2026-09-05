@@ -339,11 +339,6 @@ export function OrdersPage() {
   };
 
   const handleUpdatePaymentStatus = async (orderId: string, status: PaymentStatus) => {
-    const o = orders.find((x) => x.id === orderId);
-    if (o && isOrderPastDeadline(o)) {
-      showToast({ message: "Pesanan ini sudah melewati deadline dan tidak dapat diubah.", variant: "error" });
-      return;
-    }
     try {
       await updatePaymentStatus(orderId, status);
       showToast({ message: `Status pembayaran diperbarui ke ${status}`, variant: "success" });
@@ -354,11 +349,6 @@ export function OrdersPage() {
   };
 
   const handleTransition = async (orderId: string, action: TransitionAction, reason?: string) => {
-    const o = orders.find((x) => x.id === orderId);
-    if (o && isOrderPastDeadline(o)) {
-      showToast({ message: "Pesanan ini sudah melewati deadline dan tidak dapat diubah.", variant: "error" });
-      return;
-    }
     setTransitioningId(orderId);
     try {
       await transitionOrder(orderId, { action, reason });
@@ -373,11 +363,6 @@ export function OrdersPage() {
 
   const handleManualValidationConfirm = async (data: { contactPhone: string; screenshotFileIds: string[]; notes: string }) => {
     if (!validationTargetId) return;
-    const o = orders.find((x) => x.id === validationTargetId);
-    if (o && isOrderPastDeadline(o)) {
-      showToast({ message: "Pesanan ini sudah melewati deadline dan tidak dapat divalidasi.", variant: "error" });
-      return;
-    }
     try {
       await manuallyValidateOrder(validationTargetId, data);
       showToast({ message: "Verifikasi manual berhasil disimpan!", variant: "success" });
@@ -388,11 +373,6 @@ export function OrdersPage() {
   };
 
   const handleDeleteOrder = async (orderId: string) => {
-    const o = orders.find((x) => x.id === orderId);
-    if (o && isOrderPastDeadline(o)) {
-      showToast({ message: "Pesanan ini sudah melewati deadline dan tidak dapat dihapus.", variant: "error" });
-      return;
-    }
     if (!window.confirm("Apakah Anda yakin ingin menghapus pesanan ini secara permanen dari sistem?")) return;
     try {
       await deleteOrder(orderId);
@@ -426,10 +406,6 @@ export function OrdersPage() {
 
   const handleSaveNotes = async () => {
     if (!previewInvoiceOrder) return;
-    if (isOrderPastDeadline(previewInvoiceOrder)) {
-      showToast({ message: "Pesanan ini sudah melewati deadline dan tidak dapat diubah.", variant: "error" });
-      return;
-    }
     setSavingNotes(true);
     setUploadingComplaint(true);
     
@@ -475,10 +451,6 @@ export function OrdersPage() {
     if (!activeEditRowId) return;
     const targetOrder = filteredOrders.find((o) => o.id === activeEditRowId);
     if (!targetOrder) return;
-    if (isOrderPastDeadline(targetOrder)) {
-      showToast({ message: "Pesanan ini sudah melewati deadline dan tidak dapat diubah.", variant: "error" });
-      return;
-    }
     
     setSavingNotes(true);
     setUploadingComplaint(true);
@@ -1681,7 +1653,7 @@ export function OrdersPage() {
 
                       {/* Status Pembayaran */}
                       <td className="py-4 px-4 whitespace-nowrap">
-                        {isMonitoring || isPast ? (
+                        {isMonitoring ? (
                           <span
                             className={`inline-block text-xs font-bold rounded-lg px-2.5 py-1.5 border ${
                               o.paymentStatus === "SUDAH_DIBAYAR"
@@ -1846,7 +1818,7 @@ export function OrdersPage() {
                               )}
                             </button>
 
-                            {!isMonitoring && !isPast && (
+                            {!isMonitoring && (
                               <>
                                 <Link
                                   to={`/admin/orders/${o.id}/edit`}
@@ -2025,15 +1997,13 @@ export function OrdersPage() {
                                   )}
 
                                   {/* Edit button */}
-                                  {!isPast && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleStartEditNotes(o)}
-                                      className="text-[10px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded px-2 py-1 cursor-pointer shrink-0 transition-all ml-auto self-center"
-                                    >
-                                      Edit Catatan
-                                    </button>
-                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditNotes(o)}
+                                    className="text-[10px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded px-2 py-1 cursor-pointer shrink-0 transition-all ml-auto self-center"
+                                  >
+                                    Edit Catatan
+                                  </button>
                                 </div>
                               )}
                             </div>
@@ -2181,7 +2151,7 @@ export function OrdersPage() {
                 <div className="flex flex-col gap-1 pt-1 border-t border-[#F3F4F6]">
                   <div className="flex flex-wrap items-center justify-between gap-1">
                     <div className="flex items-center gap-1">
-                      {isMonitoring || isPast ? (
+                      {isMonitoring ? (
                         <span
                           className={`inline-block text-[8px] font-extrabold rounded-md px-1 py-0.5 border ${
                             o.paymentStatus === "SUDAH_DIBAYAR"
@@ -2251,7 +2221,7 @@ export function OrdersPage() {
                     <button
                       className="bg-[#D97706] hover:bg-[#B45309] text-white w-full h-8 rounded-lg text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
                       onClick={() => handleTransition(o.id, "start-production")}
-                      disabled={transitioningId === o.id || isPast}
+                      disabled={transitioningId === o.id}
                     >
                       Mulai Masak
                     </button>
@@ -2260,7 +2230,7 @@ export function OrdersPage() {
                     <button
                       className="bg-purple-600 hover:bg-purple-700 text-white w-full h-8 rounded-lg text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
                       onClick={() => handleTransition(o.id, "complete-production")}
-                      disabled={transitioningId === o.id || isPast}
+                      disabled={transitioningId === o.id}
                     >
                       Selesai Masak
                     </button>
@@ -2270,7 +2240,7 @@ export function OrdersPage() {
                       <button
                         className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 rounded-lg text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
                         onClick={() => handleTransition(o.id, "qc-pass")}
-                        disabled={transitioningId === o.id || isPast}
+                        disabled={transitioningId === o.id}
                       >
                         Lolos
                       </button>
@@ -2280,7 +2250,7 @@ export function OrdersPage() {
                           const reason = prompt("Masukkan alasan kegagalan QC:");
                           if (reason) handleTransition(o.id, "qc-fail", reason);
                         }}
-                        disabled={transitioningId === o.id || isPast}
+                        disabled={transitioningId === o.id}
                       >
                         Gagal
                       </button>
@@ -2396,13 +2366,13 @@ export function OrdersPage() {
                         )}
                       </button>
 
-                      {!isMonitoring && !isPast && (
+                      {!isMonitoring && (
                         <button
                           onClick={() => handleDeleteOrder(o.id)}
                           className="text-red-600 hover:text-white hover:bg-red-600 border border-red-200 hover:border-red-600 rounded-lg transition-all flex items-center justify-center h-8 w-8 shrink-0 cursor-pointer"
                           title="Hapus Pesanan"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       )}
                     </div>
@@ -2417,7 +2387,7 @@ export function OrdersPage() {
                         <AlertTriangle className="w-3 h-3 text-amber-500" />
                         <span>Komplain & Bukti</span>
                       </div>
-                      {activeEditRowId !== o.id && !isPast && (
+                      {activeEditRowId !== o.id && (
                         <button
                           type="button"
                           onClick={() => handleStartEditNotes(o)}
@@ -3240,7 +3210,7 @@ export function OrdersPage() {
                   </>
                 )}
               </Button>
-              {!isMonitoring && !isOrderPastDeadline(previewInvoiceOrder) && (
+              {!isMonitoring && (
                 <>
                   <Link to={`/admin/orders/${previewInvoiceOrder.id}/edit`}>
                     <Button
