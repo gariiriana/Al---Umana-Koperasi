@@ -1,11 +1,26 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const express = require('express');
+const fs = require('fs');
 
 const app = express();
 app.use(express.json());
 
 console.log('Menginisialisasi WhatsApp Client...');
+
+// Auto-detect browser lokal (Chrome / Edge) agar tidak perlu download chromium terpisah
+const candidatePaths = [
+    process.env.CHROME_BIN,
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium'
+];
+const detectedExecutable = candidatePaths.find(p => p && fs.existsSync(p));
+if (detectedExecutable) {
+    console.log(`Menggunakan browser: ${detectedExecutable}`);
+}
 
 // Inisialisasi WhatsApp Client dengan strategi penyimpanan sesi lokal
 const client = new Client({
@@ -14,6 +29,7 @@ const client = new Client({
     }),
     puppeteer: {
         headless: true,
+        ...(detectedExecutable ? { executablePath: detectedExecutable } : {}),
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
