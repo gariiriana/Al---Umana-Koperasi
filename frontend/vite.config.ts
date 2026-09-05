@@ -49,6 +49,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         // Cache static assets (fonts, css, js)
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
@@ -73,12 +75,13 @@ export default defineConfig({
             },
           },
           {
-            // App pages - stale while revalidate
+            // App pages - NetworkFirst so users always get latest deployed version
             urlPattern: ({ request }) => request.mode === "navigate",
-            handler: "StaleWhileRevalidate",
+            handler: "NetworkFirst",
             options: {
               cacheName: "pages-cache",
               expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 },
+              networkTimeoutSeconds: 5,
             },
           },
         ],
