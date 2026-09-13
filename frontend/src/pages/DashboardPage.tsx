@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { ChefHat, Truck, TrendingUp, Award, Activity, X, MapPin, Package, Clock, AlertCircle, AlertTriangle, ExternalLink, FileDown } from "lucide-react";
@@ -127,7 +127,13 @@ export function DashboardPage() {
     if (!showStats) return;
     const fetchUsers = async () => {
       try {
-        const snap = await getDocs(collection(db, "users"));
+        const staffRoles = [
+          "kurir", "kurir_mbg", "produksi", "tim_produksi",
+          "produksi_1", "produksi_2", "distribusi", "distribusi_mbg",
+          "admin", "admin_mbg"
+        ];
+        const qUsers = query(collection(db, "users"), where("role", "in", staffRoles));
+        const snap = await getDocs(qUsers);
         const mapping: Record<string, string> = {};
         snap.docs.forEach((doc) => {
           const data = doc.data();

@@ -14,6 +14,7 @@ import {
   getDocs,
   query,
   where,
+  limit,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -66,9 +67,9 @@ export async function listAvailableProducts(
 
   try {
     const colRef = collection(db, "inventory");
-    let q = query(colRef, where("available", "==", true));
+    let q = query(colRef, where("available", "==", true), limit(60));
     if (opts.category && opts.category.trim() !== "") {
-      q = query(q, where("category", "==", opts.category.trim()));
+      q = query(colRef, where("available", "==", true), where("category", "==", opts.category.trim()), limit(60));
     }
     const snap = await getDocs(q);
     const items = snap.docs.map((docSnap) => {
@@ -211,7 +212,7 @@ export async function listCategories(): Promise<string[]> {
 
   try {
     const colRef = collection(db, "inventory");
-    const snap = await getDocs(colRef);
+    const snap = await getDocs(query(colRef, limit(100)));
     if (!snap.empty) {
       const categories = new Set<string>();
       snap.docs.forEach((docSnap) => {

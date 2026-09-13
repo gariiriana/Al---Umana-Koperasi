@@ -1,4 +1,4 @@
-import { listOrders } from "./orderService";
+import { listOrders, getOrder } from "./orderService";
 import { sendWhatsAppNotificationDirect } from "./whatsappService";
 import type { Order } from "@/types/order";
 
@@ -6,7 +6,7 @@ import type { Order } from "@/types/order";
  * Get upcoming deliveries that are scheduled within the next N hours.
  */
 export async function getUpcomingDeliveries(hoursAhead = 1): Promise<Order[]> {
-  const orders = await listOrders();
+  const orders = await listOrders({ limit: 50 });
   const now = Date.now();
   const limitTime = now + hoursAhead * 60 * 60 * 1000;
 
@@ -27,7 +27,7 @@ export async function getUpcomingDeliveries(hoursAhead = 1): Promise<Order[]> {
  * Get orders with overdue payments.
  */
 export async function getOverduePayments(): Promise<Order[]> {
-  const orders = await listOrders();
+  const orders = await listOrders({ limit: 50 });
   const now = Date.now();
 
   return orders.filter((o) => {
@@ -45,8 +45,7 @@ export async function getOverduePayments(): Promise<Order[]> {
  */
 export async function sendDeliveryReminder(orderId: string): Promise<boolean> {
   try {
-    const orders = await listOrders();
-    const order = orders.find((o) => o.id === orderId);
+    const order = await getOrder(orderId);
     if (!order || !order.recipientPhone) return false;
 
     const shortId = order.id.length > 6 ? order.id.slice(-6).toUpperCase() : order.id.toUpperCase();
@@ -64,8 +63,7 @@ export async function sendDeliveryReminder(orderId: string): Promise<boolean> {
  */
 export async function sendPaymentReminder(orderId: string): Promise<boolean> {
   try {
-    const orders = await listOrders();
-    const order = orders.find((o) => o.id === orderId);
+    const order = await getOrder(orderId);
     if (!order || !order.recipientPhone) return false;
 
     const shortId = order.id.length > 6 ? order.id.slice(-6).toUpperCase() : order.id.toUpperCase();

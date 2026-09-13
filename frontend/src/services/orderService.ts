@@ -377,9 +377,9 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
 
 export async function listOrders(filter: ListOrdersFilter = {}): Promise<Order[]> {
   const colRef = collection(db, "orders");
-  
-  // Retrieve all orders (uses default auto-created single-field indexes)
-  const snap = await getDocs(colRef);
+  const maxLimit = filter.limit || 100;
+  const q = query(colRef, limit(maxLimit));
+  const snap = await getDocs(q);
   let orders = snapshotToOrders(snap);
 
   // 1. Sort by createdAt descending in-memory
