@@ -19,6 +19,8 @@ import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import {
   initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   memoryLocalCache,
   type Firestore,
 } from 'firebase/firestore';
@@ -60,9 +62,11 @@ export const app: FirebaseApp = initializeApp(firebaseConfig);
 export const auth: Auth = getAuth(app);
 export const storage: FirebaseStorage = getStorage(app);
 
-// Firestore initialization with memory cache (prevents multi-tab IndexedDB assertion crashes)
+// Firestore initialization with persistent multi-tab cache (drastically saves server read quota)
 export const db: Firestore = initializeFirestore(app, {
-  localCache: memoryLocalCache(),
+  localCache: typeof window !== 'undefined'
+    ? persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    : memoryLocalCache(),
 });
 
 // Analytics is only valid in a browser environment that supports the required

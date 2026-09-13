@@ -556,6 +556,7 @@ export interface MbgPortionBumbuItem {
 export interface MbgPortionDailyData {
   portionType: 'kecil' | 'besar' | 'balita' | 'bumil_busui';
   portionTitle: string;
+  pmCount?: number;
   menuList: string[];
   nutritionItems: MbgPortionNutritionItem[];
   bahanItems: MbgPortionBahanItem[];

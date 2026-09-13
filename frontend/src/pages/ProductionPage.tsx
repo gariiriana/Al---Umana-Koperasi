@@ -5,11 +5,9 @@ import { useLanguage } from "@/contexts/LanguageContext";
 
 import { ApiError } from "@/services/apiClient";
 import { transitionOrder } from "@/services/orderService";
-import { subscribeOrders } from "@/services/realtimeService";
+import { subscribeProductionOrders } from "@/services/realtimeService";
 import type { Order } from "@/types/order";
 
-import { db } from "@/lib/firebase";
-import { doc, updateDoc } from "firebase/firestore";
 import { ProductImage } from "@/components/ProductImage";
 import { parseIngredients } from "@/lib/ingredientsParser";
 import { getProduct } from "@/services/catalogService";
@@ -29,6 +27,15 @@ const formatSimpleAddress = (address: string) => {
     return parts[0];
   }
   return address.replace(/https?:\/\/[^\s]+/, "").trim();
+};
+
+const formatFriendlyError = (err: unknown): string => {
+  if (err instanceof ApiError) return err.message;
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes("resource-exhausted") || msg.includes("Quota exceeded") || msg.includes("quota")) {
+    return "Batas kuota harian Firebase telah tercapai (Quota Exceeded). Operasi database sementara dibatasi oleh Google Cloud hingga reset kuota atau penambahan limit Firebase Console.";
+  }
+  return msg;
 };
 
 const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
@@ -510,7 +517,12 @@ export function ProductionPage() {
   const [endDate, setEndDate] = useState<string>("");
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => subscribeOrders(setOrders, console.error), []);
+  useEffect(() => {
+    return subscribeProductionOrders(setOrders, (err) => {
+      console.error("subscribeProductionOrders error:", err);
+      setError(formatFriendlyError(err));
+    });
+  }, []);
 
   const confirmed = orders.filter((o) => o.status === "PENDING").sort((a, b) => {
     const deadlineA = getOrderDeadline(a);
@@ -566,13 +578,14 @@ export function ProductionPage() {
     setBusyId(o.id);
     setError(null);
     try {
-      await transitionOrder(o.id, { action: "start-production" });
-      await updateDoc(doc(db, "orders", o.id), {
+      await transitionOrder(o.id, {
+        action: "start-production",
         itemKitchens: kitchens,
         qaStartChecklist: qaChecklist,
       });
+      showToast({ message: "Pesanan masuk ke dapur & mulai dimasak!", variant: "success" });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
+      setError(formatFriendlyError(err));
     } finally {
       setBusyId(null);
     }
@@ -583,8 +596,9 @@ export function ProductionPage() {
     setError(null);
     try {
       await transitionOrder(o.id, { action: "complete-production" });
+      showToast({ message: "Produksi selesai, pesanan siap dikirim!", variant: "success" });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
+      setError(formatFriendlyError(err));
     } finally {
       setBusyId(null);
     }
@@ -894,9 +908,20 @@ export function ProductionPage() {
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-center gap-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 font-['Hanken_Grotesk',system-ui,sans-serif]">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {error}
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700 font-['Hanken_Grotesk',system-ui,sans-serif] shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-red-400 hover:text-red-700 font-extrabold text-lg leading-none cursor-pointer px-1.5 py-0.5"
+            title="Tutup pesan error"
+            aria-label="Tutup pesan error"
+          >
+            ×
+          </button>
         </div>
       )}
 

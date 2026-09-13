@@ -468,6 +468,8 @@ export type TransitionAction =
 export interface TransitionPayload {
   action: TransitionAction;
   reason?: string;
+  itemKitchens?: Record<string, string>;
+  qaStartChecklist?: { kebersihan: boolean; kelengkapanBahan: boolean; suhuPenyimpanan: boolean };
 }
 
 /** Apply a state machine transition to an order. */
@@ -499,6 +501,12 @@ export async function transitionOrder(
         updates.status = "IN_PRODUCTION";
         updates.productionStartedBy = actorUid;
         updates.productionStartedAt = now;
+        if (payload.itemKitchens) {
+          updates.itemKitchens = payload.itemKitchens;
+        }
+        if (payload.qaStartChecklist) {
+          updates.qaStartChecklist = payload.qaStartChecklist;
+        }
         break;
 
       case "complete-production":

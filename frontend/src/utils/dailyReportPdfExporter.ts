@@ -2,19 +2,62 @@ import jsPDF from 'jspdf';
 import autoTable, { type RowInput } from 'jspdf-autotable';
 import type { MbgProductionDailyReport, MbgPmBatch } from '@/types/mbg';
 
-const getBase64ImageFromUrl = async (url: string): Promise<string> => {
+const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
   try {
     const res = await fetch(url);
+    if (!res.ok) return null;
+    const contentType = res.headers.get('content-type');
+    if (contentType && !contentType.startsWith('image/')) {
+      return null;
+    }
     const blob = await res.blob();
+    if (blob.type && !blob.type.startsWith('image/')) {
+      return null;
+    }
     return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve('');
-      reader.readAsDataURL(blob);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const maxDim = 256;
+          let width = img.naturalWidth || 100;
+          let height = img.naturalHeight || 100;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/png'));
+          } else {
+            resolve(null);
+          }
+        } catch {
+          resolve(null);
+        } finally {
+          URL.revokeObjectURL(img.src);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(img.src);
+        resolve(null);
+      };
+      img.src = URL.createObjectURL(blob);
     });
   } catch (err) {
-    console.error('Error loading image base64:', err);
-    return '';
+    console.warn('Error loading image base64:', err);
+    return null;
   }
 };
 
@@ -27,17 +70,25 @@ const drawPageHeader = async (
   doc: jsPDF,
   _title: string,
   tanggal: string,
-  logoAlUmanaa: string,
-  logoBadanGizi: string
+  logoAlUmanaa: string | null,
+  logoBadanGizi: string | null
 ) => {
   const pageW = doc.internal.pageSize.getWidth();
 
-  // Draw Logos
+  // Draw Logos safely with try/catch to avoid breaking PDF export on bad image
   if (logoAlUmanaa) {
-    doc.addImage(logoAlUmanaa, 'PNG', 12, 8, 16, 16);
+    try {
+      doc.addImage(logoAlUmanaa, 'PNG', 12, 8, 16, 16);
+    } catch (err) {
+      console.warn('Failed to add logoAlUmanaa to PDF:', err);
+    }
   }
   if (logoBadanGizi) {
-    doc.addImage(logoBadanGizi, 'PNG', pageW - 28, 8, 16, 16);
+    try {
+      doc.addImage(logoBadanGizi, 'PNG', pageW - 28, 8, 16, 16);
+    } catch (err) {
+      console.warn('Failed to add logoBadanGizi to PDF:', err);
+    }
   }
 
   // Header Title Text
@@ -76,7 +127,7 @@ export async function export8PageDailyReportPdf(
 ) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-  const logoAlUmanaa = await getBase64ImageFromUrl('/logo_alumana.png');
+  const logoAlUmanaa = (await getBase64ImageFromUrl('/logo.png')) || (await getBase64ImageFromUrl('/logo_alumana.png'));
   const logoBadanGizi = await getBase64ImageFromUrl('/logo_badan_gizi.png');
 
   const tanggalStr = report.tanggal || batch?.tanggal || '27 Juli 2026';
@@ -84,7 +135,7 @@ export async function export8PageDailyReportPdf(
   // Helper to render Portions Pages (Pages 1-4)
   const renderPortionPage = async (
     pageIndex: number,
-    portionData: typeof report.porsiKecil,
+    portionData: typeof report.porsiKecil | undefined,
     titleBanner: string,
     akgLabels: { label: string; key: string }[]
   ) => {
@@ -103,7 +154,7 @@ export async function export8PageDailyReportPdf(
     currentY += 2;
 
     const giziRows: RowInput[] = [];
-    portionData.nutritionItems.forEach((item) => {
+    portionData?.nutritionItems?.forEach((item) => {
       giziRows.push([
         item.menuName || '-',
         item.rincianBahan || '-',
@@ -117,20 +168,27 @@ export async function export8PageDailyReportPdf(
     });
 
     // Total row
-    const totalGizi = portionData.totalGizi;
+    const totalGizi = portionData?.totalGizi || {
+      beratBersih: 0,
+      energi: 0,
+      protein: 0,
+      lemak: 0,
+      karbohidrat: 0,
+      serat: 0,
+    };
     giziRows.push([
       { content: 'Total', colSpan: 2, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
-      { content: totalGizi.beratBersih, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
-      { content: totalGizi.energi, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
-      { content: totalGizi.protein, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
-      { content: totalGizi.lemak, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
-      { content: totalGizi.karbohidrat, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
-      { content: totalGizi.serat, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
+      { content: totalGizi.beratBersih || 0, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
+      { content: totalGizi.energi || 0, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
+      { content: totalGizi.protein || 0, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
+      { content: totalGizi.lemak || 0, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
+      { content: totalGizi.karbohidrat || 0, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
+      { content: totalGizi.serat || 0, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
     ]);
 
     // AKG Rows
     akgLabels.forEach((akg) => {
-      const metric = portionData.akgMetrics?.[akg.key] || { percentMakanSiang: 0, percentHarian: 0 };
+      const metric = portionData?.akgMetrics?.[akg.key] || { percentMakanSiang: 0, percentHarian: 0 };
       giziRows.push([
         { content: `%Pemenuhan Makan Siang (${akg.label})`, colSpan: 2, styles: { fontStyle: 'bold' } },
         metric.percentMakanSiang || 0,
@@ -163,16 +221,16 @@ export async function export8PageDailyReportPdf(
     currentY += 2;
 
     const bahanRows: RowInput[] = [];
-    portionData.bahanItems.forEach((b) => {
+    portionData?.bahanItems?.forEach((b) => {
       bahanRows.push([
         b.rincianBahan,
         formatRupiah(b.hargaBahan),
-        `${b.bddPercent}%`,
-        b.beratKotor,
-        b.totalGml,
-        `${b.sparePercent}%`,
-        b.kebutuhan,
-        b.satuan,
+        `${b.bddPercent || 0}%`,
+        b.beratKotor || 0,
+        b.totalGml || 0,
+        `${b.sparePercent || 0}%`,
+        b.kebutuhan || 0,
+        b.satuan || '',
         formatRupiah(b.harga),
       ]);
     });
@@ -180,11 +238,11 @@ export async function export8PageDailyReportPdf(
     // Summary row
     bahanRows.push([
       { content: 'TOTAL BELANJA', colSpan: 8, styles: { fontStyle: 'bold', halign: 'right' } },
-      { content: formatRupiah(portionData.totalBelanjaBahan), styles: { fontStyle: 'bold' } },
+      { content: formatRupiah(portionData?.totalBelanjaBahan), styles: { fontStyle: 'bold' } },
     ]);
     bahanRows.push([
       { content: 'HARGA BAHAN MAKANAN PER PORSI', colSpan: 8, styles: { fontStyle: 'bold', halign: 'right' } },
-      { content: formatRupiah(portionData.hargaBahanPerPorsi), styles: { fontStyle: 'bold' } },
+      { content: formatRupiah(portionData?.hargaBahanPerPorsi), styles: { fontStyle: 'bold' } },
     ]);
 
     autoTable(doc, {
@@ -207,25 +265,25 @@ export async function export8PageDailyReportPdf(
     currentY += 2;
 
     const bumbuRows: RowInput[] = [];
-    portionData.bumbuItems.forEach((bm) => {
+    portionData?.bumbuItems?.forEach((bm) => {
       bumbuRows.push([
         bm.namaMenu || '',
         bm.namaBumbu || '',
         formatRupiah(bm.hargaBumbu),
-        bm.kebutuhan,
-        bm.satuan,
+        bm.kebutuhan || 0,
+        bm.satuan || '',
         formatRupiah(bm.harga),
       ]);
     });
 
     bumbuRows.push([
       { content: 'TOTAL BELANJA', colSpan: 4, styles: { fontStyle: 'bold', halign: 'right' } },
-      { content: formatRupiah(portionData.totalBelanjaBumbu), styles: { fontStyle: 'bold' } },
-      { content: `HARGA PER PORSI: ${formatRupiah(portionData.hargaPerPorsiOverall)}`, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
+      { content: formatRupiah(portionData?.totalBelanjaBumbu), styles: { fontStyle: 'bold' } },
+      { content: `HARGA PER PORSI: ${formatRupiah(portionData?.hargaPerPorsiOverall)}`, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
     ]);
     bumbuRows.push([
       { content: 'HARGA BUMBU', colSpan: 4, styles: { fontStyle: 'bold', halign: 'right' } },
-      { content: formatRupiah(portionData.hargaBumbuPerPorsi), styles: { fontStyle: 'bold' } },
+      { content: formatRupiah(portionData?.hargaBumbuPerPorsi), styles: { fontStyle: 'bold' } },
       '',
     ]);
 

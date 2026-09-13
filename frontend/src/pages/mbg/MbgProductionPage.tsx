@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState, useCallback, Fragment } from 'react';
 import {
   Plus, Trash2, FileDown, Calendar, Loader2, CheckCircle2, Search, X, Folder, Send, ChefHat,
+  ClipboardList, FileText, FolderOpen, FileUp, Save, Sparkles, FileSpreadsheet, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -13,7 +14,7 @@ import { useToast } from '@/contexts/ToastContext';
 import * as XLSX from 'xlsx';
 import type { MbgPmBatch, MbgPmEntry, MbgNutritionEntry, MbgDayMenu, MbgProductionDailyReport } from '@/types/mbg';
 import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
-import { subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule, saveWeeklySchedule, type MbgPortionClassification } from '@/services/mbgAdminService';
+import { subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule, saveWeeklySchedule, getMenuForDate, deleteBatch, createBatch, type MbgPortionClassification } from '@/services/mbgAdminService';
 import {
   subscribeNutrition, addNutritionEntry, updateNutritionEntry, deleteNutritionEntry,
   subscribeCustomTkpiEntries, addCustomTkpiEntry, updateCustomTkpiEntry, deleteCustomTkpiEntry,
@@ -22,8 +23,9 @@ import {
   subscribeDailyReport, saveDailyReport,
 } from '@/services/mbgProductionService';
 import { export8PageDailyReportPdf } from '@/utils/dailyReportPdfExporter';
-import { parseProductionSheetRows } from '@/utils/productionSheetParser';
-import { updateBatchStatus } from '@/services/mbgAdminService';
+import { exportProductionDocx } from '@/utils/mbgProductionDocxGenerator';
+import { parseProductionSheetRows, generateDailyReportFromBatchData } from '@/utils/productionSheetParser';
+import { updateBatchStatus, updateBatch } from '@/services/mbgAdminService';
 import {
   MBG_BATCH_STATUS_CONFIG,
   NUTRIENTS_LIST,
@@ -99,7 +101,7 @@ export function MbgProductionPage() {
   const [availableSheetNames, setAvailableSheetNames] = useState<string[]>([]);
   const [sheetWorkbook, setSheetWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [dailyReport, setDailyReport] = useState<MbgProductionDailyReport | null>(null);
-  const [isInitializing, setIsInitializing] = useState(false);
+  const [showImportedDetails, setShowImportedDetails] = useState(true);
   const [showPmSummaryInGizi, setShowPmSummaryInGizi] = useState(true);
   const [isBatchDropdownOpen, setIsBatchDropdownOpen] = useState(false);
   const [batchSearchQuery, setBatchSearchQuery] = useState('');
@@ -189,9 +191,10 @@ export function MbgProductionPage() {
   const [selectedPortionClassification, setSelectedPortionClassification] = useState<MbgPortionClassification>('porsi_besar');
 
   useEffect(() => {
+    if (!user) return;
     const unsub = subscribeWeeklySchedule(setWeeklySchedule, selectedPortionClassification);
     return unsub;
-  }, [selectedPortionClassification]);
+  }, [user, selectedPortionClassification]);
 
   const handleSaveWeeklySchedule = async (updatedDays: MbgDayMenu[], portion?: MbgPortionClassification) => {
     if (!user) return;
@@ -208,21 +211,31 @@ export function MbgProductionPage() {
 
   // Subscribe custom TKPI entries
   useEffect(() => {
-    const unsub = subscribeCustomTkpiEntries((entries) => {
-      setCustomTkpiEntries(entries as unknown as (typeof tkpiDatabase[number])[]);
-    });
+    if (!user) return;
+    const unsub = subscribeCustomTkpiEntries(
+      (entries) => {
+        setCustomTkpiEntries(entries as unknown as (typeof tkpiDatabase[number])[]);
+      },
+      (err) => {
+        console.warn('Error loading custom TKPI entries:', err);
+      }
+    );
     return unsub;
-  }, []);
+  }, [user]);
 
   // Subscribe custom recipes
   useEffect(() => {
-    const unsub = subscribeCustomRecipes((recipes) => {
-      setCustomRecipes(recipes as unknown as StandarResep[]);
-    }, (err) => {
-      console.error('Error loading custom recipes:', err);
-    });
+    if (!user) return;
+    const unsub = subscribeCustomRecipes(
+      (recipes) => {
+        setCustomRecipes(recipes as unknown as StandarResep[]);
+      },
+      (err) => {
+        console.warn('Error loading custom recipes:', err);
+      }
+    );
     return unsub;
-  }, []);
+  }, [user]);
 
   const combinedTkpiDatabase = useMemo(() => {
     const map = new Map<string, typeof tkpiDatabase[number]>();
@@ -235,31 +248,76 @@ export function MbgProductionPage() {
     return Array.from(map.values());
   }, [customTkpiEntries]);
 
-  // Subscribe batches
+  // Subscribe batches (Real batches from Firestore, strictly NO auto-created dummy batches)
   useEffect(() => {
-    const unsub = subscribeBatches((data) => {
-      setBatches(data.filter((batch) => batch.status !== 'DRAFT'));
+    if (!user) return;
+
+    // Safety fallback: maximum 2.5s loading state so the spinner never spins forever
+    const timer = setTimeout(() => {
       setLoading(false);
-    });
-    return unsub;
-  }, []);
+    }, 2500);
+
+    const unsub = subscribeBatches(
+      (data) => {
+        clearTimeout(timer);
+        // Hanya batch yang sudah difinalisasi (status !== 'DRAFT') yang masuk ke Produksi MBG
+        const finalizedBatches = data.filter((b) => b.status !== 'DRAFT');
+        setBatches(finalizedBatches);
+
+        if (finalizedBatches.length > 0) {
+          setSelectedBatchId((curr) => {
+            if (curr && finalizedBatches.some((b) => b.id === curr)) return curr;
+            const todayStr = new Date().toISOString().split('T')[0];
+            const todayBatch = finalizedBatches.find((b) => b.tanggal === todayStr);
+            return todayBatch ? todayBatch.id : finalizedBatches[0].id;
+          });
+        } else {
+          setSelectedBatchId(null);
+        }
+        setLoading(false);
+      },
+      (err) => {
+        clearTimeout(timer);
+        console.error('Error subscribing to batches:', err);
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      clearTimeout(timer);
+      unsub();
+    };
+  }, [user]);
 
   // Subscribe to all entries globally for cross-batch archive filtering
   useEffect(() => {
+    if (!user) return;
     setLoadingArchive(true);
-    const unsub = subscribeAllEntries((e) => {
-      setAllEntries(e);
+    const timer = setTimeout(() => {
       setLoadingArchive(false);
-    }, (err) => {
-      console.error('Error loading all entries:', err);
-      setLoadingArchive(false);
-    });
-    return unsub;
-  }, []);
+    }, 3000);
+
+    const unsub = subscribeAllEntries(
+      (e) => {
+        clearTimeout(timer);
+        setAllEntries(e);
+        setLoadingArchive(false);
+      },
+      (err) => {
+        clearTimeout(timer);
+        console.error('Error loading all entries:', err);
+        setLoadingArchive(false);
+      }
+    );
+    return () => {
+      clearTimeout(timer);
+      unsub();
+    };
+  }, [user]);
 
   // Subscribe entries + nutrition + recipe adjustments + daily report for selected batch
   useEffect(() => {
-    if (!selectedBatchId) return;
+    if (!selectedBatchId || !user) return;
     const unsub1 = subscribeEntries(selectedBatchId, setEntries);
     const unsub2 = subscribeNutrition(selectedBatchId, setNutritionData);
     const unsub3 = subscribeRecipeAdjustments(selectedBatchId, (list) => {
@@ -273,7 +331,7 @@ export function MbgProductionPage() {
       console.error('Error loading daily report:', err);
     });
     return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
-  }, [selectedBatchId]);
+  }, [selectedBatchId, user]);
 
   const selectedBatch = useMemo(() => {
     return batches.find((b) => b.id === selectedBatchId);
@@ -284,10 +342,17 @@ export function MbgProductionPage() {
   }, [batches]);
 
   const visibleBatchesInBar = useMemo(() => {
-    // Show all PM_SUBMITTED batches, plus the selected batch if it is an archive
-    return batches.filter(
-      (b) => b.status === 'PM_SUBMITTED' || b.id === selectedBatchId
-    );
+    // Show all batches so user can switch to any batch
+    return batches;
+  }, [batches]);
+
+  // Auto-select latest batch if none is currently selected
+  useEffect(() => {
+    if (batches.length > 0) {
+      if (!selectedBatchId || !batches.some((b) => b.id === selectedBatchId)) {
+        setSelectedBatchId(batches[0].id);
+      }
+    }
   }, [batches, selectedBatchId]);
 
   const filteredBatchesForSelect = useMemo(() => {
@@ -350,7 +415,7 @@ export function MbgProductionPage() {
 
     entries.forEach((e) => {
       if (e.isSekolahLibur) return;
-      
+
       if (e.institutionType === 'sekolah') {
         if (e.classesBreakdown && e.classesBreakdown.length > 0) {
           e.classesBreakdown.forEach((c) => {
@@ -460,15 +525,19 @@ export function MbgProductionPage() {
   const recipeRequirements = useMemo(() => {
     // 1. Calculate main ingredient weight totals for each active menu item in the batch
     const menuMainTotals: Record<string, { totalQty: number; countKecil: number; countBesar: number }> = {};
-    
+
+    const fallbackBatchMenu = selectedBatch?.tanggal
+      ? getMenuForDate(selectedBatch.tanggal, weeklySchedule).menuItems
+      : [];
+
     entries.forEach((e) => {
       if (e.isSekolahLibur) return;
-      
-      const menuList = e.menuItems || [];
+
+      const menuList = (e.menuItems && e.menuItems.length > 0) ? e.menuItems : fallbackBatchMenu;
       const qtyKecil = e.qtSiswaBalita || 0;
       const qtyBesar = (e.qtBumilBusui || 0) + (e.qtGuruKader || 0);
       const entryPorsiTotal = e.jumlah || (qtyKecil + qtyBesar) || 1;
-      
+
       menuList.forEach((menuName) => {
         // Flexible porsi matching
         const normName = menuName.trim();
@@ -491,14 +560,14 @@ export function MbgProductionPage() {
             });
           }
         }
-        
+
         const smallWeight = (porsiCfg && porsiCfg.porsiKecil > 0) ? porsiCfg.porsiKecil : 100;
         const largeWeight = (porsiCfg && porsiCfg.porsiBesar > 0) ? porsiCfg.porsiBesar : 150;
         let weight = (qtyKecil * smallWeight) + (qtyBesar * largeWeight);
         if (weight === 0) {
           weight = entryPorsiTotal * 100; // fallback 100g per portion
         }
-        
+
         if (!menuMainTotals[normName]) {
           menuMainTotals[normName] = { totalQty: 0, countKecil: 0, countBesar: 0 };
         }
@@ -545,7 +614,7 @@ export function MbgProductionPage() {
       if (recipe && recipe.baseQty > 0) {
         // Scaling ratio: required main ingredient weight / base weight in recipe
         const ratio = totals.totalQty / recipe.baseQty;
-        
+
         recipe.ingredients.forEach((ing) => {
           const key = ing.bahan.toLowerCase().trim();
           if (!rawIngredients[key]) {
@@ -587,9 +656,9 @@ export function MbgProductionPage() {
         const fallbackSatuan = porsiCfg && porsiCfg.porsiKecil === 1 ? 'pcs' : 'g';
 
         if (!rawIngredients[key]) {
-          rawIngredients[key] = { 
-            name, 
-            amount: 0, 
+          rawIngredients[key] = {
+            name,
+            amount: 0,
             satuan: fallbackSatuan,
             sourceMenus: [],
             menuBreakdown: [],
@@ -616,7 +685,7 @@ export function MbgProductionPage() {
     });
 
     return Object.values(rawIngredients).sort((a, b) => a.name.localeCompare(b.name));
-  }, [entries, combinedPorsi, combinedRecipes]);
+  }, [entries, combinedPorsi, combinedRecipes, selectedBatch?.tanggal, weeklySchedule]);
 
   const adjustedRecipeRequirements = useMemo(() => {
     // 1. Start with copy of recipeRequirements
@@ -659,7 +728,7 @@ export function MbgProductionPage() {
     const query = recipeSearchQuery.toLowerCase().trim();
     if (!query) return adjustedRecipeRequirements;
     return adjustedRecipeRequirements.filter(
-      (r) => 
+      (r) =>
         r.name.toLowerCase().includes(query) ||
         r.sourceMenus.some((m) => m.toLowerCase().includes(query))
     );
@@ -683,6 +752,52 @@ export function MbgProductionPage() {
       showToast({ message: 'Gagal menyesuaikan estimasi bahan', variant: 'error' });
     } finally {
       setIsSavingAdjustment(false);
+    }
+  };
+
+  const effectiveDailyReport = useMemo(() => {
+    if (dailyReport) return dailyReport;
+    if (selectedBatch && entries.length > 0) {
+      return generateDailyReportFromBatchData(selectedBatch, entries, weeklySchedule, combinedRecipes);
+    }
+    return null;
+  }, [dailyReport, selectedBatch, entries, weeklySchedule, combinedRecipes]);
+
+  const [savingDailyReport, setSavingDailyReport] = useState(false);
+
+  const handleSaveEffectiveDailyReport = async () => {
+    if (!effectiveDailyReport || !selectedBatch || !user) return;
+    try {
+      setSavingDailyReport(true);
+      await saveDailyReport(dailyReport?.id || null, {
+        ...effectiveDailyReport,
+        batchId: selectedBatch.id,
+        tanggal: selectedBatch.tanggal,
+        updatedAt: new Date().toISOString(),
+        createdBy: user.uid,
+      });
+      showToast({ message: 'Berhasil menyimpan Laporan Harian ke database!', variant: 'success' });
+    } catch (err) {
+      console.error('Error saving daily report:', err);
+      showToast({ message: 'Gagal menyimpan Laporan Harian', variant: 'error' });
+    } finally {
+      setSavingDailyReport(false);
+    }
+  };
+
+  const handleDeleteBatch = async (batchId: string, tanggal: string) => {
+    const confirmText = `Apakah Anda yakin ingin menghapus arsip data batch tanggal ${tanggal}? Tindakan ini akan menghapus seluruh data penerima manfaat dan laporan di dalamnya, serta tidak dapat dibatalkan.`;
+    if (!window.confirm(confirmText)) return;
+
+    try {
+      await deleteBatch(batchId);
+      showToast({ message: `Data batch ${tanggal} berhasil dihapus!`, variant: 'success' });
+      if (selectedBatchId === batchId) {
+        setSelectedBatchId(null);
+      }
+    } catch (err) {
+      console.error('Error deleting batch:', err);
+      showToast({ message: 'Gagal menghapus batch', variant: 'error' });
     }
   };
 
@@ -734,9 +849,9 @@ export function MbgProductionPage() {
       setRecipeBookQuery('');
       setShowRecipeBook(true);
     } else {
-      showToast({ 
-        message: `Resep "${menuName}" tidak ditemukan di Buku Resep. Silakan buat resep kustom di Buku Resep.`, 
-        variant: 'info' 
+      showToast({
+        message: `Resep "${menuName}" tidak ditemukan di Buku Resep. Silakan buat resep kustom di Buku Resep.`,
+        variant: 'info'
       });
     }
   };
@@ -797,7 +912,6 @@ export function MbgProductionPage() {
     }
 
     try {
-      setIsInitializing(true);
       // 1. Clear existing nutrition entries for this batch
       for (const entry of nutritionData) {
         await deleteNutritionEntry(entry.id);
@@ -810,10 +924,14 @@ export function MbgProductionPage() {
       }, 0) || 1;
 
       // Build total portion count per menu item
+      const fallbackBatchMenu = selectedBatch?.tanggal
+        ? getMenuForDate(selectedBatch.tanggal, weeklySchedule).menuItems
+        : [];
+
       const menuPortionTotals: Record<string, number> = {};
       entries.forEach((e) => {
         if (e.isSekolahLibur) return;
-        const menuList = e.menuItems || [];
+        const menuList = (e.menuItems && e.menuItems.length > 0) ? e.menuItems : fallbackBatchMenu;
         const entryPortions = e.jumlah || ((e.qtSiswaBalita || 0) + (e.qtBumilBusui || 0) + (e.qtGuruKader || 0)) || 1;
         menuList.forEach((m) => {
           const norm = m.trim();
@@ -831,7 +949,7 @@ export function MbgProductionPage() {
 
       adjustedRecipeRequirements.forEach((ing) => {
         const key = ing.name.toLowerCase().trim();
-        
+
         // Calculate portion count for this specific ingredient from its source menus
         let ingPortions = 0;
         if (ing.sourceMenus && ing.sourceMenus.length > 0) {
@@ -983,28 +1101,15 @@ export function MbgProductionPage() {
     } catch (err) {
       console.error('Error syncing nutrition from ingredients:', err);
       showToast({ message: 'Gagal meng-sync data gizi bahan makanan', variant: 'error' });
-    } finally {
-      setIsInitializing(false);
     }
-  }, [selectedBatchId, user, adjustedRecipeRequirements, nutritionData, entries, combinedTkpiDatabase, showToast]);
+  }, [selectedBatchId, selectedBatch?.tanggal, weeklySchedule, user, adjustedRecipeRequirements, nutritionData, entries, combinedTkpiDatabase, showToast]);
 
-  // Auto-populate nutrition entries from raw ingredients (Standar Resep + TKPI)
-  useEffect(() => {
-    if (!selectedBatchId || loading || isInitializing || !user) return;
-    
-    // Auto populate only if entries exist, nutritionData is empty, and batch status is PM_SUBMITTED
-    if (entries.length > 0 && nutritionData.length === 0 && selectedBatch?.status === 'PM_SUBMITTED') {
-      if (adjustedRecipeRequirements.length > 0) {
-        handleSyncNutritionFromIngredients();
-      }
-    }
-  }, [entries, nutritionData.length, selectedBatchId, selectedBatch?.status, adjustedRecipeRequirements.length, loading, isInitializing, user, handleSyncNutritionFromIngredients]);
 
   const handleUpdateNutrition = async (id: string, updates: Partial<MbgNutritionEntry>) => {
     try {
       const existing = nutritionData.find((n) => n.id === id);
       if (!existing) return;
-      
+
       const oldQty = existing.quantity || 1;
       const merged = { ...existing, ...updates };
       const newQty = merged.quantity || 1;
@@ -1020,7 +1125,7 @@ export function MbgProductionPage() {
       if (match) {
         const baseBerat = match.berat || 100;
         merged.baseBerat = baseBerat;
-        
+
         if (!isNutrientUpdate) {
           // If name changes, quantity changes, or weight is not set, scale weight based on quantity
           if ('menuItemName' in updates || ('quantity' in updates && !('berat' in updates)) || !existing.berat) {
@@ -1029,7 +1134,7 @@ export function MbgProductionPage() {
 
           const targetBerat = merged.berat ?? (newQty * baseBerat);
           merged.berat = targetBerat;
-          
+
           // TKPI database values are per 100g BDD, so divide target weight by 100
           const ratio = targetBerat / 100;
 
@@ -1099,7 +1204,7 @@ export function MbgProductionPage() {
       showToast({ message: 'Nama bahan makanan harus diisi!', variant: 'error' });
       return;
     }
-    
+
     // Check duplicate only if adding new
     if (!editingDbItemId) {
       const lowercaseName = newDbItem.nama.trim().toLowerCase();
@@ -1126,7 +1231,7 @@ export function MbgProductionPage() {
         await addCustomTkpiEntry(itemToSave);
         showToast({ message: `Bahan "${newDbItem.nama}" berhasil ditambahkan ke database!`, variant: 'success' });
       }
-      
+
       // Reset form and close form view
       setNewDbItem({
         nama: '',
@@ -1197,12 +1302,72 @@ export function MbgProductionPage() {
     }
   };
 
-  const handleExportPdf = async () => {
-    if (!selectedBatchId || !selectedBatch) return;
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingDocx, setExportingDocx] = useState(false);
+  const [savingReport, setSavingReport] = useState(false);
+
+  const handleExportDocxAction = async (targetBatch?: MbgPmBatch, targetEntries?: MbgPmEntry[]) => {
+    const batchToUse = targetBatch || selectedBatch;
+    const entriesToUse = targetEntries || entries;
+    if (!batchToUse) {
+      showToast({ message: 'Pilih batch terlebih dahulu!', variant: 'info' });
+      return;
+    }
+
     try {
+      setExportingDocx(true);
+      const logoBase64 = await getBase64ImageFromUrl('/logo_badan_gizi.png');
+
+      await exportProductionDocx({
+        batch: batchToUse,
+        entries: entriesToUse,
+        nutritionTotals,
+        nutritionData,
+        recipeRequirements: adjustedRecipeRequirements,
+        dailyReport: effectiveDailyReport || dailyReport,
+        logoBase64,
+      }, `Laporan_Produksi_MBG_${batchToUse.tanggal}.docx`);
+
+      // Auto-save to archive (update batch status if PM_SUBMITTED)
+      if (batchToUse.id) {
+        if (batchToUse.status === 'PM_SUBMITTED') {
+          await updateBatchStatus(batchToUse.id, 'NUTRITION_DONE');
+        }
+        const reportToSave = effectiveDailyReport || dailyReport || generateDailyReportFromBatchData(batchToUse, entriesToUse, weeklySchedule, combinedRecipes);
+        if (reportToSave && user) {
+          await saveDailyReport(dailyReport?.id || null, {
+            ...reportToSave,
+            batchId: batchToUse.id,
+            tanggal: batchToUse.tanggal,
+            updatedAt: new Date().toISOString(),
+            createdBy: user.uid,
+          });
+        }
+      }
+
+      showToast({ message: 'Laporan DOCX berhasil di-export & dicatat di Arsip Gizi!', variant: 'success' });
+    } catch (err) {
+      console.error('Export DOCX error:', err);
+      showToast({ message: 'Gagal export DOCX', variant: 'error' });
+    } finally {
+      setExportingDocx(false);
+    }
+  };
+
+  const handleExportPdf = async (targetBatch?: MbgPmBatch, targetEntries?: MbgPmEntry[]) => {
+    const batchToUse = targetBatch || selectedBatch;
+    const entriesToUse = targetEntries || entries;
+    if (!batchToUse) {
+      showToast({ message: 'Pilih batch terlebih dahulu!', variant: 'info' });
+      return;
+    }
+
+    try {
+      setExportingPdf(true);
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageW = doc.internal.pageSize.getWidth();
-      
+      const pageH = doc.internal.pageSize.getHeight();
+
       const brandAmberDark: [number, number, number] = [180, 83, 9];    // #B45309
       const brandGold: [number, number, number] = [217, 119, 6];       // #D97706
       const slateDark: [number, number, number] = [30, 41, 59];        // #1E293B
@@ -1227,17 +1392,18 @@ export function MbgProductionPage() {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);
       doc.setTextColor(...slateLight);
-      doc.text(`Tanggal Batch: ${selectedBatch.tanggal} | SIMOL MBG`, pageW / 2, 41, { align: "center" });
+      doc.text(`Tanggal Batch: ${batchToUse.tanggal} | SIMOL MBG`, pageW / 2, 41, { align: "center" });
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8.5);
       doc.setTextColor(...brandGold);
-      doc.text(`Status: ${selectedBatch.status}`, pageW - 14, 16, { align: "right" });
+      doc.text(`Status: ${batchToUse.status}`, pageW - 14, 16, { align: "right" });
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);
       doc.setTextColor(...slateLight);
-      doc.text(`Total Porsi: ${selectedBatch.totalJumlah} Porsi`, pageW - 14, 20.5, { align: "right" });
+      const totalPorsiValue = batchToUse.totalJumlah || entriesToUse.reduce((sum, e) => sum + (e.isSekolahLibur ? 0 : (e.jumlah || 0)), 0);
+      doc.text(`Total Porsi: ${totalPorsiValue} Porsi`, pageW - 14, 20.5, { align: "right" });
 
       doc.setDrawColor(229, 231, 235);
       doc.line(14, 45, pageW - 14, 45);
@@ -1249,7 +1415,21 @@ export function MbgProductionPage() {
       doc.text("1. DATA PM (PENANGGUNG JAWAB MAKANAN) INSTITUSI", 14, 51);
 
       const pmRows: (string | number)[][] = [];
-      entries.forEach((e) => {
+      let totalSiswaAll = 0;
+      let totalBumilAll = 0;
+      let totalGuruAll = 0;
+      let totalPobiaAll = 0;
+      let totalPorsiAll = 0;
+
+      entriesToUse.forEach((e) => {
+        if (!e.isSekolahLibur) {
+          totalSiswaAll += e.qtSiswaBalita || 0;
+          totalBumilAll += e.qtBumilBusui || 0;
+          totalGuruAll += e.qtGuruKader || 0;
+          totalPobiaAll += e.qtPobiaNasi || 0;
+          totalPorsiAll += e.jumlah || 0;
+        }
+
         pmRows.push([
           e.institutionName + (e.isSekolahLibur ? ' (Libur)' : ''),
           e.institutionType === 'posyandu' ? 'Posyandu' : 'Sekolah',
@@ -1282,6 +1462,20 @@ export function MbgProductionPage() {
         }
       });
 
+      // Add Grand Total Row in PM Table
+      pmRows.push([
+        'TOTAL SELURUH INSTITUSI',
+        '-',
+        '-',
+        totalSiswaAll,
+        totalBumilAll,
+        totalGuruAll,
+        totalPobiaAll,
+        totalPorsiAll,
+        '-',
+        'Lengkap',
+      ]);
+
       autoTable(doc, {
         startY: 54,
         head: [['Institusi', 'Tipe', 'Petugas', 'Siswa/Balita', 'Bumil/Busui', 'Guru/Kader', 'Pobia Nasi', 'Jumlah', 'Jadwal', 'Status']],
@@ -1295,43 +1489,55 @@ export function MbgProductionPage() {
 
       let nextY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
 
-      // Section 2: Kadar Gizi
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(...slateDark);
-      doc.text("2. DATA KADAR GIZI BAHAN MAKANAN (INGREDIENTS)", 14, nextY);
+      // Section 2: Kadar Gizi (if available)
+      if (nutritionData && nutritionData.length > 0) {
+        if (nextY + 40 > pageH - 20) {
+          doc.addPage();
+          nextY = 20;
+        }
 
-      const giziHeaders = [
-        'Bahan Makanan',
-        'Qty',
-        'Berat',
-        ...NUTRIENTS_LIST.map((nut) => nut.label.split(' ')[0]),
-      ];
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(...slateDark);
+        doc.text("2. DATA KADAR GIZI BAHAN MAKANAN (INGREDIENTS)", 14, nextY);
 
-      const giziRows = nutritionData.map((n) => [
-        n.menuItemName,
-        n.quantity,
-        `${n.berat} g`,
-        ...NUTRIENTS_LIST.map((nut) => {
-          const val = n[nut.key as keyof MbgNutritionEntry];
-          return val !== undefined && val !== null ? Number(val).toFixed(1) : '0.0';
-        }),
-      ]);
+        const giziHeaders = [
+          'Bahan Makanan',
+          'Qty',
+          'Berat',
+          ...NUTRIENTS_LIST.map((nut) => nut.label.split(' ')[0]),
+        ];
 
-      autoTable(doc, {
-        startY: nextY + 3,
-        head: [giziHeaders],
-        body: giziRows,
-        theme: 'grid',
-        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 6 },
-        bodyStyles: { fontSize: 6 },
-        styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
-        margin: { left: 14, right: 14 },
-      });
+        const giziRows = nutritionData.map((n) => [
+          n.menuItemName,
+          n.quantity,
+          `${n.berat} g`,
+          ...NUTRIENTS_LIST.map((nut) => {
+            const val = n[nut.key as keyof MbgNutritionEntry];
+            return val !== undefined && val !== null ? Number(val).toFixed(1) : '0.0';
+          }),
+        ]);
 
-      nextY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+        autoTable(doc, {
+          startY: nextY + 3,
+          head: [giziHeaders],
+          body: giziRows,
+          theme: 'grid',
+          headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 6 },
+          bodyStyles: { fontSize: 6 },
+          styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
+          margin: { left: 14, right: 14 },
+        });
+
+        nextY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+      }
 
       // Section 3: Ringkasan Total Gizi
+      if (nextY + 35 > pageH - 20) {
+        doc.addPage();
+        nextY = 20;
+      }
+
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
       doc.setTextColor(...slateDark);
@@ -1359,51 +1565,105 @@ export function MbgProductionPage() {
       nextY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
 
       // Section 4: Estimasi Kebutuhan Bahan Baku (Standar Resep)
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
+      if (adjustedRecipeRequirements && adjustedRecipeRequirements.length > 0) {
+        if (nextY + 40 > pageH - 20) {
+          doc.addPage();
+          nextY = 20;
+        }
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(...slateDark);
+        doc.text("4. ESTIMASI KEBUTUHAN BAHAN BAKU BATCH (STANDAR RESEP)", 14, nextY);
+
+        const recipeHeaders = ['No', 'Nama Bahan Baku', 'Kebutuhan', 'Menu Terkait'];
+        const recipeRows = adjustedRecipeRequirements.map((r, index) => {
+          let formattedWeight = '';
+          if (r.satuan === 'g' && r.amount >= 1000) {
+            formattedWeight = `${(r.amount / 1000).toFixed(2)} kg`;
+          } else if (r.satuan === 'ml' && r.amount >= 1000) {
+            formattedWeight = `${(r.amount / 1000).toFixed(2)} L`;
+          } else {
+            formattedWeight = `${r.amount.toFixed(1)} ${r.satuan}`;
+          }
+
+          let displayName = r.name;
+          if (r.isCustom) {
+            displayName += ' (Manual)';
+          } else if (r.adjustmentId) {
+            displayName += ' (Disesuaikan)';
+          }
+
+          return [
+            index + 1,
+            displayName,
+            formattedWeight,
+            r.sourceMenus.join(', ')
+          ];
+        });
+
+        autoTable(doc, {
+          startY: nextY + 3,
+          head: [recipeHeaders],
+          body: recipeRows,
+          theme: 'grid',
+          headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 7 },
+          bodyStyles: { fontSize: 7 },
+          styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
+          margin: { left: 14, right: 14 },
+        });
+
+        nextY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+      }
+
+      // Section 5: Lembar Pengesahan / Tanda Tangan
+      let sigY = nextY + 4;
+      if (sigY + 38 > pageH - 18) {
+        doc.addPage();
+        sigY = 24;
+      }
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
       doc.setTextColor(...slateDark);
-      doc.text("4. ESTIMASI KEBUTUHAN BAHAN BAKU BATCH (STANDAR RESEP)", 14, nextY);
 
-      const recipeHeaders = ['No', 'Nama Bahan Baku', 'Kebutuhan', 'Menu Terkait'];
-      const recipeRows = adjustedRecipeRequirements.map((r, index) => {
-        let formattedWeight = '';
-        if (r.satuan === 'g' && r.amount >= 1000) {
-          formattedWeight = `${(r.amount / 1000).toFixed(2)} kg`;
-        } else if (r.satuan === 'ml' && r.amount >= 1000) {
-          formattedWeight = `${(r.amount / 1000).toFixed(2)} L`;
-        } else {
-          formattedWeight = `${r.amount.toFixed(1)} ${r.satuan}`;
-        }
-        
-        let displayName = r.name;
-        if (r.isCustom) {
-          displayName += ' (Manual)';
-        } else if (r.adjustmentId) {
-          displayName += ' (Disesuaikan)';
-        }
+      const col1X = 20;
+      const col2X = pageW / 2;
+      const col3X = pageW - 20;
 
-        return [
-          index + 1,
-          displayName,
-          formattedWeight,
-          r.sourceMenus.join(', ')
-        ];
-      });
+      doc.text("Mengetahui,", col1X, sigY);
+      doc.setFont("helvetica", "bold");
+      doc.text("Kepala Satuan Pelayanan (SPPG)", col1X, sigY + 4);
+      doc.setFont("helvetica", "normal");
+      doc.text("( _______________________ )", col1X, sigY + 22);
+      doc.setFontSize(7);
+      doc.setTextColor(...slateLight);
+      doc.text("NIP: SPPG-BGN-001", col1X, sigY + 26);
 
-      autoTable(doc, {
-        startY: nextY + 3,
-        head: [recipeHeaders],
-        body: recipeRows,
-        theme: 'grid',
-        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 7 },
-        bodyStyles: { fontSize: 7 },
-        styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
-        margin: { left: 14, right: 14 },
-      });
+      doc.setFontSize(8);
+      doc.setTextColor(...slateDark);
+      doc.text("Diperiksa Oleh,", col2X, sigY, { align: "center" });
+      doc.setFont("helvetica", "bold");
+      doc.text("Tenaga Ahli Gizi (Nutrisionis)", col2X, sigY + 4, { align: "center" });
+      doc.setFont("helvetica", "normal");
+      doc.text("( _______________________ )", col2X, sigY + 22, { align: "center" });
+      doc.setFontSize(7);
+      doc.setTextColor(...slateLight);
+      doc.text("STR: GIZI-MBG-2026", col2X, sigY + 26, { align: "center" });
+
+      doc.setFontSize(8);
+      doc.setTextColor(...slateDark);
+      doc.text("Dibuat Oleh,", col3X, sigY, { align: "right" });
+      doc.setFont("helvetica", "bold");
+      doc.text("Koordinator Produksi & Dapur", col3X, sigY + 4, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      doc.text("( _______________________ )", col3X, sigY + 22, { align: "right" });
+      doc.setFontSize(7);
+      doc.setTextColor(...slateLight);
+      doc.text("Koperasi Al-Umanaa", col3X, sigY + 26, { align: "right" });
 
       // Draw page decorations/variations and page numbers (e.g. Page X of Y)
       const totalPages = doc.getNumberOfPages();
-      const pageH = doc.internal.pageSize.getHeight();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
 
@@ -1422,11 +1682,63 @@ export function MbgProductionPage() {
         doc.text(`Halaman ${i} dari ${totalPages}`, pageW - 14, pageH - 7, { align: "right" });
       }
 
-      doc.save(`Laporan_Produksi_Gizi_${selectedBatch.tanggal}.pdf`);
-      showToast({ message: 'Laporan PDF berhasil di-export!', variant: 'success' });
+      doc.save(`Laporan_Produksi_MBG_${batchToUse.tanggal}.pdf`);
+
+      // Auto-save to archive!
+      if (batchToUse.id) {
+        if (batchToUse.status === 'PM_SUBMITTED') {
+          await updateBatchStatus(batchToUse.id, 'PDF_EXPORTED');
+        }
+        const reportToSave = effectiveDailyReport || dailyReport || generateDailyReportFromBatchData(batchToUse, entriesToUse, weeklySchedule, combinedRecipes);
+        if (reportToSave && user) {
+          await saveDailyReport(dailyReport?.id || null, {
+            ...reportToSave,
+            batchId: batchToUse.id,
+            tanggal: batchToUse.tanggal,
+            updatedAt: new Date().toISOString(),
+            createdBy: user.uid,
+          });
+        }
+      }
+
+      showToast({ message: 'Laporan PDF berhasil di-export & dicatat di Arsip Gizi!', variant: 'success' });
     } catch (err) {
       console.error(err);
       showToast({ message: 'Gagal export PDF', variant: 'error' });
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handleSaveReportAction = async () => {
+    if (!selectedBatchId || !selectedBatch) {
+      showToast({ message: 'Pilih batch terlebih dahulu!', variant: 'info' });
+      return;
+    }
+
+    try {
+      setSavingReport(true);
+      if (selectedBatch.status === 'PM_SUBMITTED') {
+        await updateBatchStatus(selectedBatchId, 'NUTRITION_DONE');
+      }
+
+      const reportToSave = effectiveDailyReport || dailyReport || generateDailyReportFromBatchData(selectedBatch, entries, weeklySchedule, combinedRecipes);
+      if (reportToSave && user) {
+        await saveDailyReport(dailyReport?.id || null, {
+          ...reportToSave,
+          batchId: selectedBatch.id,
+          tanggal: selectedBatch.tanggal,
+          updatedAt: new Date().toISOString(),
+          createdBy: user.uid,
+        });
+      }
+
+      showToast({ message: `Laporan batch ${selectedBatch.tanggal} berhasil disimpan ke Arsip Gizi!`, variant: 'success' });
+    } catch (err) {
+      console.error('Error saving report to archive:', err);
+      showToast({ message: 'Gagal menyimpan laporan ke Arsip Gizi', variant: 'error' });
+    } finally {
+      setSavingReport(false);
     }
   };
 
@@ -1487,39 +1799,64 @@ export function MbgProductionPage() {
     }
   };
 
-// Helper: Filter only visible & non-empty sheet tabs from Google Sheets/Excel
-function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
-  const sheetsMeta = wb.Workbook?.Sheets || [];
-  
-  const filtered = wb.SheetNames.filter((name, idx) => {
-    const nameLower = name.toLowerCase().trim();
-    if (nameLower.includes('siklus') || nameLower.includes('akg')) {
-      return false;
+  const [creatingBatch, setCreatingBatch] = useState(false);
+
+  const handleCreateTodayBatch = async () => {
+    try {
+      setCreatingBatch(true);
+      const todayStr = new Date().toISOString().split('T')[0];
+      const existing = batches.find((b) => b.tanggal === todayStr);
+      if (existing) {
+        setSelectedBatchId(existing.id);
+        showToast({ message: `Batch hari ini (${todayStr}) sudah ada dan telah dibuka!`, variant: 'info' });
+        return;
+      }
+
+      const newBatchId = await createBatch(todayStr, user?.uid || 'user', true, weeklySchedule);
+      await updateBatch(newBatchId, { status: 'PM_SUBMITTED' });
+      setSelectedBatchId(newBatchId);
+      showToast({ message: `Batch baru untuk hari ini (${todayStr}) berhasil dibuat!`, variant: 'success' });
+    } catch (err) {
+      console.error('Error creating batch:', err);
+      showToast({ message: 'Gagal membuat batch baru', variant: 'error' });
+    } finally {
+      setCreatingBatch(false);
     }
+  };
 
-    // Check if sheet tab is marked hidden in Google Sheets / Excel
-    const meta = sheetsMeta[idx];
-    if (meta && (meta.Hidden === 1 || meta.Hidden === 2)) {
-      return false;
-    }
+  // Helper: Filter only visible & non-empty sheet tabs from Google Sheets/Excel
+  function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
+    const sheetsMeta = wb.Workbook?.Sheets || [];
 
-    // Check if sheet contains content
-    const ws = wb.Sheets[name];
-    if (!ws || !ws['!ref']) {
-      return false;
-    }
+    const filtered = wb.SheetNames.filter((name, idx) => {
+      const nameLower = name.toLowerCase().trim();
+      if (nameLower.includes('siklus') || nameLower.includes('akg')) {
+        return false;
+      }
 
-    // Verify row count is non-empty
-    const range = XLSX.utils.decode_range(ws['!ref']);
-    if (range.e.r - range.s.r < 2) {
-      return false;
-    }
+      // Check if sheet tab is marked hidden in Google Sheets / Excel
+      const meta = sheetsMeta[idx];
+      if (meta && (meta.Hidden === 1 || meta.Hidden === 2)) {
+        return false;
+      }
 
-    return true;
-  });
+      // Check if sheet contains content
+      const ws = wb.Sheets[name];
+      if (!ws || !ws['!ref']) {
+        return false;
+      }
 
-  return filtered.length > 0 ? filtered : wb.SheetNames.filter((n) => !n.toLowerCase().includes('siklus') && !n.toLowerCase().includes('akg'));
-}
+      // Verify row count is non-empty
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      if (range.e.r - range.s.r < 2) {
+        return false;
+      }
+
+      return true;
+    });
+
+    return filtered.length > 0 ? filtered : wb.SheetNames.filter((n) => !n.toLowerCase().includes('siklus') && !n.toLowerCase().includes('akg'));
+  }
 
   const handleFetchGoogleSheets = async () => {
     if (!sheetsUrlInput.trim()) {
@@ -1546,7 +1883,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
       const arrayBuffer = await res.arrayBuffer();
       const wb = XLSX.read(arrayBuffer, { type: 'array' });
       setSheetWorkbook(wb);
-      
+
       const sheetNames = getVisibleSheetNames(wb);
       setAvailableSheetNames(sheetNames);
 
@@ -1582,24 +1919,100 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
     }
   };
 
+  const parseSheetNameToDate = (sheetName: string): string | null => {
+    if (!sheetName) return null;
+    const clean = sheetName.trim();
+
+    // Pattern 1: DDMMYYYY (8 digits, e.g. 04092026 or 11092026)
+    const ddmmyyyy = clean.match(/^(\d{2})(\d{2})(\d{4})$/);
+    if (ddmmyyyy) {
+      const [, d, m, y] = ddmmyyyy;
+      return `${y}-${m}-${d}`;
+    }
+
+    // Pattern 2: YYYY-MM-DD
+    const yyyymmdd = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (yyyymmdd) {
+      return clean;
+    }
+
+    // Pattern 3: DD-MM-YYYY or DD/MM/YYYY
+    const ddmmyyyySep = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (ddmmyyyySep) {
+      const [, d, m, y] = ddmmyyyySep;
+      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+
+    // Pattern 4: DDMMYY (6 digits, e.g. 040926)
+    const ddmmyy = clean.match(/^(\d{2})(\d{2})(\d{2})$/);
+    if (ddmmyy) {
+      const [, d, m, y] = ddmmyy;
+      return `20${y}-${m}-${d}`;
+    }
+
+    return null;
+  };
+
   const handleSelectSheetDay = async (sheetName: string) => {
-    if (!sheetWorkbook || !selectedBatchId || !selectedBatch) return;
+    if (!sheetWorkbook) return;
 
     try {
       setImportingSheets(true);
       const ws = sheetWorkbook.Sheets[sheetName];
       const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-      const parsedReport = parseProductionSheetRows(rows, selectedBatchId, selectedBatch.tanggal, sheetName);
-      
-      await saveDailyReport(dailyReport?.id || null, {
+      // Parse date from sheetName (e.g. "04092026" -> "2026-09-04")
+      const parsedDateFromSheet = parseSheetNameToDate(sheetName);
+      const targetBatchTanggal = parsedDateFromSheet || selectedBatch?.tanggal || new Date().toISOString().split('T')[0];
+
+      let targetBatchId = '';
+      const existingBatch = batches.find((b) => b.tanggal === targetBatchTanggal);
+
+      if (existingBatch) {
+        targetBatchId = existingBatch.id;
+      } else {
+        // Auto-create batch for this date with autoPopulate = true
+        targetBatchId = await createBatch(targetBatchTanggal, user?.uid || 'user', true, weeklySchedule);
+      }
+
+      const parsedReport = parseProductionSheetRows(rows, targetBatchId, targetBatchTanggal, sheetName);
+
+      const totalPorsiFromReport =
+        (parsedReport.porsiKecil?.pmCount || 0) +
+        (parsedReport.porsiBesar?.pmCount || 0) +
+        (parsedReport.porsiBalita?.pmCount || 0) +
+        (parsedReport.porsiBumilBusui?.pmCount || 0);
+
+      if (totalPorsiFromReport > 0) {
+        await updateBatch(targetBatchId, {
+          totalJumlah: totalPorsiFromReport,
+          totalSiswaBalita: (parsedReport.porsiKecil?.pmCount || 0) + (parsedReport.porsiBesar?.pmCount || 0) + (parsedReport.porsiBalita?.pmCount || 0),
+          totalBumilBusui: (parsedReport.porsiBumilBusui?.pmCount || 0),
+          status: 'PM_SUBMITTED',
+        });
+      }
+
+      const savedReportId = await saveDailyReport(null, {
         ...parsedReport,
+        batchId: targetBatchId,
+        tanggal: targetBatchTanggal,
         createdBy: user?.uid || '',
       });
 
+      setDailyReport({
+        id: savedReportId,
+        ...parsedReport,
+        batchId: targetBatchId,
+        tanggal: targetBatchTanggal,
+        createdBy: user?.uid || '',
+      });
+
+      setSelectedBatchId(targetBatchId);
+      setShowImportedDetails(true);
       setShowSheetsImportModal(false);
-      setActiveTab('daily-report');
-      showToast({ message: `Berhasil meng-import data Laporan Harian (${sheetName}) ke website!`, variant: 'success' });
+      setActiveTab('pm-data');
+
+      showToast({ message: `Berhasil meng-import data Laporan Harian (${sheetName}) ke Batch ${targetBatchTanggal}!`, variant: 'success' });
     } catch (err: unknown) {
       console.error('Parse Sheet error:', err);
       showToast({ message: 'Gagal memproses sheet ter-pilih', variant: 'error' });
@@ -1613,7 +2026,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
       showToast({ message: 'Pilih batch terlebih dahulu!', variant: 'info' });
       return;
     }
-    const reportToExport = dailyReport || parseProductionSheetRows([], selectedBatch.id, selectedBatch.tanggal, 'HARI 3');
+    const reportToExport = effectiveDailyReport || dailyReport || generateDailyReportFromBatchData(selectedBatch, entries, weeklySchedule, combinedRecipes);
     try {
       await export8PageDailyReportPdf(reportToExport as MbgProductionDailyReport, selectedBatch);
       showToast({ message: 'Berhasil meng-export PDF 8-Halaman Laporan Harian Operasional!', variant: 'success' });
@@ -1633,52 +2046,54 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
         </p>
       </div>
 
-      {/* Tab Toggle */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div className="flex gap-1 bg-[#F3F4F6] rounded-xl p-1 w-full max-w-xl">
-          {(['pm-data', 'nutrition', 'daily-report', 'archive'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${
-                activeTab === tab
-                  ? 'bg-white text-[#111827] shadow-sm'
-                  : 'text-[#6B7280] hover:text-[#111827]'
-              }`}
-            >
-              {tab === 'pm-data'
-                ? '📋 Data PM'
-                : tab === 'nutrition'
-                ? '🧪 Kadar Gizi'
-                : tab === 'daily-report'
-                ? '📑 Laporan Harian (8 Hal)'
-                : '📁 Arsip Gizi'}
-            </button>
-          ))}
+      {/* Tab Navigation & Action Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+        <div className="inline-flex items-center gap-1.5 bg-[#F1F5F9] p-1.5 rounded-2xl border border-slate-200/80 shadow-inner overflow-x-auto max-w-full">
+          {[
+            { id: 'pm-data', label: 'Data PM', icon: ClipboardList },
+            { id: 'archive', label: 'Arsip Gizi', icon: FolderOpen },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                className={`inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer select-none ${isActive
+                    ? 'bg-white text-slate-900 shadow-sm ring-1 ring-black/5'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                  }`}
+              >
+                <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-amber-600' : 'text-slate-400'}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
+
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setShowSheetsImportModal(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#10B981] hover:bg-[#059669] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#10B981] hover:bg-[#059669] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap"
             title="Import data Laporan Harian via Google Sheets Link / File Excel"
           >
-            <FileDown className="h-4 w-4 text-white rotate-180" />
-            <span>📥 Import Google Sheets / Excel</span>
+            <FileUp className="h-4 w-4 text-white" />
+            <span>Import Google Sheets / Excel</span>
           </button>
           <button
             onClick={handleTriggerExport8PagePdf}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap"
             title="Export Laporan Harian Operasional PDF 8-Halaman Resmi"
           >
             <FileDown className="h-4 w-4 text-amber-400" />
-            <span>📄 Export PDF (8 Hal)</span>
+            <span>Export PDF (8 Hal)</span>
           </button>
           <button
             onClick={() => setShowScheduleModal(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#059669] hover:bg-[#047857] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#059669] hover:bg-[#047857] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap"
             title="Lihat / Edit Master Jadwal Menu Mingguan MBG"
           >
-            <Calendar className="h-4 w-4 text-[#FBBF24]" />
+            <Calendar className="h-4 w-4 text-emerald-200" />
             <span>Master Jadwal Menu</span>
           </button>
           {activeTab === 'nutrition' && selectedBatchId && (
@@ -1691,41 +2106,41 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                 <Send className="h-4 w-4 text-white" />
                 <span>Submit ke Purchasing</span>
               </button>
-            <button
-              onClick={handleExportPdf}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#111827] text-white text-xs font-extrabold rounded-xl shadow hover:bg-[#1F2937] transition-colors cursor-pointer"
-            >
-              <FileDown className="h-4 w-4" />
-              <span>Export PDF</span>
-            </button>
-            <button
-              onClick={() => {
-                setRecipeBookQuery('');
-                setSelectedRecipeItem(null);
-                setShowRecipeBook(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#E11D48] hover:bg-[#BE123C] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
-            >
-              <span>📖 Buku Resep</span>
-            </button>
-            <button
-              onClick={() => {
-                setDbSearchQuery('');
-                setSelectedDbItem(null);
-                setIsAddingDbItem(false);
-                setShowDbLookup(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F59E0B] hover:bg-[#D97706] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
-            >
-              <span>Gizi (TKPI)</span>
-            </button>
-            <button
-              onClick={handleSyncNutritionFromIngredients}
-              title="Kalkulasi dan sync kadar gizi dari seluruh bahan baku resep batch ke database TKPI"
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#15803D] hover:bg-[#166534] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
-            >
-              <span>⚡ Auto-Sync Gizi</span>
-            </button>
+              <button
+                onClick={() => handleExportPdf()}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#111827] text-white text-xs font-extrabold rounded-xl shadow hover:bg-[#1F2937] transition-colors cursor-pointer"
+              >
+                <FileDown className="h-4 w-4" />
+                <span>Export PDF</span>
+              </button>
+              <button
+                onClick={() => {
+                  setRecipeBookQuery('');
+                  setSelectedRecipeItem(null);
+                  setShowRecipeBook(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#E11D48] hover:bg-[#BE123C] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+              >
+                <span>📖 Buku Resep</span>
+              </button>
+              <button
+                onClick={() => {
+                  setDbSearchQuery('');
+                  setSelectedDbItem(null);
+                  setIsAddingDbItem(false);
+                  setShowDbLookup(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F59E0B] hover:bg-[#D97706] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+              >
+                <span>Gizi (TKPI)</span>
+              </button>
+              <button
+                onClick={handleSyncNutritionFromIngredients}
+                title="Kalkulasi dan sync kadar gizi dari seluruh bahan baku resep batch ke database TKPI"
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#15803D] hover:bg-[#166534] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+              >
+                <span>⚡ Auto-Sync Gizi</span>
+              </button>
             </>
           )}
         </div>
@@ -1743,7 +2158,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
               <h3 className="text-sm font-extrabold text-[#111827]">Arsip Dokumen Gizi</h3>
               <p className="text-xs text-gray-400 mt-0.5">Daftar batch PM yang sudah dihitung kadar gizinya.</p>
             </div>
-            
+
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               {/* Search input */}
               <div className="relative max-w-xs">
@@ -1799,36 +2214,49 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                 const matchingQuery = archiveSearchQuery.toLowerCase();
                 const matchedSchools = archiveSearchQuery
                   ? batchEntries.filter(
-                      (e) =>
-                        e.institutionName.toLowerCase().includes(matchingQuery) ||
-                        (e.assignedPetugasName || '').toLowerCase().includes(matchingQuery)
-                    )
+                    (e) =>
+                      e.institutionName.toLowerCase().includes(matchingQuery) ||
+                      (e.assignedPetugasName || '').toLowerCase().includes(matchingQuery)
+                  )
                   : [];
-                
+
                 const cfg = MBG_BATCH_STATUS_CONFIG[b.status] || MBG_BATCH_STATUS_CONFIG.DRAFT;
-                
+
                 return (
                   <div
                     key={b.id}
                     onClick={() => {
                       setSelectedBatchId(b.id);
-                      setActiveTab('nutrition');
+                      setActiveTab('pm-data');
                     }}
                     className="bg-white rounded-2xl border border-[#E5E7EB] hover:border-amber-300 p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden group hover:-translate-y-0.5"
                   >
                     {/* Visual tab of a folder */}
                     <div className="absolute top-0 left-0 w-24 h-1 bg-amber-400 group-hover:bg-[#F59E0B] transition-colors" />
-                    
+
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="p-2.5 bg-amber-50 rounded-xl text-amber-500 group-hover:bg-amber-100 transition-colors">
                           <Folder className="h-5 w-5 fill-amber-100" />
                         </div>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${cfg.bgClass} ${cfg.textClass}`}>
-                          {cfg.label}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${cfg.bgClass} ${cfg.textClass}`}>
+                            {cfg.label}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteBatch(b.id, b.tanggal);
+                            }}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                            title={`Hapus Batch ${b.tanggal}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
-                      
+
                       <div>
                         <h4 className="text-xs font-extrabold text-gray-800 break-all">
                           {b.tanggal}
@@ -1869,12 +2297,32 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-[10px]">
-                      <span className="text-gray-400 font-medium truncate max-w-[90px]">
-                        {b.petugasList && b.petugasList.length > 0 
-                          ? `${b.petugasList.length} Kurir`
-                          : 'Belum ada kurir'
-                        }
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExportDocxAction(b, batchEntries);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold transition-colors cursor-pointer flex items-center gap-1 text-[10px]"
+                          title={`Download Laporan DOCX (Word) Batch ${b.tanggal}`}
+                        >
+                          <FileText className="h-3 w-3 text-blue-600" />
+                          <span>DOCX</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExportPdf(b, batchEntries);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold transition-colors cursor-pointer flex items-center gap-1 text-[10px]"
+                          title={`Download Laporan PDF Resmi Batch ${b.tanggal}`}
+                        >
+                          <FileDown className="h-3 w-3 text-rose-600" />
+                          <span>PDF</span>
+                        </button>
+                      </div>
                       <span className="font-bold text-amber-600 group-hover:text-amber-700 flex items-center gap-0.5">
                         Buka Arsip →
                       </span>
@@ -1885,384 +2333,409 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
             </div>
           )}
         </div>
-      ) : activeTab === 'daily-report' ? (
-        /* Daily Report View (8-Halaman Operasional) */
-        <div className="space-y-6">
-          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-              <div>
-                <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                  <span>📑 Laporan Harian Operasional SPPG</span>
-                  {dailyReport?.sheetDayName && (
-                    <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 text-xs font-bold rounded-full border border-amber-200">
-                      {dailyReport.sheetDayName}
-                    </span>
+      ) : activeTab === 'daily-report' ? (() => {
+        const curReport = effectiveDailyReport || dailyReport;
+        return (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div>
+                  <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-amber-500" />
+                    <span>Laporan Harian Operasional SPPG</span>
+                    {curReport?.sheetDayName && (
+                      <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 text-xs font-bold rounded-full border border-amber-200">
+                        {curReport.sheetDayName}
+                      </span>
+                    )}
+                    {!dailyReport && effectiveDailyReport && (
+                      <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-full border border-emerald-200 flex items-center gap-1">
+                        <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Auto-Generated dari Data PM</span>
+                      </span>
+                    )}
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Format Laporan Harian Operasional resmi (Kandungan Gizi, Pesanan Bahan, Pesanan Bumbu, PO, QC, Limbah)
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {!dailyReport && effectiveDailyReport && (
+                    <button
+                      onClick={handleSaveEffectiveDailyReport}
+                      disabled={savingDailyReport}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50"
+                      title="Simpan Laporan Harian yang ter-generate otomatis ini ke database Firestore"
+                    >
+                      {savingDailyReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 text-white" />}
+                      <span>Simpan ke Database</span>
+                    </button>
                   )}
-                </h2>
-                <p className="text-xs text-slate-500 mt-1">
-                  Format Laporan Harian Operasional resmi (Kandungan Gizi, Pesanan Bahan, Pesanan Bumbu, PO, QC, Limbah)
-                </p>
+                  <button
+                    onClick={() => setShowSheetsImportModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <FileUp className="h-4 w-4 text-white" />
+                    <span>Import Google Sheets / Excel</span>
+                  </button>
+                  <button
+                    onClick={handleTriggerExport8PagePdf}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <FileDown className="h-4 w-4 text-amber-400" />
+                    <span>Export PDF (8-Halaman)</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => setShowSheetsImportModal(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
-                >
-                  <FileDown className="h-4 w-4 text-white rotate-180" />
-                  <span>📥 Import Google Sheets / Excel</span>
-                </button>
-                <button
-                  onClick={handleTriggerExport8PagePdf}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
-                >
-                  <FileDown className="h-4 w-4 text-amber-400" />
-                  <span>📄 Export PDF (8-Halaman)</span>
-                </button>
+              {/* Sub-tab Navigation for 8 Sections */}
+              <div className="flex gap-1.5 overflow-x-auto py-3 border-b border-slate-200 scrollbar-none">
+                {[
+                  { key: 'kecil', label: '1. Porsi Kecil' },
+                  { key: 'besar', label: '2. Porsi Besar' },
+                  { key: 'balita', label: '3. Porsi Balita' },
+                  { key: 'bumil', label: '4. Bumil / Busui' },
+                  { key: 'paket3b', label: '5. Paket Sehat 3B' },
+                  { key: 'po', label: '6. PO & Pembelian' },
+                  { key: 'qc', label: '7. Form QC Bahan' },
+                  { key: 'waste', label: '8. Rekapan Limbah' },
+                ].map((st) => (
+                  <button
+                    key={st.key}
+                    onClick={() => setDailyReportSubTab(st.key as 'kecil' | 'besar' | 'balita' | 'bumil' | 'paket3b' | 'po' | 'qc' | 'waste')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${dailyReportSubTab === st.key
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
               </div>
-            </div>
 
-            {/* Sub-tab Navigation for 8 Sections */}
-            <div className="flex gap-1.5 overflow-x-auto py-3 border-b border-slate-200 scrollbar-none">
-              {[
-                { key: 'kecil', label: '1. Porsi Kecil' },
-                { key: 'besar', label: '2. Porsi Besar' },
-                { key: 'balita', label: '3. Porsi Balita' },
-                { key: 'bumil', label: '4. Bumil / Busui' },
-                { key: 'paket3b', label: '5. Paket Sehat 3B' },
-                { key: 'po', label: '6. PO & Pembelian' },
-                { key: 'qc', label: '7. Form QC Bahan' },
-                { key: 'waste', label: '8. Rekapan Limbah' },
-              ].map((st) => (
-                <button
-                  key={st.key}
-                  onClick={() => setDailyReportSubTab(st.key as 'kecil' | 'besar' | 'balita' | 'bumil' | 'paket3b' | 'po' | 'qc' | 'waste')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                    dailyReportSubTab === st.key
-                      ? 'bg-slate-900 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {st.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Sub-tab Content Views */}
-            <div className="pt-4">
-              {dailyReportSubTab === 'kecil' && (
-                <div className="space-y-6">
-                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 1: Realisasi Menu — Porsi Kecil</h3>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                            <th className="px-3 py-2">Menu</th>
-                            <th className="px-3 py-2">Rincian Bahan</th>
-                            <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
-                            <th className="px-3 py-2 text-center">Energi (kkal)</th>
-                            <th className="px-3 py-2 text-center">Protein (g)</th>
-                            <th className="px-3 py-2 text-center">Lemak (g)</th>
-                            <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
-                            <th className="px-3 py-2 text-center">Serat (g)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(dailyReport?.porsiKecil?.nutritionItems || []).map((item, idx) => (
-                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                              <td className="px-3 py-2 font-bold">{item.menuName}</td>
-                              <td className="px-3 py-2">{item.rincianBahan}</td>
-                              <td className="px-3 py-2 text-center">{item.beratBersih}</td>
-                              <td className="px-3 py-2 text-center">{item.energi}</td>
-                              <td className="px-3 py-2 text-center">{item.protein}</td>
-                              <td className="px-3 py-2 text-center">{item.lemak}</td>
-                              <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
-                              <td className="px-3 py-2 text-center">{item.serat}</td>
+              {/* Sub-tab Content Views */}
+              <div className="pt-4">
+                {dailyReportSubTab === 'kecil' && (
+                  <div className="space-y-6">
+                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 1: Realisasi Menu — Porsi Kecil</h3>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                              <th className="px-3 py-2">Menu</th>
+                              <th className="px-3 py-2">Rincian Bahan</th>
+                              <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
+                              <th className="px-3 py-2 text-center">Energi (kkal)</th>
+                              <th className="px-3 py-2 text-center">Protein (g)</th>
+                              <th className="px-3 py-2 text-center">Lemak (g)</th>
+                              <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
+                              <th className="px-3 py-2 text-center">Serat (g)</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {(curReport?.porsiKecil?.nutritionItems || []).map((item, idx) => (
+                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                                <td className="px-3 py-2 font-bold">{item.menuName}</td>
+                                <td className="px-3 py-2">{item.rincianBahan}</td>
+                                <td className="px-3 py-2 text-center">{item.beratBersih}</td>
+                                <td className="px-3 py-2 text-center">{item.energi}</td>
+                                <td className="px-3 py-2 text-center">{item.protein}</td>
+                                <td className="px-3 py-2 text-center">{item.lemak}</td>
+                                <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
+                                <td className="px-3 py-2 text-center">{item.serat}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {dailyReportSubTab === 'besar' && (
-                <div className="space-y-6">
-                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 2: Realisasi Menu — Porsi Besar</h3>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                            <th className="px-3 py-2">Menu</th>
-                            <th className="px-3 py-2">Rincian Bahan</th>
-                            <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
-                            <th className="px-3 py-2 text-center">Energi (kkal)</th>
-                            <th className="px-3 py-2 text-center">Protein (g)</th>
-                            <th className="px-3 py-2 text-center">Lemak (g)</th>
-                            <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
-                            <th className="px-3 py-2 text-center">Serat (g)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(dailyReport?.porsiBesar?.nutritionItems || []).map((item, idx) => (
-                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                              <td className="px-3 py-2 font-bold">{item.menuName}</td>
-                              <td className="px-3 py-2">{item.rincianBahan}</td>
-                              <td className="px-3 py-2 text-center">{item.beratBersih}</td>
-                              <td className="px-3 py-2 text-center">{item.energi}</td>
-                              <td className="px-3 py-2 text-center">{item.protein}</td>
-                              <td className="px-3 py-2 text-center">{item.lemak}</td>
-                              <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
-                              <td className="px-3 py-2 text-center">{item.serat}</td>
+                {dailyReportSubTab === 'besar' && (
+                  <div className="space-y-6">
+                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 2: Realisasi Menu — Porsi Besar</h3>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                              <th className="px-3 py-2">Menu</th>
+                              <th className="px-3 py-2">Rincian Bahan</th>
+                              <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
+                              <th className="px-3 py-2 text-center">Energi (kkal)</th>
+                              <th className="px-3 py-2 text-center">Protein (g)</th>
+                              <th className="px-3 py-2 text-center">Lemak (g)</th>
+                              <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
+                              <th className="px-3 py-2 text-center">Serat (g)</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {(curReport?.porsiBesar?.nutritionItems || []).map((item, idx) => (
+                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                                <td className="px-3 py-2 font-bold">{item.menuName}</td>
+                                <td className="px-3 py-2">{item.rincianBahan}</td>
+                                <td className="px-3 py-2 text-center">{item.beratBersih}</td>
+                                <td className="px-3 py-2 text-center">{item.energi}</td>
+                                <td className="px-3 py-2 text-center">{item.protein}</td>
+                                <td className="px-3 py-2 text-center">{item.lemak}</td>
+                                <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
+                                <td className="px-3 py-2 text-center">{item.serat}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {dailyReportSubTab === 'balita' && (
-                <div className="space-y-6">
-                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 3: Realisasi Menu — Porsi Balita</h3>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                            <th className="px-3 py-2">Menu</th>
-                            <th className="px-3 py-2">Rincian Bahan</th>
-                            <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
-                            <th className="px-3 py-2 text-center">Energi (kkal)</th>
-                            <th className="px-3 py-2 text-center">Protein (g)</th>
-                            <th className="px-3 py-2 text-center">Lemak (g)</th>
-                            <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
-                            <th className="px-3 py-2 text-center">Serat (g)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(dailyReport?.porsiBalita?.nutritionItems || []).map((item, idx) => (
-                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                              <td className="px-3 py-2 font-bold">{item.menuName}</td>
-                              <td className="px-3 py-2">{item.rincianBahan}</td>
-                              <td className="px-3 py-2 text-center">{item.beratBersih}</td>
-                              <td className="px-3 py-2 text-center">{item.energi}</td>
-                              <td className="px-3 py-2 text-center">{item.protein}</td>
-                              <td className="px-3 py-2 text-center">{item.lemak}</td>
-                              <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
-                              <td className="px-3 py-2 text-center">{item.serat}</td>
+                {dailyReportSubTab === 'balita' && (
+                  <div className="space-y-6">
+                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 3: Realisasi Menu — Porsi Balita</h3>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                              <th className="px-3 py-2">Menu</th>
+                              <th className="px-3 py-2">Rincian Bahan</th>
+                              <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
+                              <th className="px-3 py-2 text-center">Energi (kkal)</th>
+                              <th className="px-3 py-2 text-center">Protein (g)</th>
+                              <th className="px-3 py-2 text-center">Lemak (g)</th>
+                              <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
+                              <th className="px-3 py-2 text-center">Serat (g)</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {(curReport?.porsiBalita?.nutritionItems || []).map((item, idx) => (
+                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                                <td className="px-3 py-2 font-bold">{item.menuName}</td>
+                                <td className="px-3 py-2">{item.rincianBahan}</td>
+                                <td className="px-3 py-2 text-center">{item.beratBersih}</td>
+                                <td className="px-3 py-2 text-center">{item.energi}</td>
+                                <td className="px-3 py-2 text-center">{item.protein}</td>
+                                <td className="px-3 py-2 text-center">{item.lemak}</td>
+                                <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
+                                <td className="px-3 py-2 text-center">{item.serat}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {dailyReportSubTab === 'bumil' && (
-                <div className="space-y-6">
-                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 4: Realisasi Menu — Porsi Bumil / Busui</h3>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                            <th className="px-3 py-2">Menu</th>
-                            <th className="px-3 py-2">Rincian Bahan</th>
-                            <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
-                            <th className="px-3 py-2 text-center">Energi (kkal)</th>
-                            <th className="px-3 py-2 text-center">Protein (g)</th>
-                            <th className="px-3 py-2 text-center">Lemak (g)</th>
-                            <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
-                            <th className="px-3 py-2 text-center">Serat (g)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(dailyReport?.porsiBumilBusui?.nutritionItems || []).map((item, idx) => (
-                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                              <td className="px-3 py-2 font-bold">{item.menuName}</td>
-                              <td className="px-3 py-2">{item.rincianBahan}</td>
-                              <td className="px-3 py-2 text-center">{item.beratBersih}</td>
-                              <td className="px-3 py-2 text-center">{item.energi}</td>
-                              <td className="px-3 py-2 text-center">{item.protein}</td>
-                              <td className="px-3 py-2 text-center">{item.lemak}</td>
-                              <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
-                              <td className="px-3 py-2 text-center">{item.serat}</td>
+                {dailyReportSubTab === 'bumil' && (
+                  <div className="space-y-6">
+                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 4: Realisasi Menu — Porsi Bumil / Busui</h3>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                              <th className="px-3 py-2">Menu</th>
+                              <th className="px-3 py-2">Rincian Bahan</th>
+                              <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
+                              <th className="px-3 py-2 text-center">Energi (kkal)</th>
+                              <th className="px-3 py-2 text-center">Protein (g)</th>
+                              <th className="px-3 py-2 text-center">Lemak (g)</th>
+                              <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
+                              <th className="px-3 py-2 text-center">Serat (g)</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {(curReport?.porsiBumilBusui?.nutritionItems || []).map((item, idx) => (
+                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                                <td className="px-3 py-2 font-bold">{item.menuName}</td>
+                                <td className="px-3 py-2">{item.rincianBahan}</td>
+                                <td className="px-3 py-2 text-center">{item.beratBersih}</td>
+                                <td className="px-3 py-2 text-center">{item.energi}</td>
+                                <td className="px-3 py-2 text-center">{item.protein}</td>
+                                <td className="px-3 py-2 text-center">{item.lemak}</td>
+                                <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
+                                <td className="px-3 py-2 text-center">{item.serat}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {dailyReportSubTab === 'paket3b' && (
-                <div className="space-y-6">
-                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 5: Paket Sehat 3B</h3>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Daftar Bahan Keringan</div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                            <th className="px-3 py-2">Item Bahan</th>
-                            <th className="px-3 py-2 text-center">Qty (Pcs)</th>
-                            <th className="px-3 py-2 text-center">Qty</th>
-                            <th className="px-3 py-2 text-center">Satuan</th>
-                            <th className="px-3 py-2 text-right">Harga Satuan</th>
-                            <th className="px-3 py-2 text-right">Total Harga</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(dailyReport?.paketSehat3b?.keringanItems || []).map((k, idx) => (
-                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                              <td className="px-3 py-2 font-bold">{k.item}</td>
-                              <td className="px-3 py-2 text-center">{k.qtyPcs}</td>
-                              <td className="px-3 py-2 text-center">{k.qty}</td>
-                              <td className="px-3 py-2 text-center">{k.satuan}</td>
-                              <td className="px-3 py-2 text-right">Rp{(k.hargaSatuan || 0).toLocaleString('id-ID')}</td>
-                              <td className="px-3 py-2 text-right font-bold">Rp{(k.totalHarga || 0).toLocaleString('id-ID')}</td>
+                {dailyReportSubTab === 'paket3b' && (
+                  <div className="space-y-6">
+                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 5: Paket Sehat 3B</h3>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Daftar Bahan Keringan</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                              <th className="px-3 py-2">Item Bahan</th>
+                              <th className="px-3 py-2 text-center">Qty (Pcs)</th>
+                              <th className="px-3 py-2 text-center">Qty</th>
+                              <th className="px-3 py-2 text-center">Satuan</th>
+                              <th className="px-3 py-2 text-right">Harga Satuan</th>
+                              <th className="px-3 py-2 text-right">Total Harga</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {(curReport?.paketSehat3b?.keringanItems || []).map((k, idx) => (
+                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                                <td className="px-3 py-2 font-bold">{k.item}</td>
+                                <td className="px-3 py-2 text-center">{k.qtyPcs}</td>
+                                <td className="px-3 py-2 text-center">{k.qty}</td>
+                                <td className="px-3 py-2 text-center">{k.satuan}</td>
+                                <td className="px-3 py-2 text-right">Rp{(k.hargaSatuan || 0).toLocaleString('id-ID')}</td>
+                                <td className="px-3 py-2 text-right font-bold">Rp{(k.totalHarga || 0).toLocaleString('id-ID')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {dailyReportSubTab === 'po' && (
-                <div className="space-y-6">
-                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 6: PO & Realisasi Pembelian</h3>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Realisasi Pembelian vs Anggaran</div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                            <th className="px-3 py-2">Tanggal</th>
-                            <th className="px-3 py-2">Nama Bahan</th>
-                            <th className="px-3 py-2 text-center">Kuantitas</th>
-                            <th className="px-3 py-2 text-center">Satuan</th>
-                            <th className="px-3 py-2 text-right">Harga Per Unit</th>
-                            <th className="px-3 py-2 text-right">Total Harga</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(dailyReport?.realisasiPembelianRows || []).map((r, idx) => (
-                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                              <td className="px-3 py-2">{r.tanggal}</td>
-                              <td className="px-3 py-2 font-bold">{r.namaBahan}</td>
-                              <td className="px-3 py-2 text-center">{r.kuantitas}</td>
-                              <td className="px-3 py-2 text-center">{r.satuan}</td>
-                              <td className="px-3 py-2 text-right">Rp{(r.hargaPerUnit || 0).toLocaleString('id-ID')}</td>
-                              <td className="px-3 py-2 text-right font-bold">Rp{(r.totalHarga || 0).toLocaleString('id-ID')}</td>
+                {dailyReportSubTab === 'po' && (
+                  <div className="space-y-6">
+                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 6: PO & Realisasi Pembelian</h3>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Realisasi Pembelian vs Anggaran</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                              <th className="px-3 py-2">Tanggal</th>
+                              <th className="px-3 py-2">Nama Bahan</th>
+                              <th className="px-3 py-2 text-center">Kuantitas</th>
+                              <th className="px-3 py-2 text-center">Satuan</th>
+                              <th className="px-3 py-2 text-right">Harga Per Unit</th>
+                              <th className="px-3 py-2 text-right">Total Harga</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {(curReport?.realisasiPembelianRows || []).map((r, idx) => (
+                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                                <td className="px-3 py-2">{r.tanggal}</td>
+                                <td className="px-3 py-2 font-bold">{r.namaBahan}</td>
+                                <td className="px-3 py-2 text-center">{r.kuantitas}</td>
+                                <td className="px-3 py-2 text-center">{r.satuan}</td>
+                                <td className="px-3 py-2 text-right">Rp{(r.hargaPerUnit || 0).toLocaleString('id-ID')}</td>
+                                <td className="px-3 py-2 text-right font-bold">Rp{(r.totalHarga || 0).toLocaleString('id-ID')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {dailyReportSubTab === 'qc' && (
-                <div className="space-y-6">
-                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 7: Form Pemeriksaan Bahan Makanan (QC)</h3>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Form QC Pemeriksaan Physical</div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                            <th className="px-3 py-2">Jenis Bahan Makanan</th>
-                            <th className="px-3 py-2 text-center">Banyaknya</th>
-                            <th className="px-3 py-2 text-center">Satuan</th>
-                            <th className="px-3 py-2 text-center">Jumlah</th>
-                            <th className="px-3 py-2 text-center">Kondisi Bahan</th>
-                            <th className="px-3 py-2">Catatan QC</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(dailyReport?.inspectionForm?.rows || []).map((qc, idx) => (
-                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                              <td className="px-3 py-2 font-bold">{qc.jenisBahan}</td>
-                              <td className="px-3 py-2 text-center">{qc.banyaknya}</td>
-                              <td className="px-3 py-2 text-center">{qc.satuan}</td>
-                              <td className="px-3 py-2 text-center">
-                                <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${qc.isSesuai ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
-                                  {qc.isSesuai ? 'Sesuai' : 'Tidak Sesuai'}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2 text-center">
-                                <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${qc.isBaik ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
-                                  {qc.isBaik ? 'Baik' : 'Rusak'}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2">{qc.notes || '-'}</td>
+                {dailyReportSubTab === 'qc' && (
+                  <div className="space-y-6">
+                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 7: Form Pemeriksaan Bahan Makanan (QC)</h3>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Form QC Pemeriksaan Physical</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                              <th className="px-3 py-2">Jenis Bahan Makanan</th>
+                              <th className="px-3 py-2 text-center">Banyaknya</th>
+                              <th className="px-3 py-2 text-center">Satuan</th>
+                              <th className="px-3 py-2 text-center">Jumlah</th>
+                              <th className="px-3 py-2 text-center">Kondisi Bahan</th>
+                              <th className="px-3 py-2">Catatan QC</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {(curReport?.inspectionForm?.rows || []).map((qc, idx) => (
+                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                                <td className="px-3 py-2 font-bold">{qc.jenisBahan}</td>
+                                <td className="px-3 py-2 text-center">{qc.banyaknya}</td>
+                                <td className="px-3 py-2 text-center">{qc.satuan}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${qc.isSesuai ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                                    {qc.isSesuai ? 'Sesuai' : 'Tidak Sesuai'}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${qc.isBaik ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                                    {qc.isBaik ? 'Baik' : 'Rusak'}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2">{qc.notes || '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {dailyReportSubTab === 'waste' && (
-                <div className="space-y-6">
-                  <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 8: Rekapan Limbah Sisa Makanan</h3>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                    <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Tabel Rekapan Limbah</div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                            <th className="px-3 py-2 text-center">No</th>
-                            <th className="px-3 py-2">Nama Makanan</th>
-                            <th className="px-3 py-2 text-center">Kuantitas</th>
-                            <th className="px-3 py-2 text-center">Satuan</th>
-                            <th className="px-3 py-2">Dokumentasi</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(dailyReport?.wasteLogs || []).map((w, idx) => (
-                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                              <td className="px-3 py-2 text-center">{w.no || idx + 1}</td>
-                              <td className="px-3 py-2 font-bold">{w.namaMakanan}</td>
-                              <td className="px-3 py-2 text-center">{w.kuantitas}</td>
-                              <td className="px-3 py-2 text-center">{w.satuan}</td>
-                              <td className="px-3 py-2">{w.dokumentasi || '-'}</td>
+                {dailyReportSubTab === 'waste' && (
+                  <div className="space-y-6">
+                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 8: Rekapan Limbah Sisa Makanan</h3>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Tabel Rekapan Limbah</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                              <th className="px-3 py-2 text-center">No</th>
+                              <th className="px-3 py-2">Nama Makanan</th>
+                              <th className="px-3 py-2 text-center">Kuantitas</th>
+                              <th className="px-3 py-2 text-center">Satuan</th>
+                              <th className="px-3 py-2">Dokumentasi</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {(curReport?.wasteLogs || []).map((w, idx) => (
+                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                                <td className="px-3 py-2 text-center">{w.no || idx + 1}</td>
+                                <td className="px-3 py-2 font-bold">{w.namaMakanan}</td>
+                                <td className="px-3 py-2 text-center">{w.kuantitas}</td>
+                                <td className="px-3 py-2 text-center">{w.satuan}</td>
+                                <td className="px-3 py-2">{w.dokumentasi || '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      ) : (
+        );
+      })() : (
         /* Normal Editor Flow */
         <>
-          {visibleBatchesInBar.length > 0 && (
-            <div className="relative mb-6 font-['Hanken_Grotesk'] max-w-md">
-              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
-                Pilih Tanggal Batch / Operasional:
-              </label>
-              
+          {/* Batch Selector Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 font-['Hanken_Grotesk']">
+            <div className="relative max-w-md w-full">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  Pilih Tanggal Batch / Operasional:
+                </label>
+                <span className="text-[11px] text-gray-400 font-medium">
+                  {batches.length} Batch Terdaftar
+                </span>
+              </div>
+
               {/* Dropdown Button */}
               <button
                 type="button"
@@ -2273,16 +2746,16 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-[#FBBF24]" />
                     <span>{selectedBatch.tanggal}</span>
-                    <span className={`text-[9px] font-extrabold rounded-full px-2 py-0.5 ${
-                      (MBG_BATCH_STATUS_CONFIG[selectedBatch.status] || MBG_BATCH_STATUS_CONFIG.DRAFT).textClass
-                    } ${
-                      (MBG_BATCH_STATUS_CONFIG[selectedBatch.status] || MBG_BATCH_STATUS_CONFIG.DRAFT).bgClass
-                    }`}>
+                    <span className={`text-[9px] font-extrabold rounded-full px-2 py-0.5 ${(MBG_BATCH_STATUS_CONFIG[selectedBatch.status] || MBG_BATCH_STATUS_CONFIG.DRAFT).textClass
+                      } ${(MBG_BATCH_STATUS_CONFIG[selectedBatch.status] || MBG_BATCH_STATUS_CONFIG.DRAFT).bgClass
+                      }`}>
                       {(MBG_BATCH_STATUS_CONFIG[selectedBatch.status] || MBG_BATCH_STATUS_CONFIG.DRAFT).label}
                     </span>
                   </div>
                 ) : (
-                  <span className="text-[#9CA3AF] font-bold">Pilih Tanggal Batch...</span>
+                  <span className="text-[#9CA3AF] font-bold">
+                    {batches.length > 0 ? 'Pilih Tanggal Batch...' : 'Belum Ada Batch'}
+                  </span>
                 )}
                 <span className="text-gray-400 text-[10px] font-bold">
                   {isBatchDropdownOpen ? '▲' : '▼'}
@@ -2293,14 +2766,14 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
               {isBatchDropdownOpen && (
                 <>
                   {/* Backdrop to close */}
-                  <div 
-                    className="fixed inset-0 z-40 cursor-default" 
+                  <div
+                    className="fixed inset-0 z-40 cursor-default"
                     onClick={() => {
                       setIsBatchDropdownOpen(false);
                       setBatchSearchQuery('');
                     }}
                   />
-                  
+
                   <div className="absolute left-0 right-0 mt-1 bg-white border border-[#E5E7EB] rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
                     {/* Search Input */}
                     <div className="p-2 border-b border-gray-100 bg-gray-50 flex items-center gap-1.5">
@@ -2339,9 +2812,8 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                                 setIsBatchDropdownOpen(false);
                                 setBatchSearchQuery('');
                               }}
-                              className={`w-full text-left px-4 py-2.5 text-xs font-bold transition-colors hover:bg-gray-50 flex items-center justify-between cursor-pointer ${
-                                selectedBatchId === b.id ? 'bg-[#FBBF24]/10 text-[#92400E]' : 'text-gray-700'
-                              }`}
+                              className={`w-full text-left px-4 py-2.5 text-xs font-bold transition-colors hover:bg-gray-50 flex items-center justify-between cursor-pointer ${selectedBatchId === b.id ? 'bg-[#FBBF24]/10 text-[#92400E]' : 'text-gray-700'
+                                }`}
                             >
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-3.5 w-3.5 text-gray-400" />
@@ -2359,19 +2831,274 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                 </>
               )}
             </div>
-          )}
+
+            <div className="flex items-center gap-2 self-start sm:self-end">
+              <button
+                type="button"
+                onClick={handleCreateTodayBatch}
+                disabled={creatingBatch}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-black rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                title="Buat batch produksi baru untuk hari ini"
+              >
+                {creatingBatch ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                <span>+ Buat Batch Hari Ini</span>
+              </button>
+            </div>
+          </div>
 
           {!selectedBatchId ? (
-            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-12 text-center shadow-sm font-['Hanken_Grotesk']">
-              <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm font-bold text-[#6B7280]">Silakan pilih tanggal batch di atas atau buka Arsip Gizi</p>
-              <p className="text-xs text-[#9CA3AF] mt-1">Anda juga dapat membuka tab Arsip Gizi untuk melihat daftar dokumen arsip.</p>
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-10 text-center shadow-sm font-['Hanken_Grotesk'] space-y-4">
+              <Calendar className="h-12 w-12 text-amber-400 mx-auto" />
+              <div>
+                <h3 className="text-base font-black text-slate-800">
+                  {batches.length === 0 ? 'Belum Ada Batch Produksi MBG' : 'Silakan Pilih Tanggal Batch'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  {batches.length === 0
+                    ? 'Belum ada data batch produksi di database. Anda dapat membuat batch baru untuk hari ini atau meng-import file Excel / Google Sheets untuk memulai.'
+                    : 'Pilih salah satu batch yang tersedia di bawah ini untuk melihat data PM:'}
+                </p>
+              </div>
+
+              {batches.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-w-2xl mx-auto pt-2 text-left">
+                  {batches.slice(0, 6).map((b) => {
+                    const cfg = MBG_BATCH_STATUS_CONFIG[b.status] || MBG_BATCH_STATUS_CONFIG.DRAFT;
+                    return (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => setSelectedBatchId(b.id)}
+                        className="p-3.5 bg-slate-50 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-xl transition-all text-left cursor-pointer group shadow-sm"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-black text-slate-800 group-hover:text-amber-700">{b.tanggal}</span>
+                          <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${cfg.textClass} ${cfg.bgClass}`}>
+                            {cfg.label}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-500 block">
+                          {b.totalJumlah || 0} Porsi
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleCreateTodayBatch}
+                    disabled={creatingBatch}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {creatingBatch ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    <span>Buat Batch Hari Ini</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowSheetsImportModal(true)}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                  >
+                    <FileUp className="h-4 w-4" />
+                    <span>Import Excel / Sheets</span>
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <>
               {activeTab === 'pm-data' ? (
                 /* PM Data View (Read-Only) */
                 <div className="space-y-4 font-['Hanken_Grotesk']">
+                  {/* Card Data Hasil Import Laporan Harian (Excel / Google Sheets) */}
+                  {(dailyReport || effectiveDailyReport) && (() => {
+                    const curReport = dailyReport || effectiveDailyReport;
+                    if (!curReport) return null;
+                    const totalPorsiReport =
+                      (curReport.porsiKecil?.pmCount || 0) +
+                      (curReport.porsiBesar?.pmCount || 0) +
+                      (curReport.porsiBalita?.pmCount || 0) +
+                      (curReport.porsiBumilBusui?.pmCount || 0) ||
+                      selectedBatch?.totalJumlah || 0;
+                    const menuItemsList =
+                      (curReport.porsiBesar?.menuList && curReport.porsiBesar.menuList.length > 0)
+                        ? curReport.porsiBesar.menuList
+                        : (curReport.porsiKecil?.menuList && curReport.porsiKecil.menuList.length > 0)
+                          ? curReport.porsiKecil.menuList
+                          : [];
+
+                    return (
+                      <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-amber-50 border border-emerald-200/90 rounded-2xl p-5 shadow-sm space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-200/60">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-sm">
+                              <FileSpreadsheet className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="text-sm font-black text-emerald-950">
+                                  Data Laporan Harian Ter-import {curReport.sheetDayName ? `(${curReport.sheetDayName})` : `(${curReport.tanggal})`}
+                                </h3>
+                                <span className="text-[10px] font-extrabold bg-emerald-600 text-white px-2.5 py-0.5 rounded-full shadow-xs">
+                                  Excel / Sheets Aktif
+                                </span>
+                              </div>
+                              <p className="text-xs text-emerald-700/80 mt-0.5">
+                                Data realisasi menu, kadar gizi, dan kebutuhan bahan baku berhasil disinkronkan ke batch ini.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 self-start sm:self-auto">
+                            <button
+                              type="button"
+                              onClick={() => setShowImportedDetails(!showImportedDetails)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                            >
+                              {showImportedDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                              <span>{showImportedDetails ? 'Sembunyikan Rincian' : 'Lihat Rincian Gizi & Bahan'}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Metric Overview Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs font-['Hanken_Grotesk']">
+                          <div className="bg-white/90 rounded-xl p-2.5 border border-emerald-100 shadow-xs">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Porsi</span>
+                            <span className="text-sm font-black text-slate-900">
+                              {totalPorsiReport} Porsi
+                            </span>
+                          </div>
+                          <div className="bg-white/90 rounded-xl p-2.5 border border-emerald-100 shadow-xs">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase block">Porsi Kecil / Besar</span>
+                            <span className="text-xs font-black text-slate-900">
+                              {curReport.porsiKecil?.pmCount || 0} / {curReport.porsiBesar?.pmCount || 0}
+                            </span>
+                          </div>
+                          <div className="bg-white/90 rounded-xl p-2.5 border border-emerald-100 shadow-xs">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase block">Balita & Bumil</span>
+                            <span className="text-xs font-black text-slate-900">
+                              {curReport.porsiBalita?.pmCount || 0} / {curReport.porsiBumilBusui?.pmCount || 0}
+                            </span>
+                          </div>
+                          <div className="bg-white/90 rounded-xl p-2.5 border border-emerald-100 shadow-xs">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase block">Energi (Kkal)</span>
+                            <span className="text-xs font-black text-amber-700">
+                              {curReport.porsiBesar?.totalGizi?.energi || curReport.porsiKecil?.totalGizi?.energi || 0} kkal
+                            </span>
+                          </div>
+                          <div className="bg-white/90 rounded-xl p-2.5 border border-emerald-100 shadow-xs">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase block">Protein / Lemak</span>
+                            <span className="text-xs font-black text-emerald-800">
+                              {curReport.porsiBesar?.totalGizi?.protein || curReport.porsiKecil?.totalGizi?.protein || 0}g / {curReport.porsiBesar?.totalGizi?.lemak || curReport.porsiKecil?.totalGizi?.lemak || 0}g
+                            </span>
+                          </div>
+                          <div className="bg-white/90 rounded-xl p-2.5 border border-emerald-100 shadow-xs">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Belanja</span>
+                            <span className="text-xs font-black text-blue-700">
+                              Rp {(curReport.totalPengeluaran || 0).toLocaleString('id-ID')}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Menu List Badges */}
+                        {menuItemsList.length > 0 && (
+                          <div className="flex items-center gap-2 flex-wrap text-xs pt-1">
+                            <span className="text-[11px] font-bold text-emerald-900">Menu Ter-import:</span>
+                            {menuItemsList.map((m, idx) => (
+                              <span key={idx} className="bg-white border border-emerald-200 text-emerald-900 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold shadow-2xs">
+                                🍴 {m}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Expandable Details: Tables of Nutrition & Raw Ingredients from Excel */}
+                        {showImportedDetails && (
+                          <div className="space-y-4 pt-3 border-t border-emerald-200/60 animate-in fade-in duration-150">
+                            {/* Nutrition Table */}
+                            <div className="bg-white rounded-xl border border-emerald-200/80 overflow-hidden shadow-xs">
+                              <div className="px-3.5 py-2 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between">
+                                <span>Rincian Kandungan Gizi Menu (Hasil Excel)</span>
+                                <span className="text-amber-300 text-[10px]">Realisasi Porsi Besar & Kecil</span>
+                              </div>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-xs text-left">
+                                  <thead>
+                                    <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+                                      <th className="px-3 py-2">Menu</th>
+                                      <th className="px-3 py-2">Rincian Bahan</th>
+                                      <th className="px-2 py-2 text-center">Berat (g)</th>
+                                      <th className="px-2 py-2 text-center">Energi (kkal)</th>
+                                      <th className="px-2 py-2 text-center">Protein (g)</th>
+                                      <th className="px-2 py-2 text-center">Lemak (g)</th>
+                                      <th className="px-2 py-2 text-center">Karbohidrat (g)</th>
+                                      <th className="px-2 py-2 text-center">Serat (g)</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {(curReport.porsiBesar?.nutritionItems || curReport.porsiKecil?.nutritionItems || []).map((item, idx) => (
+                                      <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                                        <td className="px-3 py-2 font-bold text-slate-900">{item.menuName}</td>
+                                        <td className="px-3 py-2 text-slate-600">{item.rincianBahan}</td>
+                                        <td className="px-2 py-2 text-center">{item.beratBersih}</td>
+                                        <td className="px-2 py-2 text-center font-bold text-amber-700">{item.energi}</td>
+                                        <td className="px-2 py-2 text-center">{item.protein}</td>
+                                        <td className="px-2 py-2 text-center">{item.lemak}</td>
+                                        <td className="px-2 py-2 text-center">{item.karbohidrat}</td>
+                                        <td className="px-2 py-2 text-center">{item.serat}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            {/* Bahan Baku Items */}
+                            {(curReport.porsiBesar?.bahanItems || curReport.porsiKecil?.bahanItems || []).length > 0 && (
+                              <div className="bg-white rounded-xl border border-emerald-200/80 overflow-hidden shadow-xs">
+                                <div className="px-3.5 py-2 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between">
+                                  <span>Pesanan Bahan Makanan Ter-import</span>
+                                  <span className="text-emerald-400 text-[10px]">
+                                    {(curReport.porsiBesar?.bahanItems || []).length + (curReport.porsiKecil?.bahanItems || []).length} Item
+                                  </span>
+                                </div>
+                                <div className="overflow-x-auto max-h-52 overflow-y-auto">
+                                  <table className="w-full text-xs text-left">
+                                    <thead>
+                                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+                                        <th className="px-3 py-2">Rincian Bahan</th>
+                                        <th className="px-2 py-2 text-center">Kebutuhan</th>
+                                        <th className="px-2 py-2 text-center">Satuan</th>
+                                        <th className="px-2 py-2 text-right">Harga Satuan</th>
+                                        <th className="px-3 py-2 text-right">Total Harga</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {(curReport.porsiBesar?.bahanItems || curReport.porsiKecil?.bahanItems || []).map((b, idx) => (
+                                        <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
+                                          <td className="px-3 py-2 font-bold">{b.rincianBahan}</td>
+                                          <td className="px-2 py-2 text-center font-bold text-slate-900">{b.kebutuhan}</td>
+                                          <td className="px-2 py-2 text-center text-slate-500">{b.satuan}</td>
+                                          <td className="px-2 py-2 text-right font-medium text-slate-600">
+                                            {b.hargaBahan ? `Rp ${b.hargaBahan.toLocaleString('id-ID')}` : '-'}
+                                          </td>
+                                          <td className="px-3 py-2 text-right font-bold text-emerald-800">
+                                            {b.harga ? `Rp ${b.harga.toLocaleString('id-ID')}` : '-'}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {Object.entries(groupedEntries).map(([petugasName, petugasEntries]) => (
                     <div key={petugasName} className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
                       <div className="px-4 py-3 bg-[#111827] flex items-center gap-2">
@@ -2417,6 +3144,93 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                       </div>
                     </div>
                   ))}
+
+                  {/* Action Toolbar: Export DOCX, Export PDF, Simpan Laporan */}
+                  <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm mt-5 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                      <div>
+                        <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-amber-500" />
+                          <span>Dokumentasi & Arsip Laporan Produksi MBG</span>
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Export laporan dalam format Word / PDF resmi, atau simpan langsung ke sistem Arsip Gizi.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('archive')}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-xl transition-colors cursor-pointer self-start sm:self-auto"
+                      >
+                        <FolderOpen className="h-3.5 w-3.5" />
+                        <span>Buka Arsip Gizi →</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Button 1: Export DOCX */}
+                      <button
+                        type="button"
+                        onClick={() => handleExportDocxAction()}
+                        disabled={exportingDocx}
+                        className="flex items-center justify-center gap-2.5 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 active:scale-[0.99] text-white text-xs font-extrabold rounded-xl shadow-md shadow-blue-600/20 transition-all cursor-pointer disabled:opacity-50"
+                        title="Download Laporan MBG dalam format Microsoft Word (.docx)"
+                      >
+                        {exportingDocx ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-white" />
+                        ) : (
+                          <FileText className="h-4 w-4 text-blue-100" />
+                        )}
+                        <div className="text-left">
+                          <span className="block leading-tight">Export DOCX</span>
+                          <span className="text-[10px] font-normal text-blue-200">Format Word (.docx)</span>
+                        </div>
+                      </button>
+
+                      {/* Button 2: Export PDF */}
+                      <button
+                        type="button"
+                        onClick={() => handleExportPdf()}
+                        disabled={exportingPdf}
+                        className="flex items-center justify-center gap-2.5 px-4 py-3 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 active:scale-[0.99] text-white text-xs font-extrabold rounded-xl shadow-md shadow-rose-600/20 transition-all cursor-pointer disabled:opacity-50"
+                        title="Download Laporan MBG dalam format PDF Resmi"
+                      >
+                        {exportingPdf ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-white" />
+                        ) : (
+                          <FileDown className="h-4 w-4 text-rose-100" />
+                        )}
+                        <div className="text-left">
+                          <span className="block leading-tight">Export PDF</span>
+                          <span className="text-[10px] font-normal text-rose-200">Laporan Resmi (Landscape)</span>
+                        </div>
+                      </button>
+
+                      {/* Button 3: Simpan Laporan */}
+                      <button
+                        type="button"
+                        onClick={handleSaveReportAction}
+                        disabled={savingReport}
+                        className="flex items-center justify-center gap-2.5 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 active:scale-[0.99] text-white text-xs font-extrabold rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
+                        title="Simpan perhitungan laporan batch ini langsung ke Arsip Gizi"
+                      >
+                        {savingReport ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-white" />
+                        ) : (
+                          <Save className="h-4 w-4 text-emerald-100" />
+                        )}
+                        <div className="text-left">
+                          <span className="block leading-tight">Simpan Laporan</span>
+                          <span className="text-[10px] font-normal text-emerald-200">Masuk ke Arsip Gizi</span>
+                        </div>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2 border border-slate-200/60">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                      <span>Semua laporan yang di-export (DOCX / PDF) maupun disimpan akan otomatis terdaftar dan tersimpan di tab <strong>Arsip Gizi</strong>.</span>
+                    </div>
+                  </div>
 
                   {/* Submit to Purchasing CTA */}
                   {selectedBatch && ['NUTRITION_DONE', 'PDF_EXPORTED'].includes(selectedBatch.status) && (
@@ -2735,7 +3549,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                               Tim Produksi dapat menyesuaikan takaran atau menambahkan bahan baku tambahan secara manual.
                             </p>
                           </div>
-                          
+
                           <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
                             <div className="relative flex-1 md:w-60">
                               <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-gray-400" />
@@ -2756,7 +3570,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                                 </button>
                               )}
                             </div>
-                            
+
                             <button
                               type="button"
                               onClick={() => setIsAddingCustomIngredient(!isAddingCustomIngredient)}
@@ -2769,7 +3583,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
 
                         {/* Add Custom Ingredient Form */}
                         {isAddingCustomIngredient && (
-                          <form 
+                          <form
                             onSubmit={handleAddCustomIngredient}
                             className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end animate-in fade-in slide-in-from-top-2 duration-150"
                           >
@@ -2849,7 +3663,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                               ) : (
                                 filteredRecipeRequirements.map((r, idx) => {
                                   const isEditing = editingIngredientName === r.name;
-                                  
+
                                   // Format weight nicely for display
                                   let formattedWeight = '';
                                   if (r.satuan === 'g' && r.amount >= 1000) {
@@ -2859,7 +3673,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                                   } else {
                                     formattedWeight = `${r.amount.toFixed(1)} ${r.satuan}`;
                                   }
-                                  
+
                                   return (
                                     <tr key={r.name} className="hover:bg-gray-50/50 transition-colors">
                                       <td className="px-4 py-3 text-gray-400 font-bold">{idx + 1}</td>
@@ -2886,7 +3700,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                                               </span>
                                             )}
                                           </button>
-                                          
+
                                           {expandedBahan === r.name && (
                                             <div className="mt-2 p-3 rounded-xl bg-amber-50/40 border border-amber-100/60 text-[10px] font-medium space-y-1.5 text-gray-500 animate-fadeIn shadow-inner max-w-sm">
                                               <div className="font-extrabold text-[#92400E] border-b border-amber-100 pb-1 mb-1.5 uppercase tracking-wider text-[8px]">
@@ -2938,11 +3752,10 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                                             </select>
                                           </div>
                                         ) : (
-                                          <span className={`inline-block px-2.5 py-1 rounded-md text-xs font-extrabold ${
-                                            r.adjustmentId 
-                                              ? 'bg-blue-50 text-blue-800 border border-blue-200 shadow-sm' 
+                                          <span className={`inline-block px-2.5 py-1 rounded-md text-xs font-extrabold ${r.adjustmentId
+                                              ? 'bg-blue-50 text-blue-800 border border-blue-200 shadow-sm'
                                               : 'bg-[#FEF3C7] text-[#92400E]'
-                                          }`}>
+                                            }`}>
                                             {formattedWeight}
                                           </span>
                                         )}
@@ -2958,11 +3771,10 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                                               type="button"
                                               onClick={() => handleOpenRecipeDetail(m)}
                                               title={hasRecipe ? `Klik untuk detail resep ${m}` : `Resep kustom belum terdaftar`}
-                                              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
-                                                hasRecipe 
-                                                  ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:text-amber-900 cursor-pointer shadow-sm' 
+                                              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${hasRecipe
+                                                  ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:text-amber-900 cursor-pointer shadow-sm'
                                                   : 'bg-gray-100 text-gray-500 border border-gray-200 cursor-not-allowed'
-                                              }`}
+                                                }`}
                                             >
                                               {m}
                                             </button>
@@ -3195,7 +4007,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                       <CheckCircle2 className="h-4 w-4" /> Simpan Kadar Gizi
                     </button>
                     <button
-                      onClick={handleExportPdf}
+                      onClick={() => handleExportPdf()}
                       className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#111827] text-white text-sm font-extrabold rounded-xl hover:bg-[#1F2937] cursor-pointer transition-colors"
                     >
                       <FileDown className="h-4 w-4" /> Export PDF
@@ -3309,23 +4121,23 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
             <div className="px-6 py-4 border-b border-[#F1F5F9] flex items-center justify-between">
               <div>
                 <h3 className="text-base font-extrabold text-[#1E293B]">
-                  {selectedDbItem 
-                    ? `Detail Gizi: ${selectedDbItem.nama}` 
+                  {selectedDbItem
+                    ? `Detail Gizi: ${selectedDbItem.nama}`
                     : isAddingDbItem
-                    ? 'Tambah Bahan Pangan Baru'
-                    : 'Referensi Kandungan Pangan Indonesia (TKPI)'
+                      ? 'Tambah Bahan Pangan Baru'
+                      : 'Referensi Kandungan Pangan Indonesia (TKPI)'
                   }
                 </h3>
                 <p className="text-xs text-[#64748B] mt-0.5">
-                  {selectedDbItem 
-                    ? `Kadar gizi per 100g berat layak makan (BDD)` 
+                  {selectedDbItem
+                    ? `Kadar gizi per 100g berat layak makan (BDD)`
                     : isAddingDbItem
-                    ? 'Masukkan data gizi bahan pangan baru per 100g'
-                    : 'Cari & lihat informasi gizi dari database TKPI 2020 resmi'
+                      ? 'Masukkan data gizi bahan pangan baru per 100g'
+                      : 'Cari & lihat informasi gizi dari database TKPI 2020 resmi'
                   }
                 </p>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   if (selectedDbItem) {
                     setSelectedDbItem(null);
@@ -3387,7 +4199,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                     >
                       Kembali ke Daftar
                     </button>
-                    
+
                     <button
                       onClick={() => {
                         const item = selectedDbItem;
@@ -3794,19 +4606,19 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-base font-extrabold text-[#1E293B]">
-                    {selectedRecipeItem 
-                      ? `Detail Resep: ${selectedRecipeItem.namaMenu}` 
+                    {selectedRecipeItem
+                      ? `Detail Resep: ${selectedRecipeItem.namaMenu}`
                       : 'Pedoman Standar Resep, Porsi & Bahan Pangan MBG'
                     }
                   </h3>
                   <p className="text-xs text-[#64748B] mt-0.5">
-                    {selectedRecipeItem 
-                      ? `Bahan dan takaran standar porsi masakan` 
+                    {selectedRecipeItem
+                      ? `Bahan dan takaran standar porsi masakan`
                       : `Daftar ${combinedRecipes.length} resep masakan & ${MBG_INFORMASI_BAHAN_PANGAN.length} spesifikasi bahan pangan terintegrasi`
                     }
                   </p>
                 </div>
-                <button 
+                <button
                   type="button"
                   onClick={() => {
                     if (selectedRecipeItem) {
@@ -3828,22 +4640,20 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                   <button
                     type="button"
                     onClick={() => setRecipeModalTab('resep')}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      recipeModalTab === 'resep'
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${recipeModalTab === 'resep'
                         ? 'bg-[#15803D] text-white shadow-sm'
                         : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'
-                    }`}
+                      }`}
                   >
                     📖 Standar Resep & Porsi ({combinedRecipes.length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setRecipeModalTab('bahanPangan')}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      recipeModalTab === 'bahanPangan'
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${recipeModalTab === 'bahanPangan'
                         ? 'bg-[#15803D] text-white shadow-sm'
                         : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'
-                    }`}
+                      }`}
                   >
                     🥗 Informasi & Kategori Bahan Pangan ({MBG_INFORMASI_BAHAN_PANGAN.length})
                   </button>
@@ -3872,44 +4682,40 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                       <button
                         type="button"
                         onClick={() => setSelectedBahanCategory('all')}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
-                          selectedBahanCategory === 'all'
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${selectedBahanCategory === 'all'
                             ? 'bg-[#1E293B] text-white'
                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
+                          }`}
                       >
                         Semua ({MBG_INFORMASI_BAHAN_PANGAN.length})
                       </button>
                       <button
                         type="button"
                         onClick={() => setSelectedBahanCategory('utama')}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
-                          selectedBahanCategory === 'utama'
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${selectedBahanCategory === 'utama'
                             ? 'bg-[#15803D] text-white'
                             : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                        }`}
+                          }`}
                       >
                         Bahan Utama ({MBG_KATEGORI_BAHAN_PANGAN.bahanUtama.length})
                       </button>
                       <button
                         type="button"
                         onClick={() => setSelectedBahanCategory('pelengkap')}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
-                          selectedBahanCategory === 'pelengkap'
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${selectedBahanCategory === 'pelengkap'
                             ? 'bg-blue-600 text-white'
                             : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                        }`}
+                          }`}
                       >
                         Bumbu Pelengkap ({MBG_KATEGORI_BAHAN_PANGAN.bumbuPelengkap.length})
                       </button>
                       <button
                         type="button"
                         onClick={() => setSelectedBahanCategory('dasar')}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
-                          selectedBahanCategory === 'dasar'
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${selectedBahanCategory === 'dasar'
                             ? 'bg-amber-600 text-white'
                             : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                        }`}
+                          }`}
                       >
                         Bumbu Dasar ({MBG_KATEGORI_BAHAN_PANGAN.bumbuDasar.length})
                       </button>
@@ -3991,7 +4797,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                 </div>
               ) : isAddingRecipe ? (
                 /* Add/Edit Recipe Form View */
-                <form 
+                <form
                   onSubmit={async (e) => {
                     e.preventDefault();
                     if (!newRecipeName.trim() || !newRecipeMainBahan.trim()) {
@@ -4029,7 +4835,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                         await addCustomRecipe(recipeData);
                         showToast({ message: 'Resep baru berhasil disimpan!', variant: 'success' });
                       }
-                      
+
                       setIsAddingRecipe(false);
                       setEditingRecipeId(null);
                     } catch (err) {
@@ -4146,7 +4952,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                         + Tambah Baris Bahan
                       </button>
                     </div>
-                    
+
                     <div className="border border-gray-100 rounded-xl overflow-hidden max-h-48 overflow-y-auto space-y-2 p-2 bg-gray-50">
                       {newRecipeIngredients.length === 0 ? (
                         <p className="text-center py-4 text-xs text-gray-400 font-bold">Belum ada bahan pendukung.</p>
@@ -4314,7 +5120,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                     >
                       ← Kembali ke Daftar Resep
                     </button>
-                    
+
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -4328,7 +5134,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                           setNewRecipeMainBahan(recipe.mainBahan);
                           setNewRecipeBaseQty(recipe.baseQty);
                           setNewRecipeSatuanMainBahan(recipe.satuanMainBahan);
-                          
+
                           // Look up portion standard
                           const porsiCfg = combinedPorsi.find(
                             (p) => p.namaMenu.toLowerCase().trim() === recipe.namaMenu.toLowerCase().trim()
@@ -4344,7 +5150,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
                             resepPer: String(ing.resepPer || '')
                           }));
                           setNewRecipeIngredients(supportIngs.length > 0 ? supportIngs : [{ bahan: '', kebutuhan: 0, satuan: 'g', resepPer: '' }]);
-                          
+
                           setIsAddingRecipe(true);
                           setSelectedRecipeItem(null);
                         }}
@@ -4414,7 +5220,7 @@ function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto py-1">
                     {combinedRecipes
-                      .filter((r) => 
+                      .filter((r) =>
                         r.namaMenu.toLowerCase().includes(recipeBookQuery.toLowerCase()) ||
                         r.jenisMenu.toLowerCase().includes(recipeBookQuery.toLowerCase())
                       )

@@ -213,6 +213,33 @@ export function subscribeOrdersByStatus(
 }
 
 /**
+ * Subscribe specifically to active kitchen production orders (PENDING and IN_PRODUCTION).
+ * Deduplicated via subscriptionManager and avoids downloading thousands of past orders.
+ */
+export function subscribeProductionOrders(
+  listener: (orders: Order[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, "orders"),
+    where("status", "in", ["PENDING", "IN_PRODUCTION"])
+  );
+  return subscriptionManager.subscribe(
+    q,
+    (snap) => {
+      const orders = snapshotToOrders(snap);
+      orders.sort((a, b) => {
+        const dateA = a.eventDate || a.createdAt || "";
+        const dateB = b.eventDate || b.createdAt || "";
+        return dateA.localeCompare(dateB);
+      });
+      listener(orders);
+    },
+    onError
+  );
+}
+
+/**
  * Subscribe to a single order document.
  *
  * Single-document listeners are lightweight so they bypass the
