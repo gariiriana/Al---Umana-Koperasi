@@ -113,7 +113,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
           userDocRef,
           async (docSnap) => {
             if (docSnap.exists()) {
-              setProfile(docSnap.data() as UserProfile);
+              const data = docSnap.data() as UserProfile;
+              const em = (nextUser.email || data.email || "").toLowerCase();
+              // If account is timproduksi@alumana.id but has legacy/fallback role 'pelanggan', auto-correct to tim_produksi
+              if ((em === "timproduksi@alumana.id" || em.includes("timproduksi")) && data.role === "pelanggan") {
+                data.role = "tim_produksi";
+                data.displayName = data.displayName && data.displayName !== "Pelanggan Baru" ? data.displayName : "Tim Produksi (Ust. Joko)";
+                setDoc(userDocRef, data, { merge: true }).catch(() => {});
+              }
+              setProfile(data);
               setLoading(false);
             } else {
               console.warn(`No user profile found for UID: ${nextUser.uid}. Auto-provisioning default profile...`);
@@ -123,7 +131,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
               let defaultDisplayName = nextUser.displayName || email.split("@")[0] || "Pelanggan Baru";
 
               const em = email.toLowerCase();
-              if (em.includes("produksimbg2") || em.includes("produksi_mbg2") || em.includes("joko")) {
+              if (em === "timproduksi@alumana.id" || em.includes("timproduksi") || em.includes("tim_produksi")) {
+                defaultRole = "tim_produksi";
+                defaultDisplayName = "Tim Produksi (Ust. Joko)";
+              } else if (em.includes("produksimbg2") || em.includes("produksi_mbg2") || em.includes("joko")) {
                 defaultRole = "produksi_1";
                 defaultDisplayName = "Ust. Joko";
               } else if (em.includes("produksimbg") || em.includes("produksi_mbg") || em.includes("shifa") || em.includes("hashifah")) {

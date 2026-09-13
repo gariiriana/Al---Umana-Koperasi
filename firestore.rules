@@ -38,19 +38,32 @@ service cloud.firestore {
     function isAdmin() {
       return request.auth != null
         && (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid))
-          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-          || ('email' in request.auth.token && request.auth.token.email == 'admin@ulumana.id')
+          (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+          )
+          || ('email' in request.auth.token && (
+            request.auth.token.email == 'admin@alumana.id' ||
+            request.auth.token.email == 'admin@ulumana.id'
+          ))
         );
     }
 
     function isTimProduksi() {
       return request.auth != null
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && (
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tim_produksi'
-          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_1'
-          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_2'
+          (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && (
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tim_produksi'
+              || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_1'
+              || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_2'
+            )
+          )
+          || ('email' in request.auth.token && (
+            request.auth.token.email == 'timproduksi@alumana.id' ||
+            request.auth.token.email == 'TimProduksi@Alumana.id'
+          ))
         );
     }
 
@@ -161,7 +174,9 @@ service cloud.firestore {
           )
           || ('email' in request.auth.token && (
             request.auth.token.email == 'dstribusi2@alumana.id' ||
-            request.auth.token.email == 'Dstribusi2@alumana.id'
+            request.auth.token.email == 'Dstribusi2@alumana.id' ||
+            request.auth.token.email == 'timproduksi@alumana.id' ||
+            request.auth.token.email == 'TimProduksi@Alumana.id'
           ))
         );
     }

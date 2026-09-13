@@ -249,7 +249,13 @@ class SubscriptionManager {
 
         // Attempt reconnect with exponential backoff.
         if (managed.subscribers.size > 0) {
-          const delay = backoffMs(managed.backoffAttempt);
+          const isQuotaError =
+            error?.message?.includes("resource-exhausted") ||
+            error?.message?.includes("Quota exceeded") ||
+            error?.message?.includes("quota");
+
+          // If quota is exhausted, back off for 2 minutes to avoid hammering Google Cloud
+          const delay = isQuotaError ? 120_000 : backoffMs(managed.backoffAttempt);
           managed.backoffAttempt++;
           managed.reconnectTimer = setTimeout(() => {
             managed.reconnectTimer = null;

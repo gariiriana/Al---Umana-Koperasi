@@ -44,8 +44,8 @@ import { JOBDESK_ROLE_LABELS, ROLE_TO_PIC_NAME, compareJobDeskTime } from "@/typ
 function mapToAssignableRole(profileRole?: string, email?: string): JobDeskAssignableRole | null {
   if (email) {
     const em = email.toLowerCase();
-    // 1. Joko: ProduksiMBG2@alumana.id
-    if (em.includes("produksimbg2") || em.includes("produksi_mbg2") || em.includes("joko")) {
+    // 1. Joko: ProduksiMBG2@alumana.id / TimProduksi@Alumana.id
+    if (em === "timproduksi@alumana.id" || em.includes("timproduksi") || em.includes("produksimbg2") || em.includes("produksi_mbg2") || em.includes("joko")) {
       return "produksi_1";
     }
     // 2. Hashifah Dzihniyah Zhafirah (Shifa): ProduksiMBG@alumana.id

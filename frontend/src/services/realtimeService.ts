@@ -26,6 +26,7 @@
 import {
   collection,
   doc,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -168,11 +169,16 @@ function snapshotToCourierGPS(
  */
 export function subscribeOrders(
   listener: (orders: Order[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  maxOrders = 100
 ): Unsubscribe {
-  const collRef = collection(db, "orders");
-  return onSnapshot(
-    collRef,
+  const q = query(
+    collection(db, "orders"),
+    orderBy("createdAt", "desc"),
+    limit(maxOrders)
+  );
+  return subscriptionManager.subscribe(
+    q,
     (snap) => {
       const orders = snap.docs.map(snapshotToOrder);
       orders.sort((a, b) => {

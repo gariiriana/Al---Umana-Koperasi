@@ -362,6 +362,9 @@ export function subscribeJobDesksByRole(
 ): () => void {
   const emailLower = (userEmail || "").toLowerCase();
   const isJoko =
+    emailLower === "timproduksi@alumana.id" ||
+    emailLower.includes("timproduksi") ||
+    emailLower.includes("tim_produksi") ||
     emailLower.includes("produksimbg2") ||
     emailLower.includes("produksi_mbg2") ||
     emailLower.includes("joko") ||

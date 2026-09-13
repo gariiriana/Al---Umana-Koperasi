@@ -349,6 +349,9 @@ export function Sidebar({
                 <span className="inline-block text-[10px] font-bold bg-[#F3F4F6] text-[#6B7280] rounded-full px-2 py-0.5 mt-0.5">
                   {(() => {
                     const em = (userEmail || userName || "").toLowerCase();
+                    if (em === "timproduksi@alumana.id" || em.includes("timproduksi") || em.includes("tim_produksi")) {
+                      return "Ust. Joko (Tim Produksi)";
+                    }
                     if (em.includes("produksimbg2") || em.includes("produksi_mbg2") || em.includes("joko")) {
                       return "Ust. Joko (Produksi MBG 2)";
                     }

@@ -168,8 +168,14 @@ function ShelledRoute({
   }
 
   const isWhitelistedEmail =
-    (user?.email && user.email.toLowerCase() === "dstribusi2@alumana.id") ||
-    (profile?.email && profile.email.toLowerCase() === "dstribusi2@alumana.id");
+    (user?.email && (
+      user.email.toLowerCase() === "dstribusi2@alumana.id" ||
+      user.email.toLowerCase() === "timproduksi@alumana.id"
+    )) ||
+    (profile?.email && (
+      profile.email.toLowerCase() === "dstribusi2@alumana.id" ||
+      profile.email.toLowerCase() === "timproduksi@alumana.id"
+    ));
 
   // Redirect to respective default landing page if role is not allowed
   if (
