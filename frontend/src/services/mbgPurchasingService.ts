@@ -4,7 +4,7 @@
 
 import {
   collection, doc, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, onSnapshot, type Unsubscribe,
+  query, where, orderBy, limit, onSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { MbgPurchaseOrder, MbgSupplier } from '@/types/mbg';
@@ -49,7 +49,7 @@ export function subscribeSuppliers(
   callback: (suppliers: MbgSupplier[]) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
-  const q = query(collection(db, SUPPLIER_COLLECTION), orderBy('name'));
+  const q = query(collection(db, SUPPLIER_COLLECTION), orderBy('name'), limit(100));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgSupplier)));
   }, onError);
@@ -91,7 +91,7 @@ export function subscribeArchivedPurchasingDocs(
   onError?: (error: Error) => void
 ): Unsubscribe {
   const colRef = collection(db, DOC_ARCHIVE_COLLECTION);
-  const q = batchId ? query(colRef, where('batchId', '==', batchId)) : query(colRef);
+  const q = batchId ? query(colRef, where('batchId', '==', batchId), limit(50)) : query(colRef, limit(50));
   return onSnapshot(q, (snap) => {
     const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgPurchasingDocArchive));
     list.sort((a, b) => (b.exportedAt || '').localeCompare(a.exportedAt || ''));

@@ -24,7 +24,6 @@ import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
 import {
   subscribeBatches,
   subscribeEntries,
-  subscribeAllEntries,
   createBatch,
   updateBatchStatus,
   addEntry,
@@ -96,28 +95,15 @@ function NewBatchModal({
   onClose,
   onSubmit,
   batches,
-  allEntries = [],
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (tanggal: string, copyFromId?: string, autoPopulateMaster?: boolean) => void;
   batches: MbgPmBatch[];
-  allEntries?: MbgPmEntry[];
 }) {
   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
   const [creationMode, setCreationMode] = useState<'copy' | 'master' | 'blank'>('copy');
   const [copyFrom, setCopyFrom] = useState('');
-
-  // Calculate actual portions for each batch dynamically from allEntries
-  const batchPortionMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    allEntries.forEach((e) => {
-      if (e.batchId && !e.isSekolahLibur) {
-        map[e.batchId] = (map[e.batchId] || 0) + (e.jumlah || 0);
-      }
-    });
-    return map;
-  }, [allEntries]);
 
   // Sort batches descending by date
   const sortedBatches = useMemo(() => {
@@ -127,20 +113,20 @@ function NewBatchModal({
   // Find first batch with > 0 portions as default copy candidate if available
   useEffect(() => {
     if (!copyFrom && sortedBatches.length > 0) {
-      const best = sortedBatches.find((b) => (batchPortionMap[b.id] || b.totalJumlah || 0) > 0);
+      const best = sortedBatches.find((b) => (b.totalJumlah || 0) > 0);
       if (best) {
         setCopyFrom(best.id);
       } else {
         setCopyFrom(sortedBatches[0].id);
       }
     }
-  }, [sortedBatches, batchPortionMap, copyFrom]);
+  }, [sortedBatches, copyFrom]);
 
   if (!isOpen) return null;
 
   const selectedCopyBatch = sortedBatches.find((b) => b.id === copyFrom);
   const selectedCopyPortions = selectedCopyBatch
-    ? (batchPortionMap[selectedCopyBatch.id] ?? selectedCopyBatch.totalJumlah ?? 0)
+    ? (selectedCopyBatch.totalJumlah ?? 0)
     : 0;
 
   return (
@@ -215,7 +201,7 @@ function NewBatchModal({
                           <option value="">(Belum ada batch sebelumnya)</option>
                         ) : (
                           sortedBatches.map((b) => {
-                            const porsi = batchPortionMap[b.id] ?? b.totalJumlah ?? 0;
+                            const porsi = b.totalJumlah ?? 0;
                             const statusBadge = b.status === 'DRAFT' ? 'Draft' : 'Final';
                             return (
                               <option key={b.id} value={b.id}>
@@ -1045,7 +1031,6 @@ export function MbgAdminPage() {
 
   const [batches, setBatches] = useState<MbgPmBatch[]>([]);
   const [allBatches, setAllBatches] = useState<MbgPmBatch[]>([]);
-  const [allEntries, setAllEntries] = useState<MbgPmEntry[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [entries, setEntries] = useState<MbgPmEntry[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
@@ -1263,14 +1248,6 @@ export function MbgAdminPage() {
     const unsub = subscribeWeeklySchedule(setWeeklySchedule, selectedPortionClassification);
     return unsub;
   }, [selectedPortionClassification]);
-
-  // Subscribe to all entries globally for cross-batch portion tracking & copying
-  useEffect(() => {
-    const unsub = subscribeAllEntries((e) => {
-      setAllEntries(e);
-    });
-    return unsub;
-  }, []);
 
   // Subscribe to batches and auto-create today's batch
   useEffect(() => {
@@ -2200,7 +2177,6 @@ export function MbgAdminPage() {
           onClose={() => setShowNewBatchModal(false)}
           onSubmit={handleCreateBatch}
           batches={allBatches.length > 0 ? allBatches : batches}
-          allEntries={allEntries}
         />
       </AnimatePresence>
 

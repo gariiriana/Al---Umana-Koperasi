@@ -10,6 +10,7 @@ import {
   deleteDoc,
   query,
   where,
+  limit,
   onSnapshot,
   writeBatch,
   getDocs,
@@ -18,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { subscriptionManager } from './subscriptionManager';
 import type { MbgPmBatch, MbgPmEntry, MbgBatchStatus, MbgDayMenu } from '@/types/mbg';
 import { MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
 
@@ -124,9 +126,12 @@ export function subscribeBatches(
   callback: (batches: MbgPmBatch[]) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
-  const collRef = collection(db, BATCHES_COLLECTION);
-  return onSnapshot(
-    collRef,
+  const q = query(
+    collection(db, BATCHES_COLLECTION),
+    limit(60)
+  );
+  return subscriptionManager.subscribe(
+    q,
     (snapshot) => {
       const batches = snapshot.docs.map((d) => ({
         id: d.id,
@@ -214,7 +219,7 @@ export function subscribeEntries(
     collection(db, ENTRIES_COLLECTION),
     where('batchId', '==', batchId)
   );
-  return onSnapshot(
+  return subscriptionManager.subscribe(
     q,
     (snapshot) => {
       const entries = snapshot.docs.map((d) => ({
@@ -233,9 +238,10 @@ export function subscribeAllEntries(
   onError?: (error: Error) => void
 ): Unsubscribe {
   const q = query(
-    collection(db, ENTRIES_COLLECTION)
+    collection(db, ENTRIES_COLLECTION),
+    limit(150)
   );
-  return onSnapshot(
+  return subscriptionManager.subscribe(
     q,
     (snapshot) => {
       const entries = snapshot.docs.map((d) => ({

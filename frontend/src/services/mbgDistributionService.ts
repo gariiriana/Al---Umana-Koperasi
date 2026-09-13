@@ -4,9 +4,10 @@
 
 import {
   collection, doc, addDoc, updateDoc,
-  query, where, onSnapshot, type Unsubscribe,
+  query, where, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { subscriptionManager } from './subscriptionManager';
 import type { MbgQcCheck, MbgDeliveryTask } from '@/types/mbg';
 
 const QC_COLLECTION = 'mbg_qc_checks';
@@ -23,7 +24,7 @@ export function subscribeQcChecks(
     collection(db, QC_COLLECTION),
     where('batchId', '==', batchId)
   );
-  return onSnapshot(q, (snap) => {
+  return subscriptionManager.subscribe(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgQcCheck)));
   }, onError);
 }
@@ -48,7 +49,7 @@ export function subscribeDeliveryTasks(
     collection(db, DELIVERY_COLLECTION),
     where('batchId', '==', batchId)
   );
-  return onSnapshot(q, (snap) => {
+  return subscriptionManager.subscribe(q, (snap) => {
     const tasks = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryTask));
     tasks.sort((a, b) => (a.petugasName || '').localeCompare(b.petugasName || ''));
     callback(tasks);
@@ -64,7 +65,7 @@ export function subscribeMyDeliveryTasks(
     collection(db, DELIVERY_COLLECTION),
     where('petugasId', '==', petugasId)
   );
-  return onSnapshot(q, (snap) => {
+  return subscriptionManager.subscribe(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryTask)));
   }, onError);
 }
@@ -89,19 +90,22 @@ export interface MbgKurirUser {
 export function subscribeKurirUsers(
   callback: (kurirs: MbgKurirUser[]) => void
 ): Unsubscribe {
-  const colRef = collection(db, 'users');
-  return onSnapshot(
-    colRef,
+  const allowedRoles = [
+    'kurir_mbg',
+    'kurir',
+    'distribusi_mbg',
+    'distribusi',
+    'admin',
+    'admin_mbg',
+    'produksi_mbg',
+  ];
+  const q = query(
+    collection(db, 'users'),
+    where('role', 'in', allowedRoles)
+  );
+  return subscriptionManager.subscribe(
+    q,
     (snap) => {
-      const allowedRoles = [
-        'kurir_mbg',
-        'kurir',
-        'distribusi_mbg',
-        'distribusi',
-        'admin',
-        'admin_mbg',
-        'produksi_mbg',
-      ];
       const list = snap.docs
         .map((docSnap) => {
           const data = docSnap.data();
@@ -117,7 +121,6 @@ export function subscribeKurirUsers(
             role,
           };
         })
-        .filter((user) => !user.role || allowedRoles.includes(user.role))
         .sort((a, b) => a.name.localeCompare(b.name, 'id-ID'));
 
       callback(list);

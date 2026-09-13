@@ -289,9 +289,12 @@ export function MbgProductionPage() {
     };
   }, [user]);
 
-  // Subscribe to all entries globally for cross-batch archive filtering
+  // Subscribe to all entries globally ONLY when archive tab is active
   useEffect(() => {
-    if (!user) return;
+    if (!user || activeTab !== 'archive') {
+      setLoadingArchive(false);
+      return;
+    }
     setLoadingArchive(true);
     const timer = setTimeout(() => {
       setLoadingArchive(false);
@@ -313,7 +316,7 @@ export function MbgProductionPage() {
       clearTimeout(timer);
       unsub();
     };
-  }, [user]);
+  }, [user, activeTab]);
 
   // Subscribe entries + nutrition + recipe adjustments + daily report for selected batch
   useEffect(() => {

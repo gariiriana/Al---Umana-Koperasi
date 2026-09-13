@@ -275,7 +275,7 @@ export function subscribeCourierLocations(
   listener: (locations: CourierGPS[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
-  const q = query(collection(db, "courier_locations"));
+  const q = query(collection(db, "courier_locations"), limit(50));
   return subscriptionManager.subscribe(
     q,
     (snap) => {

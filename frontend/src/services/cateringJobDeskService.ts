@@ -11,13 +11,14 @@ import {
   query,
   where,
   orderBy,
-  onSnapshot,
+  limit,
   serverTimestamp,
   getDocs,
   Timestamp,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { subscriptionManager } from "./subscriptionManager";
 import type {
   CateringJobDesk,
   JobDeskAssignableRole,
@@ -302,10 +303,10 @@ export function subscribeAllJobDesks(
   onError?: (error: Error) => void,
   division?: JobDeskDivision
 ): () => void {
-  const collRef = collection(db, COLLECTION);
+  const q = query(collection(db, COLLECTION), limit(120));
 
-  return onSnapshot(
-    collRef,
+  return subscriptionManager.subscribe(
+    q,
     (snapshot) => {
       let results = snapshot.docs.map((d) =>
         docToJobDesk(d.id, d.data() as Record<string, unknown>)
@@ -336,14 +337,17 @@ export function subscribeJobDesksByOrder(
   onData: (jobDesks: CateringJobDesk[]) => void,
   onError?: (error: Error) => void
 ): () => void {
-  const collRef = collection(db, COLLECTION);
+  const q = query(
+    collection(db, COLLECTION),
+    where("orderId", "==", orderId)
+  );
 
-  return onSnapshot(
-    collRef,
+  return subscriptionManager.subscribe(
+    q,
     (snapshot) => {
-      const results = snapshot.docs
-        .map((d) => docToJobDesk(d.id, d.data() as Record<string, unknown>))
-        .filter((jd) => jd.orderId === orderId);
+      const results = snapshot.docs.map((d) =>
+        docToJobDesk(d.id, d.data() as Record<string, unknown>)
+      );
       onData(results);
     },
     (error) => {
@@ -395,10 +399,10 @@ export function subscribeJobDesksByRole(
       emailLower.includes("distribusi2") ||
       emailLower.startsWith("wandi"));
 
-  const collRef = collection(db, COLLECTION);
+  const q = query(collection(db, COLLECTION), limit(100));
 
-  return onSnapshot(
-    collRef,
+  return subscriptionManager.subscribe(
+    q,
     (snapshot) => {
       const results = snapshot.docs
         .map((d) => docToJobDesk(d.id, d.data() as Record<string, unknown>))

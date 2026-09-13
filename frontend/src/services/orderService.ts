@@ -19,6 +19,7 @@ import {
   getDocs,
   query,
   where,
+  limit,
   onSnapshot,
   runTransaction,
   deleteDoc,
@@ -1189,7 +1190,8 @@ export function subscribeToPaymentApprovalQueue(
 ): Unsubscribe {
   const q = query(
     collection(db, "orders"),
-    where("status", "==", "AWAITING_PAYMENT_APPROVAL")
+    where("status", "==", "AWAITING_PAYMENT_APPROVAL"),
+    limit(PAYMENT_APPROVAL_QUEUE_LIMIT)
   );
   return onSnapshot(
     q,

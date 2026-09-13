@@ -5,6 +5,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   onSnapshot,
   doc,
   updateDoc,
@@ -103,7 +104,8 @@ export function subscribeNotifications(
     const qUser = query(
       collection(db, "notifications"),
       where("recipientId", "==", userId),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
+      limit(30)
     );
 
     unsubUser = onSnapshot(
@@ -123,7 +125,8 @@ export function subscribeNotifications(
       const qRole = query(
         collection(db, "notifications"),
         where("recipientId", "==", role),
-        orderBy("createdAt", "desc")
+        orderBy("createdAt", "desc"),
+        limit(30)
       );
 
       unsubRole = onSnapshot(
@@ -177,7 +180,8 @@ export function subscribeUnreadCount(
     const qUser = query(
       collection(db, "notifications"),
       where("recipientId", "==", userId),
-      where("read", "==", false)
+      where("read", "==", false),
+      limit(50)
     );
 
     unsubUser = onSnapshot(
@@ -197,7 +201,8 @@ export function subscribeUnreadCount(
       const qRole = query(
         collection(db, "notifications"),
         where("recipientId", "==", role),
-        where("read", "==", false)
+        where("read", "==", false),
+        limit(50)
       );
 
       unsubRole = onSnapshot(

@@ -32,7 +32,7 @@ import { CartAnimationProvider } from "@/contexts/CartAnimationContext";
 import { type FlyDot } from "@/contexts/CartAnimationContextCore";
 import { useCartAnimation } from "@/contexts/useCartAnimation";
 
-import { collection, query, where, onSnapshot, DocumentData } from "firebase/firestore";
+import { collection, query, where, limit, onSnapshot, DocumentData } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Order } from "@/types/order";
 import { subscribeUnreadCount, markAllNotificationsAsRead } from "@/services/notificationService";
@@ -244,7 +244,8 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
     try {
       const q = query(
         collection(db, "orders"),
-        where("customerId", "==", user.uid)
+        where("customerId", "==", user.uid),
+        limit(20)
       );
 
       unsubscribeOrders = onSnapshot(
