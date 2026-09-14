@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useCallback, Fragment } from 'react';
 import {
   Plus, Trash2, FileDown, Calendar, Loader2, CheckCircle2, Search, X, Folder, Send, ChefHat,
   ClipboardList, FileText, FolderOpen, FileUp, Save, Sparkles, FileSpreadsheet, ChevronDown, ChevronUp,
+  AlertTriangle,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -14,6 +15,7 @@ import { useToast } from '@/contexts/ToastContext';
 import * as XLSX from 'xlsx';
 import type { MbgPmBatch, MbgPmEntry, MbgNutritionEntry, MbgDayMenu, MbgProductionDailyReport } from '@/types/mbg';
 import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
+import { DailyReportExcelSections } from '@/components/mbg/DailyReportExcelSections';
 import { subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule, saveWeeklySchedule, getMenuForDate, deleteBatch, createBatch, type MbgPortionClassification } from '@/services/mbgAdminService';
 import {
   subscribeNutrition, addNutritionEntry, updateNutritionEntry, deleteNutritionEntry,
@@ -76,6 +78,17 @@ interface RecipeAdjustment {
   updatedAt?: string;
 }
 
+interface ConfirmModalState {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  variant?: 'primary' | 'danger' | 'warning' | 'success';
+  icon?: 'send' | 'delete' | 'warning' | 'check';
+  onConfirm: () => Promise<void> | void;
+}
+
 const standarPorsi = porsiStandardData as StandarPorsi[];
 const standarResep = resepStandardData as StandarResep[];
 
@@ -93,6 +106,8 @@ export function MbgProductionPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pm-data' | 'nutrition' | 'daily-report' | 'archive'>('pm-data');
   const [dailyReportSubTab, setDailyReportSubTab] = useState<'kecil' | 'besar' | 'balita' | 'bumil' | 'paket3b' | 'po' | 'qc' | 'waste'>('kecil');
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalState | null>(null);
+  const [confirmModalLoading, setConfirmModalLoading] = useState(false);
 
   // Google Sheets & Excel Import States
   const [showSheetsImportModal, setShowSheetsImportModal] = useState(false);
@@ -788,20 +803,28 @@ export function MbgProductionPage() {
     }
   };
 
-  const handleDeleteBatch = async (batchId: string, tanggal: string) => {
-    const confirmText = `Apakah Anda yakin ingin menghapus arsip data batch tanggal ${tanggal}? Tindakan ini akan menghapus seluruh data penerima manfaat dan laporan di dalamnya, serta tidak dapat dibatalkan.`;
-    if (!window.confirm(confirmText)) return;
-
-    try {
-      await deleteBatch(batchId);
-      showToast({ message: `Data batch ${tanggal} berhasil dihapus!`, variant: 'success' });
-      if (selectedBatchId === batchId) {
-        setSelectedBatchId(null);
-      }
-    } catch (err) {
-      console.error('Error deleting batch:', err);
-      showToast({ message: 'Gagal menghapus batch', variant: 'error' });
-    }
+  const handleDeleteBatch = (batchId: string, tanggal: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Hapus Batch Operasional',
+      message: `Apakah Anda yakin ingin menghapus arsip data batch tanggal ${tanggal}? Tindakan ini akan menghapus seluruh data penerima manfaat dan laporan di dalamnya, serta tidak dapat dibatalkan.`,
+      confirmLabel: 'Ya, Hapus Permanen',
+      cancelLabel: 'Batal',
+      variant: 'danger',
+      icon: 'delete',
+      onConfirm: async () => {
+        try {
+          await deleteBatch(batchId);
+          showToast({ message: `Data batch ${tanggal} berhasil dihapus!`, variant: 'success' });
+          if (selectedBatchId === batchId) {
+            setSelectedBatchId(null);
+          }
+        } catch (err) {
+          console.error('Error deleting batch:', err);
+          showToast({ message: 'Gagal menghapus batch', variant: 'error' });
+        }
+      },
+    });
   };
 
   const handleResetIngredientAdjustment = async (name: string, adjustmentId: string | null) => {
@@ -1789,17 +1812,26 @@ export function MbgProductionPage() {
     );
   }, [nutritionData]);
 
-  const handleSubmitToPurchasing = async () => {
+  const handleSubmitToPurchasing = () => {
     if (!selectedBatchId) return;
-    if (window.confirm('Kirim/Submit data resep dan estimasi kebutuhan bahan ke Purchasing MBG?')) {
-      try {
-        await updateBatchStatus(selectedBatchId, 'PURCHASING');
-        showToast({ message: 'Data resep & kebutuhan bahan berhasil disubmit ke Purchasing MBG!', variant: 'success' });
-      } catch (err) {
-        console.error(err);
-        showToast({ message: 'Gagal menyubmit data ke Purchasing', variant: 'error' });
-      }
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Submit Data ke Purchasing MBG',
+      message: 'Kirim/Submit data resep dan estimasi kebutuhan bahan baku untuk batch ini ke bagian Purchasing MBG untuk memulai proses pengadaan bahan?',
+      confirmLabel: 'Ya, Submit ke Purchasing',
+      cancelLabel: 'Batal',
+      variant: 'success',
+      icon: 'send',
+      onConfirm: async () => {
+        try {
+          await updateBatchStatus(selectedBatchId, 'PURCHASING');
+          showToast({ message: 'Data resep & kebutuhan bahan berhasil disubmit ke Purchasing MBG!', variant: 'success' });
+        } catch (err) {
+          console.error(err);
+          showToast({ message: 'Gagal menyubmit data ke Purchasing', variant: 'error' });
+        }
+      },
+    });
   };
 
   const [creatingBatch, setCreatingBatch] = useState(false);
@@ -2053,7 +2085,10 @@ export function MbgProductionPage() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <div className="inline-flex items-center gap-1.5 bg-[#F1F5F9] p-1.5 rounded-2xl border border-slate-200/80 shadow-inner overflow-x-auto max-w-full">
           {[
-            { id: 'pm-data', label: 'Data PM', icon: ClipboardList },
+            { id: 'pm-data', label: 'Data PM & Operasional', icon: ClipboardList },
+            ...(dailyReport || effectiveDailyReport
+              ? [{ id: 'daily-report' as const, label: 'Laporan Excel (8 Bagian)', icon: FileSpreadsheet }]
+              : []),
             { id: 'archive', label: 'Arsip Gizi', icon: FolderOpen },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -2338,6 +2373,25 @@ export function MbgProductionPage() {
         </div>
       ) : activeTab === 'daily-report' ? (() => {
         const curReport = effectiveDailyReport || dailyReport;
+        if (!curReport) {
+          return (
+            <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
+              <FileSpreadsheet className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+              <h3 className="text-sm font-bold text-slate-800">Belum Ada Data Laporan Excel Ter-import</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                Silakan pilih batch dan import file Excel atau Google Sheets terlebih dahulu.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowSheetsImportModal(true)}
+                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer"
+              >
+                <FileUp className="h-4 w-4" />
+                <span>Import Google Sheets / Excel</span>
+              </button>
+            </div>
+          );
+        }
         return (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
@@ -2392,334 +2446,13 @@ export function MbgProductionPage() {
                 </div>
               </div>
 
-              {/* Sub-tab Navigation for 8 Sections */}
-              <div className="flex gap-1.5 overflow-x-auto py-3 border-b border-slate-200 scrollbar-none">
-                {[
-                  { key: 'kecil', label: '1. Porsi Kecil' },
-                  { key: 'besar', label: '2. Porsi Besar' },
-                  { key: 'balita', label: '3. Porsi Balita' },
-                  { key: 'bumil', label: '4. Bumil / Busui' },
-                  { key: 'paket3b', label: '5. Paket Sehat 3B' },
-                  { key: 'po', label: '6. PO & Pembelian' },
-                  { key: 'qc', label: '7. Form QC Bahan' },
-                  { key: 'waste', label: '8. Rekapan Limbah' },
-                ].map((st) => (
-                  <button
-                    key={st.key}
-                    onClick={() => setDailyReportSubTab(st.key as 'kecil' | 'besar' | 'balita' | 'bumil' | 'paket3b' | 'po' | 'qc' | 'waste')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${dailyReportSubTab === st.key
-                        ? 'bg-slate-900 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                  >
-                    {st.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Sub-tab Content Views */}
-              <div className="pt-4">
-                {dailyReportSubTab === 'kecil' && (
-                  <div className="space-y-6">
-                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 1: Realisasi Menu — Porsi Kecil</h3>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                              <th className="px-3 py-2">Menu</th>
-                              <th className="px-3 py-2">Rincian Bahan</th>
-                              <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
-                              <th className="px-3 py-2 text-center">Energi (kkal)</th>
-                              <th className="px-3 py-2 text-center">Protein (g)</th>
-                              <th className="px-3 py-2 text-center">Lemak (g)</th>
-                              <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
-                              <th className="px-3 py-2 text-center">Serat (g)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(curReport?.porsiKecil?.nutritionItems || []).map((item, idx) => (
-                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                                <td className="px-3 py-2 font-bold">{item.menuName}</td>
-                                <td className="px-3 py-2">{item.rincianBahan}</td>
-                                <td className="px-3 py-2 text-center">{item.beratBersih}</td>
-                                <td className="px-3 py-2 text-center">{item.energi}</td>
-                                <td className="px-3 py-2 text-center">{item.protein}</td>
-                                <td className="px-3 py-2 text-center">{item.lemak}</td>
-                                <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
-                                <td className="px-3 py-2 text-center">{item.serat}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {dailyReportSubTab === 'besar' && (
-                  <div className="space-y-6">
-                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 2: Realisasi Menu — Porsi Besar</h3>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                              <th className="px-3 py-2">Menu</th>
-                              <th className="px-3 py-2">Rincian Bahan</th>
-                              <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
-                              <th className="px-3 py-2 text-center">Energi (kkal)</th>
-                              <th className="px-3 py-2 text-center">Protein (g)</th>
-                              <th className="px-3 py-2 text-center">Lemak (g)</th>
-                              <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
-                              <th className="px-3 py-2 text-center">Serat (g)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(curReport?.porsiBesar?.nutritionItems || []).map((item, idx) => (
-                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                                <td className="px-3 py-2 font-bold">{item.menuName}</td>
-                                <td className="px-3 py-2">{item.rincianBahan}</td>
-                                <td className="px-3 py-2 text-center">{item.beratBersih}</td>
-                                <td className="px-3 py-2 text-center">{item.energi}</td>
-                                <td className="px-3 py-2 text-center">{item.protein}</td>
-                                <td className="px-3 py-2 text-center">{item.lemak}</td>
-                                <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
-                                <td className="px-3 py-2 text-center">{item.serat}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {dailyReportSubTab === 'balita' && (
-                  <div className="space-y-6">
-                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 3: Realisasi Menu — Porsi Balita</h3>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                              <th className="px-3 py-2">Menu</th>
-                              <th className="px-3 py-2">Rincian Bahan</th>
-                              <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
-                              <th className="px-3 py-2 text-center">Energi (kkal)</th>
-                              <th className="px-3 py-2 text-center">Protein (g)</th>
-                              <th className="px-3 py-2 text-center">Lemak (g)</th>
-                              <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
-                              <th className="px-3 py-2 text-center">Serat (g)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(curReport?.porsiBalita?.nutritionItems || []).map((item, idx) => (
-                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                                <td className="px-3 py-2 font-bold">{item.menuName}</td>
-                                <td className="px-3 py-2">{item.rincianBahan}</td>
-                                <td className="px-3 py-2 text-center">{item.beratBersih}</td>
-                                <td className="px-3 py-2 text-center">{item.energi}</td>
-                                <td className="px-3 py-2 text-center">{item.protein}</td>
-                                <td className="px-3 py-2 text-center">{item.lemak}</td>
-                                <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
-                                <td className="px-3 py-2 text-center">{item.serat}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {dailyReportSubTab === 'bumil' && (
-                  <div className="space-y-6">
-                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 4: Realisasi Menu — Porsi Bumil / Busui</h3>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Kandungan Gizi</div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                              <th className="px-3 py-2">Menu</th>
-                              <th className="px-3 py-2">Rincian Bahan</th>
-                              <th className="px-3 py-2 text-center">Berat Bersih (g)</th>
-                              <th className="px-3 py-2 text-center">Energi (kkal)</th>
-                              <th className="px-3 py-2 text-center">Protein (g)</th>
-                              <th className="px-3 py-2 text-center">Lemak (g)</th>
-                              <th className="px-3 py-2 text-center">Karbohidrat (g)</th>
-                              <th className="px-3 py-2 text-center">Serat (g)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(curReport?.porsiBumilBusui?.nutritionItems || []).map((item, idx) => (
-                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                                <td className="px-3 py-2 font-bold">{item.menuName}</td>
-                                <td className="px-3 py-2">{item.rincianBahan}</td>
-                                <td className="px-3 py-2 text-center">{item.beratBersih}</td>
-                                <td className="px-3 py-2 text-center">{item.energi}</td>
-                                <td className="px-3 py-2 text-center">{item.protein}</td>
-                                <td className="px-3 py-2 text-center">{item.lemak}</td>
-                                <td className="px-3 py-2 text-center">{item.karbohidrat}</td>
-                                <td className="px-3 py-2 text-center">{item.serat}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {dailyReportSubTab === 'paket3b' && (
-                  <div className="space-y-6">
-                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 5: Paket Sehat 3B</h3>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Daftar Bahan Keringan</div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                              <th className="px-3 py-2">Item Bahan</th>
-                              <th className="px-3 py-2 text-center">Qty (Pcs)</th>
-                              <th className="px-3 py-2 text-center">Qty</th>
-                              <th className="px-3 py-2 text-center">Satuan</th>
-                              <th className="px-3 py-2 text-right">Harga Satuan</th>
-                              <th className="px-3 py-2 text-right">Total Harga</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(curReport?.paketSehat3b?.keringanItems || []).map((k, idx) => (
-                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                                <td className="px-3 py-2 font-bold">{k.item}</td>
-                                <td className="px-3 py-2 text-center">{k.qtyPcs}</td>
-                                <td className="px-3 py-2 text-center">{k.qty}</td>
-                                <td className="px-3 py-2 text-center">{k.satuan}</td>
-                                <td className="px-3 py-2 text-right">Rp{(k.hargaSatuan || 0).toLocaleString('id-ID')}</td>
-                                <td className="px-3 py-2 text-right font-bold">Rp{(k.totalHarga || 0).toLocaleString('id-ID')}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {dailyReportSubTab === 'po' && (
-                  <div className="space-y-6">
-                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 6: PO & Realisasi Pembelian</h3>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Realisasi Pembelian vs Anggaran</div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                              <th className="px-3 py-2">Tanggal</th>
-                              <th className="px-3 py-2">Nama Bahan</th>
-                              <th className="px-3 py-2 text-center">Kuantitas</th>
-                              <th className="px-3 py-2 text-center">Satuan</th>
-                              <th className="px-3 py-2 text-right">Harga Per Unit</th>
-                              <th className="px-3 py-2 text-right">Total Harga</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(curReport?.realisasiPembelianRows || []).map((r, idx) => (
-                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                                <td className="px-3 py-2">{r.tanggal}</td>
-                                <td className="px-3 py-2 font-bold">{r.namaBahan}</td>
-                                <td className="px-3 py-2 text-center">{r.kuantitas}</td>
-                                <td className="px-3 py-2 text-center">{r.satuan}</td>
-                                <td className="px-3 py-2 text-right">Rp{(r.hargaPerUnit || 0).toLocaleString('id-ID')}</td>
-                                <td className="px-3 py-2 text-right font-bold">Rp{(r.totalHarga || 0).toLocaleString('id-ID')}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {dailyReportSubTab === 'qc' && (
-                  <div className="space-y-6">
-                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 7: Form Pemeriksaan Bahan Makanan (QC)</h3>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Form QC Pemeriksaan Physical</div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                              <th className="px-3 py-2">Jenis Bahan Makanan</th>
-                              <th className="px-3 py-2 text-center">Banyaknya</th>
-                              <th className="px-3 py-2 text-center">Satuan</th>
-                              <th className="px-3 py-2 text-center">Jumlah</th>
-                              <th className="px-3 py-2 text-center">Kondisi Bahan</th>
-                              <th className="px-3 py-2">Catatan QC</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(curReport?.inspectionForm?.rows || []).map((qc, idx) => (
-                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                                <td className="px-3 py-2 font-bold">{qc.jenisBahan}</td>
-                                <td className="px-3 py-2 text-center">{qc.banyaknya}</td>
-                                <td className="px-3 py-2 text-center">{qc.satuan}</td>
-                                <td className="px-3 py-2 text-center">
-                                  <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${qc.isSesuai ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
-                                    {qc.isSesuai ? 'Sesuai' : 'Tidak Sesuai'}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2 text-center">
-                                  <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${qc.isBaik ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
-                                    {qc.isBaik ? 'Baik' : 'Rusak'}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2">{qc.notes || '-'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {dailyReportSubTab === 'waste' && (
-                  <div className="space-y-6">
-                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Halaman 8: Rekapan Limbah Sisa Makanan</h3>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-slate-900 px-4 py-2 text-xs font-bold text-white uppercase tracking-wider">Tabel Rekapan Limbah</div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                              <th className="px-3 py-2 text-center">No</th>
-                              <th className="px-3 py-2">Nama Makanan</th>
-                              <th className="px-3 py-2 text-center">Kuantitas</th>
-                              <th className="px-3 py-2 text-center">Satuan</th>
-                              <th className="px-3 py-2">Dokumentasi</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(curReport?.wasteLogs || []).map((w, idx) => (
-                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                                <td className="px-3 py-2 text-center">{w.no || idx + 1}</td>
-                                <td className="px-3 py-2 font-bold">{w.namaMakanan}</td>
-                                <td className="px-3 py-2 text-center">{w.kuantitas}</td>
-                                <td className="px-3 py-2 text-center">{w.satuan}</td>
-                                <td className="px-3 py-2">{w.dokumentasi || '-'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
+              {/* Sub-tab Navigation for 8 Sections & Tables */}
+              <div className="pt-2">
+                <DailyReportExcelSections
+                  report={curReport}
+                  activeSubTab={dailyReportSubTab}
+                  onSubTabChange={setDailyReportSubTab}
+                />
               </div>
             </div>
           </div>
@@ -3016,86 +2749,14 @@ export function MbgProductionPage() {
                           </div>
                         )}
 
-                        {/* Expandable Details: Tables of Nutrition & Raw Ingredients from Excel */}
+                        {/* Expandable Details: Separated Tables by Excel Tabs */}
                         {showImportedDetails && (
-                          <div className="space-y-4 pt-3 border-t border-emerald-200/60 animate-in fade-in duration-150">
-                            {/* Nutrition Table */}
-                            <div className="bg-white rounded-xl border border-emerald-200/80 overflow-hidden shadow-xs">
-                              <div className="px-3.5 py-2 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between">
-                                <span>Rincian Kandungan Gizi Menu (Hasil Excel)</span>
-                                <span className="text-amber-300 text-[10px]">Realisasi Porsi Besar & Kecil</span>
-                              </div>
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-xs text-left">
-                                  <thead>
-                                    <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                                      <th className="px-3 py-2">Menu</th>
-                                      <th className="px-3 py-2">Rincian Bahan</th>
-                                      <th className="px-2 py-2 text-center">Berat (g)</th>
-                                      <th className="px-2 py-2 text-center">Energi (kkal)</th>
-                                      <th className="px-2 py-2 text-center">Protein (g)</th>
-                                      <th className="px-2 py-2 text-center">Lemak (g)</th>
-                                      <th className="px-2 py-2 text-center">Karbohidrat (g)</th>
-                                      <th className="px-2 py-2 text-center">Serat (g)</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {(curReport.porsiBesar?.nutritionItems || curReport.porsiKecil?.nutritionItems || []).map((item, idx) => (
-                                      <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                                        <td className="px-3 py-2 font-bold text-slate-900">{item.menuName}</td>
-                                        <td className="px-3 py-2 text-slate-600">{item.rincianBahan}</td>
-                                        <td className="px-2 py-2 text-center">{item.beratBersih}</td>
-                                        <td className="px-2 py-2 text-center font-bold text-amber-700">{item.energi}</td>
-                                        <td className="px-2 py-2 text-center">{item.protein}</td>
-                                        <td className="px-2 py-2 text-center">{item.lemak}</td>
-                                        <td className="px-2 py-2 text-center">{item.karbohidrat}</td>
-                                        <td className="px-2 py-2 text-center">{item.serat}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-
-                            {/* Bahan Baku Items */}
-                            {(curReport.porsiBesar?.bahanItems || curReport.porsiKecil?.bahanItems || []).length > 0 && (
-                              <div className="bg-white rounded-xl border border-emerald-200/80 overflow-hidden shadow-xs">
-                                <div className="px-3.5 py-2 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between">
-                                  <span>Pesanan Bahan Makanan Ter-import</span>
-                                  <span className="text-emerald-400 text-[10px]">
-                                    {(curReport.porsiBesar?.bahanItems || []).length + (curReport.porsiKecil?.bahanItems || []).length} Item
-                                  </span>
-                                </div>
-                                <div className="overflow-x-auto max-h-52 overflow-y-auto">
-                                  <table className="w-full text-xs text-left">
-                                    <thead>
-                                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                                        <th className="px-3 py-2">Rincian Bahan</th>
-                                        <th className="px-2 py-2 text-center">Kebutuhan</th>
-                                        <th className="px-2 py-2 text-center">Satuan</th>
-                                        <th className="px-2 py-2 text-right">Harga Satuan</th>
-                                        <th className="px-3 py-2 text-right">Total Harga</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {(curReport.porsiBesar?.bahanItems || curReport.porsiKecil?.bahanItems || []).map((b, idx) => (
-                                        <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 font-medium text-slate-800">
-                                          <td className="px-3 py-2 font-bold">{b.rincianBahan}</td>
-                                          <td className="px-2 py-2 text-center font-bold text-slate-900">{b.kebutuhan}</td>
-                                          <td className="px-2 py-2 text-center text-slate-500">{b.satuan}</td>
-                                          <td className="px-2 py-2 text-right font-medium text-slate-600">
-                                            {b.hargaBahan ? `Rp ${b.hargaBahan.toLocaleString('id-ID')}` : '-'}
-                                          </td>
-                                          <td className="px-3 py-2 text-right font-bold text-emerald-800">
-                                            {b.harga ? `Rp ${b.harga.toLocaleString('id-ID')}` : '-'}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
+                          <div className="pt-3 border-t border-emerald-200/60 animate-in fade-in duration-150">
+                            <DailyReportExcelSections
+                              report={curReport}
+                              activeSubTab={dailyReportSubTab}
+                              onSubTabChange={setDailyReportSubTab}
+                            />
                           </div>
                         )}
                       </div>
@@ -5264,6 +4925,90 @@ export function MbgProductionPage() {
         onPortionChange={(p) => setSelectedPortionClassification(p)}
         onSave={handleSaveWeeklySchedule}
       />
+
+      {/* In-App Confirmation Modal */}
+      {confirmModal && confirmModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-200/80 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-4 mb-4">
+              <div
+                className={`p-3.5 rounded-2xl shrink-0 ${
+                  confirmModal.variant === 'danger'
+                    ? 'bg-rose-50 text-rose-600 border border-rose-200'
+                    : confirmModal.variant === 'warning'
+                    ? 'bg-amber-50 text-amber-600 border border-amber-200'
+                    : confirmModal.variant === 'success'
+                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                    : 'bg-blue-50 text-blue-600 border border-blue-200'
+                }`}
+              >
+                {confirmModal.icon === 'send' ? (
+                  <Send className="h-6 w-6" />
+                ) : confirmModal.icon === 'delete' ? (
+                  <Trash2 className="h-6 w-6" />
+                ) : confirmModal.icon === 'check' ? (
+                  <CheckCircle2 className="h-6 w-6" />
+                ) : (
+                  <AlertTriangle className="h-6 w-6" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-black text-slate-900 tracking-tight">
+                  {confirmModal.title}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  {confirmModal.message}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmModal(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-4 border-t border-slate-100 mt-4">
+              <button
+                type="button"
+                disabled={confirmModalLoading}
+                onClick={() => setConfirmModal(null)}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {confirmModal.cancelLabel || 'Batal'}
+              </button>
+              <button
+                type="button"
+                disabled={confirmModalLoading}
+                onClick={async () => {
+                  try {
+                    setConfirmModalLoading(true);
+                    await confirmModal.onConfirm();
+                    setConfirmModal(null);
+                  } catch (err) {
+                    console.error(err);
+                  } finally {
+                    setConfirmModalLoading(false);
+                  }
+                }}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${
+                  confirmModal.variant === 'danger'
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20'
+                    : confirmModal.variant === 'warning'
+                    ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/20'
+                    : confirmModal.variant === 'success'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
+                    : 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/20'
+                }`}
+              >
+                {confirmModalLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                <span>{confirmModal.confirmLabel || 'Konfirmasi'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
