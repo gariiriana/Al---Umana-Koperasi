@@ -26,7 +26,6 @@ import type {
   MbgProductionDailyReport,
   MbgPortionDailyData,
 } from '@/types/mbg';
-import { getFilteredPmEntries, type FilteredPmRow } from '@/utils/mbgPmFilter';
 
 export interface MbgProductionDocxData {
   batch: MbgPmBatch;
@@ -76,8 +75,212 @@ const NO_BORDER = {
   right: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
 };
 
-const COMPACT_CELL_MARGINS = { top: 60, bottom: 60, left: 80, right: 80 };
-const NORMAL_CELL_MARGINS = { top: 80, bottom: 80, left: 100, right: 100 };
+const COMPACT_CELL_MARGINS = { top: 50, bottom: 50, left: 60, right: 60 };
+
+// ─── REKAP PM ROW BUILDER ───────────────────────────────────────────────────
+
+interface RekapPmRowData {
+  nama: string;
+  kecilL: number;
+  kecilP: number;
+  besarL: number;
+  besarP: number;
+  balitaL: number;
+  balitaP: number;
+  bumilL: number;
+  bumilP: number;
+  siswaL: number;
+  siswaP: number;
+  siswaJumlah: number;
+  guruL: number;
+  guruP: number;
+  tendikL: number;
+  tendikP: number;
+  tendikJumlah: number;
+  totalAkhir: number;
+}
+
+function buildRekapPmRows(
+  entries: MbgPmEntry[] = [],
+  sekolahList: { nama: string; murid: number; guru: number }[] = []
+): RekapPmRowData[] {
+  if (entries && entries.length > 0) {
+    return entries.map((e) => {
+      const isTk =
+        e.schoolLevel === 'tk_paud' ||
+        e.institutionName.toLowerCase().includes('tk') ||
+        e.institutionName.toLowerCase().includes('paud');
+      const isPosyandu = e.institutionType === 'posyandu' || e.institutionName.toLowerCase().includes('posyandu');
+      const isSd =
+        e.schoolLevel === 'sd' ||
+        e.institutionName.toLowerCase().includes('sd') ||
+        e.institutionName.toLowerCase().includes('mi');
+      const isSmaOrSmp =
+        e.schoolLevel === 'sma' ||
+        (e.schoolLevel as string) === 'smp' ||
+        e.institutionName.toLowerCase().includes('smp') ||
+        e.institutionName.toLowerCase().includes('sma') ||
+        e.institutionName.toLowerCase().includes('smk') ||
+        e.institutionName.toLowerCase().includes('mts') ||
+        e.institutionName.toLowerCase().includes('ma ');
+
+      let kecilL = e.qtPorsiKecilL ?? 0;
+      let kecilP = e.qtPorsiKecilP ?? 0;
+      if (!kecilL && !kecilP) {
+        if (e.qtPorsiKecil && e.qtPorsiKecil > 0) {
+          kecilL = Math.ceil(e.qtPorsiKecil / 2);
+          kecilP = Math.floor(e.qtPorsiKecil / 2);
+        } else if (isTk) {
+          const tot = e.qtSiswaBalita || e.jumlah || 0;
+          kecilL = Math.ceil(tot / 2);
+          kecilP = Math.floor(tot / 2);
+        } else if (isSd) {
+          const sdKecil = Math.ceil((e.qtSiswaBalita || 0) / 2);
+          kecilL = Math.ceil(sdKecil / 2);
+          kecilP = Math.floor(sdKecil / 2);
+        }
+      }
+
+      let besarL = e.qtPorsiBesarL ?? 0;
+      let besarP = e.qtPorsiBesarP ?? 0;
+      if (!besarL && !besarP) {
+        if (e.qtPorsiBesar && e.qtPorsiBesar > 0) {
+          besarL = Math.ceil(e.qtPorsiBesar / 2);
+          besarP = Math.floor(e.qtPorsiBesar / 2);
+        } else if (isSmaOrSmp) {
+          const tot = e.qtSiswaBalita || (e.jumlah ? e.jumlah - (e.qtGuruKader || 0) : 0);
+          besarL = Math.ceil(tot / 2);
+          besarP = Math.floor(tot / 2);
+        } else if (isSd) {
+          const sdBesar = Math.floor((e.qtSiswaBalita || 0) / 2);
+          besarL = Math.ceil(sdBesar / 2);
+          besarP = Math.floor(sdBesar / 2);
+        }
+      }
+
+      let balitaL = 0;
+      let balitaP = 0;
+      if (isPosyandu) {
+        const balitaTot = e.qtPorsiBalita || e.qtSiswaBalita || 0;
+        balitaL = Math.ceil(balitaTot / 2);
+        balitaP = Math.floor(balitaTot / 2);
+      }
+
+      let bumilL = 0;
+      let bumilP = 0;
+      if (isPosyandu) {
+        const bumilTot = (e.qtBumil || 0) + (e.qtBusui || 0) || (e.qtPorsiBumilBusui || e.qtBumilBusui || 0);
+        bumilP = bumilTot;
+      }
+
+      const siswaL = kecilL + besarL + balitaL + bumilL;
+      const siswaP = kecilP + besarP + balitaP + bumilP;
+      const siswaJumlah = siswaL + siswaP;
+
+      let guruL = e.qtGuruL ?? 0;
+      let guruP = e.qtGuruP ?? 0;
+      if (!guruL && !guruP && e.qtGuruKader && e.qtGuruKader > 0) {
+        guruL = Math.ceil(e.qtGuruKader / 2);
+        guruP = Math.floor(e.qtGuruKader / 2);
+      }
+
+      const tendikL = e.qtTendikL ?? 0;
+      const tendikP = e.qtTendikP ?? 0;
+      const tendikJumlah = tendikL + tendikP;
+
+      const totalAkhir = siswaJumlah + (guruL + guruP) + tendikJumlah;
+
+      return {
+        nama: e.institutionName + (e.isSekolahLibur ? ' (Libur)' : ''),
+        kecilL,
+        kecilP,
+        besarL,
+        besarP,
+        balitaL,
+        balitaP,
+        bumilL,
+        bumilP,
+        siswaL,
+        siswaP,
+        siswaJumlah,
+        guruL,
+        guruP,
+        tendikL,
+        tendikP,
+        tendikJumlah,
+        totalAkhir,
+      };
+    });
+  }
+
+  return (sekolahList || []).map((s) => {
+    const isTk = s.nama.toLowerCase().includes('tk') || s.nama.toLowerCase().includes('paud');
+    const isPosyandu = s.nama.toLowerCase().includes('posyandu');
+    const isSd = s.nama.toLowerCase().includes('sd') || s.nama.toLowerCase().includes('mi');
+    const isSmaOrSmp = s.nama.toLowerCase().includes('smp') || s.nama.toLowerCase().includes('sma') || s.nama.toLowerCase().includes('smk');
+
+    let kecilL = 0;
+    let kecilP = 0;
+    let besarL = 0;
+    let besarP = 0;
+    let balitaL = 0;
+    let balitaP = 0;
+    let bumilL = 0;
+    let bumilP = 0;
+
+    if (isTk) {
+      kecilL = Math.ceil(s.murid / 2);
+      kecilP = Math.floor(s.murid / 2);
+    } else if (isSd) {
+      const half = Math.round(s.murid / 2);
+      kecilL = Math.ceil(half / 2);
+      kecilP = Math.floor(half / 2);
+      besarL = Math.ceil((s.murid - half) / 2);
+      besarP = Math.floor((s.murid - half) / 2);
+    } else if (isSmaOrSmp) {
+      besarL = Math.ceil(s.murid / 2);
+      besarP = Math.floor(s.murid / 2);
+    } else if (isPosyandu) {
+      balitaL = Math.ceil(s.murid / 2);
+      balitaP = Math.floor(s.murid / 2);
+      bumilP = s.guru || 0;
+    }
+
+    const siswaL = kecilL + besarL + balitaL + bumilL;
+    const siswaP = kecilP + besarP + balitaP + bumilP;
+    const siswaJumlah = siswaL + siswaP;
+
+    const guruL = isPosyandu ? 0 : Math.ceil((s.guru || 0) / 2);
+    const guruP = isPosyandu ? 0 : Math.floor((s.guru || 0) / 2);
+
+    const tendikL = 0;
+    const tendikP = 0;
+    const tendikJumlah = 0;
+
+    const totalAkhir = siswaJumlah + (guruL + guruP) + tendikJumlah;
+
+    return {
+      nama: s.nama,
+      kecilL,
+      kecilP,
+      besarL,
+      besarP,
+      balitaL,
+      balitaP,
+      bumilL,
+      bumilP,
+      siswaL,
+      siswaP,
+      siswaJumlah,
+      guruL,
+      guruP,
+      tendikL,
+      tendikP,
+      tendikJumlah,
+      totalAkhir,
+    };
+  });
+}
 
 export async function generateMbgProductionDocx(data: MbgProductionDocxData): Promise<Blob> {
   const { batch, entries, dailyReport, logoBase64 } = data;
@@ -89,192 +292,274 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
   const docChildren: (Paragraph | Table)[] = [];
 
   // ==========================================================================
-  // 1. KOP SURAT RESMI (OFFICIAL LETTERHEAD)
+  // HELPER: KOP RESMI
   // ==========================================================================
-  if (logoBase64) {
-    const logoBytes = dataUriToUint8Array(logoBase64);
-    if (logoBytes) {
+  const appendOfficialHeader = (sectionTitle: string, pageBreak = false) => {
+    if (pageBreak) {
       docChildren.push(
         new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 0, after: 80 },
-          children: [
-            new ImageRun({
-              data: logoBytes,
-              transformation: { width: 52, height: 52 },
-              type: 'png',
-            }),
-          ],
+          pageBreakBefore: true,
+          children: [],
         })
       );
     }
-  }
 
-  docChildren.push(
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 30 },
+    if (logoBase64 && !pageBreak) {
+      const logoBytes = dataUriToUint8Array(logoBase64);
+      if (logoBytes) {
+        docChildren.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 0, after: 60 },
+            children: [
+              new ImageRun({
+                data: logoBytes,
+                transformation: { width: 45, height: 45 },
+                type: 'png',
+              }),
+            ],
+          })
+        );
+      }
+    }
+
+    docChildren.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 20 },
+        children: [
+          new TextRun({
+            text: 'BADAN GIZI NASIONAL',
+            bold: true,
+            size: 22, // 11pt
+            font: 'Arial',
+            color: '0F172A',
+          }),
+        ],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 20 },
+        children: [
+          new TextRun({
+            text: 'SPPG SUKABUMI GUNUNGGURUH KEBONMANGGU - YAYASAN LEMBAGA WAKAF AL UMANAA',
+            bold: true,
+            size: 18, // 9pt
+            font: 'Arial',
+            color: '1E293B',
+          }),
+        ],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 20 },
+        children: [
+          new TextRun({
+            text: `LAPORAN OPERASIONAL HARIAN MBG — ${sectionTitle.toUpperCase()}`,
+            bold: true,
+            size: 19, // 9.5pt
+            font: 'Arial',
+            color: 'B45309', // Amber 700
+          }),
+        ],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 80 },
+        children: [
+          new TextRun({
+            text: `Tanggal Batch: ${batch.tanggal} • Sasaran: ${(batch.totalJumlah || 0).toLocaleString('id-ID')} Porsi • Koperasi Konsumen Al-Umanaa Mandiri Berkah`,
+            size: 14, // 7pt
+            font: 'Arial',
+            color: '64748B',
+          }),
+        ],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 120 },
+        children: [
+          new TextRun({
+            text: '══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════',
+            size: 11,
+            color: 'CBD5E1',
+          }),
+        ],
+      })
+    );
+  };
+
+  // ==========================================================================
+  // HALAMAN 1 (FOTO 1): REKAPITULASI PENERIMA MANFAAT
+  // ==========================================================================
+  appendOfficialHeader('REKAPITULASI PENERIMA MANFAAT', false);
+
+  const rekapRowsData = buildRekapPmRows(entries, dailyReport.sekolahList);
+  const totals = rekapRowsData.reduce(
+    (acc, r) => {
+      acc.kecilL += r.kecilL;
+      acc.kecilP += r.kecilP;
+      acc.besarL += r.besarL;
+      acc.besarP += r.besarP;
+      acc.balitaL += r.balitaL;
+      acc.balitaP += r.balitaP;
+      acc.bumilL += r.bumilL;
+      acc.bumilP += r.bumilP;
+      acc.siswaL += r.siswaL;
+      acc.siswaP += r.siswaP;
+      acc.siswaJumlah += r.siswaJumlah;
+      acc.guruL += r.guruL;
+      acc.guruP += r.guruP;
+      acc.tendikL += r.tendikL;
+      acc.tendikP += r.tendikP;
+      acc.tendikJumlah += r.tendikJumlah;
+      acc.totalAkhir += r.totalAkhir;
+      return acc;
+    },
+    {
+      kecilL: 0,
+      kecilP: 0,
+      besarL: 0,
+      besarP: 0,
+      balitaL: 0,
+      balitaP: 0,
+      bumilL: 0,
+      bumilP: 0,
+      siswaL: 0,
+      siswaP: 0,
+      siswaJumlah: 0,
+      guruL: 0,
+      guruP: 0,
+      tendikL: 0,
+      tendikP: 0,
+      tendikJumlah: 0,
+      totalAkhir: 0,
+    }
+  );
+
+  const rekapTableRows: TableRow[] = [
+    // Banner Row
+    new TableRow({
+      tableHeader: true,
       children: [
-        new TextRun({
-          text: 'BADAN GIZI NASIONAL',
-          bold: true,
-          size: 24, // 12pt
-          font: 'Arial',
-          color: '0F172A',
+        new TableCell({
+          columnSpan: 18,
+          shading: { fill: '0F2D59' }, // Navy #0F2D59
+          margins: COMPACT_CELL_MARGINS,
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: 'REKAPITULASI PENERIMA MANFAAT', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })],
+            }),
+          ],
         }),
       ],
     }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 30 },
+    // Level 1 Subheader
+    new TableRow({
+      tableHeader: true,
       children: [
-        new TextRun({
-          text: 'SATUAN PELAYANAN PROGRAM GIZI (SPPG) KABUPATEN SUKABUMI',
-          bold: true,
-          size: 20, // 10pt
-          font: 'Arial',
-          color: '1E293B',
-        }),
+        new TableCell({ rowSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'PENERIMA MANFAAT', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ columnSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Porsi Kecil', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ columnSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Porsi Besar', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ columnSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Porsi Balita', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ columnSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Porsi Bumil/Busui', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ columnSpan: 3, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Total Siswa', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ columnSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Guru', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ columnSpan: 3, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Tendik', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ rowSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Total', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
       ],
     }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 30 },
+    // Level 2 Subheader (L, P, Jumlah)
+    new TableRow({
+      tableHeader: true,
       children: [
-        new TextRun({
-          text: 'KOPERASI KONSUMEN AL-UMANAA MANDIRI BERKAH',
-          bold: true,
-          size: 19, // 9.5pt
-          font: 'Arial',
-          color: 'B45309', // Amber 700
-        }),
+        ...['L', 'P', 'L', 'P', 'L', 'P', 'L', 'P', 'L', 'P', 'Jumlah', 'L', 'P', 'L', 'P', 'Jumlah'].map((col) =>
+          new TableCell({
+            shading: { fill: col === 'Jumlah' ? '1D4ED8' : '3B82F6' },
+            margins: COMPACT_CELL_MARGINS,
+            children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: col, bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })],
+          })
+        ),
       ],
     }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 100 },
+  ];
+
+  // Data rows
+  rekapRowsData.forEach((r, idx) => {
+    const isEven = idx % 2 === 0;
+    const rowBg = isEven ? 'FFFFFF' : 'F8FAFC';
+
+    const renderCellVal = (val: number) => (val > 0 ? val.toString() : '-');
+
+    rekapTableRows.push(
+      new TableRow({
+        children: [
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.nama, bold: true, size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.kecilL), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.kecilP), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.besarL), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.besarP), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.balitaL), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.balitaP), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.bumilL), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.bumilP), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.siswaL), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.siswaP), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'F1F5F9' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.siswaJumlah), bold: true, size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.guruL), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.guruP), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.tendikL), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.tendikP), size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'F1F5F9' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.tendikJumlah), bold: true, size: 12, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FEF3C7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.totalAkhir), bold: true, color: 'B45309', size: 12, font: 'Arial' })] })] }),
+        ],
+      })
+    );
+  });
+
+  // Total Yellow Row
+  rekapTableRows.push(
+    new TableRow({
       children: [
-        new TextRun({
-          text: 'LAPORAN OPERASIONAL HARIAN MBG — TIM PRODUKSI DAPUR',
-          bold: true,
-          size: 20, // 10pt
-          font: 'Arial',
-          color: '0369A1', // Sky 700
-        }),
-      ],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 140 },
-      children: [
-        new TextRun({
-          text: `Tanggal Batch: ${batch.tanggal} • SPPG Sukabumi Gunungguruh Kebonmanggu • Dokumen Resmi SIMOL MBG`,
-          size: 15, // 7.5pt
-          font: 'Arial',
-          color: '64748B',
-        }),
-      ],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 160 },
-      children: [
-        new TextRun({
-          text: '══════════════════════════════════════════════════════════════════════════════════════════════════════════════════',
-          size: 12,
-          color: 'CBD5E1',
-        }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'TOTAL', bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.kecilL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.kecilP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.besarL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.besarP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.balitaL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.balitaP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.bumilL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.bumilP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.siswaL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.siswaP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.siswaJumlah.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.guruL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.guruP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.tendikL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.tendikP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.tendikJumlah.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
+        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.totalAkhir.toString(), bold: true, color: 'B45309', size: 12, font: 'Arial' })] })] }),
       ],
     })
   );
 
-  // ==========================================================================
-  // 2. METADATA BATCH BOX
-  // ==========================================================================
-  const totalPorsi =
-    batch.totalJumlah ||
-    entries.reduce((sum, e) => sum + (e.isSekolahLibur ? 0 : (e.jumlah || 0)), 0) ||
-    (dailyReport.sekolahList || []).reduce((s, sk) => s + sk.murid + sk.guru, 0);
-
-  const totalInstitusi = entries.length || (dailyReport.sekolahList || []).length;
-
-  const metadataTable = new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    borders: CELL_BORDER,
-    rows: [
-      new TableRow({
-        children: [
-          new TableCell({
-            width: { size: 25, type: WidthType.PERCENTAGE },
-            shading: { fill: 'F8FAFC' },
-            margins: NORMAL_CELL_MARGINS,
-            children: [new Paragraph({ children: [new TextRun({ text: 'Tanggal Produksi', bold: true, size: 16, font: 'Arial' })] })],
-          }),
-          new TableCell({
-            width: { size: 25, type: WidthType.PERCENTAGE },
-            margins: NORMAL_CELL_MARGINS,
-            children: [new Paragraph({ children: [new TextRun({ text: batch.tanggal, bold: true, size: 16, color: 'B45309', font: 'Arial' })] })],
-          }),
-          new TableCell({
-            width: { size: 25, type: WidthType.PERCENTAGE },
-            shading: { fill: 'F8FAFC' },
-            margins: NORMAL_CELL_MARGINS,
-            children: [new Paragraph({ children: [new TextRun({ text: 'Status Batch', bold: true, size: 16, font: 'Arial' })] })],
-          }),
-          new TableCell({
-            width: { size: 25, type: WidthType.PERCENTAGE },
-            margins: NORMAL_CELL_MARGINS,
-            children: [new Paragraph({ children: [new TextRun({ text: batch.status, bold: true, size: 16, color: '059669', font: 'Arial' })] })],
-          }),
-        ],
-      }),
-      new TableRow({
-        children: [
-          new TableCell({
-            width: { size: 25, type: WidthType.PERCENTAGE },
-            shading: { fill: 'F8FAFC' },
-            margins: NORMAL_CELL_MARGINS,
-            children: [new Paragraph({ children: [new TextRun({ text: 'Total Sasaran Porsi', bold: true, size: 16, font: 'Arial' })] })],
-          }),
-          new TableCell({
-            width: { size: 25, type: WidthType.PERCENTAGE },
-            margins: NORMAL_CELL_MARGINS,
-            children: [new Paragraph({ children: [new TextRun({ text: `${totalPorsi.toLocaleString('id-ID')} Porsi`, bold: true, size: 16, color: '1E3A8A', font: 'Arial' })] })],
-          }),
-          new TableCell({
-            width: { size: 25, type: WidthType.PERCENTAGE },
-            shading: { fill: 'F8FAFC' },
-            margins: NORMAL_CELL_MARGINS,
-            children: [new Paragraph({ children: [new TextRun({ text: 'Total Lembaga Sasaran', bold: true, size: 16, font: 'Arial' })] })],
-          }),
-          new TableCell({
-            width: { size: 25, type: WidthType.PERCENTAGE },
-            margins: NORMAL_CELL_MARGINS,
-            children: [new Paragraph({ children: [new TextRun({ text: `${totalInstitusi} Lembaga`, bold: true, size: 16, font: 'Arial' })] })],
-          }),
-        ],
-      }),
-    ],
-  });
-
-  docChildren.push(metadataTable);
-  docChildren.push(new Paragraph({ spacing: { after: 180 }, children: [] }));
+  docChildren.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: CELL_BORDER, rows: rekapTableRows }));
 
   // ==========================================================================
-  // HELPER: BUILD 3-SECTION TABLE & PM TABLE IN DOCX FOR A PORTION
+  // HELPER: BUILD PORTION STACKED TABLES (FOTO 2, 3, 4)
   // ==========================================================================
-  const appendPortionSectionDocx = (
+  const appendPortionStackedDocx = (
     portionData: MbgPortionDailyData | undefined,
-    portionNumberText: string,
     defaultTitle: string,
-    portionType: 'kecil' | 'besar' | 'balita' | 'bumil'
+    portionType: 'kecil' | 'besar' | 'balita' | 'bumil_busui'
   ) => {
     if (!portionData && portionType !== 'kecil' && portionType !== 'besar') {
-      return; // Skip balita/bumil if empty
+      return;
     }
 
     const title = portionData?.portionTitle || defaultTitle;
-    const data = portionData || {
+    const data: MbgPortionDailyData = portionData || {
       portionType,
       portionTitle: defaultTitle,
       pmCount: 0,
@@ -292,198 +577,84 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
       hargaPerPorsiOverall: 0,
     };
 
-    // Section Title
-    docChildren.push(
-      new Paragraph({
-        spacing: { before: 180, after: 80 },
-        children: [
-          new TextRun({
-            text: `${portionNumberText}. ${title.toUpperCase()}`,
-            bold: true,
-            size: 20, // 10pt
-            font: 'Arial',
-            color: '0F172A',
-          }),
-        ],
-      })
-    );
+    appendOfficialHeader(title, true);
 
-    const maxRows = Math.max(
-      data.nutritionItems?.length || 0,
-      data.bahanItems?.length || 0,
-      data.bumbuItems?.length || 0,
-      1
-    );
+    // Banners: REALISASI MENU & PORSI
+    const bannerTable = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: NO_BORDER,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              shading: { fill: '0F2D59' }, // Navy #0F2D59
+              margins: COMPACT_CELL_MARGINS,
+              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'REALISASI MENU', bold: true, color: 'FFFFFF', size: 15, font: 'Arial' })] })],
+            }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({
+              shading: { fill: 'BAE6FD' }, // Sky 200
+              margins: COMPACT_CELL_MARGINS,
+              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: title.toUpperCase(), bold: true, color: '0F172A', size: 15, font: 'Arial' })] })],
+            }),
+          ],
+        }),
+      ],
+    });
 
-    // Build Table Rows (Exact 3-Section side-by-side format)
-    const tableRows: TableRow[] = [
-      // Header 1: Category Banners (Pink, Sky Blue, Amber)
+    docChildren.push(bannerTable);
+    docChildren.push(new Paragraph({ spacing: { after: 100 }, children: [] }));
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TABEL 1: KANDUNGAN GIZI
+    // ─────────────────────────────────────────────────────────────────────────
+    const giziDocxRows: TableRow[] = [
       new TableRow({
         tableHeader: true,
         children: [
-          new TableCell({
-            columnSpan: 9,
-            shading: { fill: 'FFE4E6' },
-            margins: COMPACT_CELL_MARGINS,
-            children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '🌸 1. KANDUNGAN GIZI MENU', bold: true, size: 14, color: '881337', font: 'Arial' })] })],
-          }),
-          new TableCell({
-            columnSpan: 9,
-            shading: { fill: 'E0F2FE' },
-            margins: COMPACT_CELL_MARGINS,
-            children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '🥣 2. PESANAN BAHAN POKOK', bold: true, size: 14, color: '0369A1', font: 'Arial' })] })],
-          }),
-          new TableCell({
-            columnSpan: 6,
-            shading: { fill: 'FEF3C7' },
-            margins: COMPACT_CELL_MARGINS,
-            children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '🧂 3. PESANAN BUMBU MASAK', bold: true, size: 14, color: '92400E', font: 'Arial' })] })],
-          }),
-        ],
-      }),
-
-      // Header 2: Subheader column names
-      new TableRow({
-        tableHeader: true,
-        children: [
-          // Gizi (Pink subheader)
-          ...['Jenis Menu', 'Menu', 'Rincian Bahan', 'Berat (g)', 'Energi', 'Protein', 'Lemak', 'Karbo', 'Serat'].map((h) =>
+          ...['Menu', 'Rincian Bahan', 'Berat Bersih', 'Energi', 'Protein', 'Lemak', 'Karbohidrat', 'Serat'].map((h) =>
             new TableCell({
-              shading: { fill: 'FFF1F2' },
+              shading: { fill: 'FEF08A' }, // Yellow #FEF08A
               margins: COMPACT_CELL_MARGINS,
-              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: h, bold: true, size: 13, color: '9F1239', font: 'Arial' })] })],
-            })
-          ),
-          // Bahan (Sky subheader)
-          ...['Rincian Bahan', 'Harga Baku', '%BDD', 'Berat Kotor', 'Total (g)', 'Spare', 'Kebutuhan', 'Satuan', 'Harga'].map((h) =>
-            new TableCell({
-              shading: { fill: 'F0F9FF' },
-              margins: COMPACT_CELL_MARGINS,
-              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: h, bold: true, size: 13, color: '0C4A6E', font: 'Arial' })] })],
-            })
-          ),
-          // Bumbu (Amber subheader)
-          ...['Nama Menu', 'Nama Bumbu', 'Harga Bumbu', 'Kebutuhan', 'Satuan', 'Harga'].map((h) =>
-            new TableCell({
-              shading: { fill: 'FFFBEB' },
-              margins: COMPACT_CELL_MARGINS,
-              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: h, bold: true, size: 13, color: '78350F', font: 'Arial' })] })],
+              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: h, bold: true, color: '854D0E', size: 13, font: 'Arial' })] })],
             })
           ),
         ],
       }),
     ];
 
-    // Data Rows
-    for (let idx = 0; idx < maxRows; idx++) {
-      const nut = data.nutritionItems?.[idx];
-      const bah = data.bahanItems?.[idx];
-      const bum = data.bumbuItems?.[idx];
-      const isEven = idx % 2 === 0;
-      const rowBg = isEven ? 'FFFFFF' : 'F8FAFC';
-
-      tableRows.push(
+    (data.nutritionItems || []).forEach((nut, idx) => {
+      const rowBg = idx % 2 === 0 ? 'FFFFFF' : 'F8FAFC';
+      giziDocxRows.push(
         new TableRow({
           children: [
-            // Gizi
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: idx === 0 ? defaultTitle : '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: nut?.menuName || '', bold: true, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: nut?.rincianBahan || '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: nut ? formatNum(nut.beratBersih, 1) : '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: 'FEF3C7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: nut ? formatNum(nut.energi, 1) : '', bold: true, color: 'B45309', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: nut ? formatNum(nut.protein, 1) : '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: nut ? formatNum(nut.lemak, 1) : '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: nut ? formatNum(nut.karbohidrat, 1) : '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: nut ? formatNum(nut.serat, 1) : '', size: 13, font: 'Arial' })] })] }),
-
-            // Bahan
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: bah?.rincianBahan || '', bold: true, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: bah?.hargaBahan ? formatRp(bah.hargaBahan) : '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: bah?.bddPercent != null ? `${formatNum(bah.bddPercent, 0)}%` : '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: bah ? formatNum(bah.beratKotor, 0) : '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: bah ? formatNum(bah.totalGml, 0) : '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: bah?.sparePercent ? `${bah.sparePercent}%` : '-', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: 'E0F2FE' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: bah ? formatNum(bah.kebutuhan, 1) : '', bold: true, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: bah?.satuan || '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: 'DCFCE7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: bah?.harga ? formatRp(bah.harga) : '', bold: true, color: '166534', size: 13, font: 'Arial' })] })] }),
-
-            // Bumbu
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: bum?.namaMenu || '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: bum?.namaBumbu || '', bold: true, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: bum?.hargaBumbu ? formatRp(bum.hargaBumbu) : '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: 'FEF3C7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: bum ? (bum.kebutuhan !== undefined && bum.kebutuhan !== null ? (bum.kebutuhan > 0 ? formatNum(bum.kebutuhan, 2) : '0') : '-') : '', bold: true, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: bum?.satuan || '', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ shading: { fill: 'FEF3C7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: bum?.harga ? formatRp(bum.harga) : '', bold: true, color: '92400E', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: nut.menuName || '', bold: true, size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: nut.rincianBahan || '', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(nut.beratBersih, 1), size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: 'FEF3C7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(nut.energi, 1), bold: true, color: 'B45309', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(nut.protein, 1), size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(nut.lemak, 1), size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(nut.karbohidrat, 1), size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(nut.serat, 1), size: 13, font: 'Arial' })] })] }),
           ],
         })
       );
-    }
+    });
 
-    // Footers
-    tableRows.push(
-      // Row Total
+    // Total Gizi Row
+    giziDocxRows.push(
       new TableRow({
         children: [
-          new TableCell({
-            columnSpan: 3,
-            shading: { fill: 'FFE4E6' },
-            margins: COMPACT_CELL_MARGINS,
-            children: [new Paragraph({ alignment: AlignmentType.LEFT, children: [new TextRun({ text: 'TOTAL GIZI', bold: true, size: 13, color: '881337', font: 'Arial' })] })],
-          }),
-          new TableCell({ shading: { fill: 'FFE4E6' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.beratBersih, 1), bold: true, size: 13, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: 'FEF3C7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.energi, 1), bold: true, color: 'B45309', size: 13, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: 'FFE4E6' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.protein, 1), bold: true, size: 13, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: 'FFE4E6' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.lemak, 1), bold: true, size: 13, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: 'FFE4E6' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.karbohidrat, 1), bold: true, size: 13, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: 'FFE4E6' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.serat, 1), bold: true, size: 13, font: 'Arial' })] })] }),
-
-          new TableCell({
-            columnSpan: 8,
-            shading: { fill: 'E0F2FE' },
-            margins: COMPACT_CELL_MARGINS,
-            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'TOTAL BELANJA BAHAN:', bold: true, size: 13, color: '0369A1', font: 'Arial' })] })],
-          }),
-          new TableCell({
-            shading: { fill: 'DCFCE7' },
-            margins: COMPACT_CELL_MARGINS,
-            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(data.totalBelanjaBahan), bold: true, size: 13, color: '166534', font: 'Arial' })] })],
-          }),
-
-          new TableCell({
-            columnSpan: 5,
-            shading: { fill: 'FEF3C7' },
-            margins: COMPACT_CELL_MARGINS,
-            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'TOTAL BELANJA BUMBU:', bold: true, size: 13, color: '92400E', font: 'Arial' })] })],
-          }),
-          new TableCell({
-            shading: { fill: 'FEF3C7' },
-            margins: COMPACT_CELL_MARGINS,
-            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(data.totalBelanjaBumbu), bold: true, size: 13, color: '92400E', font: 'Arial' })] })],
-          }),
-        ],
-      }),
-
-      // Row Biaya per Porsi
-      new TableRow({
-        children: [
-          new TableCell({
-            columnSpan: 9,
-            shading: { fill: 'F1F5F9' },
-            margins: COMPACT_CELL_MARGINS,
-            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Biaya Bahan Pokok per Porsi:', bold: true, size: 13, color: '475569', font: 'Arial' })] })],
-          }),
-          new TableCell({
-            columnSpan: 9,
-            shading: { fill: 'F1F5F9' },
-            margins: COMPACT_CELL_MARGINS,
-            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${formatRp(data.hargaBahanPerPorsi || (data.pmCount ? data.totalBelanjaBahan / data.pmCount : 0))} / porsi`, bold: true, size: 13, color: '0369A1', font: 'Arial' })] })],
-          }),
-          new TableCell({
-            columnSpan: 6,
-            shading: { fill: 'F1F5F9' },
-            margins: COMPACT_CELL_MARGINS,
-            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${formatRp(data.hargaBumbuPerPorsi || (data.pmCount ? data.totalBelanjaBumbu / data.pmCount : 0))} / porsi`, bold: true, size: 13, color: '92400E', font: 'Arial' })] })],
-          }),
+          new TableCell({ columnSpan: 2, shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Total', bold: true, color: '854D0E', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.beratBersih, 1), bold: true, color: '854D0E', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.energi, 1), bold: true, color: 'B45309', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.protein, 1), bold: true, color: '854D0E', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.lemak, 1), bold: true, color: '854D0E', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.karbohidrat, 1), bold: true, color: '854D0E', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.serat, 1), bold: true, color: '854D0E', size: 13, font: 'Arial' })] })] }),
         ],
       })
     );
@@ -492,28 +663,25 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
     if (data.akgMetrics && Object.keys(data.akgMetrics).length > 0) {
       Object.entries(data.akgMetrics).forEach(([akgKey, metric]) => {
         const cleanKey = akgKey.replace(/_/g, ' ').toUpperCase();
-        tableRows.push(
+        giziDocxRows.push(
           new TableRow({
             children: [
               new TableCell({
                 columnSpan: 3,
+                shading: { fill: 'FFFBEB' },
+                margins: COMPACT_CELL_MARGINS,
+                children: [new Paragraph({ alignment: AlignmentType.LEFT, children: [new TextRun({ text: `% Pemenuhan Makan Siang (${cleanKey})`, bold: true, color: '92400E', size: 13, font: 'Arial' })] })],
+              }),
+              new TableCell({
                 shading: { fill: 'FEF3C7' },
                 margins: COMPACT_CELL_MARGINS,
-                children: [new Paragraph({ alignment: AlignmentType.LEFT, children: [new TextRun({ text: `% Pemenuhan Makan Siang (${cleanKey})`, bold: true, size: 13, color: '92400E', font: 'Arial' })] })],
+                children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${formatNum(metric.percentMakanSiang, 1)}%`, bold: true, color: 'B45309', size: 13, font: 'Arial' })] })],
               }),
-              new TableCell({ shading: { fill: 'FEF3C7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '-', size: 13, font: 'Arial' })] })] }),
-              new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${formatNum(metric.percentMakanSiang, 1)}%`, bold: true, size: 13, color: '92400E', font: 'Arial' })] })] }),
               new TableCell({
                 columnSpan: 4,
-                shading: { fill: 'FEF3C7' },
+                shading: { fill: 'FFFBEB' },
                 margins: COMPACT_CELL_MARGINS,
-                children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: metric.percentHarian > 0 ? `Harian: ${formatNum(metric.percentHarian, 1)}%` : 'Standar Kemkes', size: 13, color: '92400E', font: 'Arial' })] })],
-              }),
-              new TableCell({
-                columnSpan: 15,
-                shading: { fill: 'F8FAFC' },
-                margins: COMPACT_CELL_MARGINS,
-                children: [new Paragraph({ alignment: AlignmentType.LEFT, children: [new TextRun({ text: `Capaian Angka Kecukupan Gizi (AKG) Sasaran ${cleanKey}`, italics: true, size: 13, color: '64748B', font: 'Arial' })] })],
+                children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: metric.percentHarian > 0 ? `Harian: ${formatNum(metric.percentHarian, 1)}%` : 'Standar Kemkes', color: '92400E', size: 13, font: 'Arial' })] })],
               }),
             ],
           })
@@ -521,183 +689,261 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
       });
     }
 
-    docChildren.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: CELL_BORDER, rows: tableRows }));
-    docChildren.push(new Paragraph({ spacing: { after: 100 }, children: [] }));
+    docChildren.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: CELL_BORDER, rows: giziDocxRows }));
+    docChildren.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
 
-    // ─── DIRECTLY BELOW: PENERIMA MANFAAT (INPUT ADMIN MBG) ───
-    const pmRows: FilteredPmRow[] = getFilteredPmEntries(entries, portionType, dailyReport.sekolahList);
-    const totalPorsiPm = pmRows.reduce((s, p) => s + (p.isLibur ? 0 : p.portionCount), 0);
-
-    docChildren.push(
-      new Paragraph({
-        spacing: { before: 80, after: 60 },
+    // ─────────────────────────────────────────────────────────────────────────
+    // TABEL 2: PESANAN BAHAN MAKANAN
+    // ─────────────────────────────────────────────────────────────────────────
+    const bahanDocxRows: TableRow[] = [
+      new TableRow({
+        tableHeader: true,
         children: [
-          new TextRun({
-            text: `Data Penerima Manfaat (Input Admin MBG) — Sasaran ${title} (Total: ${totalPorsiPm.toLocaleString('id-ID')} Porsi • ${pmRows.length} Lembaga)`,
-            bold: true,
-            size: 16, // 8pt
-            font: 'Arial',
-            color: '1E293B',
+          ...['Rincian Bahan', 'Harga Bahan', '%BDD', 'Berat Kotor', 'Total (g/ml)', 'Spare %', 'Kebutuhan (Per Unit)', 'Satuan', 'Harga'].map((h) =>
+            new TableCell({
+              shading: { fill: 'FEF08A' }, // Yellow #FEF08A
+              margins: COMPACT_CELL_MARGINS,
+              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: h, bold: true, color: '854D0E', size: 13, font: 'Arial' })] })],
+            })
+          ),
+        ],
+      }),
+    ];
+
+    (data.bahanItems || []).forEach((bah, idx) => {
+      const rowBg = idx % 2 === 0 ? 'FFFFFF' : 'F8FAFC';
+      bahanDocxRows.push(
+        new TableRow({
+          children: [
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: bah.rincianBahan || '', bold: true, size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: bah.hargaBahan ? formatRp(bah.hargaBahan) : '-', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: bah.bddPercent != null ? `${formatNum(bah.bddPercent, 0)}%` : '-', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(bah.beratKotor, 0), size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(bah.totalGml, 0), size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: bah.sparePercent ? `${bah.sparePercent}%` : '-', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: 'E0F2FE' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(bah.kebutuhan, 1), bold: true, size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: bah.satuan || '', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: 'DCFCE7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(bah.harga), bold: true, color: '166534', size: 13, font: 'Arial' })] })] }),
+          ],
+        })
+      );
+    });
+
+    // Total Belanja & Harga per Porsi
+    bahanDocxRows.push(
+      new TableRow({
+        children: [
+          new TableCell({
+            columnSpan: 8,
+            shading: { fill: 'FEF08A' },
+            margins: COMPACT_CELL_MARGINS,
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'TOTAL BELANJA', bold: true, color: '854D0E', size: 13, font: 'Arial' })] })],
+          }),
+          new TableCell({
+            shading: { fill: 'DCFCE7' },
+            margins: COMPACT_CELL_MARGINS,
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(data.totalBelanjaBahan), bold: true, color: '166534', size: 13, font: 'Arial' })] })],
+          }),
+        ],
+      }),
+      new TableRow({
+        children: [
+          new TableCell({
+            columnSpan: 8,
+            shading: { fill: 'F1F5F9' },
+            margins: COMPACT_CELL_MARGINS,
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'HARGA BAHAN MAKANAN (PER PORSI)', bold: true, color: '475569', size: 13, font: 'Arial' })] })],
+          }),
+          new TableCell({
+            shading: { fill: 'E0F2FE' },
+            margins: COMPACT_CELL_MARGINS,
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${formatRp(data.hargaBahanPerPorsi || (data.pmCount ? data.totalBelanjaBahan / data.pmCount : 0))} / porsi`, bold: true, color: '0369A1', size: 13, font: 'Arial' })] })],
           }),
         ],
       })
     );
 
-    if (pmRows.length === 0) {
-      docChildren.push(
-        new Paragraph({
-          spacing: { after: 140 },
+    docChildren.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: CELL_BORDER, rows: bahanDocxRows }));
+    docChildren.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TABEL 3: PESANAN BUMBU
+    // ─────────────────────────────────────────────────────────────────────────
+    const bumbuDocxRows: TableRow[] = [
+      new TableRow({
+        tableHeader: true,
+        children: [
+          ...['Nama Menu', 'Nama Bumbu', 'Harga Bumbu', 'Kebutuhan (Per Unit)', 'Satuan', 'Harga'].map((h) =>
+            new TableCell({
+              shading: { fill: 'FEF08A' }, // Yellow #FEF08A
+              margins: COMPACT_CELL_MARGINS,
+              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: h, bold: true, color: '854D0E', size: 13, font: 'Arial' })] })],
+            })
+          ),
+        ],
+      }),
+    ];
+
+    (data.bumbuItems || []).forEach((bum, idx) => {
+      const rowBg = idx % 2 === 0 ? 'FFFFFF' : 'F8FAFC';
+      bumbuDocxRows.push(
+        new TableRow({
           children: [
-            new TextRun({
-              text: 'Belum ada data input Admin MBG yang dialokasikan untuk kategori sasaran ini.',
-              italics: true,
-              size: 14,
-              color: '94A3B8',
-              font: 'Arial',
-            }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: bum.namaMenu || '', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: bum.namaBumbu || '', bold: true, size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: bum.hargaBumbu ? formatRp(bum.hargaBumbu) : '-', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: 'FEF3C7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: bum.kebutuhan !== undefined && bum.kebutuhan !== null ? (bum.kebutuhan > 0 ? formatNum(bum.kebutuhan, 2) : '0') : '-', bold: true, size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: bum.satuan || '', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ shading: { fill: 'FEF3C7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(bum.harga), bold: true, color: 'B45309', size: 13, font: 'Arial' })] })] }),
           ],
         })
       );
-    } else {
-      const pmDocxRows: TableRow[] = [
-        new TableRow({
-          tableHeader: true,
-          children: [
-            new TableCell({ width: { size: 4, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'No', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 28, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Nama Institusi / Lembaga', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Kategori / Jenjang', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Porsi Sasaran', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 16, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Rincian / Catatan', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Total Porsi', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Kurir', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 8, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Status', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-          ],
-        }),
-      ];
+    });
 
-      pmRows.forEach((r, pIdx) => {
-        const rowBg = r.isLibur ? 'FEE2E2' : pIdx % 2 === 0 ? 'FFFFFF' : 'F8FAFC';
-        pmDocxRows.push(
-          new TableRow({
-            children: [
-              new TableCell({ width: { size: 4, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${pIdx + 1}`, size: 13, font: 'Arial' })] })] }),
-              new TableCell({ width: { size: 28, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.institutionName, bold: true, size: 13, font: 'Arial' })] })] }),
-              new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.categoryLabel, size: 13, font: 'Arial' })] })] }),
-              new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${r.portionCount}`, bold: true, color: 'B45309', size: 14, font: 'Arial' })] })] }),
-              new TableCell({ width: { size: 16, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.detailBreakdown || '-', size: 13, font: 'Arial' })] })] }),
-              new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${r.totalJumlah}`, bold: true, size: 13, font: 'Arial' })] })] }),
-              new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.petugasName, size: 13, font: 'Arial' })] })] }),
-              new TableCell({ width: { size: 8, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: r.isLibur ? 'Libur' : 'Aktif', bold: true, color: r.isLibur ? 'DC2626' : '059669', size: 13, font: 'Arial' })] })] }),
-            ],
-          })
-        );
-      });
+    // Total Belanja, Harga Bumbu per Porsi & Grand Total per Porsi
+    bumbuDocxRows.push(
+      new TableRow({
+        children: [
+          new TableCell({
+            columnSpan: 5,
+            shading: { fill: 'FEF08A' },
+            margins: COMPACT_CELL_MARGINS,
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'TOTAL BELANJA', bold: true, color: '854D0E', size: 13, font: 'Arial' })] })],
+          }),
+          new TableCell({
+            shading: { fill: 'FEF3C7' },
+            margins: COMPACT_CELL_MARGINS,
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(data.totalBelanjaBumbu), bold: true, color: 'B45309', size: 13, font: 'Arial' })] })],
+          }),
+        ],
+      }),
+      new TableRow({
+        children: [
+          new TableCell({
+            columnSpan: 5,
+            shading: { fill: 'F1F5F9' },
+            margins: COMPACT_CELL_MARGINS,
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'HARGA BUMBU (PER PORSI)', bold: true, color: '475569', size: 13, font: 'Arial' })] })],
+          }),
+          new TableCell({
+            shading: { fill: 'F1F5F9' },
+            margins: COMPACT_CELL_MARGINS,
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${formatRp(data.hargaBumbuPerPorsi || (data.pmCount ? data.totalBelanjaBumbu / data.pmCount : 0))} / porsi`, bold: true, color: '92400E', size: 13, font: 'Arial' })] })],
+          }),
+        ],
+      }),
+      new TableRow({
+        children: [
+          new TableCell({
+            columnSpan: 5,
+            shading: { fill: 'DCFCE7' },
+            margins: COMPACT_CELL_MARGINS,
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'HARGA PER PORSI (BAHAN + BUMBU)', bold: true, color: '166534', size: 13, font: 'Arial' })] })],
+          }),
+          new TableCell({
+            shading: { fill: 'DCFCE7' },
+            margins: COMPACT_CELL_MARGINS,
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${formatRp(data.hargaPerPorsiOverall || ((data.hargaBahanPerPorsi || 0) + (data.hargaBumbuPerPorsi || 0)))} / porsi`, bold: true, color: '166534', size: 13, font: 'Arial' })] })],
+          }),
+        ],
+      })
+    );
 
-      // Total Row
-      pmDocxRows.push(
-        new TableRow({
-          children: [
-            new TableCell({
-              columnSpan: 3,
-              width: { size: 44, type: WidthType.PERCENTAGE },
-              shading: { fill: '0F172A' },
-              margins: COMPACT_CELL_MARGINS,
-              children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'TOTAL PORSI SASARAN INI:', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })],
-            }),
-            new TableCell({
-              width: { size: 12, type: WidthType.PERCENTAGE },
-              shading: { fill: 'FEF3C7' },
-              margins: COMPACT_CELL_MARGINS,
-              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${totalPorsiPm} Porsi`, bold: true, color: 'B45309', size: 14, font: 'Arial' })] })],
-            }),
-            new TableCell({
-              columnSpan: 4,
-              width: { size: 44, type: WidthType.PERCENTAGE },
-              shading: { fill: '0F172A' },
-              margins: COMPACT_CELL_MARGINS,
-              children: [new Paragraph({ alignment: AlignmentType.LEFT, children: [new TextRun({ text: 'Data Terintegrasi Admin MBG', italics: true, color: 'CBD5E1', size: 13, font: 'Arial' })] })],
-            }),
-          ],
-        })
-      );
-
-      docChildren.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: CELL_BORDER, rows: pmDocxRows }));
-      docChildren.push(new Paragraph({ spacing: { after: 180 }, children: [] }));
-    }
+    docChildren.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: CELL_BORDER, rows: bumbuDocxRows }));
   };
 
-  // ─── RENDER PORTIONS ──────────────────────────────────────────────────────
-  appendPortionSectionDocx(dailyReport.porsiKecil, 'I', 'PORSI KECIL (PAUD / TK & SD KELAS 1-3)', 'kecil');
-  appendPortionSectionDocx(dailyReport.porsiBesar, 'II', 'PORSI BESAR (SD KELAS 4-6, SMP, SMA)', 'besar');
+  // ─── RENDER PORTIONS (PAGES 2+) ───────────────────────────────────────────
+  appendPortionStackedDocx(dailyReport.porsiKecil, 'PORSI KECIL (PAUD / TK & SD KELAS 1-3)', 'kecil');
+  appendPortionStackedDocx(dailyReport.porsiBesar, 'PORSI BESAR (SD KELAS 4-6, SMP, SMA)', 'besar');
 
   if (dailyReport.porsiBalita && (dailyReport.porsiBalita.nutritionItems?.length || 0) > 0) {
-    appendPortionSectionDocx(dailyReport.porsiBalita, 'III', 'PORSI BALITA (USIA 6-59 BULAN)', 'balita');
+    appendPortionStackedDocx(dailyReport.porsiBalita, 'PORSI BALITA (USIA 6-59 BULAN)', 'balita');
   }
 
   if (dailyReport.porsiBumilBusui && (dailyReport.porsiBumilBusui.nutritionItems?.length || 0) > 0) {
-    appendPortionSectionDocx(dailyReport.porsiBumilBusui, 'IV', 'PORSI IBU HAMIL & IBU MENYUSUI (BUMIL / BUSUI)', 'bumil');
+    appendPortionStackedDocx(dailyReport.porsiBumilBusui, 'PORSI IBU HAMIL & IBU MENYUSUI (BUMIL / BUSUI)', 'bumil_busui');
   }
 
   // ==========================================================================
-  // 3. TABEL SUPPLIER (PURCHASE ORDER BAHAN & BUMBU)
+  // HALAMAN AKHIR: TABEL SUPPLIER & PENGESAHAN
   // ==========================================================================
+  appendOfficialHeader('TABEL SUPPLIER & LEMBAR PENGESAHAN', true);
+
   const poList = dailyReport.poRows || [];
   const poGrandTotal =
     poList.reduce((s, p) => s + (p.totalHarga || (p.jumlah > 0 && p.hargaSatuan ? p.jumlah * p.hargaSatuan : 0)), 0) ||
     dailyReport.totalPengeluaran ||
     0;
 
-  docChildren.push(
-    new Paragraph({
-      spacing: { before: 180, after: 80 },
-      children: [
-        new TextRun({
-          text: `TABEL SUPPLIER — PESANAN BAHAN MAKANAN & BUMBU (PO)`,
-          bold: true,
-          size: 20, // 10pt
-          font: 'Arial',
-          color: '0F172A',
-        }),
-      ],
-    })
-  );
-
   const poDocxRows: TableRow[] = [
     new TableRow({
       tableHeader: true,
       children: [
-        new TableCell({ width: { size: 4, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'No', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Nama Supplier', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 26, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Item / Bahan Dipesan', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 8, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Jam Tiba', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 8, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Jumlah', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Satuan', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Harga Satuan', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 15, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Total Harga', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
+        new TableCell({
+          columnSpan: 8,
+          shading: { fill: '0F2D59' }, // Navy #0F2D59
+          margins: COMPACT_CELL_MARGINS,
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: 'TABEL SUPPLIER — DAFTAR PESANAN BAHAN KE MITRA SUPPLIER', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })],
+            }),
+          ],
+        }),
+      ],
+    }),
+    new TableRow({
+      tableHeader: true,
+      children: [
+        new TableCell({ width: { size: 4, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'No', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+        new TableCell({ width: { size: 24, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Supplier', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+        new TableCell({ width: { size: 28, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'List Pesanan Bahan', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+        new TableCell({ width: { size: 8, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Kedatangan', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+        new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Jumlah', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+        new TableCell({ width: { size: 6, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Satuan', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+        new TableCell({ width: { size: 11, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Harga Satuan', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+        new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Total Harga', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
       ],
     }),
   ];
 
-  poList.forEach((r, idx) => {
-    const isEven = idx % 2 === 0;
-    const rowBg = isEven ? 'FFFFFF' : 'F8FAFC';
-    const totalHargaItem = r.totalHarga || (r.jumlah > 0 && r.hargaSatuan ? r.jumlah * r.hargaSatuan : 0);
-
+  if (poList.length === 0) {
     poDocxRows.push(
       new TableRow({
         children: [
-          new TableCell({ width: { size: 4, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${idx + 1}`, size: 13, font: 'Arial' })] })] }),
-          new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.supplier || 'Koperasi Al Umanaa Sejahtera Mandiri', bold: true, size: 13, font: 'Arial' })] })] }),
-          new TableCell({ width: { size: 26, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.item, size: 13, font: 'Arial' })] })] }),
-          new TableCell({ width: { size: 8, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: r.jamKedatangan || '06:00', size: 13, font: 'Arial' })] })] }),
-          new TableCell({ width: { size: 8, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(r.jumlah, 1), bold: true, size: 13, font: 'Arial' })] })] }),
-          new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: r.satuan || 'kg', size: 13, font: 'Arial' })] })] }),
-          new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: r.hargaSatuan ? formatRp(r.hargaSatuan) : '-', size: 13, font: 'Arial' })] })] }),
-          new TableCell({ width: { size: 15, type: WidthType.PERCENTAGE }, shading: { fill: 'DCFCE7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(totalHargaItem), bold: true, color: '166534', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FFFFFF' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '1', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FFFFFF' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Koperasi Al Umanaa Sejahtera Mandiri', bold: true, size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FFFFFF' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Bahan Baku & Bumbu Masak Terintegrasi', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FFFFFF' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '06:00', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FFFFFF' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '1', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FFFFFF' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'paket', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FFFFFF' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(poGrandTotal), size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'DCFCE7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(poGrandTotal), bold: true, color: '166534', size: 13, font: 'Arial' })] })] }),
         ],
       })
     );
-  });
+  } else {
+    poList.forEach((r, idx) => {
+      const isEven = idx % 2 === 0;
+      const rowBg = isEven ? 'FFFFFF' : 'F8FAFC';
+      const totalHargaItem = r.totalHarga || (r.jumlah > 0 && r.hargaSatuan ? r.jumlah * r.hargaSatuan : 0);
+
+      poDocxRows.push(
+        new TableRow({
+          children: [
+            new TableCell({ width: { size: 4, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${idx + 1}`, size: 13, font: 'Arial' })] })] }),
+            new TableCell({ width: { size: 24, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.supplier || 'Koperasi Al Umanaa Sejahtera Mandiri', bold: true, size: 13, font: 'Arial' })] })] }),
+            new TableCell({ width: { size: 28, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.item, size: 13, font: 'Arial' })] })] }),
+            new TableCell({ width: { size: 8, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: r.jamKedatangan || '06:00', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(r.jumlah, 1), bold: true, size: 13, font: 'Arial' })] })] }),
+            new TableCell({ width: { size: 6, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: r.satuan || 'kg', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ width: { size: 11, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: r.hargaSatuan ? formatRp(r.hargaSatuan) : '-', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: 'DCFCE7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(totalHargaItem), bold: true, color: '166534', size: 13, font: 'Arial' })] })] }),
+          ],
+        })
+      );
+    });
+  }
 
   // Total Supplier Row
   poDocxRows.push(
@@ -705,16 +951,16 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
       children: [
         new TableCell({
           columnSpan: 7,
-          width: { size: 85, type: WidthType.PERCENTAGE },
+          width: { size: 88, type: WidthType.PERCENTAGE },
           shading: { fill: '0F172A' },
           margins: COMPACT_CELL_MARGINS,
-          children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `TOTAL PENGELUARAN BELANJA SUPPLIER (${poList.length} ITEM):`, bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })],
+          children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `TOTAL BELANJA SUPPLIER (${poList.length || 1} ITEM):`, bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })],
         }),
         new TableCell({
-          width: { size: 15, type: WidthType.PERCENTAGE },
+          width: { size: 12, type: WidthType.PERCENTAGE },
           shading: { fill: 'DCFCE7' },
           margins: COMPACT_CELL_MARGINS,
-          children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(poGrandTotal), bold: true, color: '166534', size: 15, font: 'Arial' })] })],
+          children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(poGrandTotal), bold: true, color: '166534', size: 14, font: 'Arial' })] })],
         }),
       ],
     })
@@ -723,19 +969,17 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
   docChildren.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: CELL_BORDER, rows: poDocxRows }));
   docChildren.push(new Paragraph({ spacing: { after: 180 }, children: [] }));
 
-  // ==========================================================================
-  // 4. PAKET SEHAT 3B (KERINGAN BALITA & BUMIL) — JIKA ADA
-  // ==========================================================================
+  // Paket Sehat 3B if present
   const paketItems = dailyReport.paketSehat3b?.keringanItems || [];
   if (paketItems.length > 0) {
     docChildren.push(
       new Paragraph({
-        spacing: { before: 140, after: 60 },
+        spacing: { before: 100, after: 60 },
         children: [
           new TextRun({
             text: 'PAKET SEHAT 3B — KERINGAN BALITA, IBU HAMIL & IBU MENYUSUI',
             bold: true,
-            size: 18,
+            size: 16,
             font: 'Arial',
             color: '6B21A8',
           }),
@@ -747,12 +991,12 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
       new TableRow({
         tableHeader: true,
         children: [
-          new TableCell({ width: { size: 6, type: WidthType.PERCENTAGE }, shading: { fill: '6B21A8' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'No', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-          new TableCell({ width: { size: 40, type: WidthType.PERCENTAGE }, shading: { fill: '6B21A8' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Item Bahan Keringan', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-          new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: '6B21A8' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Qty (Pcs)', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-          new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: '6B21A8' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Qty Kebutuhan', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-          new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: '6B21A8' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Satuan', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-          new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: '6B21A8' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Total Biaya', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
+          new TableCell({ width: { size: 6, type: WidthType.PERCENTAGE }, shading: { fill: '6B21A8' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'No', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ width: { size: 40, type: WidthType.PERCENTAGE }, shading: { fill: '6B21A8' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Item Bahan Keringan', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: '6B21A8' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Qty (Pcs)', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: '6B21A8' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Qty Kebutuhan', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: '6B21A8' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Satuan', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: '6B21A8' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Total Biaya', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
         ],
       }),
     ];
@@ -777,102 +1021,7 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
   }
 
   // ==========================================================================
-  // 5. REKAPITULASI PENERIMA MANFAAT LENGKAP (INPUT ADMIN MBG)
-  // ==========================================================================
-  docChildren.push(
-    new Paragraph({
-      spacing: { before: 140, after: 60 },
-      children: [
-        new TextRun({
-          text: 'REKAPITULASI DISTRIBUSI SELURUH PENERIMA MANFAAT (PM)',
-          bold: true,
-          size: 18,
-          font: 'Arial',
-          color: '0F172A',
-        }),
-      ],
-    })
-  );
-
-  const rekapPmRows: TableRow[] = [
-    new TableRow({
-      tableHeader: true,
-      children: [
-        new TableCell({ width: { size: 4, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'No', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 28, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Nama Institusi / Sasaran', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Tipe / Jenjang', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 14, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Kurir', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Siswa/Blt', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Bumil/Bsu', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Guru/Kdr', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: '0F172A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Total Porsi', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })] }),
-      ],
-    }),
-  ];
-
-  if (entries && entries.length > 0) {
-    entries.forEach((e, idx) => {
-      const rowBg = e.isSekolahLibur ? 'FEE2E2' : idx % 2 === 0 ? 'FFFFFF' : 'F8FAFC';
-      rekapPmRows.push(
-        new TableRow({
-          children: [
-            new TableCell({ width: { size: 4, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${idx + 1}`, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 28, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: e.institutionName + (e.isSekolahLibur ? ' (Libur)' : ''), bold: true, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: e.institutionType === 'posyandu' ? 'Posyandu' : (e.schoolLevel || 'Sekolah').toUpperCase(), size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 14, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: e.assignedPetugasName || '-', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: e.isSekolahLibur ? '-' : `${e.qtSiswaBalita || 0}`, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: e.isSekolahLibur ? '-' : `${e.qtBumilBusui || 0}`, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: e.isSekolahLibur ? '-' : `${e.qtGuruKader || 0}`, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: e.isSekolahLibur ? '0' : `${e.jumlah || 0}`, bold: true, color: 'B45309', size: 13, font: 'Arial' })] })] }),
-          ],
-        })
-      );
-    });
-  } else if (dailyReport.sekolahList && dailyReport.sekolahList.length > 0) {
-    dailyReport.sekolahList.forEach((s, idx) => {
-      rekapPmRows.push(
-        new TableRow({
-          children: [
-            new TableCell({ width: { size: 4, type: WidthType.PERCENTAGE }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${idx + 1}`, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 28, type: WidthType.PERCENTAGE }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: s.nama, bold: true, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Sekolah', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 14, type: WidthType.PERCENTAGE }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Tim MBG', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${s.murid}`, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: '-', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${s.guru}`, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${s.murid + s.guru}`, bold: true, size: 13, font: 'Arial' })] })] }),
-          ],
-        })
-      );
-    });
-  }
-
-  // Grand Total Row
-  rekapPmRows.push(
-    new TableRow({
-      children: [
-        new TableCell({
-          columnSpan: 7,
-          width: { size: 88, type: WidthType.PERCENTAGE },
-          shading: { fill: 'FEF3C7' },
-          margins: COMPACT_CELL_MARGINS,
-          children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'TOTAL SELURUH PENERIMA MANFAAT:', bold: true, color: '92400E', size: 14, font: 'Arial' })] })],
-        }),
-        new TableCell({
-          width: { size: 12, type: WidthType.PERCENTAGE },
-          shading: { fill: 'FEF3C7' },
-          margins: COMPACT_CELL_MARGINS,
-          children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${totalPorsi.toLocaleString('id-ID')} Porsi`, bold: true, color: 'B45309', size: 15, font: 'Arial' })] })],
-        }),
-      ],
-    })
-  );
-
-  docChildren.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: CELL_BORDER, rows: rekapPmRows }));
-  docChildren.push(new Paragraph({ spacing: { after: 240 }, children: [] }));
-
-  // ==========================================================================
-  // 6. LEMBAR PENGESAHAN (3 TANDA TANGAN)
+  // LEMBAR PENGESAHAN (3 TANDA TANGAN)
   // ==========================================================================
   const signatureTable = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -883,31 +1032,31 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
           new TableCell({
             width: { size: 33, type: WidthType.PERCENTAGE },
             children: [
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Mengetahui,', size: 16, font: 'Arial' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Kepala Satuan Pelayanan (SPPG)', bold: true, size: 16, font: 'Arial' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Mengetahui,', size: 15, font: 'Arial' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Kepala Satuan Pelayanan (SPPG)', bold: true, size: 15, font: 'Arial' })] }),
               new Paragraph({ text: '', spacing: { after: 600 } }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '( _______________________ )', bold: true, size: 16, font: 'Arial' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'NIP: SPPG-BGN-001', size: 14, color: '64748B', font: 'Arial' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '( _______________________ )', bold: true, size: 15, font: 'Arial' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'NIP: SPPG-BGN-001', size: 13, color: '64748B', font: 'Arial' })] }),
             ],
           }),
           new TableCell({
             width: { size: 34, type: WidthType.PERCENTAGE },
             children: [
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Diperiksa Oleh,', size: 16, font: 'Arial' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Tenaga Ahli Gizi (Nutrisionis)', bold: true, size: 16, font: 'Arial' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Diperiksa Oleh,', size: 15, font: 'Arial' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Tenaga Ahli Gizi (Nutrisionis)', bold: true, size: 15, font: 'Arial' })] }),
               new Paragraph({ text: '', spacing: { after: 600 } }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '( _______________________ )', bold: true, size: 16, font: 'Arial' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'STR: GIZI-MBG-2026', size: 14, color: '64748B', font: 'Arial' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '( _______________________ )', bold: true, size: 15, font: 'Arial' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'STR: GIZI-MBG-2026', size: 13, color: '64748B', font: 'Arial' })] }),
             ],
           }),
           new TableCell({
             width: { size: 33, type: WidthType.PERCENTAGE },
             children: [
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Dibuat Oleh,', size: 16, font: 'Arial' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Koordinator Produksi & Dapur', bold: true, size: 16, font: 'Arial' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Dibuat Oleh,', size: 15, font: 'Arial' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Koordinator Produksi & Dapur', bold: true, size: 15, font: 'Arial' })] }),
               new Paragraph({ text: '', spacing: { after: 600 } }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '( _______________________ )', bold: true, size: 16, font: 'Arial' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Koperasi Al-Umanaa', size: 14, color: '64748B', font: 'Arial' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '( _______________________ )', bold: true, size: 15, font: 'Arial' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Koperasi Al Umanaa Sejahtera Mandiri', size: 13, color: '64748B', font: 'Arial' })] }),
             ],
           }),
         ],
@@ -929,10 +1078,10 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
               orientation: PageOrientation.LANDSCAPE,
             },
             margin: {
-              top: 720, // 0.5 in
-              bottom: 720,
-              left: 720,
-              right: 720,
+              top: 500,
+              bottom: 500,
+              left: 500,
+              right: 500,
             },
           },
         },
@@ -944,7 +1093,7 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
                 children: [
                   new TextRun({
                     text: `Laporan Operasional Produksi MBG • Tanggal: ${batch.tanggal}`,
-                    size: 14,
+                    size: 13,
                     color: '94A3B8',
                     font: 'Arial',
                   }),
@@ -961,25 +1110,25 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
                 children: [
                   new TextRun({
                     text: 'Dokumen Resmi SIMOL MBG — Halaman ',
-                    size: 14,
+                    size: 13,
                     color: '94A3B8',
                     font: 'Arial',
                   }),
                   new TextRun({
                     children: [PageNumber.CURRENT],
-                    size: 14,
+                    size: 13,
                     color: '94A3B8',
                     font: 'Arial',
                   }),
                   new TextRun({
                     text: ' dari ',
-                    size: 14,
+                    size: 13,
                     color: '94A3B8',
                     font: 'Arial',
                   }),
                   new TextRun({
                     children: [PageNumber.TOTAL_PAGES],
-                    size: 14,
+                    size: 13,
                     color: '94A3B8',
                     font: 'Arial',
                   }),
