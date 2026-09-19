@@ -2,9 +2,9 @@
 // MBG Production Page — Kadar Gizi + Export PDF #1
 // ============================================================================
 
-import { useEffect, useMemo, useState, useCallback, Fragment } from 'react';
+import { useEffect, useMemo, useState, Fragment } from 'react';
 import {
-  Plus, Trash2, FileDown, Calendar, Loader2, CheckCircle2, Search, X, Folder, Send, ChefHat,
+  Plus, Trash2, FileDown, Calendar, Loader2, CheckCircle2, Search, X, Folder, Send,
   ClipboardList, FileText, FolderOpen, FileUp, Save, Sparkles, FileSpreadsheet, ChevronDown, ChevronUp,
   AlertTriangle,
 } from 'lucide-react';
@@ -26,7 +26,7 @@ import {
 } from '@/services/mbgProductionService';
 import { export8PageDailyReportPdf } from '@/utils/dailyReportPdfExporter';
 import { exportProductionDocx } from '@/utils/mbgProductionDocxGenerator';
-import { parseProductionSheetRows, generateDailyReportFromBatchData } from '@/utils/productionSheetParser';
+import { parseProductionSheetRows } from '@/utils/productionSheetParser';
 import { updateBatchStatus, updateBatch } from '@/services/mbgAdminService';
 import {
   MBG_BATCH_STATUS_CONFIG,
@@ -38,8 +38,6 @@ import {
   MBG_AKG_REFERENCE,
   DEFAULT_WEEKLY_SCHEDULE,
 } from '@/constants/mbgConstants';
-import porsiStandardData from '@/constants/standarPorsi.json';
-import resepStandardData from '@/constants/standarResep.json';
 
 export interface TkpiDatabaseItem {
   nama: string;
@@ -118,8 +116,8 @@ interface ConfirmModalState {
   onConfirm: () => Promise<void> | void;
 }
 
-const standarPorsi = porsiStandardData as StandarPorsi[];
-const standarResep = resepStandardData as StandarResep[];
+const standarPorsi: StandarPorsi[] = [];
+const standarResep: StandarResep[] = [];
 
 
 
@@ -796,34 +794,8 @@ export function MbgProductionPage() {
   };
 
   const effectiveDailyReport = useMemo(() => {
-    if (dailyReport) return dailyReport;
-    if (selectedBatch && entries.length > 0) {
-      return generateDailyReportFromBatchData(selectedBatch, entries, weeklySchedule, combinedRecipes);
-    }
-    return null;
-  }, [dailyReport, selectedBatch, entries, weeklySchedule, combinedRecipes]);
-
-  const [savingDailyReport, setSavingDailyReport] = useState(false);
-
-  const handleSaveEffectiveDailyReport = async () => {
-    if (!effectiveDailyReport || !selectedBatch || !user) return;
-    try {
-      setSavingDailyReport(true);
-      await saveDailyReport(dailyReport?.id || null, {
-        ...effectiveDailyReport,
-        batchId: selectedBatch.id,
-        tanggal: selectedBatch.tanggal,
-        updatedAt: new Date().toISOString(),
-        createdBy: user.uid,
-      });
-      showToast({ message: 'Berhasil menyimpan Laporan Harian ke database!', variant: 'success' });
-    } catch (err) {
-      console.error('Error saving daily report:', err);
-      showToast({ message: 'Gagal menyimpan Laporan Harian', variant: 'error' });
-    } finally {
-      setSavingDailyReport(false);
-    }
-  };
+    return dailyReport;
+  }, [dailyReport]);
 
   const handleDeleteBatch = (batchId: string, tanggal: string) => {
     setConfirmModal({
@@ -947,210 +919,6 @@ export function MbgProductionPage() {
       showToast({ message: 'Gagal menambah data gizi', variant: 'error' });
     }
   };
-
-  const handleSyncNutritionFromIngredients = useCallback(async () => {
-    if (!selectedBatchId || !user) {
-      showToast({ message: 'Silakan pilih tanggal batch terlebih dahulu!', variant: 'error' });
-      return;
-    }
-
-    if (adjustedRecipeRequirements.length === 0) {
-      showToast({ message: 'Belum ada data kebutuhan bahan baku dari resep untuk batch ini.', variant: 'error' });
-      return;
-    }
-
-    try {
-      // 1. Clear existing nutrition entries for this batch
-      for (const entry of nutritionData) {
-        await deleteNutritionEntry(entry.id);
-      }
-
-      const totalBatchPorsi = entries.reduce((s, e) => {
-        if (e.isSekolahLibur) return s;
-        const p = e.jumlah || ((e.qtSiswaBalita || 0) + (e.qtBumilBusui || 0) + (e.qtGuruKader || 0));
-        return s + p;
-      }, 0) || 1;
-
-      // Build total portion count per menu item
-      const fallbackBatchMenu = selectedBatch?.tanggal
-        ? getMenuForDate(selectedBatch.tanggal, weeklySchedule).menuItems
-        : [];
-
-      const menuPortionTotals: Record<string, number> = {};
-      entries.forEach((e) => {
-        if (e.isSekolahLibur) return;
-        const menuList = (e.menuItems && e.menuItems.length > 0) ? e.menuItems : fallbackBatchMenu;
-        const entryPortions = e.jumlah || ((e.qtSiswaBalita || 0) + (e.qtBumilBusui || 0) + (e.qtGuruKader || 0)) || 1;
-        menuList.forEach((m) => {
-          const norm = m.trim();
-          menuPortionTotals[norm] = (menuPortionTotals[norm] || 0) + entryPortions;
-        });
-      });
-
-      // 2. Consolidate ingredient requirements by clean name and track portion counts
-      const consolidatedIngs = new Map<string, {
-        name: string;
-        amount: number;
-        satuan: string;
-        portions: number;
-      }>();
-
-      adjustedRecipeRequirements.forEach((ing) => {
-        const key = ing.name.toLowerCase().trim();
-
-        // Calculate portion count for this specific ingredient from its source menus
-        let ingPortions = 0;
-        if (ing.sourceMenus && ing.sourceMenus.length > 0) {
-          ing.sourceMenus.forEach((sm) => {
-            const norm = sm.trim();
-            if (menuPortionTotals[norm]) {
-              ingPortions += menuPortionTotals[norm];
-            }
-          });
-        }
-        if (ingPortions <= 0) ingPortions = totalBatchPorsi;
-
-        if (!consolidatedIngs.has(key)) {
-          consolidatedIngs.set(key, {
-            name: ing.name,
-            amount: ing.amount,
-            satuan: ing.satuan,
-            portions: ingPortions,
-          });
-        } else {
-          const existing = consolidatedIngs.get(key)!;
-          existing.amount += ing.amount;
-          if (ingPortions > existing.portions) {
-            existing.portions = ingPortions;
-          }
-        }
-      });
-
-      // 3. Loop through consolidated ingredient requirements
-      for (const ing of Array.from(consolidatedIngs.values())) {
-        let beratInGrams = ing.amount;
-        if (ing.satuan === 'kg' || ing.satuan === 'L' || ing.satuan === 'Liter') {
-          beratInGrams = ing.amount * 1000;
-        } else if (ing.satuan === 'pcs' || ing.satuan === 'butir' || ing.satuan === 'buah') {
-          beratInGrams = ing.amount * 50;
-        } else if (ing.satuan === 'ikat') {
-          beratInGrams = ing.amount * 100;
-        } else if (ing.satuan === 'siung' || ing.satuan === 'lembar') {
-          beratInGrams = ing.amount * 5;
-        }
-
-        if (beratInGrams <= 0) {
-          beratInGrams = ing.portions * 2;
-        }
-
-        const ingNameLower = ing.name.toLowerCase().trim();
-        const words = ingNameLower.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length >= 3);
-
-        // 1. Direct match or substring match
-        let match = combinedTkpiDatabase.find((item) => {
-          const itemLower = item.nama.toLowerCase().trim();
-          return itemLower === ingNameLower || itemLower.includes(ingNameLower) || ingNameLower.includes(itemLower);
-        });
-
-        // 2. Keyword score match
-        if (!match && words.length > 0) {
-          let maxScore = 0;
-          for (const item of combinedTkpiDatabase) {
-            const itemLower = item.nama.toLowerCase();
-            let score = 0;
-            for (const w of words) {
-              if (itemLower.includes(w)) score++;
-            }
-            if (score > maxScore) {
-              maxScore = score;
-              match = item;
-            }
-          }
-        }
-
-        const baseBerat = match?.berat || 100;
-        const ratio = beratInGrams / 100;
-
-        // Fallback nutrition values per 100g if TKPI entry was not matched
-        const fallbackNutrients = {
-          air: 75.0,
-          energi: 165.0,
-          protein: 12.5,
-          lemak: 6.0,
-          kh: 18.0,
-          serat: 1.5,
-          abu: 1.2,
-          kalsium: 45.0,
-          fosfor: 110.0,
-          besi: 1.8,
-          natrium: 70.0,
-          kalium: 180.0,
-          tembaga: 0.15,
-          seng: 1.2,
-          retinol: 25.0,
-          bkar: 120.0,
-          kartotal: 150.0,
-          thiamin: 0.08,
-          riboflavin: 0.12,
-          niasin: 2.5,
-          vit_c: 8.0,
-        };
-
-        const getNutVal = (key: keyof typeof fallbackNutrients) => {
-          if (match && match[key] !== undefined && match[key] !== null && Number(match[key]) > 0) {
-            return Number(match[key]);
-          }
-          return fallbackNutrients[key];
-        };
-
-        const entryPayload: Omit<MbgNutritionEntry, 'id'> = {
-          batchId: selectedBatchId,
-          menuItemName: ing.name,
-          berat: Math.round(beratInGrams * 10) / 10,
-          baseBerat: baseBerat,
-          quantity: ing.portions || totalBatchPorsi,
-          air: Math.round(ratio * getNutVal('air') * 10) / 10,
-          kalori: Math.round(ratio * getNutVal('energi')),
-          protein: Math.round(ratio * getNutVal('protein') * 10) / 10,
-          lemak: Math.round(ratio * getNutVal('lemak') * 10) / 10,
-          karbohidrat: Math.round(ratio * getNutVal('kh') * 10) / 10,
-          serat: Math.round(ratio * getNutVal('serat') * 10) / 10,
-          abu: Math.round(ratio * getNutVal('abu') * 10) / 10,
-          kalsium: Math.round(ratio * getNutVal('kalsium')),
-          fosfor: Math.round(ratio * getNutVal('fosfor')),
-          zatBesi: Math.round(ratio * getNutVal('besi') * 10) / 10,
-          natrium: Math.round(ratio * getNutVal('natrium')),
-          kalium: Math.round(ratio * getNutVal('kalium')),
-          tembaga: Math.round(ratio * getNutVal('tembaga') * 100) / 100,
-          seng: Math.round(ratio * getNutVal('seng') * 10) / 10,
-          vitaminA: Math.round(ratio * getNutVal('retinol')),
-          bkar: Math.round(ratio * getNutVal('bkar')),
-          kartotal: Math.round(ratio * getNutVal('kartotal')),
-          thiamin: Math.round(ratio * getNutVal('thiamin') * 100) / 100,
-          riboflavin: Math.round(ratio * getNutVal('riboflavin') * 100) / 100,
-          niasin: Math.round(ratio * getNutVal('niasin') * 10) / 10,
-          vitaminC: Math.round(ratio * getNutVal('vit_c') * 10) / 10,
-          totalKalori: Math.round(ratio * getNutVal('energi')),
-          totalProtein: Math.round(ratio * getNutVal('protein') * 10) / 10,
-          totalLemak: Math.round(ratio * getNutVal('lemak') * 10) / 10,
-          totalKarbohidrat: Math.round(ratio * getNutVal('kh') * 10) / 10,
-          totalSerat: Math.round(ratio * getNutVal('serat') * 10) / 10,
-          calculatedBy: user.uid,
-          calculatedAt: new Date().toISOString(),
-        };
-
-        await addNutritionEntry(entryPayload);
-      }
-
-      showToast({
-        message: `Berhasil meng-kalkulasi & meng-sync kadar gizi ${consolidatedIngs.size} Bahan Makanan dari database TKPI!`,
-        variant: 'success',
-      });
-    } catch (err) {
-      console.error('Error syncing nutrition from ingredients:', err);
-      showToast({ message: 'Gagal meng-sync data gizi bahan makanan', variant: 'error' });
-    }
-  }, [selectedBatchId, selectedBatch?.tanggal, weeklySchedule, user, adjustedRecipeRequirements, nutritionData, entries, combinedTkpiDatabase, showToast]);
 
 
   const handleUpdateNutrition = async (id: string, updates: Partial<MbgNutritionEntry>) => {
@@ -1381,10 +1149,9 @@ export function MbgProductionPage() {
         if (batchToUse.status === 'PM_SUBMITTED') {
           await updateBatchStatus(batchToUse.id, 'NUTRITION_DONE');
         }
-        const reportToSave = effectiveDailyReport || dailyReport || generateDailyReportFromBatchData(batchToUse, entriesToUse, weeklySchedule, combinedRecipes);
-        if (reportToSave && user) {
-          await saveDailyReport(dailyReport?.id || null, {
-            ...reportToSave,
+        if (dailyReport && user) {
+          await saveDailyReport(dailyReport.id || null, {
+            ...dailyReport,
             batchId: batchToUse.id,
             tanggal: batchToUse.tanggal,
             updatedAt: new Date().toISOString(),
@@ -1737,10 +1504,9 @@ export function MbgProductionPage() {
         if (batchToUse.status === 'PM_SUBMITTED') {
           await updateBatchStatus(batchToUse.id, 'PDF_EXPORTED');
         }
-        const reportToSave = effectiveDailyReport || dailyReport || generateDailyReportFromBatchData(batchToUse, entriesToUse, weeklySchedule, combinedRecipes);
-        if (reportToSave && user) {
-          await saveDailyReport(dailyReport?.id || null, {
-            ...reportToSave,
+        if (dailyReport && user) {
+          await saveDailyReport(dailyReport.id || null, {
+            ...dailyReport,
             batchId: batchToUse.id,
             tanggal: batchToUse.tanggal,
             updatedAt: new Date().toISOString(),
@@ -1770,10 +1536,9 @@ export function MbgProductionPage() {
         await updateBatchStatus(selectedBatchId, 'NUTRITION_DONE');
       }
 
-      const reportToSave = effectiveDailyReport || dailyReport || generateDailyReportFromBatchData(selectedBatch, entries, weeklySchedule, combinedRecipes);
-      if (reportToSave && user) {
-        await saveDailyReport(dailyReport?.id || null, {
-          ...reportToSave,
+      if (dailyReport && user) {
+        await saveDailyReport(dailyReport.id || null, {
+          ...dailyReport,
           batchId: selectedBatch.id,
           tanggal: selectedBatch.tanggal,
           updatedAt: new Date().toISOString(),
@@ -1869,7 +1634,7 @@ export function MbgProductionPage() {
         return;
       }
 
-      const newBatchId = await createBatch(todayStr, user?.uid || 'user', true, weeklySchedule);
+      const newBatchId = await createBatch(todayStr, user?.uid || 'user', false, weeklySchedule);
       await updateBatch(newBatchId, { status: 'PM_SUBMITTED' });
       setSelectedBatchId(newBatchId);
       showToast({ message: `Batch baru untuk hari ini (${todayStr}) berhasil dibuat!`, variant: 'success' });
@@ -2028,8 +1793,8 @@ export function MbgProductionPage() {
       if (existingBatch) {
         targetBatchId = existingBatch.id;
       } else {
-        // Auto-create batch for this date with autoPopulate = true
-        targetBatchId = await createBatch(targetBatchTanggal, user?.uid || 'user', true, weeklySchedule);
+        // Create batch for this date without autoPopulate dummy master entries
+        targetBatchId = await createBatch(targetBatchTanggal, user?.uid || 'user', false, weeklySchedule);
       }
 
       const parsedReport = parseProductionSheetRows(rows, targetBatchId, targetBatchTanggal, sheetName, sheetWorkbook);
@@ -2083,9 +1848,12 @@ export function MbgProductionPage() {
       showToast({ message: 'Pilih batch terlebih dahulu!', variant: 'info' });
       return;
     }
-    const reportToExport = effectiveDailyReport || dailyReport || generateDailyReportFromBatchData(selectedBatch, entries, weeklySchedule, combinedRecipes);
+    if (!dailyReport) {
+      showToast({ message: 'Belum ada data Laporan Excel yang di-import untuk batch ini!', variant: 'info' });
+      return;
+    }
     try {
-      await export8PageDailyReportPdf(reportToExport as MbgProductionDailyReport, selectedBatch);
+      await export8PageDailyReportPdf(dailyReport, selectedBatch);
       showToast({ message: 'Berhasil meng-export PDF 8-Halaman Laporan Harian Operasional!', variant: 'success' });
     } catch (err) {
       console.error(err);
@@ -2193,13 +1961,6 @@ export function MbgProductionPage() {
                 className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F59E0B] hover:bg-[#D97706] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
               >
                 <span>Gizi (TKPI)</span>
-              </button>
-              <button
-                onClick={handleSyncNutritionFromIngredients}
-                title="Kalkulasi dan sync kadar gizi dari seluruh bahan baku resep batch ke database TKPI"
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#15803D] hover:bg-[#166534] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
-              >
-                <span>⚡ Auto-Sync Gizi</span>
               </button>
             </>
           )}
@@ -2427,12 +2188,6 @@ export function MbgProductionPage() {
                         {curReport.sheetDayName}
                       </span>
                     )}
-                    {!dailyReport && effectiveDailyReport && (
-                      <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-full border border-emerald-200 flex items-center gap-1">
-                        <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
-                        <span>Auto-Generated dari Data PM</span>
-                      </span>
-                    )}
                   </h2>
                   <p className="text-xs text-slate-500 mt-1">
                     Format Laporan Harian Operasional resmi (Kandungan Gizi, Pesanan Bahan, Pesanan Bumbu, PO, QC, Limbah)
@@ -2440,17 +2195,6 @@ export function MbgProductionPage() {
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  {!dailyReport && effectiveDailyReport && (
-                    <button
-                      onClick={handleSaveEffectiveDailyReport}
-                      disabled={savingDailyReport}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50"
-                      title="Simpan Laporan Harian yang ter-generate otomatis ini ke database Firestore"
-                    >
-                      {savingDailyReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 text-white" />}
-                      <span>Simpan ke Database</span>
-                    </button>
-                  )}
                   <button
                     onClick={() => setShowSheetsImportModal(true)}
                     className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap"
@@ -3531,24 +3275,16 @@ export function MbgProductionPage() {
                     )}
                   </div>
 
-                  {/* Nutrition Section Header & Auto-Sync Button */}
+                  {/* Nutrition Section Header */}
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
                     <div>
                       <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
                         3. Analisis & Kadar Gizi Per Bahan Makanan (Bahan Baku Batch)
                       </h4>
                       <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
-                        Hitungan gizi dikalkulasi per jenis bahan baku dari standar resep batch dikalikan referensi TKPI 2020.
+                        Rincian kandungan gizi per jenis bahan makanan untuk batch operasional yang dipilih.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleSyncNutritionFromIngredients}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-extrabold rounded-xl shadow-xs cursor-pointer transition-all shrink-0"
-                    >
-                      <ChefHat className="h-4 w-4 text-[#FBBF24]" />
-                      ✨ Auto-Sync Gizi dari Resep & TKPI
-                    </button>
                   </div>
 
                   {/* Summary Cards */}
