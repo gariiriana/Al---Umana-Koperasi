@@ -57,6 +57,7 @@ export function getFilteredPmEntries(
     return [];
   }
 
+  const seenNames = new Set<string>();
   const result: FilteredPmRow[] = [];
 
   entries.forEach((e) => {
@@ -153,6 +154,17 @@ export function getFilteredPmEntries(
     }
 
     if (count > 0 || (portionType === 'kecil' && e.schoolLevel === 'tk_paud')) {
+      const cleanName = e.institutionName.toLowerCase()
+        .replace(/kelas\s*[0-9-]+/gi, '')
+        .replace(/kls\s*[0-9-]+/gi, '')
+        .replace(/[^a-z0-9]/g, '')
+        .trim();
+      const normKey = cleanName || e.institutionName.toLowerCase().trim();
+      if (seenNames.has(normKey)) {
+        return;
+      }
+      seenNames.add(normKey);
+
       result.push({
         id: e.id,
         institutionName: e.institutionName,

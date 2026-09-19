@@ -161,7 +161,7 @@ export function DailyReportExcelSections({
     {
       key: 'po' as const,
       number: '5',
-      label: 'Tabel Supplier',
+      label: 'Daftar Pesanan Bahan',
       icon: Truck,
       countBadge: `${(curReport.poRows || []).length} Item PO`,
       itemCount: (curReport.poRows || []).length,
@@ -499,8 +499,8 @@ export function DailyReportExcelSections({
     defaultTitle: string,
     portionType: 'kecil' | 'besar' | 'balita' | 'bumil'
   ) => {
-    const data = portionData || {
-      portionType,
+    const data: MbgPortionDailyData = portionData || {
+      portionType: portionType === 'bumil' ? 'bumil_busui' : portionType,
       portionTitle: defaultTitle,
       pmCount: 0,
       menuList: [],
@@ -509,6 +509,7 @@ export function DailyReportExcelSections({
       bumbuItems: [],
       totalGizi: { beratBersih: 0, energi: 0, protein: 0, lemak: 0, karbohidrat: 0, serat: 0 },
       akgMetrics: {},
+      akgRows: [],
       totalBelanjaBahan: 0,
       hargaBahanPerPorsi: 0,
       totalBelanjaBumbu: 0,
@@ -1079,8 +1080,35 @@ export function DailyReportExcelSections({
                   </td>
                 </tr>
 
-                {/* AKG Rows */}
-                {data.akgMetrics && Object.keys(data.akgMetrics).length > 0 ? (
+                {/* AKG Rows (EPLKS: Energi, Protein, Lemak, Karbohidrat, Serat) */}
+                {data.akgRows && data.akgRows.length > 0 ? (
+                  data.akgRows.map((akgRow, akgIdx) => (
+                    <tr key={akgIdx} className="bg-[#FEF3C7]/40 text-amber-950 border-b border-amber-200/80">
+                      <td colSpan={3} className="px-3 py-1.5 text-left font-bold text-[10px] text-amber-900 border-r border-amber-200">
+                        {akgRow.label}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center text-[10px] border-r border-amber-200 text-slate-400">-</td>
+                      <td className="px-1.5 py-1.5 text-center font-black text-amber-900 border-r border-amber-200 bg-amber-100/50">
+                        {formatNum(akgRow.energi, 1)}%
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center font-bold text-amber-900 border-r border-amber-200">
+                        {formatNum(akgRow.protein, 1)}%
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center font-bold text-amber-900 border-r border-amber-200">
+                        {formatNum(akgRow.lemak, 1)}%
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center font-bold text-amber-900 border-r border-amber-200">
+                        {formatNum(akgRow.karbohidrat, 1)}%
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center font-bold text-amber-900 border-r-2 border-slate-300">
+                        {formatNum(akgRow.serat, 1)}%
+                      </td>
+                      <td colSpan={isEditing ? 16 : 15} className="px-3 py-1.5 text-xs text-slate-500 font-medium italic">
+                        Capaian Angka Kecukupan Gizi (AKG) — {akgRow.label.replace(/^%?\s*pemenuhan\s*/i, '')}
+                      </td>
+                    </tr>
+                  ))
+                ) : data.akgMetrics && Object.keys(data.akgMetrics).length > 0 ? (
                   Object.entries(data.akgMetrics).map(([akgKey, metric], akgIdx) => {
                     const cleanKey = akgKey.replace(/_/g, ' ').toUpperCase();
                     return (
@@ -1313,7 +1341,7 @@ export function DailyReportExcelSections({
             <div className="flex items-center gap-2">
               <Truck className="h-5 w-5 text-amber-500" />
               <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
-                Tabel Supplier — Pesanan Bahan Makanan & Bumbu
+                Daftar Pesanan Bahan — Pesanan Bahan Makanan & Bumbu
               </h4>
               {isEditing && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-black bg-amber-500 text-white animate-pulse">
@@ -1323,7 +1351,7 @@ export function DailyReportExcelSections({
               )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Format persis sesuai form excel yang di-import: Supplier, List Pesanan Bahan, Kedatangan, Jumlah, Item/Satuan, Harga Satuan, Total Harga.
+              Format persis sesuai form excel yang di-import: Supplier, List Pesanan Bahan, Jumlah, Item/Satuan, Harga Satuan, Total Harga.
             </p>
           </div>
 
@@ -1356,7 +1384,7 @@ export function DailyReportExcelSections({
                 title="Edit data pesanan supplier langsung di tabel ini"
               >
                 <Pencil className="h-3.5 w-3.5 text-amber-600" />
-                <span>Edit Tabel Supplier</span>
+                <span>Edit Daftar Pesanan Bahan</span>
               </button>
             ) : (
               <div className="flex items-center gap-1.5">
@@ -1396,7 +1424,7 @@ export function DailyReportExcelSections({
           <div className="px-4 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 text-xs font-black uppercase tracking-wider flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-slate-950"></span>
-              <span>Tabel Daftar Pesanan Bahan ke Supplier (Hasil Excel Import)</span>
+              <span>Daftar Pesanan Bahan ke Mitra Supplier (Hasil Excel Import)</span>
               {isEditing && (
                 <span className="text-[10px] font-bold text-slate-900 normal-case bg-white/60 px-2 py-0.5 rounded-md">
                   (Klik pada sel tabel untuk mengubah nilai)
@@ -1420,7 +1448,6 @@ export function DailyReportExcelSections({
                     <th className="px-3 py-2 w-10 text-center">No</th>
                     <th className="px-4 py-2 border-r border-amber-300">Supplier</th>
                     <th className="px-4 py-2 border-r border-amber-300">List Pesanan Bahan</th>
-                    <th className="px-3 py-2 text-center border-r border-amber-300 whitespace-nowrap">Kedatangan</th>
                     <th className="px-3 py-2 text-center border-r border-amber-300 whitespace-nowrap">Jumlah</th>
                     <th className="px-3 py-2 text-center border-r border-amber-300 whitespace-nowrap">Item (Satuan)</th>
                     <th className="px-3 py-2 text-right border-r border-amber-300 whitespace-nowrap">Harga Satuan</th>
@@ -1466,17 +1493,8 @@ export function DailyReportExcelSections({
                           <td className="px-4 py-2 font-bold text-slate-900 border-r border-slate-100">
                             {po.item}
                           </td>
-                          <td className="px-3 py-2 text-center text-slate-500 border-r border-slate-100 whitespace-nowrap">
-                            {po.jamKedatangan && po.jamKedatangan !== '06:00' ? (
-                              <span className="font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md">
-                                {po.jamKedatangan}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 italic">-</span>
-                            )}
-                          </td>
                           <td className="px-3 py-2 text-center font-black text-slate-900 bg-amber-50/30 border-r border-slate-100">
-                            {po.jumlah > 0 ? formatNum(po.jumlah, 1) : '-'}
+                            {po.jumlah > 0 ? Math.round(po.jumlah).toLocaleString('id-ID') : '-'}
                           </td>
                           <td className="px-3 py-2 text-center font-bold text-slate-600 border-r border-slate-100">
                             {po.satuan || 'kg'}
@@ -1527,19 +1545,10 @@ export function DailyReportExcelSections({
                         </td>
                         <td className="px-2 py-1.5 text-center">
                           <input
-                            type="text"
-                            value={po.jamKedatangan || ''}
-                            onChange={(e) => updateSupplierCell(idx, 'jamKedatangan', e.target.value)}
-                            placeholder="06:00"
-                            className="w-16 px-1 py-1 text-center bg-white border border-amber-300 rounded text-[11px] focus:outline-none"
-                          />
-                        </td>
-                        <td className="px-2 py-1.5 text-center">
-                          <input
                             type="number"
-                            step="0.1"
-                            value={po.jumlah || ''}
-                            onChange={(e) => updateSupplierCell(idx, 'jumlah', e.target.value)}
+                            step="1"
+                            value={po.jumlah ? Math.round(po.jumlah) : ''}
+                            onChange={(e) => updateSupplierCell(idx, 'jumlah', Math.round(Number(e.target.value)))}
                             className="w-16 px-1 py-1 text-center bg-white border border-amber-300 rounded text-[11px] font-black focus:outline-none"
                           />
                         </td>

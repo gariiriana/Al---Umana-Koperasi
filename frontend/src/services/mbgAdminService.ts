@@ -326,6 +326,54 @@ export async function addMultipleEntries(
   await batch.commit();
 }
 
+export async function clearBatchEntries(batchId: string): Promise<void> {
+  const q = query(
+    collection(db, ENTRIES_COLLECTION),
+    where('batchId', '==', batchId)
+  );
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return;
+  const batch = writeBatch(db);
+  snapshot.docs.forEach((d) => batch.delete(d.ref));
+  await batch.commit();
+}
+
+export async function cleanDuplicateBatchEntries(batchId: string): Promise<number> {
+  const q = query(
+    collection(db, ENTRIES_COLLECTION),
+    where('batchId', '==', batchId)
+  );
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return 0;
+
+  const seen = new Set<string>();
+  const toDelete: string[] = [];
+
+  snapshot.docs.forEach((d) => {
+    const data = d.data() as MbgPmEntry;
+    const cleanName = (data.institutionName || '').toLowerCase()
+      .replace(/kelas\s*[0-9-]+/gi, '')
+      .replace(/kls\s*[0-9-]+/gi, '')
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
+    const key = cleanName || (data.institutionName || '').toLowerCase().trim();
+    if (seen.has(key)) {
+      toDelete.push(d.id);
+    } else {
+      seen.add(key);
+    }
+  });
+
+  if (toDelete.length > 0) {
+    const batch = writeBatch(db);
+    toDelete.forEach((id) => batch.delete(doc(db, ENTRIES_COLLECTION, id)));
+    await batch.commit();
+    await recalculateBatchTotals(batchId);
+  }
+
+  return toDelete.length;
+}
+
 /**
  * Recalculates batch totals from all its entries and updates the batch document.
  */

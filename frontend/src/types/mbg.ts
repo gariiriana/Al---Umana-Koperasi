@@ -553,6 +553,15 @@ export interface MbgPortionBumbuItem {
   harga: number;
 }
 
+export interface MbgAkgRowData {
+  label: string;
+  energi: number;
+  protein: number;
+  lemak: number;
+  karbohidrat: number;
+  serat: number;
+}
+
 export interface MbgPortionDailyData {
   portionType: 'kecil' | 'besar' | 'balita' | 'bumil_busui';
   portionTitle: string;
@@ -570,6 +579,7 @@ export interface MbgPortionDailyData {
     serat: number;
   };
   akgMetrics: Record<string, { percentMakanSiang: number; percentHarian: number }>;
+  akgRows?: MbgAkgRowData[];
   totalBelanjaBahan: number;
   hargaBahanPerPorsi: number;
   totalBelanjaBumbu: number;

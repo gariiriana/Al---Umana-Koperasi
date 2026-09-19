@@ -17,7 +17,7 @@ import { DailyReportExcelSections, type MbgDailyReportSubTab } from '@/component
 import {
   subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule,
   saveWeeklySchedule, getMenuForDate, deleteBatch, createBatch,
-  addMultipleEntries, recalculateBatchTotals,
+  addMultipleEntries, recalculateBatchTotals, clearBatchEntries, cleanDuplicateBatchEntries,
   type MbgPortionClassification
 } from '@/services/mbgAdminService';
 import {
@@ -1164,6 +1164,26 @@ export function MbgProductionPage() {
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingDocx, setExportingDocx] = useState(false);
   const [savingReport, setSavingReport] = useState(false);
+  const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
+
+  const handleCleanDuplicates = async () => {
+    if (!selectedBatchId) return;
+    setIsCleaningDuplicates(true);
+    try {
+      const removed = await cleanDuplicateBatchEntries(selectedBatchId);
+      if (removed > 0) {
+        await recalculateBatchTotals(selectedBatchId);
+        showToast({ message: `Berhasil membersihkan ${removed} data lembaga yang duplikat!`, variant: 'success' });
+      } else {
+        showToast({ message: 'Tidak ditemukan data lembaga yang duplikat pada batch ini.', variant: 'info' });
+      }
+    } catch (err) {
+      console.error('Clean duplicate error:', err);
+      showToast({ message: 'Gagal membersihkan data duplikat', variant: 'error' });
+    } finally {
+      setIsCleaningDuplicates(false);
+    }
+  };
 
   const handleExportDocxAction = async (targetBatch?: MbgPmBatch, targetEntries?: MbgPmEntry[]) => {
     const batchToUse = targetBatch || selectedBatch;
@@ -1535,6 +1555,7 @@ export function MbgProductionPage() {
         return;
       }
 
+      await clearBatchEntries(targetBatchId);
       await addMultipleEntries(pmEntries);
       await recalculateBatchTotals(targetBatchId);
 
@@ -1668,6 +1689,7 @@ export function MbgProductionPage() {
       }
 
       if (importedPmEntries.length > 0) {
+        await clearBatchEntries(targetBatchId);
         await addMultipleEntries(importedPmEntries);
         await recalculateBatchTotals(targetBatchId);
         await updateBatchStatus(targetBatchId, 'PM_SUBMITTED');
@@ -1748,6 +1770,17 @@ export function MbgProductionPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {selectedBatchId && (
+            <button
+              onClick={handleCleanDuplicates}
+              disabled={isCleaningDuplicates}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50"
+              title="Periksa dan bersihkan data lembaga penerima manfaat yang ter-input duplikat"
+            >
+              {isCleaningDuplicates ? <Loader2 className="h-4 w-4 animate-spin text-amber-600" /> : <Sparkles className="h-4 w-4 text-amber-600" />}
+              <span>Bersihkan Duplikat PM</span>
+            </button>
+          )}
           <button
             onClick={() => setShowSheetsImportModal(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#10B981] hover:bg-[#059669] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap"

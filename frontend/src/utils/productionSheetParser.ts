@@ -25,14 +25,23 @@ export function num(v: unknown): number {
   if (!s) return 0;
 
   if (s.includes('.') && s.includes(',')) {
-    s = s.replace(/\./g, '').replace(',', '.');
+    const lastDot = s.lastIndexOf('.');
+    const lastComma = s.lastIndexOf(',');
+    if (lastDot > lastComma) {
+      // US standard: 1,234.56
+      s = s.replace(/,/g, '');
+    } else {
+      // Indonesian / European: 1.234,56
+      s = s.replace(/\./g, '').replace(',', '.');
+    }
   } else if (s.includes(',')) {
     s = s.replace(',', '.');
   } else if (s.includes('.')) {
     const dotCount = (s.match(/\./g) || []).length;
     if (dotCount > 1) {
       s = s.replace(/\./g, '');
-    } else if (hasRp) {
+    } else if (hasRp || /^\d{1,3}\.\d{3}$/.test(s)) {
+      // Indonesian single-dot thousands separator e.g. 15.000 or 525.000
       s = s.replace(/\./g, '');
     }
   }
@@ -111,17 +120,17 @@ export function resolveSheetColumnIndices(rows: unknown[][]): SheetColMap {
     colBeratKotor: 17,      // R: Berat Kotor
     colTotalGml: 18,        // S: Total (g/ml)
     colSpareBahan: 19,      // T: Spare %
-    colKebutuhanBahan: 20,  // U: Kebutuhan (Per Unit / Jumlah)
-    colSatuanBahan: 21,     // V: Satuan
-    colHargaTotalBahan: 22, // W: Total Harga Bahan
+    colKebutuhanBahan: 19,  // T: Kebutuhan (Per Unit / Jumlah) (or 20 if spare exists)
+    colSatuanBahan: 20,     // U: Satuan
+    colHargaTotalBahan: 21, // V: Total Harga Bahan
 
-    colSupplierBumbu: 23,   // X: Supplier Bumbu
-    colMenuBumbu: 24,       // Y: Nama Menu
-    colNamaBumbu: 25,       // Z: Nama Bumbu
-    colHargaBumbu: 26,      // AA: Harga Bumbu
-    colKebutuhanBumbu: 27,  // AB: Kebutuhan (Per Unit / Jumlah)
-    colSatuanBumbu: 28,     // AC: Satuan
-    colHargaTotalBumbu: 29, // AD: Total Harga Bumbu
+    colMenuBumbu: 22,       // W: Nama Menu
+    colNamaBumbu: 23,       // X: Nama Bumbu
+    colHargaBumbu: 24,      // Y: Harga Bumbu (Satuan)
+    colKebutuhanBumbu: 25,  // Z: Kebutuhan (Per Unit / Jumlah)
+    colSatuanBumbu: 26,     // AA: Satuan
+    colHargaTotalBumbu: 27, // AB: Total Harga Bumbu
+    colSupplierBumbu: 28,   // AC: Supplier Bumbu
   };
 
   // Dynamically detect or refine from header rows 0..3
@@ -157,11 +166,20 @@ export function resolveSheetColumnIndices(rows: unknown[][]): SheetColMap {
 
       // Bumbu headers (Cols 22..35)
       if (c >= 22 && c <= 35) {
-        if (cell === 'supplier') map.colSupplierBumbu = c;
-        else if (cell.includes('nama menu') || cell === 'menu') map.colMenuBumbu = c;
-        else if (cell.includes('nama bumbu') || cell.includes('jenis bumbu')) map.colNamaBumbu = c;
-        else if (cell.includes('harga bumb') || (cell.includes('harga') && !cell.includes('total') && c < 28)) map.colHargaBumbu = c;
-        else if (
+        if (cell === 'supplier' || cell.includes('supplier')) {
+          map.colSupplierBumbu = c;
+        } else if (cell.includes('nama menu') || cell === 'menu') {
+          map.colMenuBumbu = c;
+        } else if (cell.includes('nama bumbu') || cell.includes('jenis bumbu')) {
+          map.colNamaBumbu = c;
+        } else if (
+          cell.includes('harga bumb') ||
+          cell.includes('harga satuan') ||
+          cell.includes('harga/satuan') ||
+          cell.includes('harga baku')
+        ) {
+          map.colHargaBumbu = c;
+        } else if (
           cell.includes('kebutuhan') ||
           cell.includes('ituhan') ||
           cell === 'jumlah' ||
@@ -169,9 +187,21 @@ export function resolveSheetColumnIndices(rows: unknown[][]): SheetColMap {
           cell.includes('qty') ||
           cell.includes('banyaknya') ||
           cell.includes('kuantitas')
-        ) map.colKebutuhanBumbu = c;
-        else if (cell.includes('satuan')) map.colSatuanBumbu = c;
-        else if (cell === 'harga' || cell.includes('total') || cell.includes('biaya')) map.colHargaTotalBumbu = c;
+        ) {
+          map.colKebutuhanBumbu = c;
+        } else if (cell.includes('satuan')) {
+          map.colSatuanBumbu = c;
+        } else if (cell === 'harga' || cell.includes('total') || cell.includes('biaya')) {
+          if (
+            (map.colKebutuhanBumbu && c > map.colKebutuhanBumbu) ||
+            (map.colHargaBumbu && c > map.colHargaBumbu) ||
+            c >= 27
+          ) {
+            map.colHargaTotalBumbu = c;
+          } else {
+            map.colHargaBumbu = c;
+          }
+        }
       }
     }
   }
@@ -334,6 +364,19 @@ function parsePortionBlock(
       const kebutuhan = num(rawBahanKeb);
       let hargaBahan = num(row[map.colHargaBahan]);
       let hargaTotal = num(row[map.colHargaTotalBahan]);
+
+      // Fallback to ws cell object if 0 or undefined
+      if ((!hargaBahan || hargaBahan === 0) && ws) {
+        const cellObj = ws[XLSX.utils.encode_cell({ r: i, c: map.colHargaBahan })];
+        if (cellObj?.v != null && cellObj.v !== '' && cellObj.v !== 0) hargaBahan = num(cellObj.v);
+        else if (cellObj?.w != null && cellObj.w !== '' && cellObj.w !== '0') hargaBahan = num(cellObj.w);
+      }
+      if ((!hargaTotal || hargaTotal === 0) && ws) {
+        const cellObj = ws[XLSX.utils.encode_cell({ r: i, c: map.colHargaTotalBahan })];
+        if (cellObj?.v != null && cellObj.v !== '' && cellObj.v !== 0) hargaTotal = num(cellObj.v);
+        else if (cellObj?.w != null && cellObj.w !== '' && cellObj.w !== '0') hargaTotal = num(cellObj.w);
+      }
+
       if (hargaTotal > 0 && (!hargaBahan || hargaBahan === 0) && kebutuhan > 0) {
         hargaBahan = Math.round(hargaTotal / kebutuhan);
       } else if (hargaBahan > 0 && (!hargaTotal || hargaTotal === 0) && kebutuhan > 0) {
@@ -453,7 +496,8 @@ function parsePortionBlock(
     serat: num(totalRow?.[map.colSerat]) || nutritionItems.reduce((s, it) => s + it.serat, 0),
   };
 
-  // Parse AKG Metrics (rows directly below Total)
+  // Parse AKG Metrics & Full EPLKS Rows (rows directly below Total)
+  const akgRows: { label: string; energi: number; protein: number; lemak: number; karbohidrat: number; serat: number }[] = [];
   const akgMetrics: Record<string, { percentMakanSiang: number; percentHarian: number }> = {};
   const akgMapping: Record<string, string> = {
     'paud': 'paud',
@@ -471,33 +515,72 @@ function parsePortionBlock(
   for (let i = endRow + 1; i < endRow + 8 && i < rows.length; i++) {
     const row = rows[i];
     if (!row) continue;
-    const label = str(row[map.colSectionHeader]).toLowerCase();
-    if (!label.includes('pemenuhan')) continue;
+    const label = str(row[map.colSectionHeader]);
+    if (!label || !label.toLowerCase().includes('pemenuhan')) continue;
 
-    const isMakanSiang = label.includes('makan siang');
-    const energiVal = num(row[map.colEnergi]);
+    const getColNum = (colIdx: number) => {
+      const val = num(row[colIdx]);
+      if (val > 0) return val;
+      if (ws) {
+        const cell = ws[XLSX.utils.encode_cell({ r: i, c: colIdx })];
+        if (cell?.v != null && cell.v !== '') return num(cell.v);
+        if (cell?.w != null && cell.w !== '') return num(cell.w);
+      }
+      return 0;
+    };
+
+    const energi = getColNum(map.colEnergi);
+    const protein = getColNum(map.colProtein);
+    const lemak = getColNum(map.colLemak);
+    const karbohidrat = getColNum(map.colKarbo);
+    const serat = getColNum(map.colSerat);
+
+    akgRows.push({
+      label,
+      energi,
+      protein,
+      lemak,
+      karbohidrat,
+      serat,
+    });
+
+    const labelLower = label.toLowerCase();
+    const isMakanSiang = labelLower.includes('makan siang');
 
     for (const [keyword, key] of Object.entries(akgMapping)) {
-      if (label.includes(keyword)) {
+      if (labelLower.includes(keyword)) {
         if (!akgMetrics[key]) {
           akgMetrics[key] = { percentMakanSiang: 0, percentHarian: 0 };
         }
         if (isMakanSiang) {
-          akgMetrics[key].percentMakanSiang = energiVal;
+          akgMetrics[key].percentMakanSiang = energi;
         } else {
-          akgMetrics[key].percentHarian = energiVal;
+          akgMetrics[key].percentHarian = energi;
         }
         break;
       }
     }
   }
 
-  // Calculate totals
+  // Calculate totals with ws cell fallback
+  let rawTotalBahan = num(totalRow?.[map.colHargaTotalBahan]);
+  if ((!rawTotalBahan || rawTotalBahan === 0) && ws) {
+    const cellObj = ws[XLSX.utils.encode_cell({ r: endRow, c: map.colHargaTotalBahan })];
+    if (cellObj?.v != null && cellObj.v !== '' && cellObj.v !== 0) rawTotalBahan = num(cellObj.v);
+    else if (cellObj?.w != null && cellObj.w !== '' && cellObj.w !== '0') rawTotalBahan = num(cellObj.w);
+  }
   const totalBelanjaBahan =
-    num(totalRow?.[map.colHargaTotalBahan]) ||
+    rawTotalBahan ||
     bahanItems.reduce((s, b) => s + b.harga, 0);
+
+  let rawTotalBumbu = num(totalRow?.[map.colHargaTotalBumbu]);
+  if ((!rawTotalBumbu || rawTotalBumbu === 0) && ws) {
+    const cellObj = ws[XLSX.utils.encode_cell({ r: endRow, c: map.colHargaTotalBumbu })];
+    if (cellObj?.v != null && cellObj.v !== '' && cellObj.v !== 0) rawTotalBumbu = num(cellObj.v);
+    else if (cellObj?.w != null && cellObj.w !== '' && cellObj.w !== '0') rawTotalBumbu = num(cellObj.w);
+  }
   const totalBelanjaBumbu =
-    num(totalRow?.[map.colHargaTotalBumbu]) ||
+    rawTotalBumbu ||
     bumbuItems.reduce((s, b) => s + b.harga, 0);
 
   const hargaBahanPerPorsi = pmCount > 0 ? totalBelanjaBahan / pmCount : 0;
@@ -513,6 +596,7 @@ function parsePortionBlock(
     bumbuItems,
     totalGizi,
     akgMetrics,
+    akgRows,
     totalBelanjaBahan,
     hargaBahanPerPorsi,
     totalBelanjaBumbu,
@@ -992,28 +1076,75 @@ export function parseProductionSheetRows(
   if (dedicatedSupplierCol !== -1) {
     const c = dedicatedSupplierCol;
     let currentSupplier = 'Koperasi Al Umanaa Sejahtera Mandiri';
+
+    // Scan headers dynamically to find exact column indices
+    let colItem = c + 1;
+    let colJumlah = c + 3;
+    let colSatuan = c + 4;
+    let colHargaSatuan = c + 6;
+    let colTotalHarga = c + 7;
+
+    const headRow = rows[dedicatedSupplierRow] || [];
+    for (let colIdx = c; colIdx < Math.min(headRow.length, c + 12); colIdx++) {
+      const headerText = str(headRow[colIdx]).toLowerCase();
+      if ((headerText.includes('pesanan') || headerText.includes('item') || headerText.includes('bahan')) && !headerText.includes('satuan') && !headerText.includes('harga')) {
+        colItem = colIdx;
+      } else if (headerText.includes('jumlah') || headerText.includes('qty') || headerText.includes('kuantitas')) {
+        colJumlah = colIdx;
+      } else if (headerText.includes('satuan') && !headerText.includes('harga')) {
+        colSatuan = colIdx;
+      } else if (headerText.includes('harga satuan') || headerText.includes('harga / unit') || (headerText.includes('harga') && !headerText.includes('total') && colIdx > c + 4)) {
+        colHargaSatuan = colIdx;
+      } else if (headerText.includes('total harga') || (headerText.includes('total') && colIdx > c + 5)) {
+        colTotalHarga = colIdx;
+      }
+    }
+
     for (let r = dedicatedSupplierRow + 1; r < Math.min(rows.length, dedicatedSupplierRow + 60); r++) {
       const row = rows[r] || [];
       const suppInRow = str(row[c]);
       if (suppInRow && !suppInRow.toLowerCase().includes('total') && !suppInRow.startsWith('=')) {
         currentSupplier = suppInRow === 'Koperasi Al Umanaa' ? 'Koperasi Al Umanaa Sejahtera Mandiri' : suppInRow;
       }
-      const item = str(row[c + 1]);
+      const item = str(row[colItem]);
       if (!item || item.toLowerCase().includes('total') || item.toLowerCase() === 'list pesanan bahan' || item.startsWith('=')) {
         continue;
       }
-      const jamKedatangan = str(row[c + 2]) || '06:00';
-      const jumlah = num(row[c + 3]);
-      const satuan = str(row[c + 4]) || 'kg';
-      // In sheet: col c+6 is Harga Satuan, col c+7 is Total Harga
-      const hargaSatuan = num(row[c + 6]);
-      const totalHarga = num(row[c + 7]) || (jumlah > 0 && hargaSatuan > 0 ? jumlah * hargaSatuan : 0);
+
+      let jumlah = num(row[colJumlah]);
+      if ((!jumlah || jumlah === 0) && ws) {
+        const cellObj = ws[XLSX.utils.encode_cell({ r, c: colJumlah })];
+        if (cellObj?.v != null && cellObj.v !== '' && cellObj.v !== 0) jumlah = num(cellObj.v);
+        else if (cellObj?.w != null && cellObj.w !== '' && cellObj.w !== '0') jumlah = num(cellObj.w);
+      }
+
+      const satuan = str(row[colSatuan]) || 'kg';
+
+      let hargaSatuan = num(row[colHargaSatuan]);
+      if ((!hargaSatuan || hargaSatuan === 0) && ws) {
+        const cellObj = ws[XLSX.utils.encode_cell({ r, c: colHargaSatuan })];
+        if (cellObj?.v != null && cellObj.v !== '' && cellObj.v !== 0) hargaSatuan = num(cellObj.v);
+        else if (cellObj?.w != null && cellObj.w !== '' && cellObj.w !== '0') hargaSatuan = num(cellObj.w);
+      }
+
+      let totalHarga = num(row[colTotalHarga]);
+      if ((!totalHarga || totalHarga === 0) && ws) {
+        const cellObj = ws[XLSX.utils.encode_cell({ r, c: colTotalHarga })];
+        if (cellObj?.v != null && cellObj.v !== '' && cellObj.v !== 0) totalHarga = num(cellObj.v);
+        else if (cellObj?.w != null && cellObj.w !== '' && cellObj.w !== '0') totalHarga = num(cellObj.w);
+      }
+
+      if (!totalHarga && jumlah > 0 && hargaSatuan > 0) {
+        totalHarga = Math.round(jumlah * hargaSatuan);
+      } else if (!hargaSatuan && totalHarga > 0 && jumlah > 0) {
+        hargaSatuan = Math.round(totalHarga / jumlah);
+      }
 
       dedicatedPoRows.push({
         supplier: currentSupplier,
         item,
-        jamKedatangan,
-        jumlah: Math.round(jumlah * 100) / 100,
+        jamKedatangan: '',
+        jumlah: Math.round(jumlah),
         satuan,
         keterangan: 'Sesuai Spesifikasi',
         hargaSatuan: hargaSatuan > 0 ? hargaSatuan : 0,
@@ -1191,6 +1322,7 @@ export function createEmptyPortionData(
       serat: 0,
     },
     akgMetrics: {},
+    akgRows: [],
     totalBelanjaBahan: 0,
     hargaBahanPerPorsi: 0,
     totalBelanjaBumbu: 0,

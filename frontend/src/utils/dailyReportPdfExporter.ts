@@ -164,7 +164,15 @@ const buildRekapPmRows = (
   sekolahList: { nama: string; murid: number; guru: number }[] = []
 ): RekapPmRowData[] => {
   if (entries && entries.length > 0) {
-    return entries.map((e) => {
+    const seenNames = new Set<string>();
+    const uniqueEntries: MbgPmEntry[] = [];
+    for (const e of entries) {
+      const norm = (e.institutionName || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      if (norm && seenNames.has(norm)) continue;
+      if (norm) seenNames.add(norm);
+      uniqueEntries.push(e);
+    }
+    return uniqueEntries.map((e) => {
       const isTk =
         e.schoolLevel === 'tk_paud' ||
         e.institutionName.toLowerCase().includes('tk') ||
@@ -281,7 +289,15 @@ const buildRekapPmRows = (
   }
 
   // Fallback if entries not available but sekolahList is present
-  return (sekolahList || []).map((s) => {
+  const seenSekolah = new Set<string>();
+  const uniqueSekolah: typeof sekolahList = [];
+  for (const s of sekolahList || []) {
+    const norm = (s.nama || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    if (norm && seenSekolah.has(norm)) continue;
+    if (norm) seenSekolah.add(norm);
+    uniqueSekolah.push(s);
+  }
+  return uniqueSekolah.map((s) => {
     const isTk = s.nama.toLowerCase().includes('tk') || s.nama.toLowerCase().includes('paud');
     const isPosyandu = s.nama.toLowerCase().includes('posyandu');
     const isSd = s.nama.toLowerCase().includes('sd') || s.nama.toLowerCase().includes('mi');
@@ -508,6 +524,7 @@ const renderRekapitulasiPmPage = (
       lineWidth: 0.15,
       lineColor: [203, 213, 225],
       textColor: [30, 41, 59],
+      overflow: 'linebreak',
     },
     columnStyles: {
       0: { cellWidth: 55, fontStyle: 'bold' },
@@ -529,7 +546,10 @@ const renderRekapitulasiPmPage = (
       16: { cellWidth: 14, halign: 'center', fontStyle: 'bold', fillColor: [241, 245, 249] },
       17: { cellWidth: 17, halign: 'center', fontStyle: 'bold', textColor: [180, 83, 9], fillColor: [254, 243, 199] },
     },
-    margin: { left: 10, right: 10 },
+    margin: { top: 28, bottom: 12, left: 10, right: 10 },
+    didDrawPage: () => {
+      drawLandscapeHeader(doc, 'REKAPITULASI PENERIMA MANFAAT', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
+    },
   });
 };
 
@@ -619,8 +639,20 @@ const renderPortionStackedPage = (
     ],
   ];
 
-  // AKG % Pemenuhan rows
-  if (data.akgMetrics && Object.keys(data.akgMetrics).length > 0) {
+  // AKG % Pemenuhan rows (EPLKS: Energi, Protein, Lemak, Karbohidrat, Serat)
+  if (data.akgRows && data.akgRows.length > 0) {
+    data.akgRows.forEach((akgRow) => {
+      giziFootRows.push([
+        { content: akgRow.label, colSpan: 2, styles: { fontStyle: 'bold', halign: 'left', fillColor: [255, 251, 235], textColor: [146, 64, 14] } },
+        { content: '-', styles: { halign: 'center', fillColor: [255, 251, 235], textColor: [146, 64, 14] } },
+        { content: `${formatNum(akgRow.energi, 1)}%`, styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199], textColor: [180, 83, 9] } },
+        { content: `${formatNum(akgRow.protein, 1)}%`, styles: { halign: 'center', fillColor: [255, 251, 235], textColor: [146, 64, 14] } },
+        { content: `${formatNum(akgRow.lemak, 1)}%`, styles: { halign: 'center', fillColor: [255, 251, 235], textColor: [146, 64, 14] } },
+        { content: `${formatNum(akgRow.karbohidrat, 1)}%`, styles: { halign: 'center', fillColor: [255, 251, 235], textColor: [146, 64, 14] } },
+        { content: `${formatNum(akgRow.serat, 1)}%`, styles: { halign: 'center', fillColor: [255, 251, 235], textColor: [146, 64, 14] } },
+      ]);
+    });
+  } else if (data.akgMetrics && Object.keys(data.akgMetrics).length > 0) {
     Object.entries(data.akgMetrics).forEach(([akgKey, metric]) => {
       const cleanKey = akgKey.replace(/_/g, ' ').toUpperCase();
       giziFootRows.push([
@@ -662,6 +694,7 @@ const renderPortionStackedPage = (
       lineWidth: 0.15,
       lineColor: [203, 213, 225],
       textColor: [30, 41, 59],
+      overflow: 'linebreak',
     },
     columnStyles: {
       0: { cellWidth: 50, fontStyle: 'bold' },
@@ -673,14 +706,22 @@ const renderPortionStackedPage = (
       6: { cellWidth: 32, halign: 'center' },
       7: { cellWidth: 28, halign: 'center' },
     },
-    margin: { left: 10, right: 10 },
+    margin: { top: 28, bottom: 12, left: 10, right: 10 },
+    didDrawPage: () => {
+      drawLandscapeHeader(doc, title, tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
+    },
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TABEL 2: PESANAN BAHAN MAKANAN
   // ═══════════════════════════════════════════════════════════════════════════
   const afterGiziY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY || curY + 40;
-  const bahanStartY = afterGiziY + 4;
+  let bahanStartY = afterGiziY + 4;
+  if (afterGiziY > 140) {
+    doc.addPage();
+    drawLandscapeHeader(doc, title, tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
+    bahanStartY = 28;
+  }
 
   const bahanRows: RowInput[] = (data.bahanItems || []).map((bah) => [
     bah.rincianBahan || '',
@@ -743,6 +784,7 @@ const renderPortionStackedPage = (
       lineWidth: 0.15,
       lineColor: [203, 213, 225],
       textColor: [30, 41, 59],
+      overflow: 'linebreak',
     },
     columnStyles: {
       0: { cellWidth: 55, fontStyle: 'bold' },
@@ -755,14 +797,22 @@ const renderPortionStackedPage = (
       7: { cellWidth: 18, halign: 'center' },
       8: { cellWidth: 41, halign: 'right', fontStyle: 'bold', textColor: [22, 101, 52] },
     },
-    margin: { left: 10, right: 10 },
+    margin: { top: 28, bottom: 12, left: 10, right: 10 },
+    didDrawPage: () => {
+      drawLandscapeHeader(doc, title, tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
+    },
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TABEL 3: PESANAN BUMBU
   // ═══════════════════════════════════════════════════════════════════════════
   const afterBahanY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY || bahanStartY + 45;
-  const bumbuStartY = afterBahanY + 4;
+  let bumbuStartY = afterBahanY + 4;
+  if (afterBahanY > 140) {
+    doc.addPage();
+    drawLandscapeHeader(doc, title, tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
+    bumbuStartY = 28;
+  }
 
   const bumbuRows: RowInput[] = (data.bumbuItems || []).map((bum) => [
     bum.namaMenu || '',
@@ -826,6 +876,7 @@ const renderPortionStackedPage = (
       lineWidth: 0.15,
       lineColor: [203, 213, 225],
       textColor: [30, 41, 59],
+      overflow: 'linebreak',
     },
     columnStyles: {
       0: { cellWidth: 55, fontStyle: 'bold' },
@@ -835,7 +886,10 @@ const renderPortionStackedPage = (
       4: { cellWidth: 25, halign: 'center' },
       5: { cellWidth: 56, halign: 'right', fontStyle: 'bold', textColor: [180, 83, 9] },
     },
-    margin: { left: 10, right: 10 },
+    margin: { top: 28, bottom: 12, left: 10, right: 10 },
+    didDrawPage: () => {
+      drawLandscapeHeader(doc, title, tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
+    },
   });
 };
 
@@ -849,7 +903,7 @@ const renderSupplierPage = (
   logoAlUmanaa: string | null,
   logoBadanGizi: string | null
 ) => {
-  drawLandscapeHeader(doc, 'TABEL SUPPLIER (PESANAN BAHAN MAKANAN & BUMBU)', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
+  drawLandscapeHeader(doc, 'DAFTAR PESANAN BAHAN', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
 
   const poList = report.poRows || [];
   const poGrandTotal =
@@ -861,15 +915,14 @@ const renderSupplierPage = (
     idx + 1,
     row.supplier || 'Koperasi Al Umanaa Sejahtera Mandiri',
     row.item,
-    row.jamKedatangan || '06:00',
-    formatNum(row.jumlah, 1),
+    formatNum(Math.round(row.jumlah), 0),
     row.satuan || 'kg',
     row.hargaSatuan ? formatRp(row.hargaSatuan) : '-',
-    formatRp(row.totalHarga || (row.jumlah * (row.hargaSatuan || 0))),
+    formatRp(row.totalHarga || (Math.round(row.jumlah) * (row.hargaSatuan || 0))),
   ]);
 
   if (poTableBody.length === 0) {
-    poTableBody.push(['1', 'Koperasi Al Umanaa Sejahtera Mandiri', 'Bahan Baku & Bumbu Masak Terintegrasi', '06:00', '1', 'paket', formatRp(poGrandTotal), formatRp(poGrandTotal)]);
+    poTableBody.push(['1', 'Koperasi Al Umanaa Sejahtera Mandiri', 'Bahan Baku & Bumbu Masak Terintegrasi', '1', 'paket', formatRp(poGrandTotal), formatRp(poGrandTotal)]);
   }
 
   autoTable(doc, {
@@ -878,8 +931,8 @@ const renderSupplierPage = (
       // Banner row
       [
         {
-          content: 'TABEL SUPPLIER — DAFTAR PESANAN BAHAN KE MITRA SUPPLIER',
-          colSpan: 8,
+          content: 'DAFTAR PESANAN BAHAN — DAFTAR PESANAN BAHAN KE MITRA SUPPLIER',
+          colSpan: 7,
           styles: {
             fillColor: [15, 45, 89],
             textColor: [255, 255, 255],
@@ -894,7 +947,6 @@ const renderSupplierPage = (
         { content: 'No', styles: { halign: 'center' } },
         { content: 'Supplier', styles: { halign: 'center' } },
         { content: 'List Pesanan Bahan', styles: { halign: 'center' } },
-        { content: 'Kedatangan', styles: { halign: 'center' } },
         { content: 'Jumlah', styles: { halign: 'center' } },
         { content: 'Satuan', styles: { halign: 'center' } },
         { content: 'Harga Satuan', styles: { halign: 'center' } },
@@ -904,24 +956,26 @@ const renderSupplierPage = (
     body: poTableBody,
     foot: [
       [
-        { content: `TOTAL BELANJA SUPPLIER (${poList.length || 1} ITEM):`, colSpan: 7, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+        { content: `TOTAL BELANJA (${poList.length || 1} ITEM):`, colSpan: 6, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
         { content: formatRp(poGrandTotal), styles: { halign: 'right', fontStyle: 'bold', fillColor: [220, 252, 231], textColor: [22, 101, 52] } },
       ],
     ],
     theme: 'grid',
-    styles: { fontSize: 6.8, cellPadding: 1.2, lineWidth: 0.15, lineColor: [203, 213, 225] },
+    styles: { fontSize: 6.8, cellPadding: 1.2, lineWidth: 0.15, lineColor: [203, 213, 225], overflow: 'linebreak' },
     headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
     columnStyles: {
-      0: { cellWidth: 8, halign: 'center' },
-      1: { cellWidth: 58, fontStyle: 'bold' },
-      2: { cellWidth: 70 },
-      3: { cellWidth: 22, halign: 'center' },
-      4: { cellWidth: 20, halign: 'center', fontStyle: 'bold' },
-      5: { cellWidth: 18, halign: 'center' },
-      6: { cellWidth: 33, halign: 'right' },
-      7: { cellWidth: 38, halign: 'right', fontStyle: 'bold', textColor: [22, 101, 52] },
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 70, fontStyle: 'bold' },
+      2: { cellWidth: 85 },
+      3: { cellWidth: 24, halign: 'center', fontStyle: 'bold' },
+      4: { cellWidth: 20, halign: 'center' },
+      5: { cellWidth: 34, halign: 'right' },
+      6: { cellWidth: 34, halign: 'right', fontStyle: 'bold', textColor: [22, 101, 52] },
     },
-    margin: { left: 10, right: 10 },
+    margin: { top: 28, bottom: 12, left: 10, right: 10 },
+    didDrawPage: () => {
+      drawLandscapeHeader(doc, 'DAFTAR PESANAN BAHAN', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
+    },
   });
 
   // Paket Sehat 3B (Balita / Bumil) if exists
@@ -954,7 +1008,7 @@ const renderSupplierPage = (
       ],
       body: p3bBody,
       theme: 'grid',
-      styles: { fontSize: 6.8, cellPadding: 1, lineWidth: 0.15, lineColor: [233, 213, 255] },
+      styles: { fontSize: 6.8, cellPadding: 1, lineWidth: 0.15, lineColor: [233, 213, 255], overflow: 'linebreak' },
       headStyles: { fillColor: [107, 33, 168], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
       columnStyles: {
         0: { cellWidth: 8, halign: 'center' },
@@ -965,7 +1019,10 @@ const renderSupplierPage = (
         5: { cellWidth: 40, halign: 'right' },
         6: { cellWidth: 45, halign: 'right', fontStyle: 'bold', textColor: [107, 33, 168] },
       },
-      margin: { left: 10, right: 10 },
+      margin: { top: 28, bottom: 12, left: 10, right: 10 },
+      didDrawPage: () => {
+        drawLandscapeHeader(doc, 'DAFTAR PESANAN BAHAN', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
+      },
     });
   }
 };
@@ -1062,7 +1119,7 @@ export async function export8PageDailyReportPdf(
     );
   }
 
-  // ─── HALAMAN AKHIR: TABEL SUPPLIER & PENGESAHAN ───────────────────────────
+  // ─── HALAMAN AKHIR: DAFTAR PESANAN BAHAN ───────────────────────────────────
   doc.addPage();
   renderSupplierPage(
     doc,
