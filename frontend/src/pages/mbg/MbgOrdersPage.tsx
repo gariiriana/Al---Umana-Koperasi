@@ -533,7 +533,7 @@ export function MbgOrdersPage() {
                           <tbody className="divide-y divide-gray-100">
                             {dailyReport.poRows.map((po, idx) => (
                               <tr key={idx} className="hover:bg-gray-50/50 font-medium">
-                                <td className="py-3.5 px-6 font-bold text-gray-900">{po.supplier || 'Koperasi Al Umanaa'}</td>
+                                <td className="py-3.5 px-6 font-bold text-gray-900">{po.supplier || 'Koperasi Al Umanaa Sejahtera Mandiri'}</td>
                                 <td className="py-3.5 px-6 font-bold text-sky-950">{po.item}</td>
                                 <td className="py-3.5 px-6 text-center font-bold text-slate-800">
                                   {po.jumlah} {po.satuan || 'kg'}

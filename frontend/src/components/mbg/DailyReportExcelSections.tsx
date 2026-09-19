@@ -30,6 +30,7 @@ import {
   X,
   Loader2,
   Check,
+  CheckCheck,
   ExternalLink,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -424,6 +425,74 @@ export function DailyReportExcelSections({
     });
   };
 
+  const handleSetAllSuppliersToAlUmanaa = async () => {
+    const target = 'Koperasi Al Umanaa Sejahtera Mandiri';
+    if (editingTab === 'po') {
+      if (!draftReport) return;
+      const rows = (draftReport.poRows || []).map((r) => ({
+        ...r,
+        supplier: target,
+      }));
+      setDraftReport({
+        ...draftReport,
+        poRows: rows,
+      });
+    } else {
+      const base = report || curReport;
+      const rows = (base.poRows || []).map((r) => ({
+        ...r,
+        supplier: target,
+      }));
+      const updated = {
+        ...base,
+        poRows: rows,
+      };
+      try {
+        setIsSaving(true);
+        if (onSaveReport) {
+          await onSaveReport(updated);
+        }
+        setSaveSuccessNotice(true);
+        setTimeout(() => setSaveSuccessNotice(false), 4000);
+      } catch (err) {
+        console.error('Failed to set all suppliers:', err);
+        alert('Gagal menyimpan nama supplier!');
+      } finally {
+        setIsSaving(false);
+      }
+    }
+  };
+
+  const handleSetSingleSupplierToAlUmanaa = async (idx: number) => {
+    const target = 'Koperasi Al Umanaa Sejahtera Mandiri';
+    if (editingTab === 'po') {
+      updateSupplierCell(idx, 'supplier', target);
+    } else {
+      const base = report || curReport;
+      const rows = JSON.parse(JSON.stringify(base.poRows || [])) as MbgPoReportRow[];
+      if (rows[idx]) {
+        rows[idx].supplier = target;
+        const updated = {
+          ...base,
+          poRows: rows,
+        };
+        try {
+          setIsSaving(true);
+          if (onSaveReport) {
+            await onSaveReport(updated);
+          }
+          setSaveSuccessNotice(true);
+          setTimeout(() => setSaveSuccessNotice(false), 4000);
+        } catch (err) {
+          console.error('Failed to set supplier:', err);
+          alert('Gagal memperbarui supplier!');
+        } finally {
+          setIsSaving(false);
+        }
+      }
+    }
+  };
+
   // ─── RENDERER: TABEL PORSI EXCEL ───────────────────────────────────────────
   const renderUnifiedExcelPortionTable = (
     portionData: MbgPortionDailyData | undefined,
@@ -724,7 +793,7 @@ export function DailyReportExcelSections({
                           {bum?.hargaBumbu ? formatRp(bum.hargaBumbu) : ''}
                         </td>
                         <td className="px-1.5 py-1.5 text-center font-black text-slate-900 bg-amber-50/30 border-r border-amber-100/60">
-                          {bum ? (bum.kebutuhan > 0 ? formatNum(bum.kebutuhan, 2) : '-') : ''}
+                          {bum ? (bum.kebutuhan !== undefined && bum.kebutuhan !== null ? (bum.kebutuhan > 0 ? formatNum(bum.kebutuhan, 2) : '0') : '-') : ''}
                         </td>
                         <td className="px-1.5 py-1.5 text-center font-bold text-slate-600 border-r border-amber-100/60">
                           {bum?.satuan || ''}
@@ -1223,7 +1292,7 @@ export function DailyReportExcelSections({
 
     // Grouping by supplier for recap cards underneath
     const supplierGroups = poList.reduce((acc, row) => {
-      const sup = row.supplier || 'Koperasi Al Umanaa';
+      const sup = row.supplier || 'Koperasi Al Umanaa Sejahtera Mandiri';
       if (!acc[sup]) {
         acc[sup] = {
           items: [],
@@ -1265,6 +1334,18 @@ export function DailyReportExcelSections({
             <span className="px-3 py-1 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-black">
               Total Belanja: {formatRp(grandTotal)}
             </span>
+
+            {/* BUTTON 1-CLICK: SET ALL SUPPLIER TO KOPERASI AL UMANAA SEJAHTERA MANDIRI */}
+            <button
+              type="button"
+              onClick={handleSetAllSuppliersToAlUmanaa}
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50"
+              title="Ubah semua supplier menjadi 'Koperasi Al Umanaa Sejahtera Mandiri'"
+            >
+              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="h-3.5 w-3.5" />}
+              <span>Set Semua: Koperasi Al Umanaa Sejahtera Mandiri</span>
+            </button>
 
             {/* BUTTONS: EDIT SUPPLIER / SIMPAN / BATAL */}
             {!isEditing ? (
@@ -1358,9 +1439,29 @@ export function DailyReportExcelSections({
                         <tr key={idx} className="hover:bg-amber-50/40 transition-colors font-medium text-slate-800">
                           <td className="px-3 py-2 text-center text-slate-400">{idx + 1}</td>
                           <td className="px-4 py-2 font-black text-slate-900 border-r border-slate-100">
-                            <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200/60 font-extrabold text-[10px]">
-                              {po.supplier || 'Koperasi Al Umanaa'}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-300 font-extrabold text-[11px] inline-flex items-center gap-1 shadow-2xs">
+                                {po.supplier || 'Koperasi Al Umanaa Sejahtera Mandiri'}
+                              </span>
+                              {po.supplier !== 'Koperasi Al Umanaa Sejahtera Mandiri' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSetSingleSupplierToAlUmanaa(idx)}
+                                  className="text-[9px] font-extrabold text-amber-700 hover:text-amber-950 bg-amber-100/90 hover:bg-amber-200 px-1.5 py-0.5 rounded border border-amber-300 cursor-pointer transition-colors shadow-2xs"
+                                  title="Ubah supplier baris ini menjadi 'Koperasi Al Umanaa Sejahtera Mandiri'"
+                                >
+                                  ⚡ Set Al Umanaa
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleStartEdit('po')}
+                                className="text-slate-400 hover:text-amber-600 p-0.5 rounded hover:bg-amber-50 transition-colors"
+                                title="Edit baris supplier ini"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </div>
                           </td>
                           <td className="px-4 py-2 font-bold text-slate-900 border-r border-slate-100">
                             {po.item}
@@ -1395,13 +1496,25 @@ export function DailyReportExcelSections({
                       <tr key={idx} className="bg-amber-50/30 font-medium">
                         <td className="px-2 py-1.5 text-center text-slate-400">{idx + 1}</td>
                         <td className="px-2 py-1.5">
-                          <input
-                            type="text"
-                            value={po.supplier || ''}
-                            onChange={(e) => updateSupplierCell(idx, 'supplier', e.target.value)}
-                            placeholder="Supplier"
-                            className="w-32 px-1.5 py-1 bg-white border border-amber-300 rounded text-[11px] font-bold text-slate-900 focus:outline-none"
-                          />
+                          <div className="space-y-1">
+                            <input
+                              type="text"
+                              value={po.supplier || ''}
+                              onChange={(e) => updateSupplierCell(idx, 'supplier', e.target.value)}
+                              placeholder="Koperasi Al Umanaa Sejahtera Mandiri"
+                              className="w-44 px-2 py-1 bg-white border border-amber-300 rounded text-[11px] font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                            />
+                            {po.supplier !== 'Koperasi Al Umanaa Sejahtera Mandiri' && (
+                              <button
+                                type="button"
+                                onClick={() => updateSupplierCell(idx, 'supplier', 'Koperasi Al Umanaa Sejahtera Mandiri')}
+                                className="block text-[9px] font-extrabold text-amber-700 hover:text-amber-950 bg-amber-100/90 hover:bg-amber-200 px-1.5 py-0.5 rounded border border-amber-300 cursor-pointer transition-colors"
+                                title="Set jadi 'Koperasi Al Umanaa Sejahtera Mandiri'"
+                              >
+                                ⚡ Set Al Umanaa Sejahtera
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="px-2 py-1.5">
                           <input

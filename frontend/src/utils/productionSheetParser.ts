@@ -124,46 +124,54 @@ export function resolveSheetColumnIndices(rows: unknown[][]): SheetColMap {
     colHargaTotalBumbu: 29, // AD: Total Harga Bumbu
   };
 
-  // Dynamically detect or refine from header rows 0..1 ONLY (never scan data rows)
-  for (let r = 0; r < Math.min(rows.length, 2); r++) {
+  // Dynamically detect or refine from header rows 0..3
+  for (let r = 0; r < Math.min(rows.length, 4); r++) {
     const row = rows[r] || [];
-    for (let c = 0; c < Math.min(row.length, 35); c++) {
-      const cell = str(row[c]).toLowerCase();
+    for (let c = 0; c < Math.min(row.length, 45); c++) {
+      const cell = str(row[c]).toLowerCase().replace(/[\r\n]+/g, ' ');
       if (!cell) continue;
 
-      // Gizi headers (Cols 4..12)
-      if (c >= 4 && c <= 12) {
+      // Gizi headers (Cols 4..13)
+      if (c >= 4 && c <= 13) {
         if (cell.includes('berat bersih')) map.colBeratBersih = c;
         else if (cell.includes('energi')) map.colEnergi = c;
         else if (cell.includes('protein')) map.colProtein = c;
         else if (cell.includes('lemak')) map.colLemak = c;
-        else if (cell.includes('karbohidrat')) map.colKarbo = c;
+        else if (cell.includes('karbo')) map.colKarbo = c;
         else if (cell.includes('serat')) map.colSerat = c;
       }
 
-      // Bahan Makanan headers (Cols 12..23)
-      if (c >= 12 && c <= 23) {
-        if (cell === 'supplier' && c < 15) map.colSupplierBahan = c;
+      // Bahan Makanan headers (Cols 12..24)
+      if (c >= 12 && c <= 24) {
+        if (cell === 'supplier' && c < 16) map.colSupplierBahan = c;
         else if (cell.includes('rincian') || cell === 'bahan' || cell.includes('rincian bahan')) map.colBahanOrder = c;
         else if (cell.includes('harga bahan') || cell.includes('harga baku') || (cell.includes('harga') && c <= 16)) map.colHargaBahan = c;
         else if (cell.includes('bdd') || cell.includes('%bdd')) map.colBdd = c;
         else if (cell.includes('berat kotor')) map.colBeratKotor = c;
         else if (cell.includes('total (g') || cell.includes('total (g/ml)')) map.colTotalGml = c;
         else if (cell.includes('spare')) map.colSpareBahan = c;
-        else if (cell.includes('kebutuhan') || cell.includes('ituhan')) map.colKebutuhanBahan = c;
+        else if (cell.includes('kebutuhan') || cell.includes('ituhan') || cell === 'jumlah') map.colKebutuhanBahan = c;
         else if (cell.includes('satuan') && c >= 19 && c <= 22) map.colSatuanBahan = c;
         else if ((cell === 'harga' || cell.includes('total')) && c >= 21 && c <= 23) map.colHargaTotalBahan = c;
       }
 
-      // Bumbu headers (Cols 22..32)
-      if (c >= 22 && c <= 32) {
-        if (cell === 'supplier' && c >= 22) map.colSupplierBumbu = c;
+      // Bumbu headers (Cols 22..35)
+      if (c >= 22 && c <= 35) {
+        if (cell === 'supplier') map.colSupplierBumbu = c;
         else if (cell.includes('nama menu') || cell === 'menu') map.colMenuBumbu = c;
         else if (cell.includes('nama bumbu') || cell.includes('jenis bumbu')) map.colNamaBumbu = c;
-        else if (cell.includes('harga bumb') || cell.includes('harga bumbu')) map.colHargaBumbu = c;
-        else if ((cell.includes('kebutuhan') || cell.includes('ituhan')) && c >= 26) map.colKebutuhanBumbu = c;
-        else if (cell.includes('satuan') && c >= 27) map.colSatuanBumbu = c;
-        else if ((cell === 'harga' || cell.includes('total')) && c >= 28) map.colHargaTotalBumbu = c;
+        else if (cell.includes('harga bumb') || (cell.includes('harga') && !cell.includes('total') && c < 28)) map.colHargaBumbu = c;
+        else if (
+          cell.includes('kebutuhan') ||
+          cell.includes('ituhan') ||
+          cell === 'jumlah' ||
+          cell.includes('jumlah') ||
+          cell.includes('qty') ||
+          cell.includes('banyaknya') ||
+          cell.includes('kuantitas')
+        ) map.colKebutuhanBumbu = c;
+        else if (cell.includes('satuan')) map.colSatuanBumbu = c;
+        else if (cell === 'harga' || cell.includes('total') || cell.includes('biaya')) map.colHargaTotalBumbu = c;
       }
     }
   }
@@ -251,7 +259,8 @@ function parsePortionBlock(
   range: RawBlockRange,
   menuList: string[],
   pmCount: number,
-  colMap?: SheetColMap
+  colMap?: SheetColMap,
+  ws?: Record<string, any>
 ): MbgPortionDailyData {
   const map = colMap || resolveSheetColumnIndices(rows);
   const { portionType, title, startRow, endRow } = range;
@@ -309,7 +318,20 @@ function parsePortionBlock(
     ) {
       const bddRaw = num(row[map.colBdd]);
       const bddPercent = bddRaw > 0 && bddRaw <= 1 ? bddRaw * 100 : bddRaw || 100;
-      const kebutuhan = num(row[map.colKebutuhanBahan]);
+      let rawBahanKeb: unknown = row[map.colKebutuhanBahan];
+      if ((rawBahanKeb == null || rawBahanKeb === '' || rawBahanKeb === 0) && ws) {
+        const cellRef = XLSX.utils.encode_cell({ r: i, c: map.colKebutuhanBahan });
+        const cellObj = ws[cellRef];
+        if (cellObj) {
+          if (cellObj.w != null && cellObj.w !== '') rawBahanKeb = cellObj.w;
+          else if (cellObj.v != null && cellObj.v !== '') rawBahanKeb = cellObj.v;
+          else if (cellObj.f) {
+            const matchFallback = String(cellObj.f).match(/,\s*([0-9.]+)\s*\)$/);
+            if (matchFallback && matchFallback[1]) rawBahanKeb = Number(matchFallback[1]);
+          }
+        }
+      }
+      const kebutuhan = num(rawBahanKeb);
       let hargaBahan = num(row[map.colHargaBahan]);
       let hargaTotal = num(row[map.colHargaTotalBahan]);
       if (hargaTotal > 0 && (!hargaBahan || hargaBahan === 0) && kebutuhan > 0) {
@@ -343,9 +365,66 @@ function parsePortionBlock(
       bumbuNama !== '0'
     ) {
       const bumbuMenu = currentMenuBumbu || str(row[map.colMenuBumbu]) || currentMenuName || '';
-      const kebutuhan = num(row[map.colKebutuhanBumbu]);
+      
+      // 1. Read directly from row array
+      let rawKeb: unknown = row[map.colKebutuhanBumbu];
+
+      // 2. If row cell is empty/zero, inspect the actual worksheet cell (cell.w, cell.v, or formula fallback)
+      if ((rawKeb == null || rawKeb === '' || rawKeb === 0 || rawKeb === '0' || rawKeb === '-' || String(rawKeb).startsWith('#')) && ws) {
+        const cellRef = XLSX.utils.encode_cell({ r: i, c: map.colKebutuhanBumbu });
+        const cellObj = ws[cellRef];
+        if (cellObj) {
+          if (cellObj.v != null && cellObj.v !== '' && cellObj.v !== 0) {
+            rawKeb = cellObj.v;
+          } else if (cellObj.w != null && cellObj.w !== '' && cellObj.w !== '0') {
+            rawKeb = cellObj.w;
+          } else if (cellObj.f) {
+            const matchFallback = String(cellObj.f).match(/,\s*([0-9.]+)\s*\)$/);
+            if (matchFallback && matchFallback[1]) {
+              rawKeb = Number(matchFallback[1]);
+            } else {
+              const matchQuote = String(cellObj.f).match(/"([0-9.]+)"/);
+              if (matchQuote && matchQuote[1]) {
+                rawKeb = Number(matchQuote[1]);
+              }
+            }
+          }
+        }
+      }
+
+      // 2b. If still empty/zero, check relative column (map.colNamaBumbu + 2) if different
+      if ((rawKeb == null || rawKeb === '' || rawKeb === 0 || rawKeb === '0') && map.colNamaBumbu + 2 !== map.colKebutuhanBumbu) {
+        const adjCol = map.colNamaBumbu + 2;
+        if (row[adjCol] != null && row[adjCol] !== '' && row[adjCol] !== 0) {
+          rawKeb = row[adjCol];
+        } else if (ws) {
+          const cellObj = ws[XLSX.utils.encode_cell({ r: i, c: adjCol })];
+          if (cellObj?.v != null && cellObj.v !== '') rawKeb = cellObj.v;
+          else if (cellObj?.w != null && cellObj.w !== '') rawKeb = cellObj.w;
+        }
+      }
+
+      let kebutuhan = num(rawKeb);
       let hargaBumbu = num(row[map.colHargaBumbu]);
       let hargaTotal = num(row[map.colHargaTotalBumbu]);
+
+      // If hargaBumbu or hargaTotal were 0, also inspect ws cell
+      if ((!hargaBumbu || hargaBumbu === 0) && ws) {
+        const cellObj = ws[XLSX.utils.encode_cell({ r: i, c: map.colHargaBumbu })];
+        if (cellObj?.v != null && cellObj.v !== '') hargaBumbu = num(cellObj.v);
+        else if (cellObj?.w != null && cellObj.w !== '') hargaBumbu = num(cellObj.w);
+      }
+      if ((!hargaTotal || hargaTotal === 0) && ws) {
+        const cellObj = ws[XLSX.utils.encode_cell({ r: i, c: map.colHargaTotalBumbu })];
+        if (cellObj?.v != null && cellObj.v !== '') hargaTotal = num(cellObj.v);
+        else if (cellObj?.w != null && cellObj.w !== '') hargaTotal = num(cellObj.w);
+      }
+
+      // 3. Fallback inference: If hargaTotal & hargaBumbu exist, but kebutuhan is 0, infer kebutuhan = total / hargaBumbu
+      if (kebutuhan === 0 && hargaTotal > 0 && hargaBumbu > 0) {
+        kebutuhan = Math.round((hargaTotal / hargaBumbu) * 100) / 100;
+      }
+
       if (hargaTotal > 0 && (!hargaBumbu || hargaBumbu === 0) && kebutuhan > 0) {
         hargaBumbu = Math.round(hargaTotal / kebutuhan);
       } else if (hargaBumbu > 0 && (!hargaTotal || hargaTotal === 0) && kebutuhan > 0) {
@@ -556,6 +635,8 @@ export function parseProductionSheetRows(
 
   // 4. Find and parse portion blocks
   const ranges = findPortionRanges(rows);
+  const wb = workbook as { Sheets?: Record<string, any> } | undefined;
+  const ws = wb?.Sheets?.[sheetDayName];
 
   const rangeKecil = ranges.find((r) => r.portionType === 'kecil');
   const rangeBesar = ranges.find((r) => r.portionType === 'besar');
@@ -563,19 +644,19 @@ export function parseProductionSheetRows(
   const rangeBumil = ranges.find((r) => r.portionType === 'bumil_busui');
 
   const porsiKecil = rangeKecil
-    ? parsePortionBlock(rows, rangeKecil, menuList, pmOmprengKecil, colMap)
+    ? parsePortionBlock(rows, rangeKecil, menuList, pmOmprengKecil, colMap, ws)
     : createEmptyPortionData('kecil', 'PORSI KECIL');
 
   const porsiBesar = rangeBesar
-    ? parsePortionBlock(rows, rangeBesar, menuList, pmOmprengBesar, colMap)
+    ? parsePortionBlock(rows, rangeBesar, menuList, pmOmprengBesar, colMap, ws)
     : createEmptyPortionData('besar', 'PORSI BESAR');
 
   let porsiBalita = rangeBalita
-    ? parsePortionBlock(rows, rangeBalita, menuList, pmBalita, colMap)
+    ? parsePortionBlock(rows, rangeBalita, menuList, pmBalita, colMap, ws)
     : createEmptyPortionData('balita', 'PORSI BALITA');
 
   let porsiBumilBusui = rangeBumil
-    ? parsePortionBlock(rows, rangeBumil, menuList, pmBumil, colMap)
+    ? parsePortionBlock(rows, rangeBumil, menuList, pmBumil, colMap, ws)
     : createEmptyPortionData('bumil_busui', 'PORSI BUMIL/BUSUI');
 
   // Fill in menu names for porsi kecil if col F was blank
@@ -910,12 +991,12 @@ export function parseProductionSheetRows(
   const dedicatedPoRows: MbgPoReportRow[] = [];
   if (dedicatedSupplierCol !== -1) {
     const c = dedicatedSupplierCol;
-    let currentSupplier = 'Supplier MBG';
+    let currentSupplier = 'Koperasi Al Umanaa Sejahtera Mandiri';
     for (let r = dedicatedSupplierRow + 1; r < Math.min(rows.length, dedicatedSupplierRow + 60); r++) {
       const row = rows[r] || [];
       const suppInRow = str(row[c]);
       if (suppInRow && !suppInRow.toLowerCase().includes('total') && !suppInRow.startsWith('=')) {
-        currentSupplier = suppInRow;
+        currentSupplier = suppInRow === 'Koperasi Al Umanaa' ? 'Koperasi Al Umanaa Sejahtera Mandiri' : suppInRow;
       }
       const item = str(row[c + 1]);
       if (!item || item.toLowerCase().includes('total') || item.toLowerCase() === 'list pesanan bahan' || item.startsWith('=')) {
@@ -951,7 +1032,7 @@ export function parseProductionSheetRows(
       const hUnit = num(row[colMap.colHargaBahan]);
       const hTotal = num(row[colMap.colHargaTotalBahan]);
       rawPoItems.push({
-        supplier: bSup || 'Koperasi Al Umanaa',
+        supplier: bSup ? (bSup === 'Koperasi Al Umanaa' ? 'Koperasi Al Umanaa Sejahtera Mandiri' : bSup) : 'Koperasi Al Umanaa Sejahtera Mandiri',
         item: bName,
         jumlah: num(row[colMap.colKebutuhanBahan]),
         satuan: str(row[colMap.colSatuanBahan]) || 'kg',
@@ -966,7 +1047,7 @@ export function parseProductionSheetRows(
       const hUnit = num(row[colMap.colHargaBumbu]);
       const hTotal = num(row[colMap.colHargaTotalBumbu]);
       rawPoItems.push({
-        supplier: bmSup || 'Supplier Bumbu',
+        supplier: bmSup ? (bmSup === 'Koperasi Al Umanaa' ? 'Koperasi Al Umanaa Sejahtera Mandiri' : bmSup) : 'Koperasi Al Umanaa Sejahtera Mandiri',
         item: bmName,
         jumlah: num(row[colMap.colKebutuhanBumbu]),
         satuan: str(row[colMap.colSatuanBumbu]) || 'kg',

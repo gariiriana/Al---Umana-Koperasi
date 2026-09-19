@@ -217,7 +217,7 @@ const renderPortionExcelAndPmPage = (
       bum?.namaMenu || '',
       bum?.namaBumbu || '',
       bum?.hargaBumbu ? formatRp(bum.hargaBumbu) : '',
-      bum ? (bum.kebutuhan > 0 ? formatNum(bum.kebutuhan, 2) : '-') : '',
+      bum ? (bum.kebutuhan !== undefined && bum.kebutuhan !== null ? (bum.kebutuhan > 0 ? formatNum(bum.kebutuhan, 2) : '0') : '-') : '',
       bum?.satuan || '',
       bum?.harga ? formatRp(bum.harga) : '',
     ]);
@@ -717,7 +717,7 @@ export async function export8PageDailyReportPdf(
   doc.text('( ___________________________ )', col3X, sigY + 20, { align: 'center' });
   doc.setFontSize(6.8);
   doc.setTextColor(100, 116, 139);
-  doc.text('Koperasi Al-Umanaa', col3X, sigY + 23.5, { align: 'center' });
+  doc.text('Koperasi Al Umanaa Sejahtera Mandiri', col3X, sigY + 23.5, { align: 'center' });
 
   // Save PDF
   const filename = `Laporan_Harian_MBG_Produksi_${tanggalStr}.pdf`;
