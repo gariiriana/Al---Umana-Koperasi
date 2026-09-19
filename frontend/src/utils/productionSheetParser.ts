@@ -40,31 +40,120 @@ const COL_PM_COUNT2 = 2; // C: total
 const COL_SECTION_HEADER = 4; // E: Porsi Header / Jenis Porsi / Total / %Pemenuhan
 const COL_MENU_NAME = 5; // F: Menu name
 const COL_BAHAN_GIZI = 6; // G: Rincian Bahan
-const COL_BERAT_BERSIH = 7; // H: Berat Bersih (g)
-const COL_ENERGI = 8; // I: Energi (kkal)
-const COL_PROTEIN = 9; // J: Protein (g)
-const COL_LEMAK = 10; // K: Lemak (g)
-const COL_KARBO = 11; // L: Karbohidrat (g)
-const COL_SERAT = 12; // M: Serat (g)
 
-// PESANAN BAHAN MAKANAN (Cols N - Z)
-const COL_SUPPLIER_BAHAN = 13; // N: Supplier
-const COL_BAHAN_ORDER = 14; // O: Rincian Bahan (pesanan)
-const COL_HARGA_BAHAN = 15; // P: Harga Bahan per unit
-const COL_SATUAN_BAHAN = 17; // R: Satuan
-const COL_BDD = 18; // S: %BDD (e.g. 1.0, 0.89, 0.85)
-const COL_BERAT_KOTOR = 19; // T: Berat Kotor
-const COL_TOTAL_GML = 20; // U: Total (g/ml)
-const COL_KEBUTUHAN_BAHAN = 21; // V: Kebutuhan (Per Unit / Kg)
-const COL_HARGA_TOTAL_BAHAN = 23; // X: Total Harga Bahan
+// ─── Column Map Interface & Dynamic Resolver ────────────────────────────────
+export interface SheetColMap {
+  // Gizi
+  colSectionHeader: number;
+  colMenuName: number;
+  colBahanGizi: number;
+  colBeratBersih: number;
+  colEnergi: number;
+  colProtein: number;
+  colLemak: number;
+  colKarbo: number;
+  colSerat: number;
+  // Pesanan Bahan Makanan Pokok
+  colSupplierBahan: number;
+  colBahanOrder: number;
+  colHargaBahan: number;
+  colBdd: number;
+  colBeratKotor: number;
+  colTotalGml: number;
+  colSpareBahan: number;
+  colKebutuhanBahan: number;
+  colSatuanBahan: number;
+  colHargaTotalBahan: number;
+  // Pesanan Bumbu Masak
+  colSupplierBumbu: number;
+  colMenuBumbu: number;
+  colNamaBumbu: number;
+  colHargaBumbu: number;
+  colKebutuhanBumbu: number;
+  colSatuanBumbu: number;
+  colHargaTotalBumbu: number;
+}
 
-// PESANAN BUMBU (Cols AA - AH)
-const COL_BUMBU_SUPPLIER = 26; // AA: Supplier Bumbu
-const COL_BUMBU_NAMA = 27; // AB: Jenis Bumbu
-const COL_BUMBU_HARGA_SATUAN = 28; // AC: Harga Bumbu
-const COL_BUMBU_SATUAN = 30; // AE: Satuan (kg, ikat, pcs)
-const COL_BUMBU_KEBUTUHAN = 31; // AF: Kebutuhan (Jumlah)
-const COL_BUMBU_TOTAL_HARGA = 32; // AG: Total Harga Bumbu
+export function resolveSheetColumnIndices(rows: unknown[][]): SheetColMap {
+  // Proven default indices from TEMPLATE and daily sheets (e.g. '20072026')
+  const map: SheetColMap = {
+    colSectionHeader: 4, // E
+    colMenuName: 5,       // F
+    colBahanGizi: 6,      // G
+    colBeratBersih: 7,    // H
+    colEnergi: 8,         // I
+    colProtein: 9,        // J
+    colLemak: 10,         // K
+    colKarbo: 11,         // L
+    colSerat: 12,         // M
+
+    colSupplierBahan: 13,   // N
+    colBahanOrder: 14,      // O: Rincian Bahan
+    colHargaBahan: 15,      // P: Harga Bahan
+    colBdd: 16,             // Q: %BDD
+    colBeratKotor: 17,      // R: Berat Kotor
+    colTotalGml: 18,        // S: Total (g/ml)
+    colSpareBahan: 19,      // T: Spare %
+    colKebutuhanBahan: 20,  // U: Kebutuhan (Per Unit / Jumlah)
+    colSatuanBahan: 21,     // V: Satuan
+    colHargaTotalBahan: 22, // W: Total Harga Bahan
+
+    colSupplierBumbu: 23,   // X: Supplier Bumbu
+    colMenuBumbu: 24,       // Y: Nama Menu
+    colNamaBumbu: 25,       // Z: Nama Bumbu
+    colHargaBumbu: 26,      // AA: Harga Bumbu
+    colKebutuhanBumbu: 27,  // AB: Kebutuhan (Per Unit / Jumlah)
+    colSatuanBumbu: 28,     // AC: Satuan
+    colHargaTotalBumbu: 29, // AD: Total Harga Bumbu
+  };
+
+  // Dynamically detect or refine if headers exist in rows 0..3
+  for (let r = 0; r < Math.min(rows.length, 4); r++) {
+    const row = rows[r] || [];
+    for (let c = 0; c < Math.min(row.length, 35); c++) {
+      const cell = str(row[c]).toLowerCase();
+      if (!cell) continue;
+
+      // Gizi headers
+      if (c >= 4 && c <= 12) {
+        if (cell.includes('berat bersih')) map.colBeratBersih = c;
+        else if (cell.includes('energi')) map.colEnergi = c;
+        else if (cell.includes('protein')) map.colProtein = c;
+        else if (cell.includes('lemak')) map.colLemak = c;
+        else if (cell.includes('karbohidrat')) map.colKarbo = c;
+        else if (cell.includes('serat')) map.colSerat = c;
+      }
+
+      // Bahan Makanan headers
+      if (c >= 12 && c <= 23) {
+        if (cell === 'supplier' && c < 15) map.colSupplierBahan = c;
+        else if (cell.includes('rincian') || cell === 'bahan' || cell.includes('rincian bahan')) map.colBahanOrder = c;
+        else if (cell.includes('harga bahan') || cell.includes('harga baku')) map.colHargaBahan = c;
+        else if (cell.includes('bdd') || cell.includes('%bdd')) map.colBdd = c;
+        else if (cell.includes('berat kotor')) map.colBeratKotor = c;
+        else if (cell.includes('total (g') || cell.includes('total (g/ml)')) map.colTotalGml = c;
+        else if (cell.includes('spare')) map.colSpareBahan = c;
+        else if (cell.includes('kebutuhan')) map.colKebutuhanBahan = c;
+        else if (cell.includes('satuan') && c >= 19 && c <= 22) map.colSatuanBahan = c;
+        else if (cell === 'harga' && c >= 21 && c <= 23) map.colHargaTotalBahan = c;
+      }
+
+      // Bumbu headers
+      if (c >= 22 && c <= 32) {
+        if (cell === 'supplier' && c >= 22) map.colSupplierBumbu = c;
+        else if (cell.includes('nama menu') || cell.includes('menu')) map.colMenuBumbu = c;
+        else if (cell.includes('nama bumbu') || cell.includes('jenis bumbu')) map.colNamaBumbu = c;
+        else if (cell.includes('harga bumbu')) map.colHargaBumbu = c;
+        else if (cell.includes('kebutuhan') && c >= 26) map.colKebutuhanBumbu = c;
+        else if (cell.includes('satuan') && c >= 27) map.colSatuanBumbu = c;
+        else if (cell === 'harga' && c >= 28) map.colHargaTotalBumbu = c;
+      }
+    }
+  }
+
+  return map;
+}
+
 
 // MENU 3B KERINGAN (BUMIL & BALITA) (Cols AM - AV)
 const COL_KERING_ITEM = 38; // AM: Nama Item Keringan
@@ -144,8 +233,10 @@ function parsePortionBlock(
   rows: unknown[][],
   range: RawBlockRange,
   menuList: string[],
-  pmCount: number
+  pmCount: number,
+  colMap?: SheetColMap
 ): MbgPortionDailyData {
+  const map = colMap || resolveSheetColumnIndices(rows);
   const { portionType, title, startRow, endRow } = range;
   const nutritionItems: MbgPortionNutritionItem[] = [];
   const bahanItems: MbgPortionBahanItem[] = [];
@@ -157,13 +248,13 @@ function parsePortionBlock(
     if (!row) continue;
 
     // Check menu name update in Col F
-    const menuCol = str(row[COL_MENU_NAME]);
+    const menuCol = str(row[map.colMenuName]);
     if (menuCol && menuCol.toLowerCase() !== 'menu') {
       currentMenuName = menuCol;
     }
 
     // A. Kandungan Gizi (Col G - M)
-    const bahanGizi = str(row[COL_BAHAN_GIZI]);
+    const bahanGizi = str(row[map.colBahanGizi]);
     if (bahanGizi && bahanGizi.toLowerCase() !== 'rincian bahan') {
       const itemMenuName =
         currentMenuName || menuList[nutritionItems.length] || bahanGizi;
@@ -171,54 +262,61 @@ function parsePortionBlock(
       nutritionItems.push({
         menuName: itemMenuName,
         rincianBahan: bahanGizi,
-        beratBersih: num(row[COL_BERAT_BERSIH]),
-        energi: num(row[COL_ENERGI]),
-        protein: num(row[COL_PROTEIN]),
-        lemak: num(row[COL_LEMAK]),
-        karbohidrat: num(row[COL_KARBO]),
-        serat: num(row[COL_SERAT]),
+        beratBersih: num(row[map.colBeratBersih]),
+        energi: num(row[map.colEnergi]),
+        protein: num(row[map.colProtein]),
+        lemak: num(row[map.colLemak]),
+        karbohidrat: num(row[map.colKarbo]),
+        serat: num(row[map.colSerat]),
       });
     }
 
-    // B. Pesanan Bahan Makanan (Col O - X)
-    const bahanOrder = str(row[COL_BAHAN_ORDER]);
+    // B. Pesanan Bahan Makanan (Cols N - W)
+    const bahanOrder = str(row[map.colBahanOrder]);
     if (
       bahanOrder &&
       bahanOrder.toLowerCase() !== 'rincian bahan' &&
       bahanOrder.toLowerCase() !== 'total pembelanjaan'
     ) {
-      const bddRaw = num(row[COL_BDD]);
+      const bddRaw = num(row[map.colBdd]);
       const bddPercent = bddRaw > 0 && bddRaw <= 1 ? bddRaw * 100 : bddRaw || 100;
+      const kebutuhan = num(row[map.colKebutuhanBahan]);
+      const hargaBahan = num(row[map.colHargaBahan]);
+      const hargaTotal = num(row[map.colHargaTotalBahan]) || (kebutuhan > 0 && hargaBahan > 0 ? kebutuhan * hargaBahan : 0);
 
       bahanItems.push({
         rincianBahan: bahanOrder,
-        hargaBahan: num(row[COL_HARGA_BAHAN]),
+        hargaBahan,
         bddPercent,
-        beratKotor: num(row[COL_BERAT_KOTOR]),
-        totalGml: num(row[COL_TOTAL_GML]),
-        sparePercent: 2,
-        kebutuhan: num(row[COL_KEBUTUHAN_BAHAN]),
-        satuan: str(row[COL_SATUAN_BAHAN]) || 'kg',
-        harga: num(row[COL_HARGA_TOTAL_BAHAN]),
+        beratKotor: num(row[map.colBeratKotor]),
+        totalGml: num(row[map.colTotalGml]),
+        sparePercent: num(row[map.colSpareBahan]) || 2,
+        kebutuhan,
+        satuan: str(row[map.colSatuanBahan]) || 'kg',
+        harga: hargaTotal,
       });
     }
 
-    // C. Pesanan Bumbu (Col AB - AG)
-    const bumbuNama = str(row[COL_BUMBU_NAMA]);
+    // C. Pesanan Bumbu (Cols X - AD)
+    const bumbuNama = str(row[map.colNamaBumbu]);
     if (
       bumbuNama &&
       bumbuNama.toLowerCase() !== 'jenis bumbu' &&
       bumbuNama.toLowerCase() !== 'nama bumbu' &&
       bumbuNama.toLowerCase() !== 'total pembelanjaan bumbu'
     ) {
-      const bumbuMenu = currentMenuName || '';
+      const bumbuMenu = str(row[map.colMenuBumbu]) || currentMenuName || '';
+      const kebutuhan = num(row[map.colKebutuhanBumbu]);
+      const hargaBumbu = num(row[map.colHargaBumbu]);
+      const hargaTotal = num(row[map.colHargaTotalBumbu]) || (kebutuhan > 0 && hargaBumbu > 0 ? kebutuhan * hargaBumbu : 0);
+
       bumbuItems.push({
         namaMenu: bumbuMenu,
         namaBumbu: bumbuNama,
-        hargaBumbu: num(row[COL_BUMBU_HARGA_SATUAN]),
-        kebutuhan: num(row[COL_BUMBU_KEBUTUHAN]),
-        satuan: str(row[COL_BUMBU_SATUAN]) || 'kg',
-        harga: num(row[COL_BUMBU_TOTAL_HARGA]),
+        hargaBumbu,
+        kebutuhan,
+        satuan: str(row[map.colSatuanBumbu]) || 'kg',
+        harga: hargaTotal,
       });
     }
   }
@@ -227,11 +325,11 @@ function parsePortionBlock(
   const totalRow = rows[endRow];
   const totalGizi = {
     beratBersih: nutritionItems.reduce((s, it) => s + it.beratBersih, 0),
-    energi: num(totalRow?.[COL_ENERGI]) || nutritionItems.reduce((s, it) => s + it.energi, 0),
-    protein: num(totalRow?.[COL_PROTEIN]) || nutritionItems.reduce((s, it) => s + it.protein, 0),
-    lemak: num(totalRow?.[COL_LEMAK]) || nutritionItems.reduce((s, it) => s + it.lemak, 0),
-    karbohidrat: num(totalRow?.[COL_KARBO]) || nutritionItems.reduce((s, it) => s + it.karbohidrat, 0),
-    serat: num(totalRow?.[COL_SERAT]) || nutritionItems.reduce((s, it) => s + it.serat, 0),
+    energi: num(totalRow?.[map.colEnergi]) || nutritionItems.reduce((s, it) => s + it.energi, 0),
+    protein: num(totalRow?.[map.colProtein]) || nutritionItems.reduce((s, it) => s + it.protein, 0),
+    lemak: num(totalRow?.[map.colLemak]) || nutritionItems.reduce((s, it) => s + it.lemak, 0),
+    karbohidrat: num(totalRow?.[map.colKarbo]) || nutritionItems.reduce((s, it) => s + it.karbohidrat, 0),
+    serat: num(totalRow?.[map.colSerat]) || nutritionItems.reduce((s, it) => s + it.serat, 0),
   };
 
   // Parse AKG Metrics (rows directly below Total)
@@ -252,11 +350,11 @@ function parsePortionBlock(
   for (let i = endRow + 1; i < endRow + 8 && i < rows.length; i++) {
     const row = rows[i];
     if (!row) continue;
-    const label = str(row[COL_SECTION_HEADER]).toLowerCase();
+    const label = str(row[map.colSectionHeader]).toLowerCase();
     if (!label.includes('pemenuhan')) continue;
 
     const isMakanSiang = label.includes('makan siang');
-    const energiVal = num(row[COL_ENERGI]);
+    const energiVal = num(row[map.colEnergi]);
 
     for (const [keyword, key] of Object.entries(akgMapping)) {
       if (label.includes(keyword)) {
@@ -275,10 +373,10 @@ function parsePortionBlock(
 
   // Calculate totals
   const totalBelanjaBahan =
-    num(totalRow?.[COL_HARGA_TOTAL_BAHAN]) ||
+    num(totalRow?.[map.colHargaTotalBahan]) ||
     bahanItems.reduce((s, b) => s + b.harga, 0);
   const totalBelanjaBumbu =
-    num(totalRow?.[COL_BUMBU_TOTAL_HARGA]) ||
+    num(totalRow?.[map.colHargaTotalBumbu]) ||
     bumbuItems.reduce((s, b) => s + b.harga, 0);
 
   const hargaBahanPerPorsi = pmCount > 0 ? totalBelanjaBahan / pmCount : 0;
@@ -411,7 +509,10 @@ export function parseProductionSheetRows(
   // 2. Extract Menu List
   const menuList = extractMenuList(rows);
 
-  // 3. Find and parse portion blocks
+  // 3. Resolve Sheet Column Map dynamically
+  const colMap = resolveSheetColumnIndices(rows);
+
+  // 4. Find and parse portion blocks
   const ranges = findPortionRanges(rows);
 
   const rangeKecil = ranges.find((r) => r.portionType === 'kecil');
@@ -420,19 +521,19 @@ export function parseProductionSheetRows(
   const rangeBumil = ranges.find((r) => r.portionType === 'bumil_busui');
 
   const porsiKecil = rangeKecil
-    ? parsePortionBlock(rows, rangeKecil, menuList, pmOmprengKecil)
+    ? parsePortionBlock(rows, rangeKecil, menuList, pmOmprengKecil, colMap)
     : createEmptyPortionData('kecil', 'PORSI KECIL');
 
   const porsiBesar = rangeBesar
-    ? parsePortionBlock(rows, rangeBesar, menuList, pmOmprengBesar)
+    ? parsePortionBlock(rows, rangeBesar, menuList, pmOmprengBesar, colMap)
     : createEmptyPortionData('besar', 'PORSI BESAR');
 
   let porsiBalita = rangeBalita
-    ? parsePortionBlock(rows, rangeBalita, menuList, pmBalita)
+    ? parsePortionBlock(rows, rangeBalita, menuList, pmBalita, colMap)
     : createEmptyPortionData('balita', 'PORSI BALITA');
 
   let porsiBumilBusui = rangeBumil
-    ? parsePortionBlock(rows, rangeBumil, menuList, pmBumil)
+    ? parsePortionBlock(rows, rangeBumil, menuList, pmBumil, colMap)
     : createEmptyPortionData('bumil_busui', 'PORSI BUMIL/BUSUI');
 
   // Fill in menu names for porsi kecil if col F was blank
@@ -767,9 +868,13 @@ export function parseProductionSheetRows(
   const dedicatedPoRows: MbgPoReportRow[] = [];
   if (dedicatedSupplierCol !== -1) {
     const c = dedicatedSupplierCol;
+    let currentSupplier = 'Supplier MBG';
     for (let r = dedicatedSupplierRow + 1; r < Math.min(rows.length, dedicatedSupplierRow + 60); r++) {
       const row = rows[r] || [];
-      const supplier = str(row[c]);
+      const suppInRow = str(row[c]);
+      if (suppInRow && !suppInRow.toLowerCase().includes('total') && !suppInRow.startsWith('=')) {
+        currentSupplier = suppInRow;
+      }
       const item = str(row[c + 1]);
       if (!item || item.toLowerCase().includes('total') || item.toLowerCase() === 'list pesanan bahan' || item.startsWith('=')) {
         continue;
@@ -782,7 +887,7 @@ export function parseProductionSheetRows(
       const totalHarga = num(row[c + 7]) || (jumlah > 0 && hargaSatuan > 0 ? jumlah * hargaSatuan : 0);
 
       dedicatedPoRows.push({
-        supplier: supplier || 'Supplier MBG',
+        supplier: currentSupplier,
         item,
         jamKedatangan,
         jumlah: Math.round(jumlah * 100) / 100,
@@ -798,31 +903,31 @@ export function parseProductionSheetRows(
 
   for (let r = 2; r < Math.min(rows.length, 60); r++) {
     const row = rows[r] || [];
-    const bSup = str(row[COL_SUPPLIER_BAHAN]);
-    const bName = str(row[COL_BAHAN_ORDER]);
+    const bSup = str(row[colMap.colSupplierBahan]);
+    const bName = str(row[colMap.colBahanOrder]);
     if (bName && bName.toLowerCase() !== 'rincian bahan' && bName.toLowerCase() !== 'total pembelanjaan') {
-      const hUnit = num(row[COL_HARGA_BAHAN]);
-      const hTotal = num(row[COL_HARGA_TOTAL_BAHAN]);
+      const hUnit = num(row[colMap.colHargaBahan]);
+      const hTotal = num(row[colMap.colHargaTotalBahan]);
       rawPoItems.push({
         supplier: bSup || 'Koperasi Al Umanaa',
         item: bName,
-        jumlah: num(row[COL_KEBUTUHAN_BAHAN]),
-        satuan: str(row[COL_SATUAN_BAHAN]) || 'kg',
+        jumlah: num(row[colMap.colKebutuhanBahan]),
+        satuan: str(row[colMap.colSatuanBahan]) || 'kg',
         hargaSatuan: hUnit,
         harga: hTotal,
       });
     }
 
-    const bmSup = str(row[COL_BUMBU_SUPPLIER]);
-    const bmName = str(row[COL_BUMBU_NAMA]);
+    const bmSup = str(row[colMap.colSupplierBumbu]);
+    const bmName = str(row[colMap.colNamaBumbu]);
     if (bmName && bmName.toLowerCase() !== 'jenis bumbu' && bmName.toLowerCase() !== 'total pembelanjaan bumbu') {
-      const hUnit = num(row[COL_BUMBU_HARGA_SATUAN]);
-      const hTotal = num(row[COL_BUMBU_TOTAL_HARGA]);
+      const hUnit = num(row[colMap.colHargaBumbu]);
+      const hTotal = num(row[colMap.colHargaTotalBumbu]);
       rawPoItems.push({
         supplier: bmSup || 'Supplier Bumbu',
         item: bmName,
-        jumlah: num(row[COL_BUMBU_KEBUTUHAN]),
-        satuan: str(row[COL_BUMBU_SATUAN]) || 'kg',
+        jumlah: num(row[colMap.colKebutuhanBumbu]),
+        satuan: str(row[colMap.colSatuanBumbu]) || 'kg',
         hargaSatuan: hUnit,
         harga: hTotal,
       });
