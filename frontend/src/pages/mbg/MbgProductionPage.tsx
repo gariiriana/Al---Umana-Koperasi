@@ -1794,7 +1794,7 @@ export function MbgProductionPage() {
 
       // Determine target batch
       let targetBatchId = selectedBatchId;
-      let targetBatchTanggal = selectedBatch?.tanggal || new Date().toISOString().split('T')[0];
+      const targetBatchTanggal = selectedBatch?.tanggal || new Date().toISOString().split('T')[0];
 
       if (!targetBatchId) {
         const existingBatch = batches.find((b) => b.tanggal === targetBatchTanggal);
