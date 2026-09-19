@@ -166,7 +166,7 @@ function buildRekapPmRows(
         balitaP = Math.floor(balitaTot / 2);
       }
 
-      let bumilL = 0;
+      const bumilL = 0;
       let bumilP = 0;
       if (isPosyandu) {
         const bumilTot = (e.qtBumil || 0) + (e.qtBusui || 0) || (e.qtPorsiBumilBusui || e.qtBumilBusui || 0);
@@ -225,7 +225,7 @@ function buildRekapPmRows(
     let besarP = 0;
     let balitaL = 0;
     let balitaP = 0;
-    let bumilL = 0;
+    const bumilL = 0;
     let bumilP = 0;
 
     if (isTk) {
