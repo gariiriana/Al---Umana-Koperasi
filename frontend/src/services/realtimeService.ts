@@ -28,7 +28,6 @@ import {
   doc,
   limit,
   onSnapshot,
-  orderBy,
   query,
   where,
   type DocumentData,
@@ -49,10 +48,30 @@ import { subscriptionManager } from "@/services/subscriptionManager";
 /* ------------------------------------------------------------------ */
 
 function toIsoString(value: unknown): string {
+  if (!value) return new Date().toISOString();
   if (value instanceof Timestamp) return value.toDate().toISOString();
   if (value instanceof Date) return value.toISOString();
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate: () => unknown }).toDate === "function"
+  ) {
+    try {
+      const d = (value as { toDate: () => Date }).toDate();
+      if (d instanceof Date && !isNaN(d.getTime())) return d.toISOString();
+    } catch {
+      // Fall through
+    }
+  }
   if (typeof value === "string") return value;
+  if (typeof value === "number" && !isNaN(value)) return new Date(value).toISOString();
   return new Date().toISOString();
+}
+
+function toIsoStringOrUndefined(value: unknown): string | undefined {
+  if (!value) return undefined;
+  return toIsoString(value);
 }
 
 function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
@@ -72,7 +91,7 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     paymentStatus: (data.paymentStatus as Order["paymentStatus"]) ?? "BELUM_DIBAYAR",
     paymentDueDate: (data.paymentDueDate as string) ?? "",
     invoiceToken: data.invoiceToken as string | undefined,
-    invoiceSignedAt: data.invoiceSignedAt ? toIsoString(data.invoiceSignedAt) : undefined,
+    invoiceSignedAt: toIsoStringOrUndefined(data.invoiceSignedAt),
     invoiceSignatureData: data.invoiceSignatureData as string | undefined,
     manualValidation: data.manualValidation as Order["manualValidation"],
     adminComplaintNotes: data.adminComplaintNotes as string | undefined,
@@ -87,15 +106,11 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     outOfStockItems: data.outOfStockItems as string[] | undefined,
     assignedCourierId: data.assignedCourierId as string | undefined,
     productionStartedBy: data.productionStartedBy as string | undefined,
-    productionStartedAt: data.productionStartedAt
-      ? toIsoString(data.productionStartedAt)
-      : undefined,
+    productionStartedAt: toIsoStringOrUndefined(data.productionStartedAt),
     qcReviewedBy: data.qcReviewedBy as string | undefined,
-    qcReviewedAt: data.qcReviewedAt
-      ? toIsoString(data.qcReviewedAt)
-      : undefined,
+    qcReviewedAt: toIsoStringOrUndefined(data.qcReviewedAt),
     qcFailReason: data.qcFailReason as string | undefined,
-    deliveredAt: data.deliveredAt ? toIsoString(data.deliveredAt) : undefined,
+    deliveredAt: toIsoStringOrUndefined(data.deliveredAt),
     proofFileIds: data.proofFileIds as string[] | undefined,
     deliveryProofPhotos: data.deliveryProofPhotos as Order["deliveryProofPhotos"],
     createdAt: toIsoString(data.createdAt),
@@ -103,16 +118,16 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     paymentMethod: ((data.paymentMethod as string) ?? "cod") as Order["paymentMethod"],
     paymentProofFileId: data.paymentProofFileId as string | undefined,
     paymentApprovedBy: data.paymentApprovedBy as string | undefined,
-    paymentApprovedAt: data.paymentApprovedAt ? toIsoString(data.paymentApprovedAt) : undefined,
+    paymentApprovedAt: toIsoStringOrUndefined(data.paymentApprovedAt),
     paymentRejectedBy: data.paymentRejectedBy as string | undefined,
-    paymentRejectedAt: data.paymentRejectedAt ? toIsoString(data.paymentRejectedAt) : undefined,
+    paymentRejectedAt: toIsoStringOrUndefined(data.paymentRejectedAt),
     paymentRejectionReason: data.paymentRejectionReason as string | undefined,
     productionStartPhotoId: data.productionStartPhotoId as string | undefined,
-    productionTimerEnd: data.productionTimerEnd ? toIsoString(data.productionTimerEnd) : undefined,
+    productionTimerEnd: toIsoStringOrUndefined(data.productionTimerEnd),
     productionDurationMinutes: data.productionDurationMinutes as number | undefined,
     deliveryStartPhotoId: data.deliveryStartPhotoId as string | undefined,
-    deliveryTimerEnd: data.deliveryTimerEnd ? toIsoString(data.deliveryTimerEnd) : undefined,
-    deliveryStartedAt: data.deliveryStartedAt ? toIsoString(data.deliveryStartedAt) : undefined,
+    deliveryTimerEnd: toIsoStringOrUndefined(data.deliveryTimerEnd),
+    deliveryStartedAt: toIsoStringOrUndefined(data.deliveryStartedAt),
     deliveryDurationMinutes: data.deliveryDurationMinutes as number | undefined,
     courierLat: data.courierLat as number | undefined,
     courierLng: data.courierLng as number | undefined,
@@ -155,28 +170,28 @@ function snapshotToCourierGPS(
 /* ------------------------------------------------------------------ */
 
 /**
- * Subscribe to the most recent orders, ordered by creation time descending.
+ * Subscribe to orders across the system.
  *
- * **Scalability**: Uses a `limit()` clause (default 100) so the listener
- * only tracks a bounded window of recent orders rather than the entire
- * collection. Combined with the subscription manager's deduplication,
- * multiple components calling this with the same limit share a single
- * Firestore listener.
+ * **Scalability & Reliability**: Avoids fragile Firestore orderBy on mixed-type
+ * fields (Timestamp vs string) which causes documents to be dropped.
+ * By default, loads all operational orders without an aggressive 100-limit cutoff
+ * that conceals future or scheduled orders. Sorting is performed in JavaScript
+ * based on eventDate (descending) and createdAt (descending).
  *
  * @param listener Callback receiving the decoded orders.
  * @param onError  Optional error callback.
- * @param limit    Maximum number of orders to listen to (default 100).
+ * @param maxOrders Optional maximum number of orders to listen to (default unbounded).
  */
 export function subscribeOrders(
   listener: (orders: Order[]) => void,
   onError?: (err: Error) => void,
-  maxOrders = 100
+  maxOrders?: number
 ): Unsubscribe {
-  const q = query(
-    collection(db, "orders"),
-    orderBy("createdAt", "desc"),
-    limit(maxOrders)
-  );
+  const q =
+    typeof maxOrders === "number" && maxOrders > 0
+      ? query(collection(db, "orders"), limit(maxOrders))
+      : query(collection(db, "orders"));
+
   return subscriptionManager.subscribe(
     q,
     (snap) => {
@@ -184,7 +199,10 @@ export function subscribeOrders(
       orders.sort((a, b) => {
         const dateA = a.eventDate || a.createdAt || "";
         const dateB = b.eventDate || b.createdAt || "";
-        return dateB.localeCompare(dateA);
+        if (dateB !== dateA) {
+          return dateB.localeCompare(dateA);
+        }
+        return (b.createdAt || "").localeCompare(a.createdAt || "");
       });
       listener(orders);
     },
@@ -198,8 +216,8 @@ export function subscribeOrders(
 /**
  * Subscribe to orders filtered by a single status.
  *
- * **Scalability**: Deduplicated — if 10 components subscribe to
- * "CONFIRMED" orders, only 1 Firestore listener is created.
+ * **Scalability**: Deduplicated — if multiple components subscribe to
+ * the same status, only 1 Firestore listener is created.
  */
 export function subscribeOrdersByStatus(
   status: OrderStatus,
@@ -208,12 +226,20 @@ export function subscribeOrdersByStatus(
 ): Unsubscribe {
   const q = query(
     collection(db, "orders"),
-    where("status", "==", status),
-    orderBy("createdAt", "asc")
+    where("status", "==", status)
   );
   return subscriptionManager.subscribe(
     q,
-    (snap) => listener(snapshotToOrders(snap)),
+    (snap) => {
+      const orders = snapshotToOrders(snap);
+      orders.sort((a, b) => {
+        const dateA = a.eventDate || a.createdAt || "";
+        const dateB = b.eventDate || b.createdAt || "";
+        if (dateB !== dateA) return dateB.localeCompare(dateA);
+        return (b.createdAt || "").localeCompare(a.createdAt || "");
+      });
+      listener(orders);
+    },
     onError
   );
 }

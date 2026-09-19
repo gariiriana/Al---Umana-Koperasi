@@ -171,11 +171,11 @@ export function DeliverySchedulerPage() {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const match = 
-          o.institutionName?.toLowerCase().includes(q) ||
-          o.customerName?.toLowerCase().includes(q) ||
-          o.recipientName?.toLowerCase().includes(q) ||
-          o.id.toLowerCase().includes(q) ||
-          o.items.some(it => it.itemName.toLowerCase().includes(q));
+          (o.institutionName || "").toLowerCase().includes(q) ||
+          (o.customerName || "").toLowerCase().includes(q) ||
+          (o.recipientName || "").toLowerCase().includes(q) ||
+          (o.id || "").toLowerCase().includes(q) ||
+          (o.items || []).some(it => (it.itemName || "").toLowerCase().includes(q));
         if (!match) return false;
       }
       
@@ -203,11 +203,11 @@ export function DeliverySchedulerPage() {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const match = 
-          o.institutionName?.toLowerCase().includes(q) ||
-          o.customerName?.toLowerCase().includes(q) ||
-          o.recipientName?.toLowerCase().includes(q) ||
-          o.id.toLowerCase().includes(q) ||
-          o.items.some(it => it.itemName.toLowerCase().includes(q));
+          (o.institutionName || "").toLowerCase().includes(q) ||
+          (o.customerName || "").toLowerCase().includes(q) ||
+          (o.recipientName || "").toLowerCase().includes(q) ||
+          (o.id || "").toLowerCase().includes(q) ||
+          (o.items || []).some(it => (it.itemName || "").toLowerCase().includes(q));
         if (!match) return false;
       }
       
@@ -578,6 +578,25 @@ export function DeliverySchedulerPage() {
                   value={filterDate}
                   onChange={(e) => setFilterDate(e.target.value)}
                 />
+                {filterDate ? (
+                  <button
+                    type="button"
+                    onClick={() => setFilterDate("")}
+                    className="text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-2 rounded-xl transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                    title="Tampilkan semua pesanan dari semua tanggal"
+                  >
+                    Semua Tanggal
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setFilterDate(new Date().toISOString().split("T")[0])}
+                    className="text-[11px] font-bold text-neutral-600 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 px-2.5 py-2 rounded-xl transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                    title="Kembali ke tanggal hari ini"
+                  >
+                    Hari Ini
+                  </button>
+                )}
               </div>
 
               <div className="relative flex-1 sm:w-64">

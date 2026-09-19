@@ -135,6 +135,14 @@ export function OrdersPage() {
     if (fromUrl) return fromUrl as OrderStatus;
     return "ALL";
   });
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("status");
+    if (fromUrl) {
+      setStatusFilter(fromUrl as OrderStatus);
+    }
+  }, [searchParams]);
+
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | "ALL">("ALL");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
@@ -577,12 +585,15 @@ export function OrdersPage() {
 
   // Filter logic
   const filteredOrders = orders.filter((o) => {
-    const query = search.toLowerCase();
+    const query = search.toLowerCase().trim();
     const matchSearch =
-      o.institutionName.toLowerCase().includes(query) ||
-      o.recipientName.toLowerCase().includes(query) ||
-      o.recipientPhone.includes(query) ||
-      o.id.toLowerCase().includes(query);
+      !query ||
+      (o.institutionName || "").toLowerCase().includes(query) ||
+      (o.recipientName || "").toLowerCase().includes(query) ||
+      (o.customerName || "").toLowerCase().includes(query) ||
+      (o.recipientPhone || "").includes(query) ||
+      (o.id || "").toLowerCase().includes(query) ||
+      (o.items || []).some((it) => (it.itemName || "").toLowerCase().includes(query));
 
     const matchStatus = statusFilter === "ALL" ? true : o.status === statusFilter;
     const matchPayment = paymentFilter === "ALL" ? true : o.paymentStatus === paymentFilter;

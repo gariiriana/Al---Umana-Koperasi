@@ -420,19 +420,11 @@ export function OrderInputPage() {
 
     try {
       const today = new Date().toISOString().split("T")[0];
-      let finalEventDate = eventDate.trim();
-      if (!finalEventDate) {
-        if (deliveryTime && deliveryTime.includes("T")) {
-          finalEventDate = deliveryTime;
-        } else {
-          finalEventDate = `${today}T${eventTimeOnly || "08:00"}`;
-        }
-      }
+      const targetEventDate = eventDateOnly || today;
+      const finalEventDate = (eventDate.trim() || `${targetEventDate}T${eventTimeOnly || "08:00"}`);
 
-      let finalDeliveryTime = deliveryTime.trim();
-      if (!finalDeliveryTime) {
-        finalDeliveryTime = finalEventDate;
-      }
+      const targetDelivDate = deliveryDateOnly || eventDateOnly || today;
+      const finalDeliveryTime = (deliveryTime.trim() || `${targetDelivDate}T${deliveryTimeOnly || "12:00"}`);
 
       const orderPayload = {
         orderType,

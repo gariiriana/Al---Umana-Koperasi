@@ -1239,6 +1239,21 @@ export interface CreateAdminOrderPayload {
   customerName?: string;
 }
 
+function generateUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    try {
+      return crypto.randomUUID();
+    } catch {
+      // Fall through to fallback
+    }
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export async function createAdminOrder(payload: CreateAdminOrderPayload): Promise<Order> {
   const user = currentUser();
   if (!user) {
@@ -1247,30 +1262,30 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
 
   const colRef = collection(db, "orders");
   const orderDocRef = doc(colRef);
-  const invoiceToken = crypto.randomUUID();
+  const invoiceToken = generateUUID();
   const now = new Date();
   const dueDate = calculateDueDate(now, payload.orderType);
 
   const orderData: Record<string, unknown> = {
-    orderType: payload.orderType,
-    institutionName: payload.institutionName,
-    recipientName: payload.recipientName,
-    recipientPhone: payload.recipientPhone,
-    recipientNotes: payload.recipientNotes || "",
-    customerName: payload.customerName || "",
-    eventDate: payload.eventDate,
-    deliveryAddress: payload.deliveryAddress,
-    deliveryTime: payload.deliveryTime,
-    foodDetails: payload.foodDetails,
-    drinkDetails: payload.drinkDetails,
-    totalPrice: payload.totalPrice,
+    orderType: payload.orderType || "event",
+    institutionName: (payload.institutionName || "").trim(),
+    recipientName: (payload.recipientName || "").trim(),
+    recipientPhone: (payload.recipientPhone || "").trim(),
+    recipientNotes: (payload.recipientNotes || "").trim(),
+    customerName: (payload.customerName || "").trim(),
+    eventDate: payload.eventDate || "",
+    deliveryAddress: (payload.deliveryAddress || "").trim(),
+    deliveryTime: payload.deliveryTime || payload.eventDate || "",
+    foodDetails: (payload.foodDetails || "").trim(),
+    drinkDetails: (payload.drinkDetails || "").trim(),
+    totalPrice: payload.totalPrice || 0,
     additionalFee: payload.additionalFee || 0,
-    additionalNotes: payload.additionalNotes || "",
+    additionalNotes: (payload.additionalNotes || "").trim(),
     paymentStatus: "BELUM_DIBAYAR",
     paymentDueDate: dueDate,
     invoiceToken: invoiceToken,
     status: "PENDING",
-    items: payload.items,
+    items: payload.items || [],
     isPreOrder: !!payload.isPreOrder,
     promoCode: payload.promoCode || "",
     discountAmount: payload.discountAmount || 0,
@@ -1491,7 +1506,7 @@ export async function manuallyValidateOrder(
 }
 
 export async function generateInvoiceToken(orderId: string): Promise<string> {
-  const invoiceToken = crypto.randomUUID();
+  const invoiceToken = generateUUID();
   const docRef = doc(db, "orders", orderId);
   await updateDocAndReturn(docRef, {
     invoiceToken,
