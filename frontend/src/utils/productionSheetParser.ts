@@ -260,7 +260,7 @@ function parsePortionBlock(
   menuList: string[],
   pmCount: number,
   colMap?: SheetColMap,
-  ws?: Record<string, any>
+  ws?: XLSX.WorkSheet
 ): MbgPortionDailyData {
   const map = colMap || resolveSheetColumnIndices(rows);
   const { portionType, title, startRow, endRow } = range;
@@ -635,7 +635,7 @@ export function parseProductionSheetRows(
 
   // 4. Find and parse portion blocks
   const ranges = findPortionRanges(rows);
-  const wb = workbook as { Sheets?: Record<string, any> } | undefined;
+  const wb = workbook as XLSX.WorkBook | undefined;
   const ws = wb?.Sheets?.[sheetDayName];
 
   const rangeKecil = ranges.find((r) => r.portionType === 'kecil');
