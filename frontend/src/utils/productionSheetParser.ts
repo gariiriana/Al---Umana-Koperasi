@@ -747,31 +747,84 @@ export function parseProductionSheetRows(
   }
 
   // 7. Extract PO Rows / Logistik Kedatangan with Real Suppliers
-  const rawPoItems: { supplier: string; item: string; jumlah: number; satuan: string; harga: number }[] = [];
+  // First check if there is a dedicated Supplier Table block (e.g., Image 5: Supplier, List Pesanan Bahan, Kedatangan, Jumlah, Item, n, Harga Satuan, Total Harga)
+  let dedicatedSupplierCol = -1;
+  let dedicatedSupplierRow = -1;
+  for (let r = 0; r < Math.min(rows.length, 6); r++) {
+    const row = rows[r] || [];
+    for (let c = 0; c < row.length; c++) {
+      const val = str(row[c]).toLowerCase();
+      const valNext = str(row[c + 1]).toLowerCase();
+      if (val === 'supplier' && (valNext.includes('pesanan') || valNext.includes('bahan') || valNext.includes('list'))) {
+        dedicatedSupplierCol = c;
+        dedicatedSupplierRow = r;
+        break;
+      }
+    }
+    if (dedicatedSupplierCol !== -1) break;
+  }
+
+  const dedicatedPoRows: MbgPoReportRow[] = [];
+  if (dedicatedSupplierCol !== -1) {
+    const c = dedicatedSupplierCol;
+    for (let r = dedicatedSupplierRow + 1; r < Math.min(rows.length, dedicatedSupplierRow + 60); r++) {
+      const row = rows[r] || [];
+      const supplier = str(row[c]);
+      const item = str(row[c + 1]);
+      if (!item || item.toLowerCase().includes('total') || item.toLowerCase() === 'list pesanan bahan' || item.startsWith('=')) {
+        continue;
+      }
+      const jamKedatangan = str(row[c + 2]) || '06:00';
+      const jumlah = num(row[c + 3]);
+      const satuan = str(row[c + 4]) || 'kg';
+      // In sheet: col c+6 is Harga Satuan, col c+7 is Total Harga
+      const hargaSatuan = num(row[c + 6]);
+      const totalHarga = num(row[c + 7]) || (jumlah > 0 && hargaSatuan > 0 ? jumlah * hargaSatuan : 0);
+
+      dedicatedPoRows.push({
+        supplier: supplier || 'Supplier MBG',
+        item,
+        jamKedatangan,
+        jumlah: Math.round(jumlah * 100) / 100,
+        satuan,
+        keterangan: 'Sesuai Spesifikasi',
+        hargaSatuan: hargaSatuan > 0 ? hargaSatuan : undefined,
+        totalHarga: totalHarga > 0 ? totalHarga : undefined,
+      });
+    }
+  }
+
+  const rawPoItems: { supplier: string; item: string; jumlah: number; satuan: string; hargaSatuan: number; harga: number }[] = [];
 
   for (let r = 2; r < Math.min(rows.length, 60); r++) {
     const row = rows[r] || [];
     const bSup = str(row[COL_SUPPLIER_BAHAN]);
     const bName = str(row[COL_BAHAN_ORDER]);
     if (bName && bName.toLowerCase() !== 'rincian bahan' && bName.toLowerCase() !== 'total pembelanjaan') {
+      const hUnit = num(row[COL_HARGA_BAHAN]);
+      const hTotal = num(row[COL_HARGA_TOTAL_BAHAN]);
       rawPoItems.push({
         supplier: bSup || 'Koperasi Al Umanaa',
         item: bName,
         jumlah: num(row[COL_KEBUTUHAN_BAHAN]),
         satuan: str(row[COL_SATUAN_BAHAN]) || 'kg',
-        harga: num(row[COL_HARGA_TOTAL_BAHAN]),
+        hargaSatuan: hUnit,
+        harga: hTotal,
       });
     }
 
     const bmSup = str(row[COL_BUMBU_SUPPLIER]);
     const bmName = str(row[COL_BUMBU_NAMA]);
     if (bmName && bmName.toLowerCase() !== 'jenis bumbu' && bmName.toLowerCase() !== 'total pembelanjaan bumbu') {
+      const hUnit = num(row[COL_BUMBU_HARGA_SATUAN]);
+      const hTotal = num(row[COL_BUMBU_TOTAL_HARGA]);
       rawPoItems.push({
         supplier: bmSup || 'Supplier Bumbu',
         item: bmName,
         jumlah: num(row[COL_BUMBU_KEBUTUHAN]),
         satuan: str(row[COL_BUMBU_SATUAN]) || 'kg',
-        harga: num(row[COL_BUMBU_TOTAL_HARGA]),
+        hargaSatuan: hUnit,
+        harga: hTotal,
       });
     }
   }
@@ -782,6 +835,7 @@ export function parseProductionSheetRows(
       item: it.item,
       jumlah: it.qty,
       satuan: it.satuan,
+      hargaSatuan: it.hargaSatuan || 0,
       harga: it.totalHarga || 0,
     });
   }
@@ -798,30 +852,40 @@ export function parseProductionSheetRows(
         jumlah: Math.round(entry.jumlah * 100) / 100,
         satuan: entry.satuan,
         keterangan: 'Sesuai Spesifikasi',
+        hargaSatuan: entry.hargaSatuan > 0 ? entry.hargaSatuan : undefined,
+        totalHarga: entry.harga > 0 ? entry.harga : undefined,
       });
     } else {
       const exist = poMap.get(key)!;
       exist.jumlah = Math.round((exist.jumlah + entry.jumlah) * 100) / 100;
+      if (entry.harga > 0) {
+        exist.totalHarga = (exist.totalHarga || 0) + entry.harga;
+      }
+      if (!exist.hargaSatuan && entry.hargaSatuan > 0) {
+        exist.hargaSatuan = entry.hargaSatuan;
+      }
     }
   }
-  const poRows: MbgPoReportRow[] = Array.from(poMap.values());
+  const poRows: MbgPoReportRow[] = dedicatedPoRows.length > 0 ? dedicatedPoRows : Array.from(poMap.values());
 
   // 8. Realisasi Pembelian Rows
-  const realisasiPembelianRows: MbgRealisasiPembelianRow[] = rawPoItems.map((item) => ({
+  const realisasiPembelianRows: MbgRealisasiPembelianRow[] = (dedicatedPoRows.length > 0 ? dedicatedPoRows : rawPoItems).map((item) => ({
     tanggal: tanggal || '',
     namaBahan: item.item,
     kuantitas: item.jumlah,
     satuan: item.satuan,
-    hargaPerUnit: item.jumlah > 0 ? Math.round(item.harga / item.jumlah) : 0,
-    totalHarga: item.harga,
+    hargaPerUnit: item.hargaSatuan || (item.jumlah > 0 && (item as { harga?: number }).harga ? Math.round((item as { harga?: number }).harga! / item.jumlah) : 0),
+    totalHarga: (item as { totalHarga?: number }).totalHarga || (item as { harga?: number }).harga || ((item.jumlah || 0) * (item.hargaSatuan || 0)),
   }));
 
   const totalPengeluaran =
-    porsiKecil.totalBelanjaOverall +
-    porsiBesar.totalBelanjaOverall +
-    porsiBalita.totalBelanjaOverall +
-    porsiBumilBusui.totalBelanjaOverall ||
-    realisasiPembelianRows.reduce((s, r) => s + r.totalHarga, 0);
+    dedicatedPoRows.length > 0
+      ? dedicatedPoRows.reduce((s, it) => s + (it.totalHarga || 0), 0)
+      : (porsiKecil.totalBelanjaOverall +
+         porsiBesar.totalBelanjaOverall +
+         porsiBalita.totalBelanjaOverall +
+         porsiBumilBusui.totalBelanjaOverall ||
+         realisasiPembelianRows.reduce((s, r) => s + r.totalHarga, 0));
 
   // 9. Inspection Form
   const inspectionRows: MbgInspectionFormRow[] = poRows.map((po) => ({

@@ -2,20 +2,24 @@ import { useState } from 'react';
 import type {
   MbgProductionDailyReport,
   MbgPortionDailyData,
+  MbgPmEntry,
 } from '@/types/mbg';
 import {
   Utensils,
   ChefHat,
   Baby,
   Heart,
-  Package,
   Truck,
   ClipboardCheck,
   Trash2,
-  CheckCircle2,
   AlertCircle,
-  Sparkles,
   School,
+  Search,
+  Building2,
+  Clock,
+  UserCheck,
+  Layers,
+  ChevronDown,
 } from 'lucide-react';
 
 export type MbgDailyReportSubTab =
@@ -23,8 +27,8 @@ export type MbgDailyReportSubTab =
   | 'besar'
   | 'balita'
   | 'bumil'
-  | 'paket3b'
   | 'po'
+  | 'paket3b'
   | 'qc'
   | 'waste'
   | 'sekolah';
@@ -34,6 +38,7 @@ interface DailyReportExcelSectionsProps {
   defaultSubTab?: MbgDailyReportSubTab;
   activeSubTab?: MbgDailyReportSubTab;
   onSubTabChange?: (tab: MbgDailyReportSubTab) => void;
+  entries?: MbgPmEntry[];
 }
 
 function formatRp(val: number | undefined | null): string {
@@ -47,13 +52,190 @@ function formatNum(val: number | undefined | null, decimals = 2): string {
   return Number(val.toFixed(decimals)).toString();
 }
 
+// ─── HELPER: Filter PM Entries Inputted by Admin MBG for each Portion ──────────
+
+interface FilteredPmRow {
+  id: string;
+  institutionName: string;
+  categoryLabel: string;
+  portionCount: number;
+  totalJumlah: number;
+  petugasName: string;
+  jadwal: string;
+  isLibur: boolean;
+  address?: string;
+  detailBreakdown?: string;
+}
+
+function getFilteredPmEntries(
+  entries: MbgPmEntry[] = [],
+  portionType: 'kecil' | 'besar' | 'balita' | 'bumil',
+  fallbackSekolahList: { nama: string; murid: number; guru: number }[] = []
+): FilteredPmRow[] {
+  if (!entries || entries.length === 0) {
+    // Fallback using report.sekolahList if available
+    if (fallbackSekolahList && fallbackSekolahList.length > 0) {
+      return fallbackSekolahList.map((s, idx) => {
+        let count = 0;
+        let cat = 'Sekolah';
+        if (portionType === 'kecil') {
+          const isTk = s.nama.toLowerCase().includes('tk') || s.nama.toLowerCase().includes('paud');
+          count = isTk ? s.murid : Math.ceil(s.murid / 2);
+          cat = isTk ? 'TK / PAUD' : 'SD Kelas 1-3';
+        } else if (portionType === 'besar') {
+          const isSma = s.nama.toLowerCase().includes('sma') || s.nama.toLowerCase().includes('smk');
+          const isSmp = s.nama.toLowerCase().includes('smp') || s.nama.toLowerCase().includes('mts');
+          count = (isSma || isSmp ? s.murid : Math.floor(s.murid / 2)) + (s.guru || 0);
+          cat = isSma ? 'SMA / SMK' : isSmp ? 'SMP / MTs' : 'SD Kelas 4-6 + Guru';
+        } else if (portionType === 'balita') {
+          count = s.nama.toLowerCase().includes('posyandu') ? s.murid : 0;
+          cat = 'Balita Posyandu';
+        } else if (portionType === 'bumil') {
+          count = s.nama.toLowerCase().includes('posyandu') ? s.guru : 0;
+          cat = 'Bumil & Busui';
+        }
+
+        return {
+          id: `fallback-${idx}`,
+          institutionName: s.nama,
+          categoryLabel: cat,
+          portionCount: count,
+          totalJumlah: s.murid + s.guru,
+          petugasName: 'Tim Distribusi MBG',
+          jadwal: '06.30 - 08.00',
+          isLibur: false,
+        };
+      }).filter((it) => it.portionCount > 0);
+    }
+    return [];
+  }
+
+  const result: FilteredPmRow[] = [];
+
+  entries.forEach((e) => {
+    let count = 0;
+    let cat = '';
+    let detail = '';
+
+    if (portionType === 'kecil') {
+      if (e.institutionType === 'sekolah') {
+        const isTk =
+          e.schoolLevel === 'tk_paud' ||
+          e.institutionName.toLowerCase().includes('tk') ||
+          e.institutionName.toLowerCase().includes('paud');
+        const isSd =
+          e.schoolLevel === 'sd' ||
+          e.institutionName.toLowerCase().includes('sd') ||
+          e.institutionName.toLowerCase().includes('mi');
+
+        if (isTk) {
+          count = e.qtPorsiKecil || e.qtSiswaBalita || 0;
+          cat = 'TK / PAUD';
+          detail = `${count} Siswa TK/PAUD`;
+        } else if (isSd) {
+          count = e.qtPorsiKecil || Math.ceil((e.qtSiswaBalita || 0) / 2);
+          cat = 'SD / MI (Kelas 1-3)';
+          detail = `${count} Siswa Kelas 1-3`;
+        } else if (e.qtPorsiKecil && e.qtPorsiKecil > 0) {
+          count = e.qtPorsiKecil;
+          cat = 'Porsi Kecil';
+          detail = `${count} Porsi Kecil`;
+        }
+      }
+    } else if (portionType === 'besar') {
+      if (e.institutionType === 'sekolah') {
+        const isSma =
+          e.schoolLevel === 'sma' ||
+          e.institutionName.toLowerCase().includes('sma') ||
+          e.institutionName.toLowerCase().includes('smk') ||
+          e.institutionName.toLowerCase().includes('ma ');
+        const isSmp =
+          (e.schoolLevel as string) === 'smp' ||
+          e.institutionName.toLowerCase().includes('smp') ||
+          e.institutionName.toLowerCase().includes('mts');
+        const isSd =
+          e.schoolLevel === 'sd' ||
+          e.institutionName.toLowerCase().includes('sd') ||
+          e.institutionName.toLowerCase().includes('mi');
+
+        if (isSma) {
+          const siswa = e.qtPorsiBesar || e.qtSiswaBalita || 0;
+          const guru = e.qtGuruKader || 0;
+          count = siswa + guru;
+          cat = 'SMA / SMK';
+          detail = `${siswa} Siswa + ${guru} Guru/Staff`;
+        } else if (isSmp) {
+          const siswa = e.qtPorsiBesar || e.qtSiswaBalita || 0;
+          const guru = e.qtGuruKader || 0;
+          count = siswa + guru;
+          cat = 'SMP / MTs';
+          detail = `${siswa} Siswa + ${guru} Guru/Staff`;
+        } else if (isSd) {
+          const siswaBesar = e.qtPorsiBesar || Math.floor((e.qtSiswaBalita || 0) / 2);
+          const guru = e.qtGuruKader || 0;
+          count = siswaBesar + guru;
+          cat = 'SD (Kelas 4-6 + Guru)';
+          detail = `${siswaBesar} Siswa Kls 4-6 + ${guru} Guru`;
+        } else {
+          const siswa = e.qtPorsiBesar || e.qtSiswaBalita || 0;
+          const guru = e.qtGuruKader || 0;
+          count = siswa + guru;
+          cat = 'Porsi Besar & Guru';
+          detail = `${siswa} Siswa + ${guru} Guru`;
+        }
+      } else if (e.qtGuruKader && e.qtGuruKader > 0) {
+        count = e.qtGuruKader;
+        cat = 'Kader Posyandu';
+        detail = `${count} Kader Posyandu`;
+      }
+    } else if (portionType === 'balita') {
+      if (e.institutionType === 'posyandu') {
+        count = e.qtPorsiBalita || e.qtSiswaBalita || 0;
+        cat = 'Balita Posyandu (6-59 bln)';
+        detail = `${count} Balita Sasaran`;
+      }
+    } else if (portionType === 'bumil') {
+      if (e.institutionType === 'posyandu') {
+        const bumil = e.qtBumil || 0;
+        const busui = e.qtBusui || 0;
+        const total = e.qtPorsiBumilBusui || e.qtBumilBusui || (bumil + busui);
+        count = total;
+        cat = 'Ibu Hamil & Ibu Menyusui';
+        detail = bumil > 0 || busui > 0 ? `${bumil} Bumil + ${busui} Busui` : `${total} Bumil/Busui`;
+      }
+    }
+
+    if (count > 0 || (portionType === 'kecil' && e.schoolLevel === 'tk_paud')) {
+      result.push({
+        id: e.id,
+        institutionName: e.institutionName,
+        categoryLabel: cat,
+        portionCount: count,
+        totalJumlah: e.jumlah || count,
+        petugasName: e.assignedPetugasName || 'Belum Ditugaskan',
+        jadwal: e.jadwalPengantaran || '06.30 - 08.00',
+        isLibur: !!e.isSekolahLibur,
+        address: e.address,
+        detailBreakdown: detail,
+      });
+    }
+  });
+
+  return result;
+}
+
+// ─── COMPONENT UTAMA ─────────────────────────────────────────────────────────
+
 export function DailyReportExcelSections({
   report,
   defaultSubTab = 'kecil',
   activeSubTab,
   onSubTabChange,
+  entries = [],
 }: DailyReportExcelSectionsProps) {
   const [internalSubTab, setInternalSubTab] = useState<MbgDailyReportSubTab>(defaultSubTab);
+  const [pmSearchQuery, setPmSearchQuery] = useState('');
+  const [showAuxTabs, setShowAuxTabs] = useState(false);
 
   if (!report) {
     return null;
@@ -68,93 +250,79 @@ export function DailyReportExcelSections({
     }
   };
 
-  const TABS_CONFIG = [
+  // 5 UTAMA SESUAI PERMINTAAN USER:
+  // 1. Tabel Porsi Kecil
+  // 2. Tabel Porsi Besar
+  // 3. Tabel Porsi Balita
+  // 4. Tabel Porsi Bumil/Busui
+  // 5. Tabel Supplier
+  const CORE_5_TABS = [
     {
       key: 'kecil' as const,
-      label: 'Porsi Kecil',
+      number: '1',
+      label: 'Tabel Porsi Kecil',
       icon: Utensils,
-      countBadge: `${report.porsiKecil?.pmCount || 0} porsi`,
+      countBadge: `${report.porsiKecil?.pmCount || 0} Porsi`,
       itemCount: (report.porsiKecil?.nutritionItems || []).length,
       color: 'emerald',
     },
     {
       key: 'besar' as const,
-      label: 'Porsi Besar',
+      number: '2',
+      label: 'Tabel Porsi Besar',
       icon: ChefHat,
-      countBadge: `${report.porsiBesar?.pmCount || 0} porsi`,
+      countBadge: `${report.porsiBesar?.pmCount || 0} Porsi`,
       itemCount: (report.porsiBesar?.nutritionItems || []).length,
       color: 'blue',
     },
     {
       key: 'balita' as const,
-      label: 'Porsi Balita',
+      number: '3',
+      label: 'Tabel Porsi Balita',
       icon: Baby,
-      countBadge: `${report.porsiBalita?.pmCount || 0} porsi`,
+      countBadge: `${report.porsiBalita?.pmCount || 0} Porsi`,
       itemCount: (report.porsiBalita?.nutritionItems || []).length,
       color: 'amber',
     },
     {
       key: 'bumil' as const,
-      label: 'Bumil / Busui',
+      number: '4',
+      label: 'Tabel Porsi Bumil / Busui',
       icon: Heart,
-      countBadge: `${report.porsiBumilBusui?.pmCount || 0} porsi`,
+      countBadge: `${report.porsiBumilBusui?.pmCount || 0} Porsi`,
       itemCount: (report.porsiBumilBusui?.nutritionItems || []).length,
       color: 'rose',
     },
     {
-      key: 'paket3b' as const,
-      label: 'Paket Sehat 3B',
-      icon: Package,
-      countBadge: `${(report.paketSehat3b?.keringanItems || []).length} item`,
-      itemCount: (report.paketSehat3b?.keringanItems || []).length,
-      color: 'purple',
-    },
-    {
       key: 'po' as const,
-      label: 'PO & Realisasi Belanja',
+      number: '5',
+      label: 'Tabel Supplier',
       icon: Truck,
-      countBadge: `${(report.poRows || []).length} kedatangan`,
-      itemCount: (report.realisasiPembelianRows || []).length,
-      color: 'teal',
+      countBadge: `${(report.poRows || []).length} Item PO`,
+      itemCount: (report.poRows || []).length,
+      color: 'amber',
     },
-    {
-      key: 'qc' as const,
-      label: 'QC Penerimaan Bahan',
-      icon: ClipboardCheck,
-      countBadge: `${(report.inspectionForm?.rows || []).length} bahan`,
-      itemCount: (report.inspectionForm?.rows || []).length,
-      color: 'indigo',
-    },
-    {
-      key: 'waste' as const,
-      label: 'Rekap Limbah',
-      icon: Trash2,
-      countBadge: `${(report.wasteLogs || []).length} menu`,
-      itemCount: (report.wasteLogs || []).length,
-      color: 'slate',
-    },
-    ...(report.sekolahList && report.sekolahList.length > 0
-      ? [
-          {
-            key: 'sekolah' as const,
-            label: 'Distribusi Sekolah / PM',
-            icon: School,
-            countBadge: `${report.sekolahList.length} lembaga`,
-            itemCount: report.sekolahList.length,
-            color: 'emerald',
-          },
-        ]
-      : []),
   ];
 
-  // Helper renderer for portion data (Kecil, Besar, Balita, Bumil)
-  const renderPortionSection = (
+  // Optional secondary tabs (QC, Limbah, Paket 3B, Rekap Sekolah)
+  const AUX_TABS = [
+    { key: 'paket3b' as const, label: 'Paket Sehat 3B (Keringan)', icon: Layers },
+    { key: 'qc' as const, label: 'QC Penerimaan Bahan', icon: ClipboardCheck },
+    { key: 'waste' as const, label: 'Rekap Limbah Makanan', icon: Trash2 },
+    { key: 'sekolah' as const, label: 'Rekap Distribusi Sekolah', icon: School },
+  ];
+
+  // ─── RENDERER: TABEL PORSI EXCEL (KECIL, BESAR, BALITA, BUMIL) ───────────────
+  // Layout persis seperti screenshot Excel:
+  // 3 Grup Kolom berdampingan: Gizi (Pink) | Pesanan Bahan (Sky) | Pesanan Bumbu (Amber)
+  // Dilengkapi baris Total & baris % Pemenuhan AKG
+  const renderUnifiedExcelPortionTable = (
     portionData: MbgPortionDailyData | undefined,
     defaultTitle: string,
-    badgeColor: string
+    portionType: 'kecil' | 'besar' | 'balita' | 'bumil'
   ) => {
     const data = portionData || {
-      portionType: 'kecil',
+      portionType,
       portionTitle: defaultTitle,
       pmCount: 0,
       menuList: [],
@@ -171,50 +339,59 @@ export function DailyReportExcelSections({
       hargaPerPorsiOverall: 0,
     };
 
-    const hasNutrition = (data.nutritionItems || []).length > 0;
-    const hasBahan = (data.bahanItems || []).length > 0;
-    const hasBumbu = (data.bumbuItems || []).length > 0;
+    const maxRows = Math.max(
+      data.nutritionItems?.length || 0,
+      data.bahanItems?.length || 0,
+      data.bumbuItems?.length || 0,
+      1
+    );
+
+    // Filter PM data from Admin MBG input
+    const pmRows = getFilteredPmEntries(entries, portionType, report.sekolahList);
+    const filteredPmRows = pmRows.filter((p) =>
+      p.institutionName.toLowerCase().includes(pmSearchQuery.toLowerCase()) ||
+      p.petugasName.toLowerCase().includes(pmSearchQuery.toLowerCase()) ||
+      p.categoryLabel.toLowerCase().includes(pmSearchQuery.toLowerCase())
+    );
+    const totalPorsiPm = pmRows.reduce((s, p) => s + (p.isLibur ? 0 : p.portionCount), 0);
 
     return (
-      <div className="space-y-5 animate-in fade-in duration-200">
-        {/* Header Banner & Metric Overview */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="text-sm font-black text-slate-900 tracking-tight">
-                {data.portionTitle || defaultTitle}
-              </h4>
-              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold shadow-2xs ${badgeColor}`}>
-                {data.pmCount || 0} Porsi Sasaran
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Data terpisah sesuai lembar kerja Excel: Kandungan Gizi, Pesanan Bahan Baku, dan Pesanan Bumbu.
-            </p>
+      <div className="space-y-6 animate-in fade-in duration-200">
+        {/* TOP COMPACT METRIC BAR */}
+        <div className="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3 font-['Hanken_Grotesk']">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-slate-900 text-amber-300">
+              {data.portionTitle || defaultTitle}
+            </span>
+            <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-100 text-emerald-900 border border-emerald-300">
+              🎯 Sasaran: {data.pmCount || totalPorsiPm || 0} Porsi
+            </span>
+            <span className="text-xs text-slate-500 hidden sm:inline">
+              Layout format tabel Excel: Gizi, Bahan Pokok & Bumbu Masak
+            </span>
           </div>
 
-          {/* Mini Stats Summary */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-            <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/60">
-              <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Energi</span>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <div className="bg-amber-50/80 rounded-xl px-2.5 py-1.5 border border-amber-200/80">
+              <span className="text-[10px] font-extrabold text-amber-900 uppercase block">Total Energi</span>
               <span className="text-xs font-black text-amber-700">
                 {formatNum(data.totalGizi?.energi, 1)} kkal
               </span>
             </div>
-            <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/60">
-              <span className="text-[10px] font-bold text-slate-500 uppercase block">Belanja Bahan</span>
+            <div className="bg-sky-50/80 rounded-xl px-2.5 py-1.5 border border-sky-200/80">
+              <span className="text-[10px] font-extrabold text-sky-900 uppercase block">Belanja Bahan</span>
               <span className="text-xs font-black text-slate-800">
                 {formatRp(data.totalBelanjaBahan)}
               </span>
             </div>
-            <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/60">
-              <span className="text-[10px] font-bold text-slate-500 uppercase block">Belanja Bumbu</span>
+            <div className="bg-amber-50/80 rounded-xl px-2.5 py-1.5 border border-amber-200/80">
+              <span className="text-[10px] font-extrabold text-amber-900 uppercase block">Belanja Bumbu</span>
               <span className="text-xs font-black text-slate-800">
                 {formatRp(data.totalBelanjaBumbu)}
               </span>
             </div>
-            <div className="bg-emerald-50/80 rounded-xl p-2 border border-emerald-200/80">
-              <span className="text-[10px] font-bold text-emerald-800 uppercase block">Biaya / Porsi</span>
+            <div className="bg-emerald-50/80 rounded-xl px-2.5 py-1.5 border border-emerald-200/80">
+              <span className="text-[10px] font-extrabold text-emerald-900 uppercase block">Biaya / Porsi</span>
               <span className="text-xs font-black text-emerald-900">
                 {formatRp(data.hargaPerPorsiOverall || (data.pmCount ? data.totalBelanjaOverall / data.pmCount : 0))}
               </span>
@@ -222,225 +399,405 @@ export function DailyReportExcelSections({
           </div>
         </div>
 
-        {/* TABEL 1: KANDUNGAN GIZI */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs">
-          <div className="px-4 py-2.5 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between flex-wrap gap-2">
+        {/* ─── TABEL UTAMA: FORMAT PERSIS EXCEL IMPORT ─── */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="px-4 py-2.5 bg-[#0F172A] text-white text-xs font-black uppercase tracking-wider flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-              <span>1. Kandungan Gizi Menu — {data.portionTitle || defaultTitle}</span>
-              <span className="text-[10px] font-medium text-slate-300 normal-case">
-                ({data.nutritionItems?.length || 0} Komponen)
-              </span>
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+              <span>Tabel {data.portionTitle || defaultTitle} — Sesuai Format File Excel</span>
             </div>
             <span className="text-[10px] font-bold text-amber-300 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20">
-              Realisasi Menu Excel
+              {maxRows} Baris Komponen
             </span>
           </div>
 
-          {!hasNutrition ? (
-            <div className="p-6 text-center text-xs text-slate-500 italic bg-slate-50/50">
-              Tidak ada data kandungan gizi untuk porsi ini di dalam file Excel.
+          <div className="overflow-x-auto max-h-[550px] overflow-y-auto">
+            <table className="w-full text-left border-collapse min-w-[1300px]">
+              <thead className="sticky top-0 z-20 shadow-xs">
+                {/* Header Kategori 3 Bagian */}
+                <tr className="text-[11px] font-black uppercase tracking-wider border-b border-slate-300">
+                  <th
+                    colSpan={9}
+                    className="bg-[#FFE4E6] text-[#881337] py-2 px-3 text-center border-r-2 border-slate-300 font-extrabold"
+                  >
+                    🌸 1. Kandungan Gizi Menu
+                  </th>
+                  <th
+                    colSpan={9}
+                    className="bg-[#E0F2FE] text-[#0369A1] py-2 px-3 text-center border-r-2 border-slate-300 font-extrabold"
+                  >
+                    🥣 2. Pesanan Bahan Makanan Pokok
+                  </th>
+                  <th
+                    colSpan={6}
+                    className="bg-[#FEF3C7] text-[#92400E] py-2 px-3 text-center font-extrabold"
+                  >
+                    🧂 3. Pesanan Bumbu Masak
+                  </th>
+                </tr>
+
+                {/* Sub-Header Nama Kolom (Persis Foto Excel) */}
+                <tr className="text-[10px] font-black border-b border-slate-300">
+                  {/* Kolom Gizi (Pinkish) */}
+                  <th className="px-2 py-1.5 bg-[#FFF1F2] text-[#9F1239] border-r border-rose-200 whitespace-nowrap">Jenis Menu</th>
+                  <th className="px-2 py-1.5 bg-[#FFF1F2] text-[#9F1239] border-r border-rose-200 whitespace-nowrap">Menu</th>
+                  <th className="px-2 py-1.5 bg-[#FFF1F2] text-[#9F1239] border-r border-rose-200 whitespace-nowrap">Rincian Bahan</th>
+                  <th className="px-1.5 py-1.5 bg-[#FFF1F2] text-[#9F1239] text-center border-r border-rose-200 whitespace-nowrap">Berat Bersih</th>
+                  <th className="px-1.5 py-1.5 bg-[#FFF1F2] text-amber-800 text-center border-r border-rose-200 whitespace-nowrap font-black">Energi (kkal)</th>
+                  <th className="px-1.5 py-1.5 bg-[#FFF1F2] text-[#9F1239] text-center border-r border-rose-200 whitespace-nowrap">Protein (g)</th>
+                  <th className="px-1.5 py-1.5 bg-[#FFF1F2] text-[#9F1239] text-center border-r border-rose-200 whitespace-nowrap">Lemak (g)</th>
+                  <th className="px-1.5 py-1.5 bg-[#FFF1F2] text-[#9F1239] text-center border-r border-rose-200 whitespace-nowrap">Karbohidrat (g)</th>
+                  <th className="px-1.5 py-1.5 bg-[#FFF1F2] text-[#9F1239] text-center border-r-2 border-slate-300 whitespace-nowrap">Serat (g)</th>
+
+                  {/* Kolom Bahan (Sky/Blue) */}
+                  <th className="px-2 py-1.5 bg-[#F0F9FF] text-[#0C4A6E] border-r border-sky-200 whitespace-nowrap">Rincian Bahan</th>
+                  <th className="px-2 py-1.5 bg-[#F0F9FF] text-[#0C4A6E] text-right border-r border-sky-200 whitespace-nowrap">Harga Baku</th>
+                  <th className="px-1.5 py-1.5 bg-[#F0F9FF] text-[#0C4A6E] text-center border-r border-sky-200 whitespace-nowrap">%BDD</th>
+                  <th className="px-1.5 py-1.5 bg-[#F0F9FF] text-[#0C4A6E] text-center border-r border-sky-200 whitespace-nowrap">Berat Kotor</th>
+                  <th className="px-1.5 py-1.5 bg-[#F0F9FF] text-[#0C4A6E] text-center border-r border-sky-200 whitespace-nowrap">Total (g/ml)</th>
+                  <th className="px-1.5 py-1.5 bg-[#F0F9FF] text-[#0C4A6E] text-center border-r border-sky-200 whitespace-nowrap">Spare %</th>
+                  <th className="px-1.5 py-1.5 bg-[#F0F9FF] text-[#0C4A6E] text-center border-r border-sky-200 whitespace-nowrap font-bold">Kebutuhan</th>
+                  <th className="px-1.5 py-1.5 bg-[#F0F9FF] text-[#0C4A6E] text-center border-r border-sky-200 whitespace-nowrap">Satuan</th>
+                  <th className="px-2 py-1.5 bg-[#F0F9FF] text-[#0C4A6E] text-right border-r-2 border-slate-300 whitespace-nowrap font-bold">Harga</th>
+
+                  {/* Kolom Bumbu (Amber/Yellow) */}
+                  <th className="px-2 py-1.5 bg-[#FFFBEB] text-[#78350F] border-r border-amber-200 whitespace-nowrap">Nama Menu</th>
+                  <th className="px-2 py-1.5 bg-[#FFFBEB] text-[#78350F] border-r border-amber-200 whitespace-nowrap">Nama Bumbu</th>
+                  <th className="px-2 py-1.5 bg-[#FFFBEB] text-[#78350F] text-right border-r border-amber-200 whitespace-nowrap">Harga Bumbu</th>
+                  <th className="px-1.5 py-1.5 bg-[#FFFBEB] text-[#78350F] text-center border-r border-amber-200 whitespace-nowrap font-bold">Kebutuhan</th>
+                  <th className="px-1.5 py-1.5 bg-[#FFFBEB] text-[#78350F] text-center border-r border-amber-200 whitespace-nowrap">Satuan</th>
+                  <th className="px-2 py-1.5 bg-[#FFFBEB] text-[#78350F] text-right whitespace-nowrap font-bold">Harga</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-200 font-['Hanken_Grotesk'] text-[11px]">
+                {Array.from({ length: maxRows }).map((_, idx) => {
+                  const nut = data.nutritionItems?.[idx];
+                  const bah = data.bahanItems?.[idx];
+                  const bum = data.bumbuItems?.[idx];
+
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                      {/* Gizi Cells */}
+                      <td className="px-2 py-1.5 font-bold text-slate-700 border-r border-rose-100/60 whitespace-nowrap bg-rose-50/20">
+                        {idx === 0 ? (data.portionTitle || defaultTitle) : ''}
+                      </td>
+                      <td className="px-2 py-1.5 font-bold text-slate-900 border-r border-rose-100/60 whitespace-nowrap">
+                        {nut?.menuName || ''}
+                      </td>
+                      <td className="px-2 py-1.5 text-slate-600 border-r border-rose-100/60 whitespace-nowrap">
+                        {nut?.rincianBahan || ''}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center font-medium border-r border-rose-100/60">
+                        {nut ? formatNum(nut.beratBersih, 1) : ''}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center font-black text-amber-700 border-r border-rose-100/60 bg-amber-50/30">
+                        {nut ? formatNum(nut.energi, 1) : ''}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center border-r border-rose-100/60">
+                        {nut ? formatNum(nut.protein, 1) : ''}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center border-r border-rose-100/60">
+                        {nut ? formatNum(nut.lemak, 1) : ''}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center border-r border-rose-100/60">
+                        {nut ? formatNum(nut.karbohidrat, 1) : ''}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center border-r-2 border-slate-300">
+                        {nut ? formatNum(nut.serat, 1) : ''}
+                      </td>
+
+                      {/* Bahan Pokok Cells */}
+                      <td className="px-2 py-1.5 font-bold text-slate-900 border-r border-sky-100/60 whitespace-nowrap">
+                        {bah?.rincianBahan || ''}
+                      </td>
+                      <td className="px-2 py-1.5 text-right text-slate-600 border-r border-sky-100/60 whitespace-nowrap">
+                        {bah?.hargaBahan ? formatRp(bah.hargaBahan) : ''}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center text-slate-500 border-r border-sky-100/60">
+                        {bah?.bddPercent != null ? `${formatNum(bah.bddPercent, 0)}%` : ''}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center text-slate-600 border-r border-sky-100/60">
+                        {bah ? formatNum(bah.beratKotor, 0) : ''}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center text-slate-600 border-r border-sky-100/60">
+                        {bah ? formatNum(bah.totalGml, 0) : ''}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center text-slate-400 border-r border-sky-100/60">
+                        {bah?.sparePercent ? `${bah.sparePercent}%` : '-'}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center font-black text-slate-900 bg-sky-50/30 border-r border-sky-100/60">
+                        {bah ? formatNum(bah.kebutuhan, 1) : ''}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center font-bold text-slate-600 border-r border-sky-100/60">
+                        {bah?.satuan || ''}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-bold text-emerald-800 border-r-2 border-slate-300 whitespace-nowrap">
+                        {bah?.harga ? formatRp(bah.harga) : ''}
+                      </td>
+
+                      {/* Bumbu Masak Cells */}
+                      <td className="px-2 py-1.5 text-slate-600 border-r border-amber-100/60 whitespace-nowrap">
+                        {bum?.namaMenu || ''}
+                      </td>
+                      <td className="px-2 py-1.5 font-bold text-slate-900 border-r border-amber-100/60 whitespace-nowrap">
+                        {bum?.namaBumbu || ''}
+                      </td>
+                      <td className="px-2 py-1.5 text-right text-slate-600 border-r border-amber-100/60 whitespace-nowrap">
+                        {bum?.hargaBumbu ? formatRp(bum.hargaBumbu) : ''}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center font-black text-slate-900 bg-amber-50/30 border-r border-amber-100/60">
+                        {bum ? formatNum(bum.kebutuhan, 2) : ''}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center font-bold text-slate-600 border-r border-amber-100/60">
+                        {bum?.satuan || ''}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-bold text-amber-900 whitespace-nowrap">
+                        {bum?.harga ? formatRp(bum.harga) : ''}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+
+              {/* ─── FOOTER BARIS TOTAL & % PEMENUHAN AKG ─── */}
+              <tfoot className="border-t-2 border-slate-400 font-['Hanken_Grotesk'] text-[11px] font-black">
+                {/* Baris Total Nilai Gizi & Belanja */}
+                <tr className="bg-[#FFE4E6]/50 text-slate-900 border-b border-slate-300">
+                  <td colSpan={3} className="px-3 py-2 text-left uppercase font-black text-rose-950 border-r border-rose-200">
+                    Total
+                  </td>
+                  <td className="px-1.5 py-2 text-center border-r border-rose-200 font-bold">
+                    {formatNum(data.totalGizi?.beratBersih, 1)}
+                  </td>
+                  <td className="px-1.5 py-2 text-center text-amber-900 bg-amber-200/60 font-black border-r border-rose-200">
+                    {formatNum(data.totalGizi?.energi, 1)}
+                  </td>
+                  <td className="px-1.5 py-2 text-center border-r border-rose-200">
+                    {formatNum(data.totalGizi?.protein, 1)}
+                  </td>
+                  <td className="px-1.5 py-2 text-center border-r border-rose-200">
+                    {formatNum(data.totalGizi?.lemak, 1)}
+                  </td>
+                  <td className="px-1.5 py-2 text-center border-r border-rose-200">
+                    {formatNum(data.totalGizi?.karbohidrat, 1)}
+                  </td>
+                  <td className="px-1.5 py-2 text-center border-r-2 border-slate-300">
+                    {formatNum(data.totalGizi?.serat, 1)}
+                  </td>
+
+                  {/* Total Belanja Bahan */}
+                  <td colSpan={8} className="px-3 py-2 text-right uppercase tracking-wider text-sky-950 border-r border-sky-200">
+                    Total Bahan:
+                  </td>
+                  <td className="px-2 py-2 text-right font-black text-emerald-900 border-r-2 border-slate-300 whitespace-nowrap bg-emerald-50">
+                    {formatRp(data.totalBelanjaBahan)}
+                  </td>
+
+                  {/* Total Belanja Bumbu */}
+                  <td colSpan={5} className="px-3 py-2 text-right uppercase tracking-wider text-amber-950 border-r border-amber-200">
+                    Total Bumbu:
+                  </td>
+                  <td className="px-2 py-2 text-right font-black text-amber-900 whitespace-nowrap bg-amber-50">
+                    {formatRp(data.totalBelanjaBumbu)}
+                  </td>
+                </tr>
+
+                {/* Baris Biaya Per Porsi (Jika Ada) */}
+                <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
+                  <td colSpan={9} className="px-3 py-1.5 text-right font-bold text-slate-500 border-r-2 border-slate-300">
+                    Biaya Bahan Pokok per Porsi:
+                  </td>
+                  <td colSpan={9} className="px-3 py-1.5 text-right font-black text-sky-900 border-r-2 border-slate-300">
+                    {formatRp(data.hargaBahanPerPorsi || (data.pmCount ? data.totalBelanjaBahan / data.pmCount : 0))} / porsi
+                  </td>
+                  <td colSpan={6} className="px-3 py-1.5 text-right font-black text-amber-900">
+                    {formatRp(data.hargaBumbuPerPorsi || (data.pmCount ? data.totalBelanjaBumbu / data.pmCount : 0))} / porsi
+                  </td>
+                </tr>
+
+                {/* Baris % Pemenuhan AKG (Persis di Excel) */}
+                {data.akgMetrics && Object.keys(data.akgMetrics).length > 0 ? (
+                  Object.entries(data.akgMetrics).map(([akgKey, metric], akgIdx) => {
+                    const cleanKey = akgKey.replace(/_/g, ' ').toUpperCase();
+                    return (
+                      <tr key={akgIdx} className="bg-[#FEF3C7]/40 text-amber-950 border-b border-amber-200/80">
+                        <td colSpan={3} className="px-3 py-1.5 text-left font-bold text-[10px] text-amber-900 border-r border-amber-200">
+                          % Pemenuhan Makan Siang ({cleanKey})
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center text-[10px] border-r border-amber-200">-</td>
+                        <td className="px-1.5 py-1.5 text-center font-black text-amber-800 border-r border-amber-200 bg-amber-100/50">
+                          {formatNum(metric.percentMakanSiang, 1)}%
+                        </td>
+                        <td colSpan={4} className="px-2 py-1.5 text-center text-[10px] border-r border-amber-200 text-amber-800">
+                          {metric.percentHarian > 0 ? `Harian: ${formatNum(metric.percentHarian, 1)}%` : 'Standar Kemkes'}
+                        </td>
+                        <td className="border-r-2 border-slate-300"></td>
+                        <td colSpan={15} className="px-3 py-1.5 text-xs text-slate-500 font-medium italic">
+                          Capaian Angka Kecukupan Gizi (AKG) Makan Siang Sasaran {cleanKey}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr className="bg-amber-50/40 text-amber-950">
+                    <td colSpan={3} className="px-3 py-1.5 text-left font-bold text-[10px] text-amber-900 border-r border-amber-200">
+                      % Pemenuhan Makan Siang ({portionType.toUpperCase()})
+                    </td>
+                    <td className="px-1.5 py-1.5 text-center text-[10px] border-r border-amber-200">-</td>
+                    <td className="px-1.5 py-1.5 text-center font-black text-amber-800 border-r border-amber-200 bg-amber-100/50">
+                      100%
+                    </td>
+                    <td colSpan={4} className="px-2 py-1.5 text-center text-[10px] border-r border-amber-200 text-amber-800">
+                      Sesuai Standar Gizi
+                    </td>
+                    <td className="border-r-2 border-slate-300"></td>
+                    <td colSpan={15} className="px-3 py-1.5 text-xs text-slate-500 font-medium italic">
+                      Menu Bergizi Gratis Standar Koperasi Al Umanaa
+                    </td>
+                  </tr>
+                )}
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        {/* ─── DATA INPUT ADMIN MBG (LANGSUNG DI BAWAH TABEL) ─── */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden font-['Hanken_Grotesk']">
+          <div className="px-4 py-3 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-amber-400" />
+                <h4 className="text-xs font-black uppercase tracking-wider">
+                  Data Penerima Manfaat (Input Admin MBG) — Sasaran {data.portionTitle || defaultTitle}
+                </h4>
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                Daftar institusi, sekolah, dan sasaran yang menerima alokasi porsi ini pada batch produksi aktif.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-3 py-1 bg-amber-400 text-slate-950 rounded-xl text-xs font-black shadow-xs">
+                Total Alokasi: {totalPorsiPm.toLocaleString('id-ID')} Porsi
+              </span>
+              <span className="px-2.5 py-1 bg-slate-800 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold">
+                {pmRows.length} Lembaga
+              </span>
+            </div>
+          </div>
+
+          {/* Search bar inside */}
+          <div className="p-3 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between gap-3">
+            <div className="relative max-w-sm w-full">
+              <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={pmSearchQuery}
+                onChange={(e) => setPmSearchQuery(e.target.value)}
+                placeholder="Cari nama sekolah / posyandu / kurir..."
+                className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-amber-400 font-medium"
+              />
+            </div>
+            <span className="text-[11px] text-slate-500 font-bold hidden sm:inline">
+              Menampilkan {filteredPmRows.length} dari {pmRows.length} sasaran
+            </span>
+          </div>
+
+          {/* Table Data Admin MBG */}
+          {filteredPmRows.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-500 space-y-2">
+              <School className="h-8 w-8 text-slate-300 mx-auto" />
+              <p className="font-bold text-slate-700">
+                Belum ada data input Admin MBG yang cocok untuk kategori {data.portionTitle || defaultTitle}.
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Pastikan Admin MBG telah menginput data sekolah/posyandu di menu Admin MBG atau mengimport data penerima manfaat.
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
                 <thead>
                   <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                    <th className="px-3 py-2 w-10 text-center">No</th>
-                    <th className="px-3 py-2">Menu</th>
-                    <th className="px-3 py-2">Rincian Bahan</th>
-                    <th className="px-2 py-2 text-center">Berat Bersih (g)</th>
-                    <th className="px-2 py-2 text-center text-amber-700">Energi (kkal)</th>
-                    <th className="px-2 py-2 text-center">Protein (g)</th>
-                    <th className="px-2 py-2 text-center">Lemak (g)</th>
-                    <th className="px-2 py-2 text-center">Karbohidrat (g)</th>
-                    <th className="px-2 py-2 text-center">Serat (g)</th>
+                    <th className="px-3 py-2.5 w-10 text-center">No</th>
+                    <th className="px-4 py-2.5">Nama Institusi / Lembaga</th>
+                    <th className="px-3 py-2.5">Kategori / Jenjang</th>
+                    <th className="px-3 py-2.5 text-center font-black text-amber-900 bg-amber-50/60">
+                      Porsi Sasaran Ini
+                    </th>
+                    <th className="px-3 py-2.5 text-center">Rincian / Catatan</th>
+                    <th className="px-3 py-2.5 text-center font-bold">Total Seluruh Porsi</th>
+                    <th className="px-3 py-2.5">Petugas Kurir</th>
+                    <th className="px-3 py-2.5 text-center">Jadwal Pengantaran</th>
+                    <th className="px-3 py-2.5 text-center">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {data.nutritionItems.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-amber-50/40 transition-colors font-medium text-slate-800">
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                  {filteredPmRows.map((row, idx) => (
+                    <tr
+                      key={row.id || idx}
+                      className={`hover:bg-amber-50/30 transition-colors ${
+                        row.isLibur ? 'bg-red-50/50 opacity-60 line-through' : ''
+                      }`}
+                    >
                       <td className="px-3 py-2 text-center text-slate-400 text-[11px]">{idx + 1}</td>
-                      <td className="px-3 py-2 font-bold text-slate-900">{item.menuName}</td>
-                      <td className="px-3 py-2 text-slate-600">{item.rincianBahan}</td>
-                      <td className="px-2 py-2 text-center font-medium">{formatNum(item.beratBersih, 1)}</td>
-                      <td className="px-2 py-2 text-center font-bold text-amber-700">{formatNum(item.energi, 1)}</td>
-                      <td className="px-2 py-2 text-center">{formatNum(item.protein, 2)}</td>
-                      <td className="px-2 py-2 text-center">{formatNum(item.lemak, 2)}</td>
-                      <td className="px-2 py-2 text-center">{formatNum(item.karbohidrat, 2)}</td>
-                      <td className="px-2 py-2 text-center">{formatNum(item.serat, 2)}</td>
+                      <td className="px-4 py-2 font-bold text-slate-900">
+                        {row.institutionName}
+                        {row.address && (
+                          <span className="block text-[10px] text-slate-400 font-normal truncate max-w-xs">
+                            {row.address}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700">
+                          {row.categoryLabel}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-center font-black text-amber-800 bg-amber-50/50 text-sm">
+                        {row.portionCount.toLocaleString('id-ID')}
+                      </td>
+                      <td className="px-3 py-2 text-center text-slate-500 text-[11px]">
+                        {row.detailBreakdown || '-'}
+                      </td>
+                      <td className="px-3 py-2 text-center font-bold text-slate-800">
+                        {row.totalJumlah.toLocaleString('id-ID')}
+                      </td>
+                      <td className="px-3 py-2 text-slate-700 flex items-center gap-1.5 mt-1">
+                        <UserCheck className="h-3 w-3 text-emerald-600 shrink-0" />
+                        <span>{row.petugasName}</span>
+                      </td>
+                      <td className="px-3 py-2 text-center text-slate-600 font-bold whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-slate-400" />
+                          <span>{row.jadwal}</span>
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-center whitespace-nowrap">
+                        {row.isLibur ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-700">
+                            Libur
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
+                            Aktif
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-900 text-white font-black text-xs border-t-2 border-slate-900">
-                    <td colSpan={3} className="px-3 py-2.5 text-right tracking-wider uppercase">
-                      Total Gizi per Porsi:
+                    <td colSpan={3} className="px-4 py-2.5 text-right uppercase tracking-wider">
+                      Total Porsi Sasaran ({filteredPmRows.length} Lembaga):
                     </td>
-                    <td className="px-2 py-2.5 text-center">{formatNum(data.totalGizi?.beratBersih, 1)}</td>
-                    <td className="px-2 py-2.5 text-center text-amber-300 font-extrabold">{formatNum(data.totalGizi?.energi, 1)}</td>
-                    <td className="px-2 py-2.5 text-center">{formatNum(data.totalGizi?.protein, 2)}</td>
-                    <td className="px-2 py-2.5 text-center">{formatNum(data.totalGizi?.lemak, 2)}</td>
-                    <td className="px-2 py-2.5 text-center">{formatNum(data.totalGizi?.karbohidrat, 2)}</td>
-                    <td className="px-2 py-2.5 text-center">{formatNum(data.totalGizi?.serat, 2)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
-
-          {/* AKG Reference Strips if available */}
-          {data.akgMetrics && Object.keys(data.akgMetrics).length > 0 && (
-            <div className="bg-amber-50/70 p-3 border-t border-amber-200/60 text-xs">
-              <span className="text-[11px] font-extrabold text-amber-900 block mb-1.5 flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-amber-600" />
-                <span>% Capaian Pemenuhan Angka Kecukupan Gizi (AKG) Hasil Excel:</span>
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(data.akgMetrics).map(([key, metric]) => (
-                  <div key={key} className="bg-white px-2.5 py-1 rounded-lg border border-amber-200 shadow-2xs flex items-center gap-2 text-[11px]">
-                    <span className="font-bold text-slate-800 uppercase">{key.replace('_', ' ')}:</span>
-                    <span className="text-amber-800 font-black">
-                      Makan Siang {formatNum(metric.percentMakanSiang, 1)}%
-                    </span>
-                    {metric.percentHarian > 0 && (
-                      <span className="text-slate-500 font-medium">
-                        | Harian {formatNum(metric.percentHarian, 1)}%
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* TABEL 2: PESANAN BAHAN MAKANAN */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs">
-          <div className="px-4 py-2.5 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span>2. Pesanan Bahan Makanan Pokok — {data.portionTitle || defaultTitle}</span>
-              <span className="text-[10px] font-medium text-slate-300 normal-case">
-                ({data.bahanItems?.length || 0} Bahan)
-              </span>
-            </div>
-            <span className="text-emerald-300 text-xs font-black">
-              Subtotal: {formatRp(data.totalBelanjaBahan)}
-            </span>
-          </div>
-
-          {!hasBahan ? (
-            <div className="p-6 text-center text-xs text-slate-500 italic bg-slate-50/50">
-              Tidak ada rincian pesanan bahan makanan pokok untuk porsi ini di dalam file Excel.
-            </div>
-          ) : (
-            <div className="overflow-x-auto max-h-80 overflow-y-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="sticky top-0 z-10">
-                  <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                    <th className="px-3 py-2 w-10 text-center">No</th>
-                    <th className="px-3 py-2">Rincian Bahan</th>
-                    <th className="px-2 py-2 text-center">%BDD</th>
-                    <th className="px-2 py-2 text-center">Berat Kotor (g)</th>
-                    <th className="px-2 py-2 text-center">Total (g/ml)</th>
-                    <th className="px-2 py-2 text-center">Kebutuhan</th>
-                    <th className="px-2 py-2 text-center">Satuan</th>
-                    <th className="px-3 py-2 text-right">Harga Satuan</th>
-                    <th className="px-3 py-2 text-right">Total Harga</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {data.bahanItems.map((b, idx) => (
-                    <tr key={idx} className="hover:bg-emerald-50/40 transition-colors font-medium text-slate-800">
-                      <td className="px-3 py-2 text-center text-slate-400 text-[11px]">{idx + 1}</td>
-                      <td className="px-3 py-2 font-bold text-slate-900">{b.rincianBahan}</td>
-                      <td className="px-2 py-2 text-center text-slate-500">{formatNum(b.bddPercent, 0)}%</td>
-                      <td className="px-2 py-2 text-center text-slate-600">{formatNum(b.beratKotor, 1)}</td>
-                      <td className="px-2 py-2 text-center text-slate-600">{formatNum(b.totalGml, 1)}</td>
-                      <td className="px-2 py-2 text-center font-black text-slate-900 bg-slate-50/80">{formatNum(b.kebutuhan, 2)}</td>
-                      <td className="px-2 py-2 text-center font-bold text-slate-600">{b.satuan || 'kg'}</td>
-                      <td className="px-3 py-2 text-right font-medium text-slate-600">
-                        {b.hargaBahan ? formatRp(b.hargaBahan) : '-'}
-                      </td>
-                      <td className="px-3 py-2 text-right font-bold text-emerald-800">
-                        {b.harga ? formatRp(b.harga) : '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-slate-100 text-slate-900 font-black text-xs border-t-2 border-slate-300">
-                    <td colSpan={8} className="px-3 py-2.5 text-right uppercase tracking-wider">
-                      Total Belanja Bahan Pokok:
+                    <td className="px-3 py-2.5 text-center text-amber-300 font-extrabold text-sm bg-slate-800">
+                      {totalPorsiPm.toLocaleString('id-ID')}
                     </td>
-                    <td className="px-3 py-2.5 text-right text-emerald-800 font-extrabold text-sm">
-                      {formatRp(data.totalBelanjaBahan)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* TABEL 3: PESANAN BUMBU */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs">
-          <div className="px-4 py-2.5 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-              <span>3. Pesanan Bumbu Masak — {data.portionTitle || defaultTitle}</span>
-              <span className="text-[10px] font-medium text-slate-300 normal-case">
-                ({data.bumbuItems?.length || 0} Bumbu)
-              </span>
-            </div>
-            <span className="text-amber-300 text-xs font-black">
-              Subtotal: {formatRp(data.totalBelanjaBumbu)}
-            </span>
-          </div>
-
-          {!hasBumbu ? (
-            <div className="p-6 text-center text-xs text-slate-500 italic bg-slate-50/50">
-              Tidak ada rincian pesanan bumbu masak untuk porsi ini di dalam file Excel.
-            </div>
-          ) : (
-            <div className="overflow-x-auto max-h-80 overflow-y-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="sticky top-0 z-10">
-                  <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                    <th className="px-3 py-2 w-10 text-center">No</th>
-                    <th className="px-3 py-2">Menu Terkait</th>
-                    <th className="px-3 py-2">Nama Bumbu</th>
-                    <th className="px-2 py-2 text-center">Kebutuhan</th>
-                    <th className="px-2 py-2 text-center">Satuan</th>
-                    <th className="px-3 py-2 text-right">Harga Satuan</th>
-                    <th className="px-3 py-2 text-right">Total Harga</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {data.bumbuItems.map((b, idx) => (
-                    <tr key={idx} className="hover:bg-amber-50/40 transition-colors font-medium text-slate-800">
-                      <td className="px-3 py-2 text-center text-slate-400 text-[11px]">{idx + 1}</td>
-                      <td className="px-3 py-2 text-slate-600 font-medium">{b.namaMenu || '-'}</td>
-                      <td className="px-3 py-2 font-bold text-slate-900">{b.namaBumbu}</td>
-                      <td className="px-2 py-2 text-center font-black text-slate-900 bg-slate-50/80">{formatNum(b.kebutuhan, 3)}</td>
-                      <td className="px-2 py-2 text-center font-bold text-slate-600">{b.satuan || 'kg'}</td>
-                      <td className="px-3 py-2 text-right font-medium text-slate-600">
-                        {b.hargaBumbu ? formatRp(b.hargaBumbu) : '-'}
-                      </td>
-                      <td className="px-3 py-2 text-right font-bold text-amber-800">
-                        {b.harga ? formatRp(b.harga) : '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-slate-100 text-slate-900 font-black text-xs border-t-2 border-slate-300">
-                    <td colSpan={6} className="px-3 py-2.5 text-right uppercase tracking-wider">
-                      Total Belanja Bumbu Masak:
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-amber-800 font-extrabold text-sm">
-                      {formatRp(data.totalBelanjaBumbu)}
+                    <td colSpan={5} className="px-3 py-2.5 text-slate-400 font-medium italic">
+                      Data otomatis terhubung dengan inputan Administrasi PM MBG.
                     </td>
                   </tr>
                 </tfoot>
@@ -452,9 +809,200 @@ export function DailyReportExcelSections({
     );
   };
 
+  // ─── RENDERER: TABEL 5 — TABEL SUPPLIER (SESUAI FOTO SCREENSHOT 5) ───────────
+  const renderSupplierSection = () => {
+    const poList = report.poRows || [];
+    const grandTotal =
+      poList.reduce((s, p) => s + (p.totalHarga || (p.jumlah > 0 && p.hargaSatuan ? p.jumlah * p.hargaSatuan : 0)), 0) ||
+      report.totalPengeluaran ||
+      0;
+
+    // Grouping by supplier for recap cards underneath
+    const supplierGroups = poList.reduce((acc, row) => {
+      const sup = row.supplier || 'Koperasi Al Umanaa';
+      if (!acc[sup]) {
+        acc[sup] = {
+          items: [],
+          totalSpend: 0,
+        };
+      }
+      const itemTotal = row.totalHarga || (row.jumlah > 0 && row.hargaSatuan ? row.jumlah * row.hargaSatuan : 0);
+      acc[sup].items.push(row);
+      acc[sup].totalSpend += itemTotal;
+      return acc;
+    }, {} as Record<string, { items: typeof poList; totalSpend: number }>);
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-200 font-['Hanken_Grotesk']">
+        {/* Banner Overview */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Truck className="h-5 w-5 text-amber-500" />
+              <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                Tabel Supplier — Pesanan Bahan Makanan & Bumbu
+              </h4>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Format persis sesuai form excel yang di-import: Supplier, List Pesanan Bahan, Kedatangan, Jumlah, Item/Satuan, Harga Satuan, Total Harga.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-3 py-1 bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-black">
+              {poList.length} Item Bahan Dipesan
+            </span>
+            <span className="px-3 py-1 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-black">
+              Total Belanja: {formatRp(grandTotal)}
+            </span>
+          </div>
+        </div>
+
+        {/* ─── TABEL SUPPLIER (SESUAI SCREENSHOT 5) ─── */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="px-4 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 text-xs font-black uppercase tracking-wider flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-950"></span>
+              <span>Tabel Daftar Pesanan Bahan ke Supplier (Hasil Excel Import)</span>
+            </div>
+            <span className="text-[11px] font-black bg-slate-950 text-amber-300 px-2.5 py-0.5 rounded-full shadow-xs">
+              {Object.keys(supplierGroups).length} Supplier Mitra
+            </span>
+          </div>
+
+          {poList.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-500 italic bg-slate-50">
+              Tidak ada data pesanan supplier pada file Excel ini.
+            </div>
+          ) : (
+            <div className="overflow-x-auto max-h-[550px] overflow-y-auto">
+              <table className="w-full text-xs text-left border-collapse min-w-[900px]">
+                <thead className="sticky top-0 z-10 shadow-xs">
+                  <tr className="bg-[#FEF08A] text-[#713F12] font-black text-[11px] border-b-2 border-amber-300">
+                    <th className="px-3 py-2 w-10 text-center">No</th>
+                    <th className="px-4 py-2 border-r border-amber-300">Supplier</th>
+                    <th className="px-4 py-2 border-r border-amber-300">List Pesanan Bahan</th>
+                    <th className="px-3 py-2 text-center border-r border-amber-300 whitespace-nowrap">Kedatangan</th>
+                    <th className="px-3 py-2 text-center border-r border-amber-300 whitespace-nowrap">Jumlah</th>
+                    <th className="px-3 py-2 text-center border-r border-amber-300 whitespace-nowrap">Item (Satuan)</th>
+                    <th className="px-3 py-2 text-right border-r border-amber-300 whitespace-nowrap">Harga Satuan</th>
+                    <th className="px-4 py-2 text-right whitespace-nowrap font-black">Total Harga</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-[11px]">
+                  {poList.map((po, idx) => {
+                    const rowTotal = po.totalHarga || (po.jumlah > 0 && po.hargaSatuan ? po.jumlah * po.hargaSatuan : 0);
+
+                    return (
+                      <tr key={idx} className="hover:bg-amber-50/40 transition-colors font-medium text-slate-800">
+                        <td className="px-3 py-2 text-center text-slate-400">{idx + 1}</td>
+                        <td className="px-4 py-2 font-black text-slate-900 border-r border-slate-100">
+                          <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200/60 font-extrabold text-[10px]">
+                            {po.supplier || 'Koperasi Al Umanaa'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 font-bold text-slate-900 border-r border-slate-100">
+                          {po.item}
+                        </td>
+                        <td className="px-3 py-2 text-center text-slate-500 border-r border-slate-100 whitespace-nowrap">
+                          {po.jamKedatangan && po.jamKedatangan !== '06:00' ? (
+                            <span className="font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md">
+                              {po.jamKedatangan}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 italic">-</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center font-black text-slate-900 bg-amber-50/30 border-r border-slate-100">
+                          {po.jumlah > 0 ? formatNum(po.jumlah, 1) : '-'}
+                        </td>
+                        <td className="px-3 py-2 text-center font-bold text-slate-600 border-r border-slate-100">
+                          {po.satuan || 'kg'}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-600 border-r border-slate-100 whitespace-nowrap">
+                          {po.hargaSatuan ? formatRp(po.hargaSatuan) : '-'}
+                        </td>
+                        <td className="px-4 py-2 text-right font-black text-emerald-900 whitespace-nowrap bg-emerald-50/20">
+                          {rowTotal > 0 ? formatRp(rowTotal) : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-900 text-white font-black text-xs border-t-2 border-slate-900">
+                    <td colSpan={7} className="px-4 py-3 uppercase tracking-wider text-right">
+                      Grand Total Belanja Supplier:
+                    </td>
+                    <td className="px-4 py-3 text-right font-extrabold text-sm text-amber-300 bg-slate-800 whitespace-nowrap">
+                      {formatRp(grandTotal)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* ─── REKAP PEMBELANJAAN PER SUPPLIER (DI BAWAH TABEL) ─── */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Truck className="h-4 w-4 text-amber-400" />
+              <h4 className="text-xs font-black uppercase tracking-wider">
+                Rekapitulasi Pembelanjaan per Supplier Mitra
+              </h4>
+            </div>
+            <span className="text-slate-300 text-xs font-bold">
+              {Object.keys(supplierGroups).length} Rekanan
+            </span>
+          </div>
+
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {Object.entries(supplierGroups).map(([supName, group]) => (
+              <div
+                key={supName}
+                className="bg-slate-50 hover:bg-amber-50/40 border border-slate-200 hover:border-amber-300 rounded-xl p-3.5 transition-all shadow-2xs"
+              >
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <h5 className="text-xs font-black text-slate-900 truncate">
+                    🏢 {supName}
+                  </h5>
+                  <span className="text-[10px] font-extrabold bg-white border border-slate-200 px-2 py-0.5 rounded-md text-slate-700 shrink-0">
+                    {group.items.length} Bahan
+                  </span>
+                </div>
+
+                <div className="text-sm font-black text-emerald-800 mb-2">
+                  {formatRp(group.totalSpend)}
+                </div>
+
+                <div className="space-y-1 border-t border-slate-200/60 pt-2 text-[11px] text-slate-600 max-h-28 overflow-y-auto pr-1">
+                  {group.items.slice(0, 5).map((it, itIdx) => (
+                    <div key={itIdx} className="flex items-center justify-between text-[10px]">
+                      <span className="truncate pr-2 font-medium">• {it.item}</span>
+                      <span className="font-bold text-slate-800 shrink-0">
+                        {it.jumlah > 0 ? `${formatNum(it.jumlah, 1)} ${it.satuan}` : ''}
+                      </span>
+                    </div>
+                  ))}
+                  {group.items.length > 5 && (
+                    <span className="text-[9px] text-slate-400 italic block">
+                      +{group.items.length - 5} item bahan lainnya...
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="space-y-4 font-['Hanken_Grotesk']">
-      {/* Production Notes / Catatan Dapur Banner dari Excel */}
+    <div className="space-y-5 font-['Hanken_Grotesk']">
+      {/* Production Notes / Catatan Dapur Banner jika ada */}
       {report.productionNotes && report.productionNotes.length > 0 && (
         <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-4 shadow-2xs">
           <div className="flex items-start gap-3">
@@ -462,10 +1010,7 @@ export function DailyReportExcelSections({
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-black uppercase tracking-wider text-amber-900">
-                  Catatan / Evaluasi Produksi Dapur
-                </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200/80 text-amber-900">
-                  Dari Lembar Excel
+                  Catatan / Evaluasi Produksi Dapur (Dari Excel)
                 </span>
               </div>
               <ul className="text-xs text-amber-800 space-y-1 list-disc pl-4 font-medium">
@@ -478,10 +1023,10 @@ export function DailyReportExcelSections({
         </div>
       )}
 
-      {/* NAVBAR / TAB SELECTION BAR */}
+      {/* ─── 5 NAVBAR TABS UTAMA (SESUAI REQUEST USER) ─── */}
       <div className="bg-slate-900 p-1.5 rounded-2xl shadow-sm border border-slate-800">
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
-          {TABS_CONFIG.map((t) => {
+          {CORE_5_TABS.map((t) => {
             const Icon = t.icon;
             const isActive = currentTab === t.key;
 
@@ -490,19 +1035,24 @@ export function DailyReportExcelSections({
                 key={t.key}
                 type="button"
                 onClick={() => setTab(t.key)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer select-none ${
+                className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer select-none ${
                   isActive
-                    ? 'bg-amber-400 text-slate-950 shadow-md font-black scale-[1.02]'
+                    ? 'bg-amber-400 text-slate-950 shadow-md font-black scale-[1.01]'
                     : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
                 }`}
               >
+                <span
+                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                    isActive ? 'bg-slate-950 text-amber-300' : 'bg-slate-800 text-slate-300'
+                  }`}
+                >
+                  {t.number}
+                </span>
                 <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-slate-950' : 'text-amber-400/80'}`} />
                 <span>{t.label}</span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded-md font-extrabold ${
-                    isActive
-                      ? 'bg-slate-950 text-amber-300'
-                      : 'bg-slate-800 text-slate-300'
+                  className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold ${
+                    isActive ? 'bg-slate-950 text-amber-300' : 'bg-slate-800 text-slate-300'
                   }`}
                 >
                   {t.countBadge}
@@ -510,481 +1060,220 @@ export function DailyReportExcelSections({
               </button>
             );
           })}
+
+          {/* Toggle auxiliary tabs jika dibutuhkan */}
+          <button
+            type="button"
+            onClick={() => setShowAuxTabs(!showAuxTabs)}
+            className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+            title="Lihat modul pendukung lainnya (QC, Limbah, dll)"
+          >
+            <span>Lainnya</span>
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAuxTabs ? 'rotate-180' : ''}`} />
+          </button>
         </div>
+
+        {/* Auxiliary Tabs Dropdown Bar */}
+        {showAuxTabs && (
+          <div className="flex items-center gap-1.5 pt-2 mt-2 border-t border-slate-800 overflow-x-auto scrollbar-none">
+            {AUX_TABS.map((a) => {
+              const Icon = a.icon;
+              const isActive = currentTab === a.key;
+              return (
+                <button
+                  key={a.key}
+                  type="button"
+                  onClick={() => setTab(a.key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    isActive ? 'bg-amber-400 text-slate-950 font-black' : 'text-slate-400 hover:text-white bg-slate-800/60'
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{a.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* CONTENT PER SELECTED TAB */}
+      {/* ─── KONTEN TIAP TAB ─── */}
       <div className="transition-all">
         {/* TAB 1: PORSI KECIL */}
         {currentTab === 'kecil' &&
-          renderPortionSection(
+          renderUnifiedExcelPortionTable(
             report.porsiKecil,
             'PORSI KECIL (PAUD / TK & SD 1-3)',
-            'bg-emerald-100 text-emerald-900 border border-emerald-300'
+            'kecil'
           )}
 
         {/* TAB 2: PORSI BESAR */}
         {currentTab === 'besar' &&
-          renderPortionSection(
+          renderUnifiedExcelPortionTable(
             report.porsiBesar,
             'PORSI BESAR (SD KELAS 4-6, SMP, SMA)',
-            'bg-blue-100 text-blue-900 border border-blue-300'
+            'besar'
           )}
 
         {/* TAB 3: PORSI BALITA */}
         {currentTab === 'balita' &&
-          renderPortionSection(
+          renderUnifiedExcelPortionTable(
             report.porsiBalita,
             'PORSI BALITA (USIA 6-59 BULAN)',
-            'bg-amber-100 text-amber-900 border border-amber-300'
+            'balita'
           )}
 
         {/* TAB 4: PORSI BUMIL / BUSUI */}
         {currentTab === 'bumil' &&
-          renderPortionSection(
+          renderUnifiedExcelPortionTable(
             report.porsiBumilBusui,
             'PORSI IBU HAMIL & IBU MENYUSUI (BUMIL / BUSUI)',
-            'bg-rose-100 text-rose-900 border border-rose-300'
+            'bumil'
           )}
 
-        {/* TAB 5: PAKET SEHAT 3B (KERINGAN) */}
+        {/* TAB 5: TABEL SUPPLIER */}
+        {currentTab === 'po' && renderSupplierSection()}
+
+        {/* AUX TAB: PAKET SEHAT 3B */}
         {currentTab === 'paket3b' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h4 className="text-sm font-black text-slate-900">
-                  Paket Sehat 3B (Bahan Keringan Balita & Bumil)
-                </h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Daftar item kudapan / suplemen makanan kering khusus sasaran 3B.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-purple-50 text-purple-800 border border-purple-200 rounded-xl text-xs font-bold">
-                  Balita: {report.paketSehat3b?.balitaCount || 0} Anak
-                </span>
-                <span className="px-3 py-1 bg-rose-50 text-rose-800 border border-rose-200 rounded-xl text-xs font-bold">
-                  Bumil: {report.paketSehat3b?.bumilBusuiCount || 0} Orang
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs">
-              <div className="px-4 py-2.5 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between">
-                <span>Daftar Item Paket Keringan</span>
-                <span className="text-purple-300 text-xs font-bold">
-                  {(report.paketSehat3b?.keringanItems || []).length} Item
-                </span>
-              </div>
-              {!(report.paketSehat3b?.keringanItems || []).length ? (
-                <div className="p-6 text-center text-xs text-slate-500 italic bg-slate-50/50">
-                  Tidak ada item paket keringan pada laporan batch ini.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                        <th className="px-3 py-2 w-10 text-center">No</th>
-                        <th className="px-3 py-2">Item Bahan Keringan</th>
-                        <th className="px-2 py-2 text-center">Qty (Pcs)</th>
-                        <th className="px-2 py-2 text-center">Qty Kebutuhan</th>
-                        <th className="px-2 py-2 text-center">Satuan</th>
-                        <th className="px-3 py-2 text-right">Harga Satuan</th>
-                        <th className="px-3 py-2 text-right">Total Biaya</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {report.paketSehat3b.keringanItems.map((k, idx) => (
-                        <tr key={idx} className="hover:bg-purple-50/40 transition-colors font-medium text-slate-800">
-                          <td className="px-3 py-2 text-center text-slate-400 text-[11px]">{idx + 1}</td>
-                          <td className="px-3 py-2 font-bold text-slate-900">{k.item}</td>
-                          <td className="px-2 py-2 text-center font-medium">{formatNum(k.qtyPcs, 0)}</td>
-                          <td className="px-2 py-2 text-center font-bold text-slate-900 bg-slate-50">{formatNum(k.qty, 1)}</td>
-                          <td className="px-2 py-2 text-center font-bold text-slate-600">{k.satuan || 'pcs'}</td>
-                          <td className="px-3 py-2 text-right font-medium text-slate-600">
-                            {k.hargaSatuan ? formatRp(k.hargaSatuan) : '-'}
-                          </td>
-                          <td className="px-3 py-2 text-right font-bold text-purple-900">
-                            {k.totalHarga ? formatRp(k.totalHarga) : '-'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-100 text-slate-900 font-black text-xs border-t-2 border-slate-300">
-                        <td colSpan={6} className="px-3 py-2.5 text-right uppercase tracking-wider">
-                          Total Biaya Paket Keringan:
-                        </td>
-                        <td className="px-3 py-2.5 text-right text-purple-900 font-extrabold text-sm">
-                          {formatRp(
-                            report.paketSehat3b.keringanItems.reduce(
-                              (s, k) => s + (k.totalHarga || (k.qty || 0) * (k.hargaSatuan || 0)),
-                              0
-                            )
-                          )}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 font-['Hanken_Grotesk'] space-y-4">
+            <h4 className="text-sm font-black text-slate-900">Paket Sehat 3B (Keringan Balita & Bumil)</h4>
+            <p className="text-xs text-slate-500">Daftar item kudapan / suplemen makanan kering khusus sasaran 3B.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+                    <th className="px-3 py-2 w-10 text-center">No</th>
+                    <th className="px-3 py-2">Item Bahan Keringan</th>
+                    <th className="px-2 py-2 text-center">Qty (Pcs)</th>
+                    <th className="px-2 py-2 text-center">Qty Kebutuhan</th>
+                    <th className="px-2 py-2 text-center">Satuan</th>
+                    <th className="px-3 py-2 text-right">Harga Satuan</th>
+                    <th className="px-3 py-2 text-right">Total Biaya</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(report.paketSehat3b?.keringanItems || []).map((k, idx) => (
+                    <tr key={idx} className="hover:bg-purple-50/40 transition-colors font-medium">
+                      <td className="px-3 py-2 text-center text-slate-400">{idx + 1}</td>
+                      <td className="px-3 py-2 font-bold text-slate-900">{k.item}</td>
+                      <td className="px-2 py-2 text-center">{formatNum(k.qtyPcs, 0)}</td>
+                      <td className="px-2 py-2 text-center font-bold">{formatNum(k.qty, 1)}</td>
+                      <td className="px-2 py-2 text-center">{k.satuan || 'pcs'}</td>
+                      <td className="px-3 py-2 text-right">{k.hargaSatuan ? formatRp(k.hargaSatuan) : '-'}</td>
+                      <td className="px-3 py-2 text-right font-bold text-purple-900">{k.totalHarga ? formatRp(k.totalHarga) : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
-        {/* TAB 6: PO & REALISASI PEMBELIAN */}
-        {currentTab === 'po' && (
-          <div className="space-y-5 animate-in fade-in duration-200">
-            {/* Tabel 1: PO Kedatangan Supplier */}
-            <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs">
-              <div className="px-4 py-2.5 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-teal-400"></span>
-                  <span>1. PO Logistik Kedatangan Supplier (Hasil Excel)</span>
-                </div>
-                <span className="text-teal-300 text-xs font-bold">
-                  {(report.poRows || []).length} Jadwal
-                </span>
-              </div>
-              {!(report.poRows || []).length ? (
-                <div className="p-6 text-center text-xs text-slate-500 italic bg-slate-50/50">
-                  Tidak ada jadwal kedatangan logistik supplier pada file Excel ini.
-                </div>
-              ) : (
-                <div className="overflow-x-auto max-h-72 overflow-y-auto">
-                  <table className="w-full text-xs text-left">
-                    <thead className="sticky top-0 z-10">
-                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                        <th className="px-3 py-2 w-10 text-center">No</th>
-                        <th className="px-3 py-2">Supplier</th>
-                        <th className="px-3 py-2">List Pesanan Bahan</th>
-                        <th className="px-2 py-2 text-center">Jam Tiba</th>
-                        <th className="px-2 py-2 text-center">Jumlah</th>
-                        <th className="px-2 py-2 text-center">Satuan</th>
-                        <th className="px-3 py-2">Keterangan</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {report.poRows.map((po, idx) => (
-                        <tr key={idx} className="hover:bg-teal-50/40 transition-colors font-medium text-slate-800">
-                          <td className="px-3 py-2 text-center text-slate-400 text-[11px]">{idx + 1}</td>
-                          <td className="px-3 py-2 font-bold text-slate-900">{po.supplier}</td>
-                          <td className="px-3 py-2 text-slate-700">{po.item}</td>
-                          <td className="px-2 py-2 text-center font-bold text-teal-800 bg-teal-50/50">{po.jamKedatangan}</td>
-                          <td className="px-2 py-2 text-center font-black text-slate-900">{formatNum(po.jumlah, 1)}</td>
-                          <td className="px-2 py-2 text-center font-bold text-slate-600">{po.satuan}</td>
-                          <td className="px-3 py-2 text-slate-600 text-[11px]">{po.keterangan}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Tabel 2: Realisasi Pembelian vs Anggaran */}
-            <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs">
-              <div className="px-4 py-2.5 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                  <span>2. Realisasi Pembelian Bahan Baku vs Anggaran</span>
-                </div>
-                <span className="text-emerald-300 text-xs font-black">
-                  Total Realisasi: {formatRp(report.totalPengeluaran)}
-                </span>
-              </div>
-              {!(report.realisasiPembelianRows || []).length ? (
-                <div className="p-6 text-center text-xs text-slate-500 italic bg-slate-50/50">
-                  Tidak ada rekapitulasi realisasi pembelian bahan baku.
-                </div>
-              ) : (
-                <div className="overflow-x-auto max-h-72 overflow-y-auto">
-                  <table className="w-full text-xs text-left">
-                    <thead className="sticky top-0 z-10">
-                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                        <th className="px-3 py-2 w-10 text-center">No</th>
-                        <th className="px-3 py-2">Tanggal</th>
-                        <th className="px-3 py-2">Nama Bahan</th>
-                        <th className="px-2 py-2 text-center">Kuantitas</th>
-                        <th className="px-2 py-2 text-center">Satuan</th>
-                        <th className="px-3 py-2 text-right">Harga Satuan</th>
-                        <th className="px-3 py-2 text-right">Total Harga</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {report.realisasiPembelianRows.map((r, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 transition-colors font-medium text-slate-800">
-                          <td className="px-3 py-2 text-center text-slate-400 text-[11px]">{idx + 1}</td>
-                          <td className="px-3 py-2 text-slate-500">{r.tanggal}</td>
-                          <td className="px-3 py-2 font-bold text-slate-900">{r.namaBahan}</td>
-                          <td className="px-2 py-2 text-center font-bold text-slate-900 bg-slate-50">{formatNum(r.kuantitas, 1)}</td>
-                          <td className="px-2 py-2 text-center font-bold text-slate-600">{r.satuan}</td>
-                          <td className="px-3 py-2 text-right text-slate-600">
-                            {r.hargaPerUnit ? formatRp(r.hargaPerUnit) : '-'}
-                          </td>
-                          <td className="px-3 py-2 text-right font-bold text-emerald-800">
-                            {r.totalHarga ? formatRp(r.totalHarga) : '-'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-100 text-slate-900 font-black text-xs border-t-2 border-slate-300">
-                        <td colSpan={6} className="px-3 py-2.5 text-right uppercase tracking-wider">
-                          Total Realisasi Belanja:
-                        </td>
-                        <td className="px-3 py-2.5 text-right text-emerald-800 font-extrabold text-sm">
-                          {formatRp(report.totalPengeluaran)}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 7: FORM QC PEMERIKSAAN BAHAN */}
+        {/* AUX TAB: QC */}
         {currentTab === 'qc' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            {/* Header info form */}
-            <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h4 className="text-sm font-black text-slate-900">
-                  Formulir Pemeriksaan Mutu Bahan Baku (QC Inspection)
-                </h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Dari: <strong className="text-slate-800">{report.inspectionForm?.dari || 'Koperasi Al Umanaa'}</strong> | Kepada: <strong className="text-slate-800">{report.inspectionForm?.kepada || 'SPPG Sukabumi'}</strong>
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-xl text-xs font-bold">
-                  Petugas QC: {report.inspectionForm?.officerName || 'Gari Iriana'}
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs">
-              <div className="px-4 py-2.5 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between">
-                <span>Pemeriksaan Kondisi & Mutu Fisik Bahan</span>
-                <span className="text-indigo-300 text-xs font-bold">
-                  {(report.inspectionForm?.rows || []).length} Item Diperiksa
-                </span>
-              </div>
-              {!(report.inspectionForm?.rows || []).length ? (
-                <div className="p-6 text-center text-xs text-slate-500 italic bg-slate-50/50">
-                  Tidak ada checklist QC pada file Excel ini.
-                </div>
-              ) : (
-                <div className="overflow-x-auto max-h-80 overflow-y-auto">
-                  <table className="w-full text-xs text-left">
-                    <thead className="sticky top-0 z-10">
-                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                        <th className="px-3 py-2 w-10 text-center">No</th>
-                        <th className="px-3 py-2">Jenis Bahan Makanan</th>
-                        <th className="px-2 py-2 text-center">Banyaknya</th>
-                        <th className="px-2 py-2 text-center">Satuan</th>
-                        <th className="px-2 py-2 text-center">Kesesuaian</th>
-                        <th className="px-2 py-2 text-center">Kondisi Fisik</th>
-                        <th className="px-3 py-2">Catatan Pemeriksa</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {report.inspectionForm.rows.map((qc, idx) => (
-                        <tr key={idx} className="hover:bg-indigo-50/30 transition-colors font-medium text-slate-800">
-                          <td className="px-3 py-2 text-center text-slate-400 text-[11px]">{idx + 1}</td>
-                          <td className="px-3 py-2 font-bold text-slate-900">{qc.jenisBahan}</td>
-                          <td className="px-2 py-2 text-center font-bold text-slate-900">{formatNum(qc.banyaknya, 1)}</td>
-                          <td className="px-2 py-2 text-center text-slate-600">{qc.satuan}</td>
-                          <td className="px-2 py-2 text-center">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black ${
-                                qc.isSesuai
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                  : 'bg-red-100 text-red-800 border border-red-300'
-                              }`}
-                            >
-                              {qc.isSesuai ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-                              <span>{qc.isSesuai ? 'Sesuai' : 'Tidak Sesuai'}</span>
-                            </span>
-                          </td>
-                          <td className="px-2 py-2 text-center">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black ${
-                                qc.isBaik
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                  : 'bg-amber-100 text-amber-800 border border-amber-300'
-                              }`}
-                            >
-                              <span>{qc.isBaik ? 'Baik / Segar' : 'Rusak / Afkir'}</span>
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-slate-600 text-[11px]">{qc.notes || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 font-['Hanken_Grotesk'] space-y-4">
+            <h4 className="text-sm font-black text-slate-900">Formulir Pemeriksaan Mutu Bahan Baku (QC Inspection)</h4>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+                    <th className="px-3 py-2 w-10 text-center">No</th>
+                    <th className="px-3 py-2">Jenis Bahan</th>
+                    <th className="px-2 py-2 text-center">Banyaknya</th>
+                    <th className="px-2 py-2 text-center">Satuan</th>
+                    <th className="px-2 py-2 text-center">Kesesuaian</th>
+                    <th className="px-2 py-2 text-center">Kondisi Fisik</th>
+                    <th className="px-3 py-2">Catatan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(report.inspectionForm?.rows || []).map((qc, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-3 py-2 text-center text-slate-400">{idx + 1}</td>
+                      <td className="px-3 py-2 font-bold text-slate-900">{qc.jenisBahan}</td>
+                      <td className="px-2 py-2 text-center">{formatNum(qc.banyaknya, 1)}</td>
+                      <td className="px-2 py-2 text-center">{qc.satuan}</td>
+                      <td className="px-2 py-2 text-center">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                          {qc.isSesuai ? 'Sesuai' : 'Tidak Sesuai'}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                          {qc.isBaik ? 'Baik / Segar' : 'Rusak'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-500">{qc.notes || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
-        {/* TAB 8: REKAPAN LIMBAH (FOOD WASTE) */}
+        {/* AUX TAB: REKAP LIMBAH */}
         {currentTab === 'waste' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h4 className="text-sm font-black text-slate-900">
-                  Rekapitulasi Pemantauan Limbah Sisa Makanan (Food Waste)
-                </h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Pencatatan sisa makanan yang terbuang setelah proses produksi & distribusi selesai.
-                </p>
-              </div>
-              <span className="px-3 py-1 bg-slate-100 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold">
-                Total Menu Terpantau: {(report.wasteLogs || []).length}
-              </span>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs">
-              <div className="px-4 py-2.5 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between">
-                <span>Daftar Sisa Makanan Terbuang</span>
-                <span className="text-slate-300 text-xs font-bold">Laporan Harian</span>
-              </div>
-              {!(report.wasteLogs || []).length ? (
-                <div className="p-6 text-center text-xs text-slate-500 italic bg-slate-50/50">
-                  Tidak ada catatan limbah sisa makanan pada laporan batch ini.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                        <th className="px-3 py-2 w-10 text-center">No</th>
-                        <th className="px-3 py-2">Nama Menu / Makanan</th>
-                        <th className="px-2 py-2 text-center">Kuantitas Limbah</th>
-                        <th className="px-2 py-2 text-center">Satuan</th>
-                        <th className="px-3 py-2">Status / Dokumentasi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {report.wasteLogs.map((w, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 transition-colors font-medium text-slate-800">
-                          <td className="px-3 py-2 text-center text-slate-400 text-[11px]">{w.no || idx + 1}</td>
-                          <td className="px-3 py-2 font-bold text-slate-900">{w.namaMakanan}</td>
-                          <td className="px-2 py-2 text-center font-bold text-slate-900 bg-slate-50">{formatNum(w.kuantitas, 2)}</td>
-                          <td className="px-2 py-2 text-center font-bold text-slate-600">{w.satuan || 'kg'}</td>
-                          <td className="px-3 py-2 text-slate-500 text-[11px]">{w.dokumentasi || 'Nihil / Habis Terkonsumsi'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 font-['Hanken_Grotesk'] space-y-4">
+            <h4 className="text-sm font-black text-slate-900">Rekapitulasi Pemantauan Limbah Sisa Makanan (Food Waste)</h4>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+                    <th className="px-3 py-2 w-10 text-center">No</th>
+                    <th className="px-3 py-2">Nama Menu / Makanan</th>
+                    <th className="px-2 py-2 text-center">Kuantitas Limbah</th>
+                    <th className="px-2 py-2 text-center">Satuan</th>
+                    <th className="px-3 py-2">Dokumentasi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(report.wasteLogs || []).map((w, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-3 py-2 text-center text-slate-400">{w.no || idx + 1}</td>
+                      <td className="px-3 py-2 font-bold text-slate-900">{w.namaMakanan}</td>
+                      <td className="px-2 py-2 text-center font-bold">{formatNum(w.kuantitas, 2)}</td>
+                      <td className="px-2 py-2 text-center">{w.satuan || 'kg'}</td>
+                      <td className="px-3 py-2 text-slate-500">{w.dokumentasi || 'Habis Terkonsumsi'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
-        {/* TAB 9: DISTRIBUSI SEKOLAH / SASARAN PENERIMA */}
-        {currentTab === 'sekolah' && (() => {
-          const list = report.sekolahList || [];
-          const totalMurid = list.reduce((s, it) => s + (it.murid || 0), 0);
-          const totalGuru = list.reduce((s, it) => s + (it.guru || 0), 0);
-          const totalPorsi = totalMurid + totalGuru;
-
-          return (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h4 className="text-sm font-black text-slate-900">
-                    Daftar Distribusi Sekolah & Sasaran Penerima Manfaat
-                  </h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Rincian alokasi porsi yang dikirimkan ke masing-masing sekolah, lembaga, dan posyandu sesuai dokumen Excel MBG.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold">
-                    {list.length} Titik Sasaran
-                  </span>
-                  <span className="px-3 py-1 bg-slate-100 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold">
-                    Total Murid: {totalMurid.toLocaleString('id-ID')}
-                  </span>
-                  <span className="px-3 py-1 bg-slate-100 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold">
-                    Total Guru: {totalGuru.toLocaleString('id-ID')}
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs">
-                <div className="px-4 py-2.5 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between">
-                  <span>Rincian Distribusi Lembaga / Sekolah Penerima</span>
-                  <span className="text-amber-300 text-xs font-bold">
-                    Grand Total Porsi: {totalPorsi.toLocaleString('id-ID')}
-                  </span>
-                </div>
-                {!list.length ? (
-                  <div className="p-6 text-center text-xs text-slate-500 italic bg-slate-50/50">
-                    Tidak ada data daftar distribusi sekolah pada laporan harian ini.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-left">
-                      <thead>
-                        <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                          <th className="px-3 py-2.5 w-12 text-center">No</th>
-                          <th className="px-4 py-2.5">Nama Sekolah / Sasaran Penerima</th>
-                          <th className="px-3 py-2.5 text-center">Porsi Murid / Balita</th>
-                          <th className="px-3 py-2.5 text-center">Porsi Guru / Petugas</th>
-                          <th className="px-3 py-2.5 text-right font-black">Total Porsi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {list.map((item, idx) => {
-                          const itemTotal = (item.murid || 0) + (item.guru || 0);
-                          return (
-                            <tr key={idx} className="hover:bg-slate-50 transition-colors font-medium text-slate-800">
-                              <td className="px-3 py-2 text-center text-slate-400 text-[11px]">{idx + 1}</td>
-                              <td className="px-4 py-2 font-bold text-slate-900">{item.nama}</td>
-                              <td className="px-3 py-2 text-center font-bold text-emerald-800 bg-emerald-50/30">
-                                {item.murid ? item.murid.toLocaleString('id-ID') : '-'}
-                              </td>
-                              <td className="px-3 py-2 text-center font-medium text-slate-700">
-                                {item.guru ? item.guru.toLocaleString('id-ID') : '-'}
-                              </td>
-                              <td className="px-3 py-2 text-right font-black text-slate-900 bg-slate-50">
-                                {itemTotal.toLocaleString('id-ID')}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot>
-                        <tr className="bg-slate-900 text-white font-black text-xs border-t-2 border-slate-900">
-                          <td colSpan={2} className="px-4 py-3 uppercase tracking-wider">
-                            Total Keseluruhan ({list.length} Lembaga):
-                          </td>
-                          <td className="px-3 py-3 text-center text-emerald-300 font-black">
-                            {totalMurid.toLocaleString('id-ID')}
-                          </td>
-                          <td className="px-3 py-3 text-center text-slate-200">
-                            {totalGuru.toLocaleString('id-ID')}
-                          </td>
-                          <td className="px-3 py-3 text-right text-amber-300 font-extrabold text-sm">
-                            {totalPorsi.toLocaleString('id-ID')}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-              </div>
+        {/* AUX TAB: DISTRIBUSI SEKOLAH */}
+        {currentTab === 'sekolah' && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 font-['Hanken_Grotesk'] space-y-4">
+            <h4 className="text-sm font-black text-slate-900">Daftar Distribusi Sekolah & Sasaran Penerima Manfaat</h4>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+                    <th className="px-3 py-2 w-10 text-center">No</th>
+                    <th className="px-4 py-2">Nama Sekolah / Sasaran</th>
+                    <th className="px-3 py-2 text-center">Porsi Murid / Balita</th>
+                    <th className="px-3 py-2 text-center">Porsi Guru / Petugas</th>
+                    <th className="px-3 py-2 text-right font-black">Total Porsi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(report.sekolahList || []).map((s, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-3 py-2 text-center text-slate-400">{idx + 1}</td>
+                      <td className="px-4 py-2 font-bold text-slate-900">{s.nama}</td>
+                      <td className="px-3 py-2 text-center font-bold text-emerald-800">{s.murid ? s.murid.toLocaleString('id-ID') : '-'}</td>
+                      <td className="px-3 py-2 text-center">{s.guru ? s.guru.toLocaleString('id-ID') : '-'}</td>
+                      <td className="px-3 py-2 text-right font-black text-slate-900">{(s.murid + s.guru).toLocaleString('id-ID')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          );
-        })()}
+          </div>
+        )}
       </div>
     </div>
   );

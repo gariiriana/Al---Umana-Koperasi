@@ -2298,6 +2298,7 @@ export function MbgProductionPage() {
                   report={curReport}
                   activeSubTab={dailyReportSubTab}
                   onSubTabChange={setDailyReportSubTab}
+                  entries={entries}
                 />
               </div>
             </div>
@@ -2602,6 +2603,7 @@ export function MbgProductionPage() {
                               report={curReport}
                               activeSubTab={dailyReportSubTab}
                               onSubTabChange={setDailyReportSubTab}
+                              entries={entries}
                             />
                           </div>
                         )}

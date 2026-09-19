@@ -598,6 +598,8 @@ export interface MbgPoReportRow {
   jumlah: number;
   satuan: string;
   keterangan: string;
+  hargaSatuan?: number;
+  totalHarga?: number;
 }
 
 export interface MbgRealisasiPembelianRow {
