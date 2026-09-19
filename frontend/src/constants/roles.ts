@@ -127,7 +127,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/mbg/admin/batch/new",
     "/mbg/archive",
     "/mbg/production",
-    "/mbg/cooking",
     "/mbg/reports",
     "/mbg/orders",
     "/mbg/distribution",
@@ -142,7 +141,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/mbg/admin/batch/new",
     "/mbg/archive",
     "/mbg/production",
-    "/mbg/cooking",
     "/mbg/reports",
     "/mbg/orders",
     "/mbg/distribution",
@@ -153,7 +151,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
    * Sub Akun Dokumentasi Memasak MBG: dokumentasi foto & status masak.
    */
   dokumentasi_produksiMBG: [
-    "/mbg/cooking",
+    "/mbg/production",
     "/mbg/orders",
   ],
 
@@ -163,7 +161,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   purchasing_mbg: [
     "/mbg/production",
     "/mbg/orders",
-    "/mbg/cooking",
   ],
 
   /**
@@ -197,17 +194,14 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   MBG2: [
     "/katering/jobdesk",
     "/mbg/production",
-    "/mbg/cooking",
   ],
   mbg2: [
     "/katering/jobdesk",
     "/mbg/production",
-    "/mbg/cooking",
   ],
   produksi_mbg_2: [
     "/katering/jobdesk",
     "/mbg/production",
-    "/mbg/cooking",
   ],
 
   /**
@@ -290,7 +284,7 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   // MBG roles
   admin_mbg: "/mbg/admin",
   produksi_mbg: "/mbg/production",
-  dokumentasi_produksiMBG: "/mbg/cooking",
+  dokumentasi_produksiMBG: "/mbg/production",
   purchasing_mbg: "/mbg/production",
   distribusi_mbg: "/mbg/distribution",
   kurir_mbg: "/mbg/delivery",

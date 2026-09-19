@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState, Fragment } from 'react';
 import {
   Plus, Trash2, FileDown, Calendar, Loader2, CheckCircle2, Search, X, Folder, Send,
   ClipboardList, FileText, FolderOpen, FileUp, Save, Sparkles, FileSpreadsheet, ChevronDown, ChevronUp,
-  AlertTriangle,
+  AlertTriangle, Truck,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -1329,23 +1329,23 @@ export function MbgProductionPage() {
     );
   }, [nutritionData]);
 
-  const handleSubmitToCooking = () => {
+  const handleSubmitToDistribution = () => {
     if (!selectedBatchId) return;
     setConfirmModal({
       isOpen: true,
-      title: 'Kirim Data ke Dapur (Mulai Masak)',
-      message: 'Kirim/Submit data resep dan kebutuhan bahan untuk batch ini ke bagian Dapur MBG untuk memulai proses memasak?',
-      confirmLabel: 'Ya, Kirim ke Dapur',
+      title: 'Kirim Data ke Distribusi MBG',
+      message: 'Kirim/Submit data porsi dan alokasi penerima manfaat batch ini ke bagian Distribusi MBG untuk persiapan pengantaran kurir?',
+      confirmLabel: 'Ya, Kirim ke Distribusi',
       cancelLabel: 'Batal',
       variant: 'success',
       icon: 'send',
       onConfirm: async () => {
         try {
-          await updateBatchStatus(selectedBatchId, 'COOKING');
-          showToast({ message: 'Data berhasil disubmit ke Dapur Masak MBG!', variant: 'success' });
+          await updateBatchStatus(selectedBatchId, 'DELIVERING');
+          showToast({ message: 'Data berhasil disubmit ke Distribusi MBG!', variant: 'success' });
         } catch (err) {
           console.error(err);
-          showToast({ message: 'Gagal menyubmit data ke Dapur', variant: 'error' });
+          showToast({ message: 'Gagal menyubmit data ke Distribusi', variant: 'error' });
         }
       },
     });
@@ -1793,12 +1793,12 @@ export function MbgProductionPage() {
           {activeTab === 'nutrition' && selectedBatchId && (
             <>
               <button
-                onClick={handleSubmitToCooking}
+                onClick={handleSubmitToDistribution}
                 className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
-                title="Kirim data resep dan kebutuhan bahan ke Dapur Masak MBG"
+                title="Kirim data batch dan alokasi penerima manfaat ke Distribusi MBG"
               >
-                <Send className="h-4 w-4 text-white" />
-                <span>Kirim ke Dapur Masak</span>
+                <Truck className="h-4 w-4 text-white" />
+                <span>Kirim ke Distribusi</span>
               </button>
               <button
                 onClick={() => {
@@ -2526,27 +2526,29 @@ export function MbgProductionPage() {
                     </div>
                   </div>
 
-                  {/* Submit to Cooking CTA */}
-                  {selectedBatch && ['NUTRITION_DONE', 'PDF_EXPORTED'].includes(selectedBatch.status) && (
+                  {/* Submit to Distribution CTA */}
+                  {selectedBatch && ['NUTRITION_DONE', 'PDF_EXPORTED', 'DRAFT', 'PM_SUBMITTED'].includes(selectedBatch.status) && (
                     <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
                       <div className="space-y-1">
                         <h4 className="text-sm font-extrabold text-emerald-800">Kadar Gizi Selesai Dihitung</h4>
                         <p className="text-xs text-emerald-600">
-                          Data gizi dan kebutuhan bahan untuk batch ini sudah siap. Silakan kirim data ini ke Dapur Masak MBG untuk memulai proses memasak.
+                          Data gizi dan alokasi penerima manfaat untuk batch ini sudah siap. Silakan kirim data ini ke Distribusi MBG untuk persiapan proses pengantaran kurir.
                         </p>
                       </div>
                       <button
-                        onClick={handleSubmitToCooking}
-                        className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow-lg shadow-emerald-600/20 cursor-pointer transition-all hover:-translate-y-0.5 active:translate-y-0"
+                        onClick={handleSubmitToDistribution}
+                        className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow-lg shadow-emerald-600/20 cursor-pointer transition-all hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2 shrink-0"
                       >
-                        Kirim ke Dapur Masak
+                        <Truck className="h-4 w-4" />
+                        <span>Kirim ke Distribusi</span>
                       </button>
                     </div>
                   )}
 
-                  {selectedBatch && (selectedBatch.status === 'COOKING' || selectedBatch.status === 'PURCHASING') && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center text-xs font-bold text-amber-800 mt-6">
-                      ✓ Data resep dan bahan batch ini siap/sedang diproses di Dapur Masak MBG.
+                  {selectedBatch && ['DELIVERING', 'DELIVERED', 'COOKING', 'PURCHASING'].includes(selectedBatch.status) && (
+                    <div className="bg-emerald-100/70 border border-emerald-300 rounded-2xl p-4 text-center text-xs font-bold text-emerald-800 mt-6 flex items-center justify-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <span>Data batch ini sudah terkirim & siap didistribusikan di Distribusi MBG.</span>
                     </div>
                   )}
                 </div>

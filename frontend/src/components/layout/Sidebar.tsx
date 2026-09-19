@@ -55,7 +55,6 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/mbg/archive", label: "Arsip PM", icon: History },
   { to: "/mbg/reports", label: "Laporan MBG", icon: FileText },
   { to: "/mbg/production", label: "Produksi MBG", icon: UtensilsCrossed },
-  { to: "/mbg/cooking", label: "Masak MBG", icon: Factory },
   { to: "/mbg/distribution", label: "Distribusi MBG", icon: ClipboardCheck },
   { to: "/mbg/delivery", label: "Kurir MBG", icon: Truck },
 ] as const;
@@ -82,7 +81,6 @@ const LABELS_DICT = {
     "/mbg/archive": "Arsip PM",
     "/mbg/reports": "Laporan MBG",
     "/mbg/production": "Produksi MBG",
-    "/mbg/cooking": "Masak MBG",
     "/mbg/distribution": "Distribusi MBG",
     "/mbg/delivery": "Kurir MBG",
   },
@@ -107,7 +105,6 @@ const LABELS_DICT = {
     "/mbg/archive": "PM Archive",
     "/mbg/reports": "MBG Reports",
     "/mbg/production": "MBG Production",
-    "/mbg/cooking": "MBG Cooking",
     "/mbg/distribution": "MBG Distribution",
     "/mbg/delivery": "MBG Delivery",
   }

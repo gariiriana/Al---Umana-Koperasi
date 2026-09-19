@@ -81,7 +81,6 @@ const CoMoReviewPage = safeLazy(() => import("@/pages/katering/CoMoReviewPage").
 // --- MBG (Makan Bergizi Gratis) Pages ---
 const MbgAdminPage = safeLazy(() => import("@/pages/mbg/MbgAdminPage").then(module => ({ default: module.MbgAdminPage })));
 const MbgProductionPage = safeLazy(() => import("@/pages/mbg/MbgProductionPage").then(module => ({ default: module.MbgProductionPage })));
-const MbgCookingPage = safeLazy(() => import("@/pages/mbg/MbgCookingPage").then(module => ({ default: module.MbgCookingPage })));
 const MbgDistributionPage = safeLazy(() => import("@/pages/mbg/MbgDistributionPage").then(module => ({ default: module.MbgDistributionPage })));
 const MbgDeliveryPage = safeLazy(() => import("@/pages/mbg/MbgDeliveryPage").then(module => ({ default: module.MbgDeliveryPage })));
 const MbgArchivePage = safeLazy(() => import("@/pages/mbg/MbgArchivePage").then(module => ({ default: module.MbgArchivePage })));
@@ -784,16 +783,8 @@ function RoutesTree() {
           </Protected>
         }
       />
-      <Route
-        path="/mbg/cooking"
-        element={
-          <Protected>
-            <ShelledRoute pageTitle="Masak MBG" allowedRoles={["produksi_mbg", "admin_mbg", "dokumentasi_produksiMBG"]}>
-              <MbgCookingPage />
-            </ShelledRoute>
-          </Protected>
-        }
-      />
+      {/* Masak MBG dihapus -> Redirect ke Distribusi MBG */}
+      <Route path="/mbg/cooking" element={<Navigate to="/mbg/distribution" replace />} />
       {/* Streamlined Purchasing MBG Routes -> Redirect to Produksi MBG */}
       <Route path="/mbg/purchasing" element={<Navigate to="/mbg/production" replace />} />
       <Route path="/mbg/sub-purchasing" element={<Navigate to="/mbg/production" replace />} />
