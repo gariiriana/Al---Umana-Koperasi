@@ -16,7 +16,7 @@ import {
   Building2,
   Utensils,
 } from "lucide-react";
-import { doc, getDoc, collection, getDocs, query, limit, orderBy } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/Button";
 import { getOrder } from "@/services/orderService";
@@ -96,8 +96,7 @@ export function NotificationDetailModal({
         const extractedShortId = directShortId || (match ? match[1] : null);
 
         if (!foundOrder && extractedShortId) {
-          const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(40));
-          const snap = await getDocs(qOrders);
+          const snap = await getDocs(collection(db, "orders"));
           const searchUpper = extractedShortId.toUpperCase();
 
           const matchedDoc = snap.docs.find((d) => {

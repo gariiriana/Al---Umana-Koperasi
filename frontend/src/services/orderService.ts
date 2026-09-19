@@ -1289,8 +1289,8 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
     isPreOrder: !!payload.isPreOrder,
     promoCode: payload.promoCode || "",
     discountAmount: payload.discountAmount || 0,
-    createdAt: now,
-    updatedAt: now,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
   };
 
   await runTransaction(db, async (tx) => {
@@ -1626,7 +1626,7 @@ export async function updateAdminOrder(orderId: string, payload: CreateAdminOrde
     isPreOrder: !!payload.isPreOrder,
     promoCode: payload.promoCode || "",
     discountAmount: payload.discountAmount || 0,
-    updatedAt: now,
+    updatedAt: now.toISOString(),
   };
 
   await runTransaction(db, async (tx) => {
@@ -1811,6 +1811,12 @@ export async function deleteOrder(orderId: string): Promise<void> {
 
 function cleanUndefined<T>(obj: T): T {
   if (obj === null || obj === undefined) return obj;
+  if (
+    obj instanceof Date ||
+    (typeof obj === "object" && obj !== null && ("toDate" in obj || "seconds" in obj))
+  ) {
+    return obj;
+  }
   if (Array.isArray(obj)) {
     return obj.map(cleanUndefined) as unknown as T;
   }

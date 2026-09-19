@@ -787,7 +787,14 @@ export function OrderInputPage() {
                     title="Tanggal Pemberangkatan"
                     className="flex-1 bg-[#F9FAFB] border border-[#D1D5DB] rounded-lg px-3 py-2.5 text-sm text-[#111827] focus:border-[#FBBF24] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]/40"
                     value={eventDateOnly}
-                    onChange={(e) => setEventDateOnly(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const prevEventDate = eventDateOnly;
+                      setEventDateOnly(val);
+                      if (!deliveryDateOnly || deliveryDateOnly === prevEventDate) {
+                        setDeliveryDateOnly(val);
+                      }
+                    }}
                   />
                   <select
                     title="Waktu Pemberangkatan"
