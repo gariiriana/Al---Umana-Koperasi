@@ -1,10 +1,12 @@
-# Al-Umanaa Koperasi Order Fulfillment & Delivery Tracking System
+# Al-Umanaa Integrated Cooperative & MBG Platform
 
-An enterprise-grade, high-performance, and secure hybrid-serverless system custom-designed for **Al-Umanaa Islamic Boarding School Cooperative**. This platform automates the entire order lifecycle—from central administrator entry, chef production timers, quality control audits, courier dispatch routing, real-time GPS location streams, to digital client handovers and receipt signatures.
+An enterprise-grade, high-performance, and secure hybrid-serverless ecosystem custom-built for **Pesantren Al-Umanaa (Al-Umanaa Islamic Boarding School)**. This platform unifies two mission-critical operations:
+1. **Koperasi Order Fulfillment & Delivery Tracking System**: End-to-end commercial order lifecycle—from administrator intake, kitchen production timers, quality control audits, and real-time GPS courier tracking, to digital client handovers and receipt signatures.
+2. **Program MBG (Makan Bergizi Gratis) Ecosystem**: Comprehensive institutional catering and nutrition logistics—featuring smart Excel workbook parsing, live in-app spreadsheet editing and auto-recalculation, dynamic kitchen batch schedules, school distribution tracking, and automated multi-page official government-standard PDF/DOCX reporting.
 
 ---
 
-## System Badges and Architecture Metrics
+## System Badges and Metrics
 
 [![Go Version](https://img.shields.io/badge/Go-1.24-blue.svg?style=for-the-badge&logo=go&logoColor=white&color=00ADD8)](https://golang.org/)
 [![React Version](https://img.shields.io/badge/React-18.3.1-blue.svg?style=for-the-badge&logo=react&logoColor=white&color=61DAFB)](https://react.dev/)
@@ -18,107 +20,113 @@ An enterprise-grade, high-performance, and secure hybrid-serverless system custo
 
 ---
 
-## Core Architectural Pillars
+## Core System Architecture & Modules
 
-### 1. Serverless Direct-to-Firestore (Decoupled Client Design)
+### 1. Program Makan Bergizi Gratis (MBG) Ecosystem
 
-The web application utilizes a modern serverless model. The React SPA communicates **directly** with Google Cloud Firestore and Firebase Authentication client-side. This design completely eliminates API gateway latency, reduces cold-start overheads, and provides auto-scaling to accommodate peak pesantren events.
+The MBG module is an institutional catering automation suite designed for large-scale school nutrition programs:
 
-### 2. Edge WAF & Proxy Layer (Cloudflare Integration)
+- **Smart Excel Workbook Parser (`productionSheetParser.ts`)**:
+  - Automatically parses official 5-sheet workbooks: *Menu MBG*, *Kebutuhan Bahan Baku*, *Kebutuhan Bumbu Dapur*, *Distribusi Sekolah / Penerima Manfaat*, and *Catatan Dapur*.
+  - Intelligently identifies dynamic header rows, detects categories (Bahan Basah, Bahan Kering, Bumbu Dapur), normalizes units (kg, gram, butir, ikat, pcs), and maps student counts per school/grade level.
+  - Automatically binds the primary supplier to **Koperasi Al Umanaa Sejahtera Mandiri**.
+- **Live In-App Spreadsheet Editor & Auto-Recalculation**:
+  - Full-featured 5-tab interactive interface mirroring the official Excel structure directly within the browser.
+  - In-place editing of ingredients, grammage, student counts, and kitchen notes with instant recalculation of total weights and procurement requirements.
+- **Synchronized MBG Operational Lifecycle**:
+  $$\text{Admin MBG (Perencanaan \& Impor)} \longrightarrow \text{Produksi MBG (Pengolahan)} \longrightarrow \text{Distribusi MBG (Serah Terima Sekolah)}$$
+  - Real-time batch filtering ensures kitchen and distribution teams focus strictly on the active schedule.
+  - Direct handover to school distribution teams without manual re-entry.
+- **Official Institutional Exporters (PDF & DOCX)**:
+  - Generates web-landscape PDF and Word (.docx) documents matching official agency standards.
+  - Includes multi-page stacked 4-photo activity documentation layout with geolocation, school metadata, and timestamps.
 
-Security is enforced at the network edge using **Cloudflare DNS Proxying (Orange Cloud)**:
+### 2. Koperasi Order Fulfillment & Delivery Tracking
 
-- **IP Masking**: The underlying Google Firebase Hosting IPs are completely hidden from public view to prevent direct target exploits.
-- **DDoS Mitigation**: Built-in edge challenge-response screens block massive automated spam/bot nets.
-- **Strict HTTPS/SSL**: Enforced connection encryption prevents middleman packet sniffing on mobile networks.
+- **Direct Serverless-to-Firestore Architecture**:
+  - React SPA communicates directly with Google Cloud Firestore and Firebase Authentication.
+  - Eliminates API gateway latency and auto-scales for high-volume pesantren events.
+- **Edge WAF & Proxy Layer (Cloudflare)**:
+  - Orange Cloud DNS proxying hides underlying Firebase Hosting IP addresses.
+  - Edge challenge-response screens block automated bots and DDoS threats while enforcing strict HTTPS.
+- **Secure Live-HUD Camera & Anti-Spoofing Engine**:
+  - **Monotonic Clock Synchronization**: Compares client and server timestamps on startup and tracks real-time intervals via `performance.now()` to render local timezone tampering useless.
+  - **GPS Verification & Timezone Validation**: Rejects mock locations and verifies device coordinate bounds against Indonesian timezones (WIB, WITA, WIT).
+  - **Reverse Geocoding**: Queries OpenStreetMap Nominatim to stamp exact village, sub-district, and regency onto the camera watermark.
+- **Triple-Proof Delivery Verification**:
+  - Captures a complete delivery lifecycle audit:
+    1. Departure proof (Start OTW photo with GPS watermark).
+    2. Arrival/Delivery documentation photo.
+    3. Recipient validation with digital signature.
+- **Asynchronous Base64 Chunk-loading Protocol**:
+  - Slices large photos and signatures into $\le 512$ KB binary chunks written sequentially to Firestore subcollections: `/{collection}/{fileId}/chunks/{index}`.
+  - Assembled on-the-fly inside custom React hooks (`useProductImage.ts`), preventing Firestore document size limit overflows ($1$ MB).
 
-### 3. Asynchronous Base64 Chunk-loading Protocol
+### 3. Database Performance & Quota Optimization
 
-To handle large uploads (delivery photos, digital signatures, and product catalog pictures) without exceeding memory or document limits:
-
-- Files are sliced client-side into binary chunks of $\le 512$ KB.
-- Each chunk is base64-encoded and written sequentially to a Firestore sub-collection: `/{collection}/{fileId}/chunks/{index}`.
-- When all chunks are written, the parent document status shifts to `completed`.
-- Downloads are parsed in parallel directly inside custom React hooks (`useProductImage.ts`), bypassing server bottlenecks and loading media dynamically.
-
-### 4. Code-Splitting & Route Laziness Optimization
-
-Using dynamic React wrappers (`React.lazy` and `<Suspense>`), the initial client bundle was optimized to ensure performance on low-end smartphones (used by kurir/drivers):
-
-- Heavy libraries (`jspdf`, `leaflet` maps, `html2canvas`) are completely code-split into distinct chunks.
-- The index bundle was reduced by **53%** (from **2.18 MB** to **1.07 MB**), resulting in rapid page render cycles and reduced mobile battery drain.
-
-### 5. Secure Live-HUD Camera & Anti-Spoofing Engine
-
-A custom client-side camera application matching Al-Umanaa's premium palette (Charcoal `#111827` and Amber `#fbbf24`) with secure watermark embedding:
-
-- **Time/Clock Anti-Tampering**: Synchronizes with the backend servers on start to calculate local clock offset. It uses a monotonic counter (`performance.now()`) to track time, rendering local timezone spoofing useless.
-- **GPS Verification & Timezone Validation**: Rejects mock location inputs, zero/negative accuracy, and automated browser agents. Compares coordinates within Indonesian boundaries against the device's timezone offset (WIB, WITA, WIT) to block active fake-GPS apps.
-- **Nominatim Geocoding**: Reverse geocodes GPS coordinates to precise Indonesian village, district, and regional names to overlay directly onto the image watermark.
-- **HUD Interface**: Supports pinch-to-zoom/sliders, front/back camera toggling, and flash controls.
-
-### 6. Signature Autosave & Responsive Image Compression
-
-- **Draft Autosaving**: Captures active signatures and proof-of-delivery photos, saving a base64 draft to `localStorage`. Reconstructs binaries and signature canvas strokes seamlessly if the page is reloaded.
-- **Canvas-based Compression**: Automatically resizes images to $\le 1280$px at 80% JPEG quality before entering the chunk-loading pipeline. This speeds up chunk uploads and protects device bandwidth.
-
-### 7. Triple-Proof Delivery Audit & Historical Ordering
-
-- **Unified 3-Column Proofs**: Renders a comprehensive delivery lifecycle audit: departure (Start OTW photo with location watermark), arrival (delivery documentation photo), and recipient validation (digital signature).
-- **Multi-Role Audit Dashboards**: Exposes full proof logs across the Distributor dispatch panel, Admin, and Monitoring invoice modals.
-- **Chronological Descents**: Real-time Completed Delivery queues are sorted in descending order (`deliveredAt` descending) so supervisors and drivers immediately see the most recent status updates.
+- **Firestore Query Bloat Elimination**:
+  - Audited and refactored queries across dashboard, reminders, catalog, and notifications to use indexed limits, preventing quota exhaust.
+- **Bundle Trimming & Asset Optimization**:
+  - Removed bloated static legacy data (`tkpiDatabase.json` and static spreadsheet masters) to reduce frontend bundle size and mobile memory consumption.
+- **Robust Multi-Date Fallback & Indexing**:
+  - Combined `eventDate` and `createdAt` fallbacks across production, dispatch scheduler, and handover queues to ensure zero missing orders across all role views.
 
 ---
 
-## High-Level System Architecture
-
-The following diagram details the interaction between the React SPA, Google Firebase, and the local WhatsApp microservices:
+## High-Level System Topology
 
 ```mermaid
 graph TB
     subgraph Client["Frontend Client (React SPA)"]
         UI[React Components & Hooks]
-        GPS[Real-time GPS Geolocator]
+        MBGParser[MBG Excel Parser & Editor]
+        GPS[Anti-Spoofing GPS HUD Engine]
         Chunker[Incremental Chunk Uploader]
         Auth[Firebase Auth Client]
     end
 
-    subgraph FirebaseCloud["Google Firebase Serverless"]
+    subgraph FirebaseCloud["Google Cloud Firebase (Serverless)"]
         Firestore[(Cloud Firestore Database)]
         FBAuth[Firebase Auth Service]
         FBHosting[Firebase Hosting Edge CDN]
     end
 
-    subgraph localServices["Pesantren On-Premise / Local Services"]
-        WAGateway[Express Node.js WA-Gateway]
-        WABot[whatsapp-web.js client]
+    subgraph Edge["Network Edge"]
+        CF[Cloudflare WAF / Orange Cloud Proxy]
     end
 
-    FBHosting -->|Serves Web Build| UI
-    UI -->|Direct CRUD Transaction| Firestore
-    GPS -->|Direct Location Stream| Firestore
-    Chunker -->|Write Base64 Chunks| Firestore
+    subgraph LocalServices["Pesantren On-Premise Infrastructure"]
+        WAGateway[Express Node.js WA-Gateway]
+        WABot[whatsapp-web.js WhatsApp Client]
+    end
+
+    CF --> FBHosting
+    FBHosting --> UI
+    UI -->|Direct Reactive Transactions| Firestore
+    GPS -->|GPS Watermark Streams| Firestore
+    MBGParser -->|Sync Batch & Production Data| Firestore
+    Chunker -->|Base64 Chunk Streams| Firestore
     Auth -->|Token Verification| FBAuth
     
-    UI -->|Local HTTP Request| WAGateway
-    WAGateway -->|API calls| WABot
+    UI -->|Internal Dispatch Alerts| WAGateway
+    WAGateway -->|API Calls| WABot
 ```
 
 ---
 
 ## Transactional State Machine
 
-Order operations and transitions are strictly locked down. The system enforces the following state transitions:
+Order operations follow a strict state transition flow enforced by Firestore security rules:
 
 ```mermaid
 stateDiagram-v2
     [*] --> PENDING: Order created by Admin
-    PENDING --> IN_PRODUCTION: Production started (Chef signs in)
-    IN_PRODUCTION --> QC: Production completed (Timer finishes)
+    PENDING --> IN_PRODUCTION: Kitchen production started
+    IN_PRODUCTION --> QC: Cooking completed (Timer finished)
     QC --> READY_TO_DELIVER: QC passed (Assigned to Courier)
-    QC --> PENDING: QC failed (Re-queued for cooking)
+    QC --> PENDING: QC failed (Returned to Kitchen)
     READY_TO_DELIVER --> OUT_FOR_DELIVERY: Dispatched by Dispatcher
-    OUT_FOR_DELIVERY --> COMPLETED: Delivery completed & Signed by Client
+    OUT_FOR_DELIVERY --> COMPLETED: Delivered & Signed by Client
     OUT_FOR_DELIVERY --> DELIVERY_FAILED: Handover failed (Rescheduled)
     COMPLETED --> [*]
     DELIVERY_FAILED --> [*]
@@ -126,38 +134,37 @@ stateDiagram-v2
 
 ---
 
-## Security Configuration and Firestore Rules
+## Security Configuration & Role-Based Access Control (RBAC)
 
-### Role-Based Access Control (RBAC)
+Database access is secured via [firestore.rules](./firestore.rules). User access is validated against custom authentication claims:
 
-Database collections are strictly gated in [firestore.rules](file:///c:/Users/Gari%20Iriana/OneDrive/Documents/Al%20umana/firestore.rules). Users are validated against custom claims:
-
-- **Admin**: Full database management, order creation, categories setup, and configuration rights.
-- **Tim Dapur**: Read-write access restricted to inventory stock quantities and production schedules.
-- **Distribusi**: Allowed to allocate courier tasks, update order statuses, and monitor delivery queues.
-- **Kurir**: Restricted write-access for streaming GPS data and uploading POD (Proof-of-Delivery) signature chunks.
-- **Monitoring**: Read-only access to specific dashboards, metrics, and KPI telemetry.
+| Role | Access Scope |
+| :--- | :--- |
+| **Admin** | Full database management, product catalog, user claims, and global configuration. |
+| **Tim Dapur** | Read-write access to kitchen queues, ingredient stock quantities, and production timers. |
+| **Distribusi** | Allocate courier tasks, manage dispatch queues, and monitor delivery progress. |
+| **Kurir** | Restricted write-access for GPS live streams, transit checkpoints, and POD photo chunks. |
+| **Monitoring** | Read-only access to KPI metrics, financial reports, and historical order audits. |
+| **Admin MBG** | Full access to Excel workbook imports, 5-tab live recalculation, menu planning, and official reporting. |
 
 ---
 
-## Correctness Properties and PBT
+## Correctness Properties & Property-Based Testing (PBT)
 
-The codebase incorporates **18 distinct correctness properties** verified via offline Property-Based Testing (PBT). All tests pass successfully and can be executed offline.
+The codebase incorporates **18 distinct correctness properties** verified through offline Property-Based Testing (fast-check & vitest):
 
-### Frontend Correctness Properties (Fast-Check)
-
-- **Property 5**: The kitchen queue filter outputs only active `PENDING` or `IN_PRODUCTION` orders, sorted chronologically.
-- **Property 9**: Geolocation coordinates are range-validated ($[-90, 90]$ for latitude, $[-180, 180]$ for longitude) before database insertion.
-- **Property 10**: Checks for GPS staleness trigger alerts if updates stop for $> 5$ minutes during transit.
-- **Property 11**: Image chunking round-trip verifies that slicing and assembly reconstructs the exact original binary file.
-- **Property 12**: Client-side chunk structures strictly preserve indices and size bounds.
-- **Property 13**: Oversized uploads ($> 15$ MB client-side) are rejected at the UI edge.
+- **Property 5**: Kitchen queue filters only active `PENDING` or `IN_PRODUCTION` orders, sorted chronologically.
+- **Property 9**: Geolocation coordinates are strictly range-validated ($[-90, 90]$ latitude, $[-180, 180]$ longitude) prior to persistence.
+- **Property 10**: GPS staleness detection triggers warnings if updates halt for $> 5$ minutes during transit.
+- **Property 11**: Base64 chunking round-trip verifies that slicing and reassembly reconstruct the exact original binary payload.
+- **Property 12**: Client chunk structures strictly preserve indices, order, and size limits.
+- **Property 13**: Uploads exceeding client-side limits ($> 15$ MB) are rejected at the UI boundary.
 - **Property 17**: Cumulative filtering on dashboards correctly computes logical `AND` checks.
-- **Property 18**: Proof of Delivery requires a valid signature representation and photo attachment before submission.
+- **Property 18**: Proof of Delivery requires valid signature canvas strokes and photo attachments before status promotion to `COMPLETED`.
 
 ---
 
-## Local Development and Deployment
+## Local Development & Deployment
 
 ### Prerequisites
 
@@ -175,7 +182,7 @@ npm install
 
 ### 2. Environment Configuration
 
-Create a `.env.production` file inside `frontend/` containing your production Firebase details:
+Create `.env.production` inside `frontend/` containing your production Firebase details:
 
 ```env
 VITE_FIREBASE_API_KEY=your_production_api_key
@@ -188,15 +195,15 @@ VITE_FIREBASE_MEASUREMENT_ID=your_measurement_id
 VITE_API_BASE_URL=
 ```
 
-### 3. Build & Local Test
+### 3. Build & Test
 
-To run unit and property-based tests:
+Run unit and property-based tests:
 
 ```bash
 npm run test
 ```
 
-To compile a minified production build:
+Build the minified production bundle:
 
 ```bash
 npm run build
@@ -204,7 +211,7 @@ npm run build
 
 ### 4. Deploying to Firebase Hosting
 
-Deploy your build to the live custom domain (`koperasi-alumana.com`):
+Deploy the frontend build to Firebase Hosting:
 
 ```bash
 npx firebase deploy --only hosting
@@ -214,9 +221,7 @@ npx firebase deploy --only hosting
 
 ## On-Premise WhatsApp Gateway (Local Service)
 
-The system integrates a local gateway (`wa-gateway`) that interfaces with WhatsApp Web. This allows automatic order updates to be sent directly to client phone numbers.
-
-To start the gateway locally:
+The system includes an on-premise WhatsApp service (`wa-gateway`) interfacing with WhatsApp Web to deliver automatic dispatch alerts:
 
 ```bash
 cd wa-gateway
@@ -224,23 +229,19 @@ npm install
 node server.js
 ```
 
-The gateway will output a QR code in the terminal. Scan it using your WhatsApp application to link the account. It serves requests on port `8000`.
+Scan the terminal QR code using WhatsApp to link the session. The service listens on port `8000`.
 
 ---
 
 ## Production Containerization & Orchestration
 
-The system is fully containerized and can be orchestrated in cloud/on-premise environments using Docker Compose or Kubernetes.
-
 ### 1. Docker Compose Production Deployment
 
-A pre-configured production Docker Compose architecture is provided in [docker-compose.prod.yml](file:///c:/Users/Gari%20Iriana/OneDrive/Documents/Al%20umana/docker-compose.prod.yml):
+A pre-configured production Docker Compose architecture is provided in [docker-compose.prod.yml](./docker-compose.prod.yml):
 
-- **Backend Service**: Serves the Go backend production target. Depends on `wa-gateway` and auto-loads `.env.production`.
-- **Frontend Service**: Hosts the built static React app served via Nginx, optimized with reverse caching.
-- **WA-Gateway**: Runs Node.js Express server with automated Chromium headless dependencies. Mounts a persistent named volume `wa_session` (`/app/.wwebjs_auth`) to store linked session states, preventing recurrent QR code scans after restarts.
-
-To build and launch the production containers:
+- **Backend Service**: Serves the Go backend production target with `.env.production`.
+- **Frontend Service**: Hosts the compiled static React application served via Nginx with reverse caching.
+- **WA-Gateway**: Runs Node.js Express with headless Chromium dependencies and a persistent volume `wa_session` (`/app/.wwebjs_auth`) to preserve login state across container restarts.
 
 ```bash
 docker-compose -f docker-compose.prod.yml up --build -d
@@ -248,20 +249,18 @@ docker-compose -f docker-compose.prod.yml up --build -d
 
 ### 2. Enterprise Kubernetes Deployment
 
-Kubernetes manifests are organized within the [k8s/](file:///c:/Users/Gari%20Iriana/OneDrive/Documents/Al%20umana/k8s) directory for high-availability cloud cluster deployment:
+Kubernetes manifests are organized within the [k8s/](./k8s) directory for high-availability cluster deployments:
 
-- **Namespace (`namespace.yaml`)**: Places resources in a dedicated `al-umana` namespace.
-- **Config & Secrets (`configmap.yaml`, `secrets.yaml`)**: Manages environment variables and stores base64 Firebase Service Account credentials securely.
-- **Backend Deployment (`backend-deployment.yaml`)**: Runs 2 replicas with health checking liveness/readiness probes on port `8080`.
-- **Frontend Deployment (`frontend-deployment.yaml`)**: Runs 2 replicas using Nginx to serve static React pages.
-- **WA Gateway (`wa-gateway-deployment.yaml`)**: Serves as a singleton replica (due to single-client session constraints) utilizing a PersistentVolumeClaim to store the WhatsApp session state.
-- **Horizontal Pod Autoscaling (`hpa.yaml`)**: Autoscales frontend pods (2–4 replicas) when CPU usage targets $\ge 60\%$, and backend pods (2–6 replicas) when CPU targets $\ge 50\%$.
-- **Ingress Controller (`ingress.yaml`)**: Employs an Nginx Ingress routing traffic:
-  - `/api/*` -> Backend ClusterIP service (`backend-service.yaml`)
-  - `/wa/*` -> WA-Gateway ClusterIP service (`wa-gateway-service.yaml`)
-  - `/*` -> Frontend ClusterIP service (`frontend-service.yaml`)
-
-To apply the Kubernetes topology to your cluster:
+- **Namespace (`namespace.yaml`)**: Isolates resources in the `al-umana` namespace.
+- **Config & Secrets (`configmap.yaml`, `secrets.yaml`)**: Stores environment configuration and base64 Firebase Service Account credentials.
+- **Backend Deployment (`backend-deployment.yaml`)**: 2 replicas with liveness and readiness probes on port `8080`.
+- **Frontend Deployment (`frontend-deployment.yaml`)**: 2 replicas served via Nginx.
+- **WA Gateway (`wa-gateway-deployment.yaml`)**: Singleton replica backed by a PersistentVolumeClaim for session retention.
+- **Horizontal Pod Autoscaling (`hpa.yaml`)**: Scales frontend pods (2–4 replicas) when CPU $\ge 60\%$, and backend pods (2–6 replicas) when CPU $\ge 50\%$.
+- **Ingress Controller (`ingress.yaml`)**: Routes traffic:
+  - `/api/*` $\rightarrow$ Backend ClusterIP
+  - `/wa/*` $\rightarrow$ WA-Gateway ClusterIP
+  - `/*` $\rightarrow$ Frontend ClusterIP
 
 ```bash
 kubectl apply -f k8s/namespace.yaml
