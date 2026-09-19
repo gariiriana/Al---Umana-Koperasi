@@ -849,10 +849,7 @@ const renderSupplierPage = (
   logoAlUmanaa: string | null,
   logoBadanGizi: string | null
 ) => {
-  const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
-
-  drawLandscapeHeader(doc, 'TABEL SUPPLIER & LEMBAR PENGESAHAN', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
+  drawLandscapeHeader(doc, 'TABEL SUPPLIER (PESANAN BAHAN MAKANAN & BUMBU)', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
 
   const poList = report.poRows || [];
   const poGrandTotal =
@@ -971,56 +968,6 @@ const renderSupplierPage = (
       margin: { left: 10, right: 10 },
     });
   }
-
-  // ─── LEMBAR PENGESAHAN (3 SIGNATURES) ─────────────────────────────────────
-  const lastFinalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY || 130;
-  let sigY = lastFinalY + 8;
-
-  if (sigY + 35 > pageH - 10) {
-    doc.addPage();
-    drawLandscapeHeader(doc, 'LEMBAR PENGESAHAN LAPORAN OPERASIONAL', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
-    sigY = 35;
-  }
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(51, 65, 85);
-
-  const col1X = 45;
-  const col2X = pageW / 2;
-  const col3X = pageW - 45;
-
-  // Signatures
-  doc.text('Mengetahui,', col1X, sigY, { align: 'center' });
-  doc.setFont('helvetica', 'bold');
-  doc.text('Kepala Satuan Pelayanan (SPPG)', col1X, sigY + 4, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.text('( ___________________________ )', col1X, sigY + 20, { align: 'center' });
-  doc.setFontSize(6.8);
-  doc.setTextColor(100, 116, 139);
-  doc.text('NIP: SPPG-BGN-001', col1X, sigY + 23.5, { align: 'center' });
-
-  doc.setFontSize(7.5);
-  doc.setTextColor(51, 65, 85);
-  doc.text('Diperiksa Oleh,', col2X, sigY, { align: 'center' });
-  doc.setFont('helvetica', 'bold');
-  doc.text('Tenaga Ahli Gizi (Nutrisionis)', col2X, sigY + 4, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.text('( ___________________________ )', col2X, sigY + 20, { align: 'center' });
-  doc.setFontSize(6.8);
-  doc.setTextColor(100, 116, 139);
-  doc.text('STR: GIZI-MBG-2026', col2X, sigY + 23.5, { align: 'center' });
-
-  doc.setFontSize(7.5);
-  doc.setTextColor(51, 65, 85);
-  doc.text('Dibuat Oleh,', col3X, sigY, { align: 'center' });
-  doc.setFont('helvetica', 'bold');
-  doc.text('Koordinator Produksi & Dapur', col3X, sigY + 4, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.text('( ___________________________ )', col3X, sigY + 20, { align: 'center' });
-  doc.setFontSize(6.8);
-  doc.setTextColor(100, 116, 139);
-  doc.text('Koperasi Al Umanaa Sejahtera Mandiri', col3X, sigY + 23.5, { align: 'center' });
 };
 
 // ─── EXPORT MAIN FUNCTION ─────────────────────────────────────────────────────

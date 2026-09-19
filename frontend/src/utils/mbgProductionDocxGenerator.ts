@@ -865,9 +865,9 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
   }
 
   // ==========================================================================
-  // HALAMAN AKHIR: TABEL SUPPLIER & PENGESAHAN
+  // HALAMAN AKHIR: TABEL SUPPLIER
   // ==========================================================================
-  appendOfficialHeader('TABEL SUPPLIER & LEMBAR PENGESAHAN', true);
+  appendOfficialHeader('TABEL SUPPLIER (PESANAN BAHAN MAKANAN & BUMBU)', true);
 
   const poList = dailyReport.poRows || [];
   const poGrandTotal =
@@ -1020,51 +1020,7 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
     docChildren.push(new Paragraph({ spacing: { after: 180 }, children: [] }));
   }
 
-  // ==========================================================================
-  // LEMBAR PENGESAHAN (3 TANDA TANGAN)
-  // ==========================================================================
-  const signatureTable = new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    borders: NO_BORDER,
-    rows: [
-      new TableRow({
-        children: [
-          new TableCell({
-            width: { size: 33, type: WidthType.PERCENTAGE },
-            children: [
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Mengetahui,', size: 15, font: 'Arial' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Kepala Satuan Pelayanan (SPPG)', bold: true, size: 15, font: 'Arial' })] }),
-              new Paragraph({ text: '', spacing: { after: 600 } }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '( _______________________ )', bold: true, size: 15, font: 'Arial' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'NIP: SPPG-BGN-001', size: 13, color: '64748B', font: 'Arial' })] }),
-            ],
-          }),
-          new TableCell({
-            width: { size: 34, type: WidthType.PERCENTAGE },
-            children: [
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Diperiksa Oleh,', size: 15, font: 'Arial' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Tenaga Ahli Gizi (Nutrisionis)', bold: true, size: 15, font: 'Arial' })] }),
-              new Paragraph({ text: '', spacing: { after: 600 } }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '( _______________________ )', bold: true, size: 15, font: 'Arial' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'STR: GIZI-MBG-2026', size: 13, color: '64748B', font: 'Arial' })] }),
-            ],
-          }),
-          new TableCell({
-            width: { size: 33, type: WidthType.PERCENTAGE },
-            children: [
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Dibuat Oleh,', size: 15, font: 'Arial' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Koordinator Produksi & Dapur', bold: true, size: 15, font: 'Arial' })] }),
-              new Paragraph({ text: '', spacing: { after: 600 } }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '( _______________________ )', bold: true, size: 15, font: 'Arial' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Koperasi Al Umanaa Sejahtera Mandiri', size: 13, color: '64748B', font: 'Arial' })] }),
-            ],
-          }),
-        ],
-      }),
-    ],
-  });
 
-  docChildren.push(signatureTable);
 
   // ==========================================================================
   // DOCUMENT BUILD IN LANDSCAPE ORIENTATION
