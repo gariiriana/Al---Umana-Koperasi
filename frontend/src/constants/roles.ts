@@ -130,13 +130,8 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/mbg/cooking",
     "/mbg/reports",
     "/mbg/orders",
-    "/mbg/purchasing",
-    "/mbg/purchasing/recap",
-    "/mbg/purchasing/archive",
-    "/mbg/suppliers",
     "/mbg/distribution",
     "/mbg/delivery",
-    "/mbg/sub-purchasing",
   ],
 
   /**
@@ -150,13 +145,8 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/mbg/cooking",
     "/mbg/reports",
     "/mbg/orders",
-    "/mbg/purchasing",
-    "/mbg/purchasing/recap",
-    "/mbg/purchasing/archive",
-    "/mbg/suppliers",
     "/mbg/distribution",
     "/mbg/delivery",
-    "/mbg/sub-purchasing",
   ],
 
   /**
@@ -168,14 +158,12 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
 
   /**
-   * Purchasing MBG: belanja bahan, kelola supplier, grouping pesanan, arsip purchasing.
+   * Purchasing MBG: Dialihkan ke Produksi MBG (Laporan Pembelian Harian Excel).
    */
   purchasing_mbg: [
-    "/mbg/purchasing",
-    "/mbg/purchasing/recap",
-    "/mbg/purchasing/archive",
-    "/mbg/suppliers",
+    "/mbg/production",
     "/mbg/orders",
+    "/mbg/cooking",
   ],
 
   /**
@@ -196,10 +184,10 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
 
   /**
-   * Sub Purchasing MBG: belanja bahan yang ditugaskan oleh Purchasing.
+   * Sub Purchasing MBG: Dialihkan ke Produksi MBG.
    */
   sub_purchasing_mbg: [
-    "/mbg/sub-purchasing",
+    "/mbg/production",
     "/mbg/orders",
   ],
 
@@ -303,10 +291,10 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   admin_mbg: "/mbg/admin",
   produksi_mbg: "/mbg/production",
   dokumentasi_produksiMBG: "/mbg/cooking",
-  purchasing_mbg: "/mbg/purchasing",
+  purchasing_mbg: "/mbg/production",
   distribusi_mbg: "/mbg/distribution",
   kurir_mbg: "/mbg/delivery",
-  sub_purchasing_mbg: "/mbg/sub-purchasing",
+  sub_purchasing_mbg: "/mbg/production",
   MBG2: "/katering/jobdesk",
   mbg2: "/katering/jobdesk",
   produksi_mbg_2: "/katering/jobdesk",

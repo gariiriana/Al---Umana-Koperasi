@@ -244,19 +244,49 @@ export function subscribeDailyReport(
   }, onError);
 }
 
+export function subscribeAllDailyReports(
+  callback: (reports: MbgProductionDailyReport[]) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  const q = collection(db, DAILY_REPORTS_COLLECTION);
+  return onSnapshot(q, (snap) => {
+    const list: MbgProductionDailyReport[] = [];
+    snap.forEach((doc) => {
+      list.push({ id: doc.id, ...doc.data() } as MbgProductionDailyReport);
+    });
+    callback(list);
+  }, onError);
+}
+
+function cleanUndefinedDeep<T>(obj: T): T {
+  if (obj === undefined) return null as unknown as T;
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanUndefinedDeep) as unknown as T;
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    if (value !== undefined) {
+      result[key] = cleanUndefinedDeep(value);
+    }
+  }
+  return result as T;
+}
+
 export async function saveDailyReport(
   reportId: string | null,
   report: Omit<MbgProductionDailyReport, 'id'>
 ): Promise<string> {
+  const cleaned = cleanUndefinedDeep(report);
   if (reportId) {
     await updateDoc(doc(db, DAILY_REPORTS_COLLECTION, reportId), {
-      ...report,
+      ...cleaned,
       updatedAt: new Date().toISOString(),
     });
     return reportId;
   } else {
     const ref = await addDoc(collection(db, DAILY_REPORTS_COLLECTION), {
-      ...report,
+      ...cleaned,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });

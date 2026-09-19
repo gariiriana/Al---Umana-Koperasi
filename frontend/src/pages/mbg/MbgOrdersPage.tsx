@@ -15,13 +15,14 @@ import 'leaflet/dist/leaflet.css';
 import { useToast } from '@/contexts/ToastContext';
 import type {
   MbgPmBatch, MbgPmEntry, MbgPurchaseOrder, MbgQcCheck,
-  MbgDeliveryTask, MbgCookingSession, MbgNutritionEntry
+  MbgDeliveryTask, MbgCookingSession, MbgNutritionEntry,
+  MbgProductionDailyReport
 } from '@/types/mbg';
 import type { CourierGPS } from '@/types/courier-gps';
 import { subscribeBatches, subscribeEntries } from '@/services/mbgAdminService';
 import { subscribePurchaseOrders } from '@/services/mbgPurchasingService';
 import { subscribeQcChecks, subscribeDeliveryTasks } from '@/services/mbgDistributionService';
-import { subscribeCookingSessions, subscribeNutrition } from '@/services/mbgProductionService';
+import { subscribeCookingSessions, subscribeNutrition, subscribeDailyReport } from '@/services/mbgProductionService';
 import { subscribeCourierLocations } from '@/services/realtimeService';
 import { MBG_BATCH_STATUS_CONFIG, NUTRIENTS_LIST } from '@/constants/mbgConstants';
 
@@ -55,6 +56,7 @@ export function MbgOrdersPage() {
   const [nutritionData, setNutritionData] = useState<MbgNutritionEntry[]>([]);
   const [deliveryTasks, setDeliveryTasks] = useState<MbgDeliveryTask[]>([]);
   const [courierLocations, setCourierLocations] = useState<CourierGPS[]>([]);
+  const [dailyReport, setDailyReport] = useState<MbgProductionDailyReport | null>(null);
 
   const [activeTab, setActiveTab] = useState<'timeline' | 'institusi' | 'nutrition' | 'purchasing' | 'dapur' | 'tracking'>('timeline');
 
@@ -92,6 +94,7 @@ export function MbgOrdersPage() {
     const unsubCooking = subscribeCookingSessions(selectedBatchId, setCookingSessions);
     const unsubNutrition = subscribeNutrition(selectedBatchId, setNutritionData);
     const unsubTasks = subscribeDeliveryTasks(selectedBatchId, setDeliveryTasks);
+    const unsubDailyReport = subscribeDailyReport(selectedBatchId, setDailyReport);
 
     return () => {
       unsubEntries();
@@ -100,6 +103,7 @@ export function MbgOrdersPage() {
       unsubCooking();
       unsubNutrition();
       unsubTasks();
+      unsubDailyReport();
     };
   }, [selectedBatchId]);
 
@@ -467,14 +471,15 @@ export function MbgOrdersPage() {
                   className="space-y-6">
                   {/* Purchase Orders List */}
                   <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
-                    <div className="px-6 py-4 bg-gray-50 border-b border-[#E5E7EB]">
-                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Status Belanja Bahan Baku</span>
+                    <div className="px-6 py-4 bg-gray-50 border-b border-[#E5E7EB] flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Status Belanja Bahan Baku & Pesanan Supplier</span>
+                      {(!purchaseOrders || purchaseOrders.length === 0) && dailyReport?.poRows && dailyReport.poRows.length > 0 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Data Terintegrasi Excel (Tabel Supplier)
+                        </span>
+                      )}
                     </div>
-                    {purchaseOrders.length === 0 ? (
-                      <div className="p-8 text-center text-gray-400 text-xs font-bold">
-                        Belum ada data Purchase Order (PO) untuk batch ini.
-                      </div>
-                    ) : (
+                    {purchaseOrders.length > 0 ? (
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs text-left">
                           <thead>
@@ -511,11 +516,50 @@ export function MbgOrdersPage() {
                           </tbody>
                         </table>
                       </div>
+                    ) : dailyReport?.poRows && dailyReport.poRows.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left">
+                          <thead>
+                            <tr className="bg-gray-100 text-gray-500 border-b border-gray-200 font-bold uppercase text-[9px] tracking-wider">
+                              <th className="py-3 px-6">Supplier</th>
+                              <th className="py-3 px-6">Item Bahan Baku</th>
+                              <th className="py-3 px-6 text-center">Jumlah Kebutuhan</th>
+                              <th className="py-3 px-6 text-center">Jam Tiba</th>
+                              <th className="py-3 px-6 text-right">Harga Satuan</th>
+                              <th className="py-3 px-6 text-right">Total Biaya</th>
+                              <th className="py-3 px-6">Keterangan</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {dailyReport.poRows.map((po, idx) => (
+                              <tr key={idx} className="hover:bg-gray-50/50 font-medium">
+                                <td className="py-3.5 px-6 font-bold text-gray-900">{po.supplier || 'Koperasi Al Umanaa'}</td>
+                                <td className="py-3.5 px-6 font-bold text-sky-950">{po.item}</td>
+                                <td className="py-3.5 px-6 text-center font-bold text-slate-800">
+                                  {po.jumlah} {po.satuan || 'kg'}
+                                </td>
+                                <td className="py-3.5 px-6 text-center text-slate-500 font-bold">{po.jamKedatangan || '-'}</td>
+                                <td className="py-3.5 px-6 text-right font-medium text-slate-600">
+                                  {po.hargaSatuan ? `Rp ${po.hargaSatuan.toLocaleString('id-ID')}` : '-'}
+                                </td>
+                                <td className="py-3.5 px-6 text-right font-black text-emerald-800">
+                                  {po.totalHarga ? `Rp ${po.totalHarga.toLocaleString('id-ID')}` : '-'}
+                                </td>
+                                <td className="py-3.5 px-6 text-slate-500 text-[11px]">{po.keterangan || '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="p-8 text-center text-gray-400 text-xs font-bold">
+                        Belum ada data pesanan supplier untuk batch ini. Data otomatis muncul ketika meng-import file Excel di Produksi MBG.
+                      </div>
                     )}
                   </div>
 
                   {/* QC Checks List */}
-                  {qcChecks.length > 0 && (
+                  {qcChecks.length > 0 ? (
                     <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
                       <div className="px-6 py-4 bg-gray-50 border-b border-[#E5E7EB]">
                         <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Hasil Quality Control (QC)</span>
@@ -550,7 +594,54 @@ export function MbgOrdersPage() {
                         ))}
                       </div>
                     </div>
-                  )}
+                  ) : dailyReport?.inspectionForm?.rows && dailyReport.inspectionForm.rows.length > 0 ? (
+                    <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
+                      <div className="px-6 py-4 bg-gray-50 border-b border-[#E5E7EB] flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Formulir Pemeriksaan Mutu Bahan Baku (QC Inspection)</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Data Terintegrasi Excel
+                        </span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left">
+                          <thead>
+                            <tr className="bg-gray-100 text-gray-500 border-b border-gray-200 font-bold uppercase text-[9px] tracking-wider">
+                              <th className="py-3 px-6">Jenis Bahan</th>
+                              <th className="py-3 px-6 text-center">Banyaknya</th>
+                              <th className="py-3 px-6 text-center">Kesesuaian</th>
+                              <th className="py-3 px-6 text-center">Kondisi Fisik</th>
+                              <th className="py-3 px-6">Catatan</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {dailyReport.inspectionForm.rows.map((qc, idx) => (
+                              <tr key={idx} className="hover:bg-gray-50/50 font-medium">
+                                <td className="py-3.5 px-6 font-bold text-gray-900">{qc.jenisBahan}</td>
+                                <td className="py-3.5 px-6 text-center font-bold text-slate-800">
+                                  {qc.banyaknya} {qc.satuan}
+                                </td>
+                                <td className="py-3.5 px-6 text-center">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    qc.isSesuai ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                                  }`}>
+                                    {qc.isSesuai ? 'Sesuai' : 'Tidak Sesuai'}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-6 text-center">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    qc.isBaik ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                                  }`}>
+                                    {qc.isBaik ? 'Baik / Segar' : 'Rusak'}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-6 text-slate-500 text-[11px]">{qc.notes || '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null}
                 </motion.div>
               )}
 

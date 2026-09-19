@@ -17,6 +17,7 @@ import {
   Trash2,
   Download,
   Save,
+  AlertTriangle,
 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import type {
@@ -24,8 +25,17 @@ import type {
   MbgPmEntry,
   MbgDeliveryTask,
   MbgSchoolProof,
+  MbgProductionDailyReport,
 } from '@/types/mbg';
-import { subscribeBatches, subscribeEntries, updateEntry } from '@/services/mbgAdminService';
+import {
+  subscribeBatches,
+  subscribeEntries,
+  updateEntry,
+  addMultipleEntries,
+  recalculateBatchTotals,
+  updateBatchStatus,
+} from '@/services/mbgAdminService';
+import { subscribeAllDailyReports } from '@/services/mbgProductionService';
 import {
   subscribeDeliveryTasks,
   addDeliveryTask,
@@ -62,6 +72,9 @@ export function MbgDistributionPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'assignment' | 'reports'>('assignment');
   const [isExportingDailyPdf, setIsExportingDailyPdf] = useState(false);
+  const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
+  const [batchFilterMode, setBatchFilterMode] = useState<'imported' | 'all'>('imported');
+  const [isSyncingEntries, setIsSyncingEntries] = useState(false);
 
   const selectedBatch = useMemo(
     () => batches.find((b) => b.id === selectedBatchId),
@@ -288,14 +301,117 @@ export function MbgDistributionPage() {
     const unsub = subscribeBatches((data) => {
       const activeBatches = data.filter((b) => b.status !== 'DRAFT' || ((b.totalJumlah ?? 0) > 0));
       setBatches(activeBatches);
-      if (activeBatches.length > 0 && !selectedBatchId) {
-        setSelectedBatchId(activeBatches[0].id);
-      }
       setLoading(false);
     });
     return unsub;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Subscribe all daily reports to know which batches have imported Excel data
+  useEffect(() => {
+    const unsub = subscribeAllDailyReports(setAllDailyReports);
+    return unsub;
+  }, []);
+
+  const savedReportBatchIds = useMemo(() => {
+    const set = new Set<string>();
+    allDailyReports.forEach((r) => {
+      if (r.batchId) set.add(r.batchId);
+    });
+    return set;
+  }, [allDailyReports]);
+
+  // Filter batches: only batches that have imported data from Produksi MBG
+  const importedBatches = useMemo(() => {
+    return batches.filter((b) => savedReportBatchIds.has(b.id));
+  }, [batches, savedReportBatchIds]);
+
+  const displayBatches = useMemo(() => {
+    if (batchFilterMode === 'imported') {
+      return importedBatches;
+    }
+    return batches;
+  }, [batchFilterMode, importedBatches, batches]);
+
+  // Keep selectedBatchId synced with displayBatches (auto-select latest imported batch)
+  useEffect(() => {
+    if (displayBatches.length > 0) {
+      if (!selectedBatchId || !displayBatches.some((b) => b.id === selectedBatchId)) {
+        setSelectedBatchId(displayBatches[0].id);
+      }
+    } else if (batchFilterMode === 'imported' && batches.length > 0 && importedBatches.length === 0) {
+      setSelectedBatchId(null);
+    }
+  }, [displayBatches, selectedBatchId, batchFilterMode, batches.length, importedBatches.length]);
+
+  // Helper to sync PM entries from Excel daily report if batch entries are empty in Firestore
+  const syncEntriesFromDailyReport = async (report: MbgProductionDailyReport, targetBatchId: string) => {
+    if (!report.sekolahList || report.sekolahList.length === 0) return;
+    try {
+      const newEntries: Omit<MbgPmEntry, 'id'>[] = report.sekolahList.map((s, idx) => {
+        const nameLower = s.nama.toLowerCase();
+        const isPosyandu = nameLower.includes('balita') || nameLower.includes('bumil') || nameLower.includes('busui') || nameLower.includes('posyandu') || nameLower.includes('3b');
+        const schoolLevel = nameLower.includes('tk') || nameLower.includes('paud') ? 'tk_paud' : (nameLower.includes('smp') || nameLower.includes('sma') ? 'sma' : 'sd');
+        const total = (s.murid || 0) + (s.guru || 0);
+        return {
+          batchId: targetBatchId,
+          institutionName: s.nama,
+          institutionType: isPosyandu ? 'posyandu' : 'sekolah',
+          schoolLevel: isPosyandu ? undefined : schoolLevel,
+          qtSiswaBalita: s.murid || 0,
+          qtBumil: 0,
+          qtBusui: 0,
+          qtBumilBusui: 0,
+          qtGuruKader: s.guru || 0,
+          qtPobiaNasi: 0,
+          qtPorsiBalita: isPosyandu && nameLower.includes('balita') ? s.murid : 0,
+          qtPorsiBumilBusui: isPosyandu && (nameLower.includes('bumil') || nameLower.includes('busui')) ? s.murid : 0,
+          jumlah: total,
+          jadwalPengantaran: '06.30-08.30',
+          assignedPetugasId: '',
+          assignedPetugasName: '',
+          menuItems: [],
+          menuKeringanItems: [],
+          isSekolahLibur: total === 0,
+          notes: '',
+          sortOrder: idx + 1,
+          createdBy: report.createdBy || 'excel-import-sync',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      });
+
+      if (newEntries.length > 0) {
+        await addMultipleEntries(newEntries);
+        await recalculateBatchTotals(targetBatchId);
+        await updateBatchStatus(targetBatchId, 'PM_SUBMITTED');
+        showToast({
+          message: `Berhasil memuat ${newEntries.length} institusi sekolah dari Excel Produksi ke Distribusi MBG!`,
+          variant: 'success',
+        });
+      }
+    } catch (err) {
+      console.error('Failed to sync entries from daily report:', err);
+      showToast({
+        message: 'Gagal memuat data sekolah dari Excel ke Distribusi MBG',
+        variant: 'error',
+      });
+    }
+  };
+
+  // Auto-sync entries if current selected batch has Excel report with sekolahList but 0 entries in mbg_pm_entries
+  useEffect(() => {
+    if (!selectedBatchId || loading || isSyncingEntries) return;
+    if (entries.length === 0) {
+      const matchedReport = allDailyReports.find((r) => r.batchId === selectedBatchId);
+      if (matchedReport?.sekolahList && matchedReport.sekolahList.length > 0) {
+        setIsSyncingEntries(true);
+        syncEntriesFromDailyReport(matchedReport, selectedBatchId).finally(() => {
+          setIsSyncingEntries(false);
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBatchId, entries.length, allDailyReports, loading]);
 
   // Subscribe relevant batch data
   useEffect(() => {
@@ -805,12 +921,65 @@ export function MbgDistributionPage() {
         </div>
       ) : (
         <>
-          <div className="mb-6">
-            <SearchableBatchSelector
-              batches={batches}
-              selectedBatchId={selectedBatchId}
-              onSelectBatch={setSelectedBatchId}
-            />
+          {/* Batch Selector Bar with Excel Filter */}
+          <div className="mb-6 bg-white p-4 rounded-2xl border border-[#E5E7EB] shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-black text-gray-700 uppercase tracking-wide">
+                  PILIH TANGGAL BATCH / PENGIRIMAN:
+                </span>
+                <span className="text-[11px] font-black text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  {importedBatches.length} Batch Siap Distribusi (Sudah Import)
+                </span>
+                {batches.length - importedBatches.length > 0 && (
+                  <span className="text-[11px] font-bold text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-200">
+                    {batches.length - importedBatches.length} Belum Import
+                  </span>
+                )}
+              </div>
+
+              {/* Mode Filter: Hanya Sudah Import vs Semua */}
+              <div className="inline-flex items-center bg-gray-100 p-1 rounded-xl text-xs font-bold shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setBatchFilterMode('imported')}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    batchFilterMode === 'imported'
+                      ? 'bg-white text-emerald-800 shadow-xs font-black'
+                      : 'text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  ✓ Hanya Sudah Import ({importedBatches.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchFilterMode('all')}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    batchFilterMode === 'all'
+                      ? 'bg-white text-gray-900 shadow-xs font-black'
+                      : 'text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  Semua Batch ({batches.length})
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <SearchableBatchSelector
+                batches={displayBatches}
+                selectedBatchId={selectedBatchId}
+                onSelectBatch={setSelectedBatchId}
+                importedBatchIds={savedReportBatchIds}
+              />
+            </div>
+
+            {displayBatches.length === 0 && (
+              <div className="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-800 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                <span>Belum ada data batch yang di-import oleh Produksi MBG. Silakan import Excel di halaman Produksi MBG terlebih dahulu.</span>
+              </div>
+            )}
           </div>
 
           {selectedBatchId ? (

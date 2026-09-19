@@ -15,12 +15,29 @@ import type {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/** Safe numeric extractor */
-function num(v: unknown): number {
+/** Safe numeric extractor supporting Indonesian currency and decimal comma formats */
+export function num(v: unknown): number {
   if (v == null || v === '') return 0;
   if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
-  const cleaned = String(v).replace(/[^0-9.-]+/g, '');
-  const n = Number(cleaned);
+  let s = String(v).trim();
+  const hasRp = /rp/i.test(s);
+  s = s.replace(/[^0-9.,-]+/g, '');
+  if (!s) return 0;
+
+  if (s.includes('.') && s.includes(',')) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.includes(',')) {
+    s = s.replace(',', '.');
+  } else if (s.includes('.')) {
+    const dotCount = (s.match(/\./g) || []).length;
+    if (dotCount > 1) {
+      s = s.replace(/\./g, '');
+    } else if (hasRp) {
+      s = s.replace(/\./g, '');
+    }
+  }
+
+  const n = Number(s);
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -107,14 +124,14 @@ export function resolveSheetColumnIndices(rows: unknown[][]): SheetColMap {
     colHargaTotalBumbu: 29, // AD: Total Harga Bumbu
   };
 
-  // Dynamically detect or refine if headers exist in rows 0..3
-  for (let r = 0; r < Math.min(rows.length, 4); r++) {
+  // Dynamically detect or refine from header rows 0..1 ONLY (never scan data rows)
+  for (let r = 0; r < Math.min(rows.length, 2); r++) {
     const row = rows[r] || [];
     for (let c = 0; c < Math.min(row.length, 35); c++) {
       const cell = str(row[c]).toLowerCase();
       if (!cell) continue;
 
-      // Gizi headers
+      // Gizi headers (Cols 4..12)
       if (c >= 4 && c <= 12) {
         if (cell.includes('berat bersih')) map.colBeratBersih = c;
         else if (cell.includes('energi')) map.colEnergi = c;
@@ -124,29 +141,29 @@ export function resolveSheetColumnIndices(rows: unknown[][]): SheetColMap {
         else if (cell.includes('serat')) map.colSerat = c;
       }
 
-      // Bahan Makanan headers
+      // Bahan Makanan headers (Cols 12..23)
       if (c >= 12 && c <= 23) {
         if (cell === 'supplier' && c < 15) map.colSupplierBahan = c;
         else if (cell.includes('rincian') || cell === 'bahan' || cell.includes('rincian bahan')) map.colBahanOrder = c;
-        else if (cell.includes('harga bahan') || cell.includes('harga baku')) map.colHargaBahan = c;
+        else if (cell.includes('harga bahan') || cell.includes('harga baku') || (cell.includes('harga') && c <= 16)) map.colHargaBahan = c;
         else if (cell.includes('bdd') || cell.includes('%bdd')) map.colBdd = c;
         else if (cell.includes('berat kotor')) map.colBeratKotor = c;
         else if (cell.includes('total (g') || cell.includes('total (g/ml)')) map.colTotalGml = c;
         else if (cell.includes('spare')) map.colSpareBahan = c;
-        else if (cell.includes('kebutuhan')) map.colKebutuhanBahan = c;
+        else if (cell.includes('kebutuhan') || cell.includes('ituhan')) map.colKebutuhanBahan = c;
         else if (cell.includes('satuan') && c >= 19 && c <= 22) map.colSatuanBahan = c;
-        else if (cell === 'harga' && c >= 21 && c <= 23) map.colHargaTotalBahan = c;
+        else if ((cell === 'harga' || cell.includes('total')) && c >= 21 && c <= 23) map.colHargaTotalBahan = c;
       }
 
-      // Bumbu headers
+      // Bumbu headers (Cols 22..32)
       if (c >= 22 && c <= 32) {
         if (cell === 'supplier' && c >= 22) map.colSupplierBumbu = c;
-        else if (cell.includes('nama menu') || cell.includes('menu')) map.colMenuBumbu = c;
+        else if (cell.includes('nama menu') || cell === 'menu') map.colMenuBumbu = c;
         else if (cell.includes('nama bumbu') || cell.includes('jenis bumbu')) map.colNamaBumbu = c;
-        else if (cell.includes('harga bumbu')) map.colHargaBumbu = c;
-        else if (cell.includes('kebutuhan') && c >= 26) map.colKebutuhanBumbu = c;
+        else if (cell.includes('harga bumb') || cell.includes('harga bumbu')) map.colHargaBumbu = c;
+        else if ((cell.includes('kebutuhan') || cell.includes('ituhan')) && c >= 26) map.colKebutuhanBumbu = c;
         else if (cell.includes('satuan') && c >= 27) map.colSatuanBumbu = c;
-        else if (cell === 'harga' && c >= 28) map.colHargaTotalBumbu = c;
+        else if ((cell === 'harga' || cell.includes('total')) && c >= 28) map.colHargaTotalBumbu = c;
       }
     }
   }
@@ -242,22 +259,31 @@ function parsePortionBlock(
   const bahanItems: MbgPortionBahanItem[] = [];
   const bumbuItems: MbgPortionBumbuItem[] = [];
   let currentMenuName = '';
+  let currentMenuBumbu = '';
 
   for (let i = startRow; i < endRow && i < rows.length; i++) {
     const row = rows[i];
     if (!row) continue;
 
-    // Check menu name update in Col F
+    // Check menu name update in Col F (Gizi) or Col Y (Bumbu)
     const menuCol = str(row[map.colMenuName]);
-    if (menuCol && menuCol.toLowerCase() !== 'menu') {
+    if (menuCol && menuCol.toLowerCase() !== 'menu' && menuCol.toLowerCase() !== 'nama menu') {
       currentMenuName = menuCol;
+    }
+    const menuBumbuCol = str(row[map.colMenuBumbu]);
+    if (menuBumbuCol && menuBumbuCol.toLowerCase() !== 'menu' && menuBumbuCol.toLowerCase() !== 'nama menu') {
+      currentMenuBumbu = menuBumbuCol;
     }
 
     // A. Kandungan Gizi (Col G - M)
     const bahanGizi = str(row[map.colBahanGizi]);
-    if (bahanGizi && bahanGizi.toLowerCase() !== 'rincian bahan') {
+    if (
+      bahanGizi &&
+      bahanGizi.toLowerCase() !== 'rincian bahan' &&
+      bahanGizi.toLowerCase() !== 'total'
+    ) {
       const itemMenuName =
-        currentMenuName || menuList[nutritionItems.length] || bahanGizi;
+        currentMenuName || currentMenuBumbu || menuList[nutritionItems.length] || bahanGizi;
 
       nutritionItems.push({
         menuName: itemMenuName,
@@ -276,13 +302,21 @@ function parsePortionBlock(
     if (
       bahanOrder &&
       bahanOrder.toLowerCase() !== 'rincian bahan' &&
-      bahanOrder.toLowerCase() !== 'total pembelanjaan'
+      bahanOrder.toLowerCase() !== 'total pembelanjaan' &&
+      bahanOrder.toLowerCase() !== 'total' &&
+      bahanOrder.toLowerCase() !== 'rp0' &&
+      bahanOrder !== '0'
     ) {
       const bddRaw = num(row[map.colBdd]);
       const bddPercent = bddRaw > 0 && bddRaw <= 1 ? bddRaw * 100 : bddRaw || 100;
       const kebutuhan = num(row[map.colKebutuhanBahan]);
-      const hargaBahan = num(row[map.colHargaBahan]);
-      const hargaTotal = num(row[map.colHargaTotalBahan]) || (kebutuhan > 0 && hargaBahan > 0 ? kebutuhan * hargaBahan : 0);
+      let hargaBahan = num(row[map.colHargaBahan]);
+      let hargaTotal = num(row[map.colHargaTotalBahan]);
+      if (hargaTotal > 0 && (!hargaBahan || hargaBahan === 0) && kebutuhan > 0) {
+        hargaBahan = Math.round(hargaTotal / kebutuhan);
+      } else if (hargaBahan > 0 && (!hargaTotal || hargaTotal === 0) && kebutuhan > 0) {
+        hargaTotal = Math.round(kebutuhan * hargaBahan);
+      }
 
       bahanItems.push({
         rincianBahan: bahanOrder,
@@ -303,12 +337,20 @@ function parsePortionBlock(
       bumbuNama &&
       bumbuNama.toLowerCase() !== 'jenis bumbu' &&
       bumbuNama.toLowerCase() !== 'nama bumbu' &&
-      bumbuNama.toLowerCase() !== 'total pembelanjaan bumbu'
+      bumbuNama.toLowerCase() !== 'total pembelanjaan bumbu' &&
+      bumbuNama.toLowerCase() !== 'total' &&
+      bumbuNama.toLowerCase() !== 'rp0' &&
+      bumbuNama !== '0'
     ) {
-      const bumbuMenu = str(row[map.colMenuBumbu]) || currentMenuName || '';
+      const bumbuMenu = currentMenuBumbu || str(row[map.colMenuBumbu]) || currentMenuName || '';
       const kebutuhan = num(row[map.colKebutuhanBumbu]);
-      const hargaBumbu = num(row[map.colHargaBumbu]);
-      const hargaTotal = num(row[map.colHargaTotalBumbu]) || (kebutuhan > 0 && hargaBumbu > 0 ? kebutuhan * hargaBumbu : 0);
+      let hargaBumbu = num(row[map.colHargaBumbu]);
+      let hargaTotal = num(row[map.colHargaTotalBumbu]);
+      if (hargaTotal > 0 && (!hargaBumbu || hargaBumbu === 0) && kebutuhan > 0) {
+        hargaBumbu = Math.round(hargaTotal / kebutuhan);
+      } else if (hargaBumbu > 0 && (!hargaTotal || hargaTotal === 0) && kebutuhan > 0) {
+        hargaTotal = Math.round(kebutuhan * hargaBumbu);
+      }
 
       bumbuItems.push({
         namaMenu: bumbuMenu,
@@ -893,8 +935,8 @@ export function parseProductionSheetRows(
         jumlah: Math.round(jumlah * 100) / 100,
         satuan,
         keterangan: 'Sesuai Spesifikasi',
-        hargaSatuan: hargaSatuan > 0 ? hargaSatuan : undefined,
-        totalHarga: totalHarga > 0 ? totalHarga : undefined,
+        hargaSatuan: hargaSatuan > 0 ? hargaSatuan : 0,
+        totalHarga: totalHarga > 0 ? totalHarga : 0,
       });
     }
   }
@@ -957,8 +999,8 @@ export function parseProductionSheetRows(
         jumlah: Math.round(entry.jumlah * 100) / 100,
         satuan: entry.satuan,
         keterangan: 'Sesuai Spesifikasi',
-        hargaSatuan: entry.hargaSatuan > 0 ? entry.hargaSatuan : undefined,
-        totalHarga: entry.harga > 0 ? entry.harga : undefined,
+        hargaSatuan: entry.hargaSatuan > 0 ? entry.hargaSatuan : 0,
+        totalHarga: entry.harga > 0 ? entry.harga : 0,
       });
     } else {
       const exist = poMap.get(key)!;
@@ -1189,15 +1231,15 @@ export function parsePenerimaManfaatSheet(
       batchId,
       institutionName: name,
       institutionType: type,
-      schoolLevel,
+      schoolLevel: schoolLevel || 'sd',
       qtSiswaBalita: qtSiswa,
-      qtBumil: qtBumil || undefined,
-      qtBusui: qtBusui || undefined,
+      qtBumil: qtBumil || 0,
+      qtBusui: qtBusui || 0,
       qtBumilBusui,
       qtGuruKader: guru,
       qtPobiaNasi: 0,
-      qtPorsiBalita: type === 'posyandu' && nameLower.includes('balita') ? murid : undefined,
-      qtPorsiBumilBusui: type === 'posyandu' && (qtBumil > 0 || qtBusui > 0) ? murid : undefined,
+      qtPorsiBalita: type === 'posyandu' && nameLower.includes('balita') ? murid : 0,
+      qtPorsiBumilBusui: type === 'posyandu' && (qtBumil > 0 || qtBusui > 0) ? murid : 0,
       jumlah: total,
       jadwalPengantaran: '06.30-08.30',
       assignedPetugasId: '',

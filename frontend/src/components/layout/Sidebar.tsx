@@ -17,13 +17,10 @@ import {
   Package2,
   Search,
   Settings,
-  ShoppingBag,
   ShoppingCart,
   Truck,
   History,
-  FolderArchive,
   UtensilsCrossed,
-  Warehouse,
   X,
   AlertCircle,
   type LucideIcon,
@@ -59,13 +56,8 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/mbg/reports", label: "Laporan MBG", icon: FileText },
   { to: "/mbg/production", label: "Produksi MBG", icon: UtensilsCrossed },
   { to: "/mbg/cooking", label: "Masak MBG", icon: Factory },
-  { to: "/mbg/purchasing", label: "Purchasing MBG", icon: ShoppingBag },
-  { to: "/mbg/purchasing/archive", label: "Arsip Purchasing", icon: FolderArchive },
-  { to: "/mbg/purchasing/recap", label: "Laporan Belanja", icon: FileText },
-  { to: "/mbg/suppliers", label: "Supplier MBG", icon: Warehouse },
   { to: "/mbg/distribution", label: "Distribusi MBG", icon: ClipboardCheck },
   { to: "/mbg/delivery", label: "Kurir MBG", icon: Truck },
-  { to: "/mbg/sub-purchasing", label: "Sub Purchasing", icon: ShoppingBag },
 ] as const;
 
 const LABELS_DICT = {
@@ -91,13 +83,8 @@ const LABELS_DICT = {
     "/mbg/reports": "Laporan MBG",
     "/mbg/production": "Produksi MBG",
     "/mbg/cooking": "Masak MBG",
-    "/mbg/purchasing": "Purchasing MBG",
-    "/mbg/purchasing/archive": "Arsip Purchasing",
-    "/mbg/purchasing/recap": "Laporan Belanja",
-    "/mbg/suppliers": "Supplier MBG",
     "/mbg/distribution": "Distribusi MBG",
     "/mbg/delivery": "Kurir MBG",
-    "/mbg/sub-purchasing": "Sub Purchasing",
   },
   en: {
     "/admin/dashboard": "Dashboard",
@@ -121,12 +108,8 @@ const LABELS_DICT = {
     "/mbg/reports": "MBG Reports",
     "/mbg/production": "MBG Production",
     "/mbg/cooking": "MBG Cooking",
-    "/mbg/purchasing": "MBG Purchasing",
-    "/mbg/purchasing/recap": "Shopping Recap",
-    "/mbg/suppliers": "MBG Suppliers",
     "/mbg/distribution": "MBG Distribution",
     "/mbg/delivery": "MBG Delivery",
-    "/mbg/sub-purchasing": "Sub Purchasing",
   }
 } as const;
 
@@ -291,7 +274,7 @@ export function Sidebar({
               <li key={to}>
                 <NavLink
                   to={to}
-                  end={to === "/mbg/purchasing"}
+                  end={to === "/mbg/orders" || to === "/admin/orders"}
                   onClick={() => onClose?.()}
                   className={({ isActive }) =>
                     `${ITEM_BASE} ${isActive ? ITEM_ACTIVE : ITEM_INACTIVE}`

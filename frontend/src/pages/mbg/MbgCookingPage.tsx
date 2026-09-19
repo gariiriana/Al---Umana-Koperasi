@@ -5,22 +5,24 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
   Camera, FileDown, Loader2, CheckCircle2,
-  ChefHat, Clock, Image as ImageIcon, Upload, Trash2, Eye, X
+  ChefHat, Clock, Image as ImageIcon, Upload, Trash2, Eye, X,
+  FileSpreadsheet, ChevronDown, ChevronUp, Utensils
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import type { MbgPmBatch, MbgCookingSession, MbgPmEntry, MbgNutritionEntry, MbgPurchaseOrder, MbgCookingPhoto } from '@/types/mbg';
+import type { MbgPmBatch, MbgCookingSession, MbgPmEntry, MbgNutritionEntry, MbgPurchaseOrder, MbgCookingPhoto, MbgProductionDailyReport } from '@/types/mbg';
 import { subscribeBatches, subscribeEntries } from '@/services/mbgAdminService';
 import {
-  subscribeCookingSessions, createCookingSession, updateCookingSession, addCookingPhoto, addCookingPhotos, deleteCookingPhoto, subscribeNutrition
+  subscribeCookingSessions, createCookingSession, updateCookingSession, addCookingPhoto, addCookingPhotos, deleteCookingPhoto, subscribeNutrition, subscribeDailyReport, subscribeAllDailyReports
 } from '@/services/mbgProductionService';
 import { subscribePurchaseOrders } from '@/services/mbgPurchasingService';
 import { updateBatchStatus } from '@/services/mbgAdminService';
-import { MBG_COOKING_PHOTO_TEMPLATES, MBG_COOKING_STATUS_CONFIG, NUTRIENTS_LIST } from '@/constants/mbgConstants';
+import { MBG_COOKING_PHOTO_TEMPLATES, MBG_COOKING_STATUS_CONFIG, NUTRIENTS_LIST, MBG_BATCH_STATUS_CONFIG } from '@/constants/mbgConstants';
 import { LiveCamera } from '@/components/LiveCamera';
 import { compressBase64Image } from '@/utils/imageCompressor';
+import { DailyReportExcelSections, type MbgDailyReportSubTab } from '@/components/mbg/DailyReportExcelSections';
 
 export function MbgCookingPage() {
   const { user } = useAuth();
@@ -39,6 +41,11 @@ export function MbgCookingPage() {
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+  const [dailyReport, setDailyReport] = useState<MbgProductionDailyReport | null>(null);
+  const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
+  const [batchExcelFilter, setBatchExcelFilter] = useState<'all' | 'unimported' | 'imported'>('all');
+  const [showDetailReport, setShowDetailReport] = useState<boolean>(true);
+  const [dailyReportSubTab, setDailyReportSubTab] = useState<MbgDailyReportSubTab>('kecil');
 
   const selectedBatch = useMemo(() => {
     return batches.find((b) => b.id === selectedBatchId);
@@ -52,10 +59,46 @@ export function MbgCookingPage() {
   }, []);
 
   useEffect(() => {
-    if (batches.length > 0 && !selectedBatchId) {
-      setSelectedBatchId(batches[0].id);
+    const unsub = subscribeAllDailyReports((list) => {
+      setAllDailyReports(list);
+    }, (err) => {
+      console.error('Error loading all daily reports:', err);
+    });
+    return () => unsub();
+  }, []);
+
+  const savedReportBatchIds = useMemo(() => {
+    const set = new Set<string>();
+    allDailyReports.forEach((r) => {
+      if (r.batchId) set.add(r.batchId);
+    });
+    return set;
+  }, [allDailyReports]);
+
+  const batchCounts = useMemo(() => {
+    const total = batches.length;
+    const imported = batches.filter((b) => savedReportBatchIds.has(b.id)).length;
+    const unimported = total - imported;
+    return { total, imported, unimported };
+  }, [batches, savedReportBatchIds]);
+
+  const filteredBatches = useMemo(() => {
+    if (batchExcelFilter === 'imported') {
+      return batches.filter((b) => savedReportBatchIds.has(b.id));
     }
-  }, [batches, selectedBatchId]);
+    if (batchExcelFilter === 'unimported') {
+      return batches.filter((b) => !savedReportBatchIds.has(b.id));
+    }
+    return batches;
+  }, [batches, batchExcelFilter, savedReportBatchIds]);
+
+  useEffect(() => {
+    if (filteredBatches.length > 0) {
+      if (!selectedBatchId || !filteredBatches.some((b) => b.id === selectedBatchId)) {
+        setSelectedBatchId(filteredBatches[0].id);
+      }
+    }
+  }, [filteredBatches, selectedBatchId]);
 
   useEffect(() => {
     if (!selectedBatchId) return;
@@ -69,12 +112,14 @@ export function MbgCookingPage() {
     const unsubE = subscribeEntries(selectedBatchId, (eList) => setEntries(eList));
     const unsubN = subscribeNutrition(selectedBatchId, (nList) => setNutritionData(nList));
     const unsubPO = subscribePurchaseOrders(selectedBatchId, (poList) => setOrders(poList));
+    const unsubDaily = subscribeDailyReport(selectedBatchId, (report) => setDailyReport(report));
 
     return () => {
       unsubS();
       unsubE();
       unsubN();
       unsubPO();
+      unsubDaily();
     };
   }, [selectedBatchId]);
 
@@ -370,22 +415,216 @@ export function MbgCookingPage() {
         </div>
       ) : (
         <>
-          {/* Batch Selector */}
-          <div className="flex gap-2 overflow-x-auto pb-3 mb-6">
-            {batches.map((b) => {
-              return (
-                <button key={b.id} onClick={() => setSelectedBatchId(b.id)}
-                  className={`shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all ${
-                    selectedBatchId === b.id ? 'bg-[#111827] text-white shadow-lg' : 'bg-white border border-[#E5E7EB] hover:border-[#FBBF24]'
-                  }`}>
-                  {b.tanggal} · {b.totalJumlah} porsi
-                </button>
-              );
-            })}
+          {/* Batch Selector Header with Excel Filter Tabs */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 font-['Hanken_Grotesk']">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                Pilih Batch Masak:
+              </span>
+              <span className="text-[11px] text-slate-400 font-bold">
+                ({filteredBatches.length} dari {batches.length} Batch)
+              </span>
+            </div>
+            {/* Filter Pills */}
+            <div className="inline-flex bg-slate-100 p-1 rounded-xl gap-1 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setBatchExcelFilter('all')}
+                className={`px-3 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                  batchExcelFilter === 'all'
+                    ? 'bg-[#111827] text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Semua ({batchCounts.total})
+              </button>
+              <button
+                type="button"
+                onClick={() => setBatchExcelFilter('unimported')}
+                className={`px-3 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                  batchExcelFilter === 'unimported'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-amber-800 hover:text-amber-950'
+                }`}
+              >
+                ⏳ Belum Import ({batchCounts.unimported})
+              </button>
+              <button
+                type="button"
+                onClick={() => setBatchExcelFilter('imported')}
+                className={`px-3 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                  batchExcelFilter === 'imported'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-emerald-800 hover:text-emerald-950'
+                }`}
+              >
+                ✓ Sudah Import ({batchCounts.imported})
+              </button>
+            </div>
+          </div>
+
+          {/* Batch Selector Horizontal Pills */}
+          <div className="flex gap-2 overflow-x-auto pb-3 mb-6 font-['Hanken_Grotesk']">
+            {filteredBatches.length === 0 ? (
+              <div className="w-full py-4 text-center text-xs font-bold text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                {batchExcelFilter === 'unimported'
+                  ? 'Semua batch sudah di-import data Excel! 🎉'
+                  : 'Belum ada batch yang di-import data Excel.'}
+              </div>
+            ) : (
+              filteredBatches.map((b) => {
+                const isImported = savedReportBatchIds.has(b.id);
+                return (
+                  <button
+                    key={b.id}
+                    onClick={() => setSelectedBatchId(b.id)}
+                    className={`shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-2 ${
+                      selectedBatchId === b.id
+                        ? 'bg-[#111827] text-white shadow-lg'
+                        : 'bg-white border border-[#E5E7EB] hover:border-[#FBBF24] text-slate-800'
+                    }`}
+                  >
+                    <span>{b.tanggal} · {b.totalJumlah} porsi</span>
+                    {isImported ? (
+                      <span className={`text-[9px] font-black rounded-full px-1.5 py-0.5 border flex items-center gap-0.5 ${
+                        selectedBatchId === b.id
+                          ? 'bg-emerald-800/60 text-emerald-200 border-emerald-500/40'
+                          : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      }`}>
+                        ✓ Excel
+                      </span>
+                    ) : (
+                      <span className={`text-[9px] font-bold rounded-full px-1.5 py-0.5 border ${
+                        selectedBatchId === b.id
+                          ? 'bg-white/10 text-slate-300 border-white/20'
+                          : 'bg-slate-100 text-slate-500 border-slate-200'
+                      }`}>
+                        ⏳ Belum
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+            )}
           </div>
 
           {selectedBatchId && (
             <div className="space-y-6">
+              {/* Batch Detail Report & Recipe Overview */}
+              <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden font-['Hanken_Grotesk']">
+                {/* Header Card */}
+                <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100/50 p-5 border-b border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-2xl shadow-sm">
+                      <ChefHat className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h2 className="text-base font-black text-slate-900">
+                          Detail Menu & Laporan Produksi {selectedBatch?.tanggal ? `(${selectedBatch.tanggal})` : ''}
+                        </h2>
+                        {selectedBatch && (
+                          <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
+                            (MBG_BATCH_STATUS_CONFIG[selectedBatch.status] || MBG_BATCH_STATUS_CONFIG.DRAFT).textClass
+                          } ${(MBG_BATCH_STATUS_CONFIG[selectedBatch.status] || MBG_BATCH_STATUS_CONFIG.DRAFT).bgClass}`}>
+                            {(MBG_BATCH_STATUS_CONFIG[selectedBatch.status] || MBG_BATCH_STATUS_CONFIG.DRAFT).label}
+                          </span>
+                        )}
+                        {dailyReport?.sheetDayName && (
+                          <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full">
+                            Sheet: {dailyReport.sheetDayName}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        Panduan resep, takaran bumbu, dan kebutuhan bahan masak yang harus disiapkan tim dapur.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setShowDetailReport(!showDetailReport)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-amber-50 text-slate-800 border border-amber-300 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer"
+                    >
+                      {showDetailReport ? <ChevronUp className="h-4 w-4 text-amber-600" /> : <ChevronDown className="h-4 w-4 text-amber-600" />}
+                      <span>{showDetailReport ? 'Tutup Detail Report' : 'Buka Detail Report'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Info Bar */}
+                <div className="p-4 bg-slate-50 border-b border-slate-200/80 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/60 shadow-xs">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Total Porsi Masak</span>
+                    <span className="text-base font-black text-slate-900">
+                      {(selectedBatch?.totalJumlah || 
+                        (dailyReport ? (dailyReport.porsiKecil?.pmCount || 0) + (dailyReport.porsiBesar?.pmCount || 0) + (dailyReport.porsiBalita?.pmCount || 0) + (dailyReport.porsiBumilBusui?.pmCount || 0) : 0)
+                      ).toLocaleString('id-ID')} Porsi
+                    </span>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/60 shadow-xs">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Porsi Kecil / Besar</span>
+                    <span className="text-xs font-black text-emerald-800">
+                      {dailyReport?.porsiKecil?.pmCount || 0} Porsi Kecil • {dailyReport?.porsiBesar?.pmCount || 0} Porsi Besar
+                    </span>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/60 shadow-xs">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Balita & Bumil</span>
+                    <span className="text-xs font-black text-blue-800">
+                      {dailyReport?.porsiBalita?.pmCount || 0} Balita • {dailyReport?.porsiBumilBusui?.pmCount || 0} Bumil/Busui
+                    </span>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/60 shadow-xs">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Total Pengeluaran / PO</span>
+                    <span className="text-xs font-black text-amber-700">
+                      Rp {(dailyReport?.totalPengeluaran || totalExpenditure || 0).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Menu list tags if available */}
+                {((dailyReport?.porsiBesar?.menuList && dailyReport.porsiBesar.menuList.length > 0) || (dailyReport?.porsiKecil?.menuList && dailyReport.porsiKecil.menuList.length > 0)) && (
+                  <div className="px-5 py-3 bg-white border-b border-slate-100 flex items-center gap-2 flex-wrap text-xs">
+                    <span className="text-[11px] font-black text-slate-700 flex items-center gap-1">
+                      <Utensils className="h-3.5 w-3.5 text-amber-600" />
+                      Menu Hari Ini:
+                    </span>
+                    {Array.from(new Set([
+                      ...(dailyReport?.porsiBesar?.menuList || []),
+                      ...(dailyReport?.porsiKecil?.menuList || []),
+                    ])).map((m, idx) => (
+                      <span key={idx} className="bg-amber-50 text-amber-900 border border-amber-200 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold">
+                        🍴 {m}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Collapsible Content: Detailed Excel Sections */}
+                {showDetailReport && (
+                  <div className="p-5">
+                    {dailyReport ? (
+                      <DailyReportExcelSections
+                        report={dailyReport}
+                        activeSubTab={dailyReportSubTab}
+                        onSubTabChange={setDailyReportSubTab}
+                        entries={entries}
+                      />
+                    ) : (
+                      <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                        <FileSpreadsheet className="h-8 w-8 text-slate-400 mx-auto mb-2" />
+                        <p className="text-xs font-bold text-slate-700">Belum ada Laporan Harian Excel untuk batch ini</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Laporan harian dapat di-import oleh admin/gizi di menu Produksi MBG.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Start/Resume Cooking */}
               {sessions.length === 0 ? (
                 <button onClick={handleStartCooking}

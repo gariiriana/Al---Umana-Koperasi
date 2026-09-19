@@ -890,7 +890,7 @@ export function DailyReportExcelSections({
                           {bum?.hargaBumbu ? formatRp(bum.hargaBumbu) : ''}
                         </td>
                         <td className="px-1.5 py-1.5 text-center font-black text-slate-900 bg-amber-50/30 border-r border-amber-100/60">
-                          {bum ? formatNum(bum.kebutuhan, 2) : ''}
+                          {bum ? (bum.kebutuhan > 0 ? formatNum(bum.kebutuhan, 2) : '-') : ''}
                         </td>
                         <td className="px-1.5 py-1.5 text-center font-bold text-slate-600 border-r border-amber-100/60">
                           {bum?.satuan || ''}

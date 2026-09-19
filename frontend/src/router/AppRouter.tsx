@@ -82,11 +82,6 @@ const CoMoReviewPage = safeLazy(() => import("@/pages/katering/CoMoReviewPage").
 const MbgAdminPage = safeLazy(() => import("@/pages/mbg/MbgAdminPage").then(module => ({ default: module.MbgAdminPage })));
 const MbgProductionPage = safeLazy(() => import("@/pages/mbg/MbgProductionPage").then(module => ({ default: module.MbgProductionPage })));
 const MbgCookingPage = safeLazy(() => import("@/pages/mbg/MbgCookingPage").then(module => ({ default: module.MbgCookingPage })));
-const MbgPurchasingPage = safeLazy(() => import("@/pages/mbg/MbgPurchasingPage").then(module => ({ default: module.MbgPurchasingPage })));
-const MbgSubPurchasingPage = safeLazy(() => import("@/pages/mbg/MbgSubPurchasingPage").then(module => ({ default: module.MbgSubPurchasingPage })));
-const MbgPurchasingRecapPage = safeLazy(() => import("@/pages/mbg/MbgPurchasingRecapPage").then(module => ({ default: module.MbgPurchasingRecapPage })));
-const MbgPurchasingArchivePage = safeLazy(() => import("@/pages/mbg/MbgPurchasingArchivePage").then(module => ({ default: module.MbgPurchasingArchivePage })));
-const MbgSupplierPage = safeLazy(() => import("@/pages/mbg/MbgSupplierPage").then(module => ({ default: module.MbgSupplierPage })));
 const MbgDistributionPage = safeLazy(() => import("@/pages/mbg/MbgDistributionPage").then(module => ({ default: module.MbgDistributionPage })));
 const MbgDeliveryPage = safeLazy(() => import("@/pages/mbg/MbgDeliveryPage").then(module => ({ default: module.MbgDeliveryPage })));
 const MbgArchivePage = safeLazy(() => import("@/pages/mbg/MbgArchivePage").then(module => ({ default: module.MbgArchivePage })));
@@ -799,56 +794,12 @@ function RoutesTree() {
           </Protected>
         }
       />
-      <Route
-        path="/mbg/purchasing"
-        element={
-          <Protected>
-            <ShelledRoute pageTitle="Purchasing MBG" allowedRoles={["purchasing_mbg", "admin_mbg", "produksi_mbg"]}>
-              <MbgPurchasingPage />
-            </ShelledRoute>
-          </Protected>
-        }
-      />
-      <Route
-        path="/mbg/sub-purchasing"
-        element={
-          <Protected>
-            <ShelledRoute pageTitle="Sub Purchasing MBG" allowedRoles={["sub_purchasing_mbg", "purchasing_mbg", "admin_mbg", "produksi_mbg"]}>
-              <MbgSubPurchasingPage />
-            </ShelledRoute>
-          </Protected>
-        }
-      />
-      <Route
-        path="/mbg/purchasing/recap"
-        element={
-          <Protected>
-            <ShelledRoute pageTitle="Laporan Belanja" allowedRoles={["purchasing_mbg", "admin_mbg", "produksi_mbg"]}>
-              <MbgPurchasingRecapPage />
-            </ShelledRoute>
-          </Protected>
-        }
-      />
-      <Route
-        path="/mbg/purchasing/archive"
-        element={
-          <Protected>
-            <ShelledRoute pageTitle="Arsip Purchasing" allowedRoles={["purchasing_mbg", "admin_mbg", "produksi_mbg"]}>
-              <MbgPurchasingArchivePage />
-            </ShelledRoute>
-          </Protected>
-        }
-      />
-      <Route
-        path="/mbg/suppliers"
-        element={
-          <Protected>
-            <ShelledRoute pageTitle="Supplier MBG" allowedRoles={["purchasing_mbg", "admin_mbg", "produksi_mbg"]}>
-              <MbgSupplierPage />
-            </ShelledRoute>
-          </Protected>
-        }
-      />
+      {/* Streamlined Purchasing MBG Routes -> Redirect to Produksi MBG */}
+      <Route path="/mbg/purchasing" element={<Navigate to="/mbg/production" replace />} />
+      <Route path="/mbg/sub-purchasing" element={<Navigate to="/mbg/production" replace />} />
+      <Route path="/mbg/purchasing/recap" element={<Navigate to="/mbg/production" replace />} />
+      <Route path="/mbg/purchasing/archive" element={<Navigate to="/mbg/production" replace />} />
+      <Route path="/mbg/suppliers" element={<Navigate to="/mbg/production" replace />} />
       <Route
         path="/mbg/distribution"
         element={

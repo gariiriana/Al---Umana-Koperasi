@@ -7,12 +7,14 @@ interface SearchableBatchSelectorProps {
   batches: MbgPmBatch[];
   selectedBatchId: string | null;
   onSelectBatch: (id: string) => void;
+  importedBatchIds?: Set<string>;
 }
 
 export function SearchableBatchSelector({
   batches,
   selectedBatchId,
   onSelectBatch,
+  importedBatchIds,
 }: SearchableBatchSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,7 +37,13 @@ export function SearchableBatchSelector({
     const dateMatch = b.tanggal.toLowerCase().includes(searchQuery.toLowerCase());
     const statusLabel = MBG_BATCH_STATUS_CONFIG[b.status]?.label || b.status;
     const statusMatch = statusLabel.toLowerCase().includes(searchQuery.toLowerCase());
-    return dateMatch || statusMatch;
+    const isImported = importedBatchIds?.has(b.id);
+    const importMatch = searchQuery.toLowerCase().includes('import') && (
+      (searchQuery.toLowerCase().includes('sudah') && isImported) ||
+      (searchQuery.toLowerCase().includes('belum') && !isImported) ||
+      isImported
+    );
+    return dateMatch || statusMatch || importMatch;
   });
 
   const selectedBatchCfg = selectedBatch
@@ -59,6 +67,17 @@ export function SearchableBatchSelector({
                 <span className={`text-[10px] font-extrabold rounded-full px-2.5 py-0.5 shrink-0 ${selectedBatchCfg.textClass} ${selectedBatchCfg.bgClass}`}>
                   {selectedBatchCfg.label}
                 </span>
+              )}
+              {importedBatchIds && (
+                importedBatchIds.has(selectedBatch.id) ? (
+                  <span className="text-[10px] font-extrabold rounded-full px-2.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shrink-0">
+                    ✓ Excel Ada
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold rounded-full px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1 shrink-0">
+                    ⏳ Belum Import
+                  </span>
+                )
               )}
             </div>
           ) : (
@@ -94,6 +113,7 @@ export function SearchableBatchSelector({
               filteredBatches.map((b) => {
                 const isSelected = b.id === selectedBatchId;
                 const cfg = MBG_BATCH_STATUS_CONFIG[b.status] || MBG_BATCH_STATUS_CONFIG.DRAFT;
+                const isImported = importedBatchIds?.has(b.id);
                 return (
                   <button
                     key={b.id}
@@ -107,13 +127,24 @@ export function SearchableBatchSelector({
                       isSelected ? 'bg-amber-50/60' : 'bg-white'
                     }`}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className={`font-extrabold ${isSelected ? 'text-amber-800' : 'text-[#111827]'}`}>
                         {b.tanggal}
                       </span>
                       <span className={`text-[9px] font-extrabold rounded-full px-2 py-0.5 ${cfg.textClass} ${cfg.bgClass}`}>
                         {cfg.label}
                       </span>
+                      {importedBatchIds && (
+                        isImported ? (
+                          <span className="text-[9px] font-black rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            ✓ Excel Ada
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold rounded-full px-2 py-0.5 bg-gray-100 text-gray-500">
+                            Belum Import
+                          </span>
+                        )
+                      )}
                     </div>
                     {isSelected && (
                       <span className="text-amber-600 text-[10px] font-extrabold uppercase">Aktif</span>
