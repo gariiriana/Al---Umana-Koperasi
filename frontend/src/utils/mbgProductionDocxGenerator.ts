@@ -26,7 +26,7 @@ import type {
   MbgProductionDailyReport,
   MbgPortionDailyData,
 } from '@/types/mbg';
-import { getFilteredPmEntries, type FilteredPmRow } from '@/components/mbg/DailyReportExcelSections';
+import { getFilteredPmEntries, type FilteredPmRow } from '@/utils/mbgPmFilter';
 
 export interface MbgProductionDocxData {
   batch: MbgPmBatch;

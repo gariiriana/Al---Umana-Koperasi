@@ -11,7 +11,7 @@ import type {
   MbgPmEntry,
   MbgPortionDailyData,
 } from '@/types/mbg';
-import { getFilteredPmEntries, type FilteredPmRow } from '@/components/mbg/DailyReportExcelSections';
+import { getFilteredPmEntries, type FilteredPmRow } from '@/utils/mbgPmFilter';
 
 const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
   try {
