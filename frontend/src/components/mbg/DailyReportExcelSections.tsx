@@ -67,7 +67,7 @@ function formatNum(val: number | undefined | null, decimals = 2): string {
 
 // ─── HELPER: Filter PM Entries Inputted by Admin MBG for each Portion ──────────
 
-interface FilteredPmRow {
+export interface FilteredPmRow {
   id: string;
   institutionName: string;
   categoryLabel: string;
@@ -80,7 +80,7 @@ interface FilteredPmRow {
   detailBreakdown?: string;
 }
 
-function getFilteredPmEntries(
+export function getFilteredPmEntries(
   entries: MbgPmEntry[] = [],
   portionType: 'kecil' | 'besar' | 'balita' | 'bumil',
   fallbackSekolahList: { nama: string; murid: number; guru: number }[] = []

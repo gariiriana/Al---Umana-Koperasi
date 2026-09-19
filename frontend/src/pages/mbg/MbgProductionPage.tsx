@@ -8,8 +8,6 @@ import {
   ClipboardList, FileText, FolderOpen, FileUp, Save, Sparkles, FileSpreadsheet, ChevronDown, ChevronUp,
   AlertTriangle,
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import * as XLSX from 'xlsx';
@@ -1175,6 +1173,21 @@ export function MbgProductionPage() {
       return;
     }
 
+    const reportToUse =
+      (targetBatch && targetBatch.id !== selectedBatchId
+        ? allDailyReports.find((r) => r.batchId === targetBatch.id)
+        : dailyReport) ||
+      allDailyReports.find((r) => r.batchId === batchToUse.id) ||
+      effectiveDailyReport;
+
+    if (!reportToUse) {
+      showToast({
+        message: `Batch tanggal ${batchToUse.tanggal} belum memiliki data import Excel Laporan Harian! Silakan import Google Sheets / Excel terlebih dahulu.`,
+        variant: 'info',
+      });
+      return;
+    }
+
     try {
       setExportingDocx(true);
       const logoBase64 = await getBase64ImageFromUrl('/logo_badan_gizi.png');
@@ -1182,33 +1195,20 @@ export function MbgProductionPage() {
       await exportProductionDocx({
         batch: batchToUse,
         entries: entriesToUse,
-        nutritionTotals,
-        nutritionData,
-        recipeRequirements: adjustedRecipeRequirements,
-        dailyReport: effectiveDailyReport || dailyReport,
+        dailyReport: reportToUse,
         logoBase64,
       }, `Laporan_Produksi_MBG_${batchToUse.tanggal}.docx`);
 
-      // Auto-save to archive (update batch status if PM_SUBMITTED)
       if (batchToUse.id) {
         if (batchToUse.status === 'PM_SUBMITTED') {
           await updateBatchStatus(batchToUse.id, 'NUTRITION_DONE');
         }
-        if (dailyReport && user) {
-          await saveDailyReport(dailyReport.id || null, {
-            ...dailyReport,
-            batchId: batchToUse.id,
-            tanggal: batchToUse.tanggal,
-            updatedAt: new Date().toISOString(),
-            createdBy: user.uid,
-          });
-        }
       }
 
-      showToast({ message: 'Laporan DOCX berhasil di-export & dicatat di Arsip Gizi!', variant: 'success' });
+      showToast({ message: 'Laporan DOCX resmi berhasil di-export!', variant: 'success' });
     } catch (err) {
       console.error('Export DOCX error:', err);
-      showToast({ message: 'Gagal export DOCX', variant: 'error' });
+      showToast({ message: err instanceof Error ? err.message : 'Gagal export DOCX', variant: 'error' });
     } finally {
       setExportingDocx(false);
     }
@@ -1222,348 +1222,33 @@ export function MbgProductionPage() {
       return;
     }
 
+    const reportToUse =
+      (targetBatch && targetBatch.id !== selectedBatchId
+        ? allDailyReports.find((r) => r.batchId === targetBatch.id)
+        : dailyReport) ||
+      allDailyReports.find((r) => r.batchId === batchToUse.id) ||
+      effectiveDailyReport;
+
+    if (!reportToUse) {
+      showToast({
+        message: `Batch tanggal ${batchToUse.tanggal} belum memiliki data import Excel Laporan Harian! Silakan import Google Sheets / Excel terlebih dahulu.`,
+        variant: 'info',
+      });
+      return;
+    }
+
     try {
       setExportingPdf(true);
-      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-      const pageW = doc.internal.pageSize.getWidth();
-      const pageH = doc.internal.pageSize.getHeight();
+      await export8PageDailyReportPdf(reportToUse, batchToUse, entriesToUse);
 
-      const brandAmberDark: [number, number, number] = [180, 83, 9];    // #B45309
-      const brandGold: [number, number, number] = [217, 119, 6];       // #D97706
-      const slateDark: [number, number, number] = [30, 41, 59];        // #1E293B
-      const slateLight: [number, number, number] = [107, 114, 128];     // #6B7280
-
-      // Draw PDF Header (Centered Layout)
-      const logoBase64 = await getBase64ImageFromUrl("/logo_badan_gizi.png");
-      if (logoBase64) {
-        doc.addImage(logoBase64, "PNG", (pageW / 2) - 9, 8, 18, 18);
+      if (batchToUse.id && batchToUse.status === 'PM_SUBMITTED') {
+        await updateBatchStatus(batchToUse.id, 'PDF_EXPORTED');
       }
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(...brandAmberDark);
-      doc.text("KOPERASI AL-UMANAA", pageW / 2, 31, { align: "center" });
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9.5);
-      doc.setTextColor(...slateDark);
-      doc.text("LAPORAN DATA PM & KADAR GIZI MBG", pageW / 2, 36.5, { align: "center" });
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7.5);
-      doc.setTextColor(...slateLight);
-      doc.text(`Tanggal Batch: ${batchToUse.tanggal} | SIMOL MBG`, pageW / 2, 41, { align: "center" });
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8.5);
-      doc.setTextColor(...brandGold);
-      doc.text(`Status: ${batchToUse.status}`, pageW - 14, 16, { align: "right" });
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7.5);
-      doc.setTextColor(...slateLight);
-      const totalPorsiValue = batchToUse.totalJumlah || entriesToUse.reduce((sum, e) => sum + (e.isSekolahLibur ? 0 : (e.jumlah || 0)), 0);
-      doc.text(`Total Porsi: ${totalPorsiValue} Porsi`, pageW - 14, 20.5, { align: "right" });
-
-      doc.setDrawColor(229, 231, 235);
-      doc.line(14, 45, pageW - 14, 45);
-
-      // Section 1: Data PM
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(...slateDark);
-      doc.text("1. DATA PM (PENANGGUNG JAWAB MAKANAN) INSTITUSI", 14, 51);
-
-      const pmRows: (string | number)[][] = [];
-      let totalSiswaAll = 0;
-      let totalBumilAll = 0;
-      let totalGuruAll = 0;
-      let totalPobiaAll = 0;
-      let totalPorsiAll = 0;
-
-      entriesToUse.forEach((e) => {
-        if (!e.isSekolahLibur) {
-          totalSiswaAll += e.qtSiswaBalita || 0;
-          totalBumilAll += e.qtBumilBusui || 0;
-          totalGuruAll += e.qtGuruKader || 0;
-          totalPobiaAll += e.qtPobiaNasi || 0;
-          totalPorsiAll += e.jumlah || 0;
-        }
-
-        pmRows.push([
-          e.institutionName + (e.isSekolahLibur ? ' (Libur)' : ''),
-          e.institutionType === 'posyandu' ? 'Posyandu' : 'Sekolah',
-          e.assignedPetugasName || '-',
-          e.qtSiswaBalita || 0,
-          e.qtBumilBusui || 0,
-          e.qtGuruKader || 0,
-          e.qtPobiaNasi || 0,
-          e.jumlah,
-          e.jadwalPengantaran || '-',
-          e.isSekolahLibur ? 'Libur' : 'Aktif',
-        ]);
-
-        if (e.classesBreakdown && e.classesBreakdown.length > 0) {
-          e.classesBreakdown.forEach((c) => {
-            const totalSiswaPortions = (c.qtPorsiBalita || 0) + (c.qtPorsiKecil || 0) + (c.qtPorsiBesar || 0);
-            pmRows.push([
-              `  ↳ ${c.className}`,
-              '-',
-              '-',
-              totalSiswaPortions || '-',
-              c.qtPorsiBumilBusui || '-',
-              '-',
-              c.qtPobiaNasi || '-',
-              c.jumlah,
-              c.jadwalPengantaran || '-',
-              '-',
-            ]);
-          });
-        }
-      });
-
-      // Add Grand Total Row in PM Table
-      pmRows.push([
-        'TOTAL SELURUH INSTITUSI',
-        '-',
-        '-',
-        totalSiswaAll,
-        totalBumilAll,
-        totalGuruAll,
-        totalPobiaAll,
-        totalPorsiAll,
-        '-',
-        'Lengkap',
-      ]);
-
-      autoTable(doc, {
-        startY: 54,
-        head: [['Institusi', 'Tipe', 'Petugas', 'Siswa/Balita', 'Bumil/Busui', 'Guru/Kader', 'Pobia Nasi', 'Jumlah', 'Jadwal', 'Status']],
-        body: pmRows,
-        theme: 'grid',
-        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 7 },
-        bodyStyles: { fontSize: 7 },
-        styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
-        margin: { left: 14, right: 14 },
-      });
-
-      let nextY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
-
-      // Section 2: Kadar Gizi (if available)
-      if (nutritionData && nutritionData.length > 0) {
-        if (nextY + 40 > pageH - 20) {
-          doc.addPage();
-          nextY = 20;
-        }
-
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(9);
-        doc.setTextColor(...slateDark);
-        doc.text("2. DATA KADAR GIZI BAHAN MAKANAN (INGREDIENTS)", 14, nextY);
-
-        const giziHeaders = [
-          'Bahan Makanan',
-          'Qty',
-          'Berat',
-          ...NUTRIENTS_LIST.map((nut) => nut.label.split(' ')[0]),
-        ];
-
-        const giziRows = nutritionData.map((n) => [
-          n.menuItemName,
-          n.quantity,
-          `${n.berat} g`,
-          ...NUTRIENTS_LIST.map((nut) => {
-            const val = n[nut.key as keyof MbgNutritionEntry];
-            return val !== undefined && val !== null ? Number(val).toFixed(1) : '0.0';
-          }),
-        ]);
-
-        autoTable(doc, {
-          startY: nextY + 3,
-          head: [giziHeaders],
-          body: giziRows,
-          theme: 'grid',
-          headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 6 },
-          bodyStyles: { fontSize: 6 },
-          styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
-          margin: { left: 14, right: 14 },
-        });
-
-        nextY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
-      }
-
-      // Section 3: Ringkasan Total Gizi
-      if (nextY + 35 > pageH - 20) {
-        doc.addPage();
-        nextY = 20;
-      }
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(...slateDark);
-      doc.text("3. RINGKASAN TOTAL KADAR GIZI BATCH", 14, nextY);
-
-      const totalRows = [
-        ['Total Kalori', `${nutritionTotals.kalori.toFixed(1)} kcal`],
-        ['Total Protein', `${nutritionTotals.protein.toFixed(1)} g`],
-        ['Total Lemak', `${nutritionTotals.lemak.toFixed(1)} g`],
-        ['Total Karbohidrat', `${nutritionTotals.karbohidrat.toFixed(1)} g`],
-        ['Total Serat', `${nutritionTotals.serat.toFixed(1)} g`],
-      ];
-
-      autoTable(doc, {
-        startY: nextY + 3,
-        head: [['Kadar Gizi', 'Total Nilai']],
-        body: totalRows,
-        theme: 'grid',
-        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 8 },
-        bodyStyles: { fontSize: 8 },
-        styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
-        margin: { left: 14, right: 14 },
-      });
-
-      nextY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
-
-      // Section 4: Estimasi Kebutuhan Bahan Baku (Standar Resep)
-      if (adjustedRecipeRequirements && adjustedRecipeRequirements.length > 0) {
-        if (nextY + 40 > pageH - 20) {
-          doc.addPage();
-          nextY = 20;
-        }
-
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(9);
-        doc.setTextColor(...slateDark);
-        doc.text("4. ESTIMASI KEBUTUHAN BAHAN BAKU BATCH (STANDAR RESEP)", 14, nextY);
-
-        const recipeHeaders = ['No', 'Nama Bahan Baku', 'Kebutuhan', 'Menu Terkait'];
-        const recipeRows = adjustedRecipeRequirements.map((r, index) => {
-          let formattedWeight = '';
-          if (r.satuan === 'g' && r.amount >= 1000) {
-            formattedWeight = `${(r.amount / 1000).toFixed(2)} kg`;
-          } else if (r.satuan === 'ml' && r.amount >= 1000) {
-            formattedWeight = `${(r.amount / 1000).toFixed(2)} L`;
-          } else {
-            formattedWeight = `${r.amount.toFixed(1)} ${r.satuan}`;
-          }
-
-          let displayName = r.name;
-          if (r.isCustom) {
-            displayName += ' (Manual)';
-          } else if (r.adjustmentId) {
-            displayName += ' (Disesuaikan)';
-          }
-
-          return [
-            index + 1,
-            displayName,
-            formattedWeight,
-            r.sourceMenus.join(', ')
-          ];
-        });
-
-        autoTable(doc, {
-          startY: nextY + 3,
-          head: [recipeHeaders],
-          body: recipeRows,
-          theme: 'grid',
-          headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 7 },
-          bodyStyles: { fontSize: 7 },
-          styles: { lineWidth: 0.2, lineColor: [203, 213, 225] },
-          margin: { left: 14, right: 14 },
-        });
-
-        nextY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
-      }
-
-      // Section 5: Lembar Pengesahan / Tanda Tangan
-      let sigY = nextY + 4;
-      if (sigY + 38 > pageH - 18) {
-        doc.addPage();
-        sigY = 24;
-      }
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(...slateDark);
-
-      const col1X = 20;
-      const col2X = pageW / 2;
-      const col3X = pageW - 20;
-
-      doc.text("Mengetahui,", col1X, sigY);
-      doc.setFont("helvetica", "bold");
-      doc.text("Kepala Satuan Pelayanan (SPPG)", col1X, sigY + 4);
-      doc.setFont("helvetica", "normal");
-      doc.text("( _______________________ )", col1X, sigY + 22);
-      doc.setFontSize(7);
-      doc.setTextColor(...slateLight);
-      doc.text("NIP: SPPG-BGN-001", col1X, sigY + 26);
-
-      doc.setFontSize(8);
-      doc.setTextColor(...slateDark);
-      doc.text("Diperiksa Oleh,", col2X, sigY, { align: "center" });
-      doc.setFont("helvetica", "bold");
-      doc.text("Tenaga Ahli Gizi (Nutrisionis)", col2X, sigY + 4, { align: "center" });
-      doc.setFont("helvetica", "normal");
-      doc.text("( _______________________ )", col2X, sigY + 22, { align: "center" });
-      doc.setFontSize(7);
-      doc.setTextColor(...slateLight);
-      doc.text("STR: GIZI-MBG-2026", col2X, sigY + 26, { align: "center" });
-
-      doc.setFontSize(8);
-      doc.setTextColor(...slateDark);
-      doc.text("Dibuat Oleh,", col3X, sigY, { align: "right" });
-      doc.setFont("helvetica", "bold");
-      doc.text("Koordinator Produksi & Dapur", col3X, sigY + 4, { align: "right" });
-      doc.setFont("helvetica", "normal");
-      doc.text("( _______________________ )", col3X, sigY + 22, { align: "right" });
-      doc.setFontSize(7);
-      doc.setTextColor(...slateLight);
-      doc.text("Koperasi Al-Umanaa", col3X, sigY + 26, { align: "right" });
-
-      // Draw page decorations/variations and page numbers (e.g. Page X of Y)
-      const totalPages = doc.getNumberOfPages();
-      for (let i = 1; i <= totalPages; i++) {
-        doc.setPage(i);
-
-        // Footer accent line
-        doc.setDrawColor(229, 231, 235);
-        doc.setLineWidth(0.3);
-        doc.line(14, pageH - 12, pageW - 14, pageH - 12);
-
-        // Footer left: branding & report details
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(7.5);
-        doc.setTextColor(107, 114, 128);
-        doc.text("Sistem Informasi Makanan Bergizi - SIMOL MBG", 14, pageH - 7);
-
-        // Footer right: page numbers
-        doc.text(`Halaman ${i} dari ${totalPages}`, pageW - 14, pageH - 7, { align: "right" });
-      }
-
-      doc.save(`Laporan_Produksi_MBG_${batchToUse.tanggal}.pdf`);
-
-      // Auto-save to archive!
-      if (batchToUse.id) {
-        if (batchToUse.status === 'PM_SUBMITTED') {
-          await updateBatchStatus(batchToUse.id, 'PDF_EXPORTED');
-        }
-        if (dailyReport && user) {
-          await saveDailyReport(dailyReport.id || null, {
-            ...dailyReport,
-            batchId: batchToUse.id,
-            tanggal: batchToUse.tanggal,
-            updatedAt: new Date().toISOString(),
-            createdBy: user.uid,
-          });
-        }
-      }
-
-      showToast({ message: 'Laporan PDF berhasil di-export & dicatat di Arsip Gizi!', variant: 'success' });
+      showToast({ message: 'Laporan PDF resmi berhasil di-export!', variant: 'success' });
     } catch (err) {
-      console.error(err);
-      showToast({ message: 'Gagal export PDF', variant: 'error' });
+      console.error('Export PDF error:', err);
+      showToast({ message: err instanceof Error ? err.message : 'Gagal export PDF', variant: 'error' });
     } finally {
       setExportingPdf(false);
     }
@@ -2002,24 +1687,6 @@ export function MbgProductionPage() {
     }
   };
 
-  const handleTriggerExport8PagePdf = async () => {
-    if (!selectedBatch) {
-      showToast({ message: 'Pilih batch terlebih dahulu!', variant: 'info' });
-      return;
-    }
-    if (!dailyReport) {
-      showToast({ message: 'Belum ada data Laporan Excel yang di-import untuk batch ini!', variant: 'info' });
-      return;
-    }
-    try {
-      await export8PageDailyReportPdf(dailyReport, selectedBatch);
-      showToast({ message: 'Berhasil meng-export PDF 8-Halaman Laporan Harian Operasional!', variant: 'success' });
-    } catch (err) {
-      console.error(err);
-      showToast({ message: 'Gagal meng-export PDF Laporan Harian', variant: 'error' });
-    }
-  };
-
   const handleSaveDailyReportFromTable = async (updated: MbgProductionDailyReport) => {
     try {
       const reportId = updated.id || dailyReport?.id || null;
@@ -2090,12 +1757,30 @@ export function MbgProductionPage() {
             <span>Import Google Sheets / Excel</span>
           </button>
           <button
-            onClick={handleTriggerExport8PagePdf}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap"
-            title="Export Laporan Harian Operasional PDF 8-Halaman Resmi"
+            onClick={() => handleExportPdf()}
+            disabled={exportingPdf}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50"
+            title="Export Laporan Harian Operasional PDF Landscape Resmi"
           >
-            <FileDown className="h-4 w-4 text-amber-400" />
-            <span>Export PDF (8 Hal)</span>
+            {exportingPdf ? (
+              <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+            ) : (
+              <FileDown className="h-4 w-4 text-amber-400" />
+            )}
+            <span>Export PDF</span>
+          </button>
+          <button
+            onClick={() => handleExportDocxAction()}
+            disabled={exportingDocx}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#1E3A8A] hover:bg-[#1D4ED8] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50"
+            title="Export Laporan Harian Operasional DOCX (Word) Landscape Resmi"
+          >
+            {exportingDocx ? (
+              <Loader2 className="h-4 w-4 animate-spin text-blue-200" />
+            ) : (
+              <FileText className="h-4 w-4 text-blue-200" />
+            )}
+            <span>Export DOCX</span>
           </button>
           <button
             onClick={() => setShowScheduleModal(true)}
@@ -2114,13 +1799,6 @@ export function MbgProductionPage() {
               >
                 <Send className="h-4 w-4 text-white" />
                 <span>Kirim ke Dapur Masak</span>
-              </button>
-              <button
-                onClick={() => handleExportPdf()}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#111827] text-white text-xs font-extrabold rounded-xl shadow hover:bg-[#1F2937] transition-colors cursor-pointer"
-              >
-                <FileDown className="h-4 w-4" />
-                <span>Export PDF</span>
               </button>
               <button
                 onClick={() => {
