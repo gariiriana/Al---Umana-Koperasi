@@ -1,6 +1,7 @@
 # Al-Umanaa Integrated Cooperative & MBG Platform
 
 An enterprise-grade, high-performance, and secure hybrid-serverless ecosystem custom-built for **Pesantren Al-Umanaa (Al-Umanaa Islamic Boarding School)**. This platform unifies two mission-critical operations:
+
 1. **Koperasi Order Fulfillment & Delivery Tracking System**: End-to-end commercial order lifecycle—from administrator intake, kitchen production timers, quality control audits, and real-time GPS courier tracking, to digital client handovers and receipt signatures.
 2. **Program MBG (Makan Bergizi Gratis) Ecosystem**: Comprehensive institutional catering and nutrition logistics—featuring smart Excel workbook parsing, live in-app spreadsheet editing and auto-recalculation, dynamic kitchen batch schedules, school distribution tracking, and automated multi-page official government-standard PDF/DOCX reporting.
 
@@ -149,7 +150,7 @@ Database access is secured via [firestore.rules](./firestore.rules). User access
 
 ---
 
-## Correctness Properties & Property-Based Testing (PBT)
+## Correctness Properties and PBT
 
 The codebase incorporates **18 distinct correctness properties** verified through offline Property-Based Testing (fast-check & vitest):
 
