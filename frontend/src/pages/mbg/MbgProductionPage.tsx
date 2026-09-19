@@ -1941,6 +1941,31 @@ export function MbgProductionPage() {
     }
   };
 
+  const handleSaveDailyReportFromTable = async (updated: MbgProductionDailyReport) => {
+    try {
+      const reportId = updated.id || dailyReport?.id || null;
+      const targetBatchId = updated.batchId || selectedBatchId || '';
+      const targetTanggal = updated.tanggal || selectedBatch?.tanggal || new Date().toISOString().split('T')[0];
+
+      const savedId = await saveDailyReport(reportId, {
+        ...updated,
+        batchId: targetBatchId,
+        tanggal: targetTanggal,
+        createdBy: user?.uid || '',
+      });
+
+      setDailyReport({
+        ...updated,
+        id: savedId,
+      });
+
+      showToast({ message: 'Perubahan tabel berhasil disimpan ke database!', variant: 'success' });
+    } catch (err) {
+      console.error('Save daily report error:', err);
+      showToast({ message: 'Gagal menyimpan perubahan tabel', variant: 'error' });
+    }
+  };
+
   return (
     <div className="min-h-screen font-['Hanken_Grotesk',system-ui,sans-serif]">
       {/* Header */}
@@ -2299,6 +2324,7 @@ export function MbgProductionPage() {
                   activeSubTab={dailyReportSubTab}
                   onSubTabChange={setDailyReportSubTab}
                   entries={entries}
+                  onSaveReport={handleSaveDailyReportFromTable}
                 />
               </div>
             </div>
@@ -2604,6 +2630,7 @@ export function MbgProductionPage() {
                               activeSubTab={dailyReportSubTab}
                               onSubTabChange={setDailyReportSubTab}
                               entries={entries}
+                              onSaveReport={handleSaveDailyReportFromTable}
                             />
                           </div>
                         )}

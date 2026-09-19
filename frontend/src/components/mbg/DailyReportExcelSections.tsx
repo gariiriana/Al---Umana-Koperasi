@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type {
   MbgProductionDailyReport,
   MbgPortionDailyData,
   MbgPmEntry,
+  MbgPoReportRow,
+  MbgPortionNutritionItem,
+  MbgPortionBahanItem,
+  MbgPortionBumbuItem,
 } from '@/types/mbg';
 import {
   Utensils,
@@ -20,7 +24,15 @@ import {
   UserCheck,
   Layers,
   ChevronDown,
+  Pencil,
+  Plus,
+  Save,
+  X,
+  Loader2,
+  Check,
+  ExternalLink,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export type MbgDailyReportSubTab =
   | 'kecil'
@@ -39,6 +51,7 @@ interface DailyReportExcelSectionsProps {
   activeSubTab?: MbgDailyReportSubTab;
   onSubTabChange?: (tab: MbgDailyReportSubTab) => void;
   entries?: MbgPmEntry[];
+  onSaveReport?: (updatedReport: MbgProductionDailyReport) => Promise<void>;
 }
 
 function formatRp(val: number | undefined | null): string {
@@ -73,7 +86,6 @@ function getFilteredPmEntries(
   fallbackSekolahList: { nama: string; murid: number; guru: number }[] = []
 ): FilteredPmRow[] {
   if (!entries || entries.length === 0) {
-    // Fallback using report.sekolahList if available
     if (fallbackSekolahList && fallbackSekolahList.length > 0) {
       return fallbackSekolahList.map((s, idx) => {
         let count = 0;
@@ -232,17 +244,40 @@ export function DailyReportExcelSections({
   activeSubTab,
   onSubTabChange,
   entries = [],
+  onSaveReport,
 }: DailyReportExcelSectionsProps) {
+  const navigate = useNavigate();
   const [internalSubTab, setInternalSubTab] = useState<MbgDailyReportSubTab>(defaultSubTab);
   const [pmSearchQuery, setPmSearchQuery] = useState('');
   const [showAuxTabs, setShowAuxTabs] = useState(false);
 
-  if (!report) {
+  // EDIT MODE STATES
+  const [editingTab, setEditingTab] = useState<MbgDailyReportSubTab | null>(null);
+  const [draftReport, setDraftReport] = useState<MbgProductionDailyReport | null>(report || null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
+
+  useEffect(() => {
+    if (report && !editingTab) {
+      setDraftReport(report);
+    }
+  }, [report, editingTab]);
+
+  if (!report && !draftReport) {
     return null;
   }
 
+  const curReport = draftReport || report!;
+
   const currentTab = activeSubTab || internalSubTab;
   const setTab = (tab: MbgDailyReportSubTab) => {
+    if (editingTab && editingTab !== tab) {
+      if (!window.confirm('Ada perubahan yang belum disimpan di tabel ini. Pindah tab dan batalkan edit?')) {
+        return;
+      }
+      setEditingTab(null);
+      setDraftReport(report || null);
+    }
     if (onSubTabChange) {
       onSubTabChange(tab);
     } else {
@@ -250,20 +285,15 @@ export function DailyReportExcelSections({
     }
   };
 
-  // 5 UTAMA SESUAI PERMINTAAN USER:
-  // 1. Tabel Porsi Kecil
-  // 2. Tabel Porsi Besar
-  // 3. Tabel Porsi Balita
-  // 4. Tabel Porsi Bumil/Busui
-  // 5. Tabel Supplier
+  // 5 TABS UTAMA
   const CORE_5_TABS = [
     {
       key: 'kecil' as const,
       number: '1',
       label: 'Tabel Porsi Kecil',
       icon: Utensils,
-      countBadge: `${report.porsiKecil?.pmCount || 0} Porsi`,
-      itemCount: (report.porsiKecil?.nutritionItems || []).length,
+      countBadge: `${curReport.porsiKecil?.pmCount || 0} Porsi`,
+      itemCount: (curReport.porsiKecil?.nutritionItems || []).length,
       color: 'emerald',
     },
     {
@@ -271,8 +301,8 @@ export function DailyReportExcelSections({
       number: '2',
       label: 'Tabel Porsi Besar',
       icon: ChefHat,
-      countBadge: `${report.porsiBesar?.pmCount || 0} Porsi`,
-      itemCount: (report.porsiBesar?.nutritionItems || []).length,
+      countBadge: `${curReport.porsiBesar?.pmCount || 0} Porsi`,
+      itemCount: (curReport.porsiBesar?.nutritionItems || []).length,
       color: 'blue',
     },
     {
@@ -280,8 +310,8 @@ export function DailyReportExcelSections({
       number: '3',
       label: 'Tabel Porsi Balita',
       icon: Baby,
-      countBadge: `${report.porsiBalita?.pmCount || 0} Porsi`,
-      itemCount: (report.porsiBalita?.nutritionItems || []).length,
+      countBadge: `${curReport.porsiBalita?.pmCount || 0} Porsi`,
+      itemCount: (curReport.porsiBalita?.nutritionItems || []).length,
       color: 'amber',
     },
     {
@@ -289,8 +319,8 @@ export function DailyReportExcelSections({
       number: '4',
       label: 'Tabel Porsi Bumil / Busui',
       icon: Heart,
-      countBadge: `${report.porsiBumilBusui?.pmCount || 0} Porsi`,
-      itemCount: (report.porsiBumilBusui?.nutritionItems || []).length,
+      countBadge: `${curReport.porsiBumilBusui?.pmCount || 0} Porsi`,
+      itemCount: (curReport.porsiBumilBusui?.nutritionItems || []).length,
       color: 'rose',
     },
     {
@@ -298,13 +328,12 @@ export function DailyReportExcelSections({
       number: '5',
       label: 'Tabel Supplier',
       icon: Truck,
-      countBadge: `${(report.poRows || []).length} Item PO`,
-      itemCount: (report.poRows || []).length,
+      countBadge: `${(curReport.poRows || []).length} Item PO`,
+      itemCount: (curReport.poRows || []).length,
       color: 'amber',
     },
   ];
 
-  // Optional secondary tabs (QC, Limbah, Paket 3B, Rekap Sekolah)
   const AUX_TABS = [
     { key: 'paket3b' as const, label: 'Paket Sehat 3B (Keringan)', icon: Layers },
     { key: 'qc' as const, label: 'QC Penerimaan Bahan', icon: ClipboardCheck },
@@ -312,10 +341,256 @@ export function DailyReportExcelSections({
     { key: 'sekolah' as const, label: 'Rekap Distribusi Sekolah', icon: School },
   ];
 
-  // ─── RENDERER: TABEL PORSI EXCEL (KECIL, BESAR, BALITA, BUMIL) ───────────────
-  // Layout persis seperti screenshot Excel:
-  // 3 Grup Kolom berdampingan: Gizi (Pink) | Pesanan Bahan (Sky) | Pesanan Bumbu (Amber)
-  // Dilengkapi baris Total & baris % Pemenuhan AKG
+  // ─── HELPER EDIT PER-TAB ───────────────────────────────────────────────────
+
+  const handleStartEdit = (tab: MbgDailyReportSubTab) => {
+    setDraftReport(JSON.parse(JSON.stringify(report || curReport)));
+    setEditingTab(tab);
+    setSaveSuccessNotice(false);
+  };
+
+  const handleCancelEdit = () => {
+    setDraftReport(report || null);
+    setEditingTab(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!draftReport) return;
+    try {
+      setIsSaving(true);
+      if (onSaveReport) {
+        await onSaveReport(draftReport);
+      }
+      setEditingTab(null);
+      setSaveSuccessNotice(true);
+      setTimeout(() => setSaveSuccessNotice(false), 4000);
+    } catch (err) {
+      console.error('Failed to save table edits:', err);
+      alert('Gagal menyimpan perubahan ke database!');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Helper: Recalculate Portion Totals
+  const recalculatePortion = (portion: MbgPortionDailyData): MbgPortionDailyData => {
+    const totalGizi = {
+      beratBersih: (portion.nutritionItems || []).reduce((s, it) => s + (Number(it.beratBersih) || 0), 0),
+      energi: (portion.nutritionItems || []).reduce((s, it) => s + (Number(it.energi) || 0), 0),
+      protein: (portion.nutritionItems || []).reduce((s, it) => s + (Number(it.protein) || 0), 0),
+      lemak: (portion.nutritionItems || []).reduce((s, it) => s + (Number(it.lemak) || 0), 0),
+      karbohidrat: (portion.nutritionItems || []).reduce((s, it) => s + (Number(it.karbohidrat) || 0), 0),
+      serat: (portion.nutritionItems || []).reduce((s, it) => s + (Number(it.serat) || 0), 0),
+    };
+
+    const totalBelanjaBahan = (portion.bahanItems || []).reduce((s, b) => s + (Number(b.harga) || 0), 0);
+    const totalBelanjaBumbu = (portion.bumbuItems || []).reduce((s, bm) => s + (Number(bm.harga) || 0), 0);
+    const totalBelanjaOverall = totalBelanjaBahan + totalBelanjaBumbu;
+    const pmCount = portion.pmCount || 1;
+
+    return {
+      ...portion,
+      totalGizi,
+      totalBelanjaBahan,
+      hargaBahanPerPorsi: pmCount > 0 ? totalBelanjaBahan / pmCount : 0,
+      totalBelanjaBumbu,
+      hargaBumbuPerPorsi: pmCount > 0 ? totalBelanjaBumbu / pmCount : 0,
+      totalBelanjaOverall,
+      hargaPerPorsiOverall: pmCount > 0 ? totalBelanjaOverall / pmCount : 0,
+    };
+  };
+
+  const getPortionDataKey = (portionType: 'kecil' | 'besar' | 'balita' | 'bumil'): keyof Pick<MbgProductionDailyReport, 'porsiKecil' | 'porsiBesar' | 'porsiBalita' | 'porsiBumilBusui'> => {
+    if (portionType === 'kecil') return 'porsiKecil';
+    if (portionType === 'besar') return 'porsiBesar';
+    if (portionType === 'balita') return 'porsiBalita';
+    return 'porsiBumilBusui';
+  };
+
+  const updatePortionCell = (
+    portionType: 'kecil' | 'besar' | 'balita' | 'bumil',
+    section: 'nutrition' | 'bahan' | 'bumbu',
+    idx: number,
+    field: string,
+    val: unknown
+  ) => {
+    if (!draftReport) return;
+    const pKey = getPortionDataKey(portionType);
+    const pData = JSON.parse(JSON.stringify(draftReport[pKey] || {})) as MbgPortionDailyData;
+
+    if (section === 'nutrition') {
+      pData.nutritionItems = pData.nutritionItems || [];
+      if (!pData.nutritionItems[idx]) {
+        pData.nutritionItems[idx] = { menuName: '', rincianBahan: '', beratBersih: 0, energi: 0, protein: 0, lemak: 0, karbohidrat: 0, serat: 0 };
+      }
+      pData.nutritionItems[idx] = {
+        ...pData.nutritionItems[idx],
+        [field]: typeof val === 'number' || !isNaN(Number(val)) ? Number(val) : val,
+      };
+    } else if (section === 'bahan') {
+      pData.bahanItems = pData.bahanItems || [];
+      if (!pData.bahanItems[idx]) {
+        pData.bahanItems[idx] = { rincianBahan: '', hargaBahan: 0, bddPercent: 100, beratKotor: 0, totalGml: 0, sparePercent: 0, kebutuhan: 0, satuan: 'kg', harga: 0 };
+      }
+      const bItem = { ...pData.bahanItems[idx], [field]: typeof val === 'number' || !isNaN(Number(val)) ? Number(val) : val };
+      // Auto compute harga if kebutuhan or hargaBahan changes
+      if (field === 'kebutuhan' || field === 'hargaBahan') {
+        const keb = field === 'kebutuhan' ? Number(val) : bItem.kebutuhan;
+        const hb = field === 'hargaBahan' ? Number(val) : bItem.hargaBahan;
+        if (keb > 0 && hb > 0) {
+          bItem.harga = Math.round(keb * hb);
+        }
+      }
+      pData.bahanItems[idx] = bItem;
+    } else if (section === 'bumbu') {
+      pData.bumbuItems = pData.bumbuItems || [];
+      if (!pData.bumbuItems[idx]) {
+        pData.bumbuItems[idx] = { namaMenu: '', namaBumbu: '', hargaBumbu: 0, kebutuhan: 0, satuan: 'kg', harga: 0 };
+      }
+      const bmItem = { ...pData.bumbuItems[idx], [field]: typeof val === 'number' || !isNaN(Number(val)) ? Number(val) : val };
+      if (field === 'kebutuhan' || field === 'hargaBumbu') {
+        const keb = field === 'kebutuhan' ? Number(val) : bmItem.kebutuhan;
+        const hb = field === 'hargaBumbu' ? Number(val) : bmItem.hargaBumbu;
+        if (keb > 0 && hb > 0) {
+          bmItem.harga = Math.round(keb * hb);
+        }
+      }
+      pData.bumbuItems[idx] = bmItem;
+    }
+
+    const recalculated = recalculatePortion(pData);
+    setDraftReport({
+      ...draftReport,
+      [pKey]: recalculated,
+    });
+  };
+
+  const handleAddPortionRow = (portionType: 'kecil' | 'besar' | 'balita' | 'bumil') => {
+    if (!draftReport) return;
+    const pKey = getPortionDataKey(portionType);
+    const pData = JSON.parse(JSON.stringify(draftReport[pKey] || {})) as MbgPortionDailyData;
+
+    const newNut: MbgPortionNutritionItem = {
+      menuName: 'Menu Baru',
+      rincianBahan: 'Bahan Baru',
+      beratBersih: 50,
+      energi: 0,
+      protein: 0,
+      lemak: 0,
+      karbohidrat: 0,
+      serat: 0,
+    };
+    const newBah: MbgPortionBahanItem = {
+      rincianBahan: 'Bahan Baru',
+      hargaBahan: 0,
+      bddPercent: 100,
+      beratKotor: 0,
+      totalGml: 0,
+      sparePercent: 0,
+      kebutuhan: 0,
+      satuan: 'kg',
+      harga: 0,
+    };
+    const newBum: MbgPortionBumbuItem = {
+      namaMenu: 'Menu Baru',
+      namaBumbu: 'Bumbu Baru',
+      hargaBumbu: 0,
+      kebutuhan: 0,
+      satuan: 'kg',
+      harga: 0,
+    };
+
+    pData.nutritionItems = [...(pData.nutritionItems || []), newNut];
+    pData.bahanItems = [...(pData.bahanItems || []), newBah];
+    pData.bumbuItems = [...(pData.bumbuItems || []), newBum];
+
+    const recalculated = recalculatePortion(pData);
+    setDraftReport({
+      ...draftReport,
+      [pKey]: recalculated,
+    });
+  };
+
+  const handleDeletePortionRow = (portionType: 'kecil' | 'besar' | 'balita' | 'bumil', idx: number) => {
+    if (!draftReport) return;
+    const pKey = getPortionDataKey(portionType);
+    const pData = JSON.parse(JSON.stringify(draftReport[pKey] || {})) as MbgPortionDailyData;
+
+    if (pData.nutritionItems && pData.nutritionItems.length > idx) {
+      pData.nutritionItems.splice(idx, 1);
+    }
+    if (pData.bahanItems && pData.bahanItems.length > idx) {
+      pData.bahanItems.splice(idx, 1);
+    }
+    if (pData.bumbuItems && pData.bumbuItems.length > idx) {
+      pData.bumbuItems.splice(idx, 1);
+    }
+
+    const recalculated = recalculatePortion(pData);
+    setDraftReport({
+      ...draftReport,
+      [pKey]: recalculated,
+    });
+  };
+
+  // ─── HELPER EDIT SUPPLIER TABLE ────────────────────────────────────────────
+
+  const updateSupplierCell = (idx: number, field: keyof MbgPoReportRow, val: unknown) => {
+    if (!draftReport) return;
+    const rows = JSON.parse(JSON.stringify(draftReport.poRows || [])) as MbgPoReportRow[];
+    if (!rows[idx]) return;
+
+    const row = { ...rows[idx], [field]: val };
+    if (field === 'jumlah' || field === 'hargaSatuan') {
+      const j = field === 'jumlah' ? Number(val) : row.jumlah;
+      const h = field === 'hargaSatuan' ? Number(val) : row.hargaSatuan || 0;
+      if (j > 0 && h > 0) {
+        row.totalHarga = Math.round(j * h);
+      }
+    }
+    rows[idx] = row;
+
+    const totalPengeluaran = rows.reduce((s, r) => s + (r.totalHarga || (r.jumlah && r.hargaSatuan ? r.jumlah * r.hargaSatuan : 0)), 0);
+
+    setDraftReport({
+      ...draftReport,
+      poRows: rows,
+      totalPengeluaran,
+    });
+  };
+
+  const handleAddSupplierRow = () => {
+    if (!draftReport) return;
+    const rows = JSON.parse(JSON.stringify(draftReport.poRows || [])) as MbgPoReportRow[];
+    rows.push({
+      supplier: 'Supplier Baru',
+      item: 'Nama Bahan / Barang',
+      jamKedatangan: '06:00',
+      jumlah: 1,
+      satuan: 'kg',
+      keterangan: 'Sesuai Spesifikasi',
+      hargaSatuan: 0,
+      totalHarga: 0,
+    });
+    setDraftReport({
+      ...draftReport,
+      poRows: rows,
+    });
+  };
+
+  const handleDeleteSupplierRow = (idx: number) => {
+    if (!draftReport) return;
+    const rows = JSON.parse(JSON.stringify(draftReport.poRows || [])) as MbgPoReportRow[];
+    rows.splice(idx, 1);
+    const totalPengeluaran = rows.reduce((s, r) => s + (r.totalHarga || (r.jumlah && r.hargaSatuan ? r.jumlah * r.hargaSatuan : 0)), 0);
+    setDraftReport({
+      ...draftReport,
+      poRows: rows,
+      totalPengeluaran,
+    });
+  };
+
+  // ─── RENDERER: TABEL PORSI EXCEL ───────────────────────────────────────────
   const renderUnifiedExcelPortionTable = (
     portionData: MbgPortionDailyData | undefined,
     defaultTitle: string,
@@ -339,6 +614,8 @@ export function DailyReportExcelSections({
       hargaPerPorsiOverall: 0,
     };
 
+    const isEditing = editingTab === portionType;
+
     const maxRows = Math.max(
       data.nutritionItems?.length || 0,
       data.bahanItems?.length || 0,
@@ -347,7 +624,7 @@ export function DailyReportExcelSections({
     );
 
     // Filter PM data from Admin MBG input
-    const pmRows = getFilteredPmEntries(entries, portionType, report.sekolahList);
+    const pmRows = getFilteredPmEntries(entries, portionType, curReport.sekolahList);
     const filteredPmRows = pmRows.filter((p) =>
       p.institutionName.toLowerCase().includes(pmSearchQuery.toLowerCase()) ||
       p.petugasName.toLowerCase().includes(pmSearchQuery.toLowerCase()) ||
@@ -357,7 +634,7 @@ export function DailyReportExcelSections({
 
     return (
       <div className="space-y-6 animate-in fade-in duration-200">
-        {/* TOP COMPACT METRIC BAR */}
+        {/* TOP COMPACT METRIC BAR & ACTION BUTTONS */}
         <div className="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3 font-['Hanken_Grotesk']">
           <div className="flex items-center gap-2.5 flex-wrap">
             <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-slate-900 text-amber-300">
@@ -366,36 +643,92 @@ export function DailyReportExcelSections({
             <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-100 text-emerald-900 border border-emerald-300">
               🎯 Sasaran: {data.pmCount || totalPorsiPm || 0} Porsi
             </span>
-            <span className="text-xs text-slate-500 hidden sm:inline">
-              Layout format tabel Excel: Gizi, Bahan Pokok & Bumbu Masak
-            </span>
+
+            {/* EDIT STATUS NOTICE */}
+            {isEditing && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black bg-amber-500 text-white animate-pulse">
+                <Pencil className="h-3.5 w-3.5" />
+                <span>Mode Edit Aktif</span>
+              </span>
+            )}
+            {saveSuccessNotice && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-600 text-white">
+                <Check className="h-3.5 w-3.5" />
+                <span>Tersimpan!</span>
+              </span>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-            <div className="bg-amber-50/80 rounded-xl px-2.5 py-1.5 border border-amber-200/80">
-              <span className="text-[10px] font-extrabold text-amber-900 uppercase block">Total Energi</span>
-              <span className="text-xs font-black text-amber-700">
-                {formatNum(data.totalGizi?.energi, 1)} kkal
-              </span>
+          {/* EDIT TOOLBAR / METRICS */}
+          <div className="flex items-center gap-3 self-end lg:self-auto flex-wrap">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <div className="bg-amber-50/80 rounded-xl px-2.5 py-1.5 border border-amber-200/80">
+                <span className="text-[10px] font-extrabold text-amber-900 uppercase block">Total Energi</span>
+                <span className="text-xs font-black text-amber-700">
+                  {formatNum(data.totalGizi?.energi, 1)} kkal
+                </span>
+              </div>
+              <div className="bg-sky-50/80 rounded-xl px-2.5 py-1.5 border border-sky-200/80">
+                <span className="text-[10px] font-extrabold text-sky-900 uppercase block">Belanja Bahan</span>
+                <span className="text-xs font-black text-slate-800">
+                  {formatRp(data.totalBelanjaBahan)}
+                </span>
+              </div>
+              <div className="bg-amber-50/80 rounded-xl px-2.5 py-1.5 border border-amber-200/80">
+                <span className="text-[10px] font-extrabold text-amber-900 uppercase block">Belanja Bumbu</span>
+                <span className="text-xs font-black text-slate-800">
+                  {formatRp(data.totalBelanjaBumbu)}
+                </span>
+              </div>
+              <div className="bg-emerald-50/80 rounded-xl px-2.5 py-1.5 border border-emerald-200/80">
+                <span className="text-[10px] font-extrabold text-emerald-900 uppercase block">Biaya / Porsi</span>
+                <span className="text-xs font-black text-emerald-900">
+                  {formatRp(data.hargaPerPorsiOverall || (data.pmCount ? data.totalBelanjaOverall / data.pmCount : 0))}
+                </span>
+              </div>
             </div>
-            <div className="bg-sky-50/80 rounded-xl px-2.5 py-1.5 border border-sky-200/80">
-              <span className="text-[10px] font-extrabold text-sky-900 uppercase block">Belanja Bahan</span>
-              <span className="text-xs font-black text-slate-800">
-                {formatRp(data.totalBelanjaBahan)}
-              </span>
-            </div>
-            <div className="bg-amber-50/80 rounded-xl px-2.5 py-1.5 border border-amber-200/80">
-              <span className="text-[10px] font-extrabold text-amber-900 uppercase block">Belanja Bumbu</span>
-              <span className="text-xs font-black text-slate-800">
-                {formatRp(data.totalBelanjaBumbu)}
-              </span>
-            </div>
-            <div className="bg-emerald-50/80 rounded-xl px-2.5 py-1.5 border border-emerald-200/80">
-              <span className="text-[10px] font-extrabold text-emerald-900 uppercase block">Biaya / Porsi</span>
-              <span className="text-xs font-black text-emerald-900">
-                {formatRp(data.hargaPerPorsiOverall || (data.pmCount ? data.totalBelanjaOverall / data.pmCount : 0))}
-              </span>
-            </div>
+
+            {/* BUTTONS: EDIT / SIMPAN / BATAL */}
+            {!isEditing ? (
+              <button
+                type="button"
+                onClick={() => handleStartEdit(portionType)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer"
+                title="Edit data menu, gizi, bahan makanan, dan bumbu langsung di tabel ini"
+              >
+                <Pencil className="h-3.5 w-3.5 text-amber-600" />
+                <span>Edit Tabel</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleAddPortionRow(portionType)}
+                  className="inline-flex items-center gap-1 px-3 py-2 bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-300 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer"
+                  title="Tambah baris komponen menu & bahan baru"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Tambah Baris</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span>Batal</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={isSaving}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  <span>Simpan Perubahan</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -405,6 +738,11 @@ export function DailyReportExcelSections({
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
               <span>Tabel {data.portionTitle || defaultTitle} — Sesuai Format File Excel</span>
+              {isEditing && (
+                <span className="text-[10px] font-bold text-amber-300 normal-case bg-amber-400/20 px-2 py-0.5 rounded-md">
+                  (Klik pada sel tabel untuk mengubah nilai)
+                </span>
+              )}
             </div>
             <span className="text-[10px] font-bold text-amber-300 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20">
               {maxRows} Baris Komponen
@@ -412,7 +750,7 @@ export function DailyReportExcelSections({
           </div>
 
           <div className="overflow-x-auto max-h-[550px] overflow-y-auto">
-            <table className="w-full text-left border-collapse min-w-[1300px]">
+            <table className="w-full text-left border-collapse min-w-[1350px]">
               <thead className="sticky top-0 z-20 shadow-xs">
                 {/* Header Kategori 3 Bagian */}
                 <tr className="text-[11px] font-black uppercase tracking-wider border-b border-slate-300">
@@ -429,7 +767,7 @@ export function DailyReportExcelSections({
                     🥣 2. Pesanan Bahan Makanan Pokok
                   </th>
                   <th
-                    colSpan={6}
+                    colSpan={isEditing ? 7 : 6}
                     className="bg-[#FEF3C7] text-[#92400E] py-2 px-3 text-center font-extrabold"
                   >
                     🧂 3. Pesanan Bumbu Masak
@@ -466,7 +804,10 @@ export function DailyReportExcelSections({
                   <th className="px-2 py-1.5 bg-[#FFFBEB] text-[#78350F] text-right border-r border-amber-200 whitespace-nowrap">Harga Bumbu</th>
                   <th className="px-1.5 py-1.5 bg-[#FFFBEB] text-[#78350F] text-center border-r border-amber-200 whitespace-nowrap font-bold">Kebutuhan</th>
                   <th className="px-1.5 py-1.5 bg-[#FFFBEB] text-[#78350F] text-center border-r border-amber-200 whitespace-nowrap">Satuan</th>
-                  <th className="px-2 py-1.5 bg-[#FFFBEB] text-[#78350F] text-right whitespace-nowrap font-bold">Harga</th>
+                  <th className="px-2 py-1.5 bg-[#FFFBEB] text-[#78350F] text-right border-r border-amber-200 whitespace-nowrap font-bold">Harga</th>
+                  {isEditing && (
+                    <th className="px-2 py-1.5 bg-red-100 text-red-900 text-center w-8 whitespace-nowrap">Aksi</th>
+                  )}
                 </tr>
               </thead>
 
@@ -476,93 +817,311 @@ export function DailyReportExcelSections({
                   const bah = data.bahanItems?.[idx];
                   const bum = data.bumbuItems?.[idx];
 
+                  if (!isEditing) {
+                    // Normal Read-Only View
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                        {/* Gizi Cells */}
+                        <td className="px-2 py-1.5 font-bold text-slate-700 border-r border-rose-100/60 whitespace-nowrap bg-rose-50/20">
+                          {idx === 0 ? (data.portionTitle || defaultTitle) : ''}
+                        </td>
+                        <td className="px-2 py-1.5 font-bold text-slate-900 border-r border-rose-100/60 whitespace-nowrap">
+                          {nut?.menuName || ''}
+                        </td>
+                        <td className="px-2 py-1.5 text-slate-600 border-r border-rose-100/60 whitespace-nowrap">
+                          {nut?.rincianBahan || ''}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center font-medium border-r border-rose-100/60">
+                          {nut ? formatNum(nut.beratBersih, 1) : ''}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center font-black text-amber-700 border-r border-rose-100/60 bg-amber-50/30">
+                          {nut ? formatNum(nut.energi, 1) : ''}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center border-r border-rose-100/60">
+                          {nut ? formatNum(nut.protein, 1) : ''}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center border-r border-rose-100/60">
+                          {nut ? formatNum(nut.lemak, 1) : ''}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center border-r border-rose-100/60">
+                          {nut ? formatNum(nut.karbohidrat, 1) : ''}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center border-r-2 border-slate-300">
+                          {nut ? formatNum(nut.serat, 1) : ''}
+                        </td>
+
+                        {/* Bahan Pokok Cells */}
+                        <td className="px-2 py-1.5 font-bold text-slate-900 border-r border-sky-100/60 whitespace-nowrap">
+                          {bah?.rincianBahan || ''}
+                        </td>
+                        <td className="px-2 py-1.5 text-right text-slate-600 border-r border-sky-100/60 whitespace-nowrap">
+                          {bah?.hargaBahan ? formatRp(bah.hargaBahan) : ''}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center text-slate-500 border-r border-sky-100/60">
+                          {bah?.bddPercent != null ? `${formatNum(bah.bddPercent, 0)}%` : ''}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center text-slate-600 border-r border-sky-100/60">
+                          {bah ? formatNum(bah.beratKotor, 0) : ''}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center text-slate-600 border-r border-sky-100/60">
+                          {bah ? formatNum(bah.totalGml, 0) : ''}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center text-slate-400 border-r border-sky-100/60">
+                          {bah?.sparePercent ? `${bah.sparePercent}%` : '-'}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center font-black text-slate-900 bg-sky-50/30 border-r border-sky-100/60">
+                          {bah ? formatNum(bah.kebutuhan, 1) : ''}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center font-bold text-slate-600 border-r border-sky-100/60">
+                          {bah?.satuan || ''}
+                        </td>
+                        <td className="px-2 py-1.5 text-right font-bold text-emerald-800 border-r-2 border-slate-300 whitespace-nowrap">
+                          {bah?.harga ? formatRp(bah.harga) : ''}
+                        </td>
+
+                        {/* Bumbu Masak Cells */}
+                        <td className="px-2 py-1.5 text-slate-600 border-r border-amber-100/60 whitespace-nowrap">
+                          {bum?.namaMenu || ''}
+                        </td>
+                        <td className="px-2 py-1.5 font-bold text-slate-900 border-r border-amber-100/60 whitespace-nowrap">
+                          {bum?.namaBumbu || ''}
+                        </td>
+                        <td className="px-2 py-1.5 text-right text-slate-600 border-r border-amber-100/60 whitespace-nowrap">
+                          {bum?.hargaBumbu ? formatRp(bum.hargaBumbu) : ''}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center font-black text-slate-900 bg-amber-50/30 border-r border-amber-100/60">
+                          {bum ? formatNum(bum.kebutuhan, 2) : ''}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center font-bold text-slate-600 border-r border-amber-100/60">
+                          {bum?.satuan || ''}
+                        </td>
+                        <td className="px-2 py-1.5 text-right font-bold text-amber-900 whitespace-nowrap">
+                          {bum?.harga ? formatRp(bum.harga) : ''}
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  // ─── INTERACTIVE EDIT MODE (EDITABLE INPUTS) ───
                   return (
-                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                      {/* Gizi Cells */}
-                      <td className="px-2 py-1.5 font-bold text-slate-700 border-r border-rose-100/60 whitespace-nowrap bg-rose-50/20">
-                        {idx === 0 ? (data.portionTitle || defaultTitle) : ''}
+                    <tr key={idx} className="bg-amber-50/20">
+                      {/* Gizi Inputs */}
+                      <td className="px-1 py-1 border-r border-rose-200">
+                        <span className="text-[10px] text-slate-400 font-bold block">{idx + 1}</span>
                       </td>
-                      <td className="px-2 py-1.5 font-bold text-slate-900 border-r border-rose-100/60 whitespace-nowrap">
-                        {nut?.menuName || ''}
+                      <td className="px-1 py-1 border-r border-rose-200">
+                        <input
+                          type="text"
+                          value={nut?.menuName || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'nutrition', idx, 'menuName', e.target.value)}
+                          placeholder="Menu"
+                          className="w-24 px-1.5 py-1 bg-white border border-rose-200 rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-rose-400 font-bold text-slate-900"
+                        />
                       </td>
-                      <td className="px-2 py-1.5 text-slate-600 border-r border-rose-100/60 whitespace-nowrap">
-                        {nut?.rincianBahan || ''}
+                      <td className="px-1 py-1 border-r border-rose-200">
+                        <input
+                          type="text"
+                          value={nut?.rincianBahan || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'nutrition', idx, 'rincianBahan', e.target.value)}
+                          placeholder="Bahan"
+                          className="w-28 px-1.5 py-1 bg-white border border-rose-200 rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-rose-400 text-slate-800"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center font-medium border-r border-rose-100/60">
-                        {nut ? formatNum(nut.beratBersih, 1) : ''}
+                      <td className="px-1 py-1 border-r border-rose-200">
+                        <input
+                          type="number"
+                          value={nut?.beratBersih || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'nutrition', idx, 'beratBersih', e.target.value)}
+                          className="w-14 px-1 py-1 text-center bg-white border border-rose-200 rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-rose-400"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center font-black text-amber-700 border-r border-rose-100/60 bg-amber-50/30">
-                        {nut ? formatNum(nut.energi, 1) : ''}
+                      <td className="px-1 py-1 border-r border-rose-200">
+                        <input
+                          type="number"
+                          value={nut?.energi || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'nutrition', idx, 'energi', e.target.value)}
+                          className="w-14 px-1 py-1 text-center bg-amber-50 border border-amber-300 rounded text-[11px] font-black text-amber-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center border-r border-rose-100/60">
-                        {nut ? formatNum(nut.protein, 1) : ''}
+                      <td className="px-1 py-1 border-r border-rose-200">
+                        <input
+                          type="number"
+                          value={nut?.protein || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'nutrition', idx, 'protein', e.target.value)}
+                          className="w-12 px-1 py-1 text-center bg-white border border-rose-200 rounded text-[11px] focus:outline-none"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center border-r border-rose-100/60">
-                        {nut ? formatNum(nut.lemak, 1) : ''}
+                      <td className="px-1 py-1 border-r border-rose-200">
+                        <input
+                          type="number"
+                          value={nut?.lemak || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'nutrition', idx, 'lemak', e.target.value)}
+                          className="w-12 px-1 py-1 text-center bg-white border border-rose-200 rounded text-[11px] focus:outline-none"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center border-r border-rose-100/60">
-                        {nut ? formatNum(nut.karbohidrat, 1) : ''}
+                      <td className="px-1 py-1 border-r border-rose-200">
+                        <input
+                          type="number"
+                          value={nut?.karbohidrat || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'nutrition', idx, 'karbohidrat', e.target.value)}
+                          className="w-12 px-1 py-1 text-center bg-white border border-rose-200 rounded text-[11px] focus:outline-none"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center border-r-2 border-slate-300">
-                        {nut ? formatNum(nut.serat, 1) : ''}
+                      <td className="px-1 py-1 border-r-2 border-slate-300">
+                        <input
+                          type="number"
+                          value={nut?.serat || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'nutrition', idx, 'serat', e.target.value)}
+                          className="w-12 px-1 py-1 text-center bg-white border border-rose-200 rounded text-[11px] focus:outline-none"
+                        />
                       </td>
 
-                      {/* Bahan Pokok Cells */}
-                      <td className="px-2 py-1.5 font-bold text-slate-900 border-r border-sky-100/60 whitespace-nowrap">
-                        {bah?.rincianBahan || ''}
+                      {/* Bahan Inputs */}
+                      <td className="px-1 py-1 border-r border-sky-200">
+                        <input
+                          type="text"
+                          value={bah?.rincianBahan || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'bahan', idx, 'rincianBahan', e.target.value)}
+                          placeholder="Bahan Pokok"
+                          className="w-28 px-1.5 py-1 bg-white border border-sky-200 rounded text-[11px] font-bold text-slate-900 focus:outline-none"
+                        />
                       </td>
-                      <td className="px-2 py-1.5 text-right text-slate-600 border-r border-sky-100/60 whitespace-nowrap">
-                        {bah?.hargaBahan ? formatRp(bah.hargaBahan) : ''}
+                      <td className="px-1 py-1 border-r border-sky-200">
+                        <input
+                          type="number"
+                          value={bah?.hargaBahan || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'bahan', idx, 'hargaBahan', e.target.value)}
+                          placeholder="Harga"
+                          className="w-20 px-1 py-1 text-right bg-white border border-sky-200 rounded text-[11px] focus:outline-none"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center text-slate-500 border-r border-sky-100/60">
-                        {bah?.bddPercent != null ? `${formatNum(bah.bddPercent, 0)}%` : ''}
+                      <td className="px-1 py-1 border-r border-sky-200">
+                        <input
+                          type="number"
+                          value={bah?.bddPercent ?? 100}
+                          onChange={(e) => updatePortionCell(portionType, 'bahan', idx, 'bddPercent', e.target.value)}
+                          className="w-12 px-1 py-1 text-center bg-white border border-sky-200 rounded text-[11px] focus:outline-none"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center text-slate-600 border-r border-sky-100/60">
-                        {bah ? formatNum(bah.beratKotor, 0) : ''}
+                      <td className="px-1 py-1 border-r border-sky-200">
+                        <input
+                          type="number"
+                          value={bah?.beratKotor || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'bahan', idx, 'beratKotor', e.target.value)}
+                          className="w-14 px-1 py-1 text-center bg-white border border-sky-200 rounded text-[11px] focus:outline-none"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center text-slate-600 border-r border-sky-100/60">
-                        {bah ? formatNum(bah.totalGml, 0) : ''}
+                      <td className="px-1 py-1 border-r border-sky-200">
+                        <input
+                          type="number"
+                          value={bah?.totalGml || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'bahan', idx, 'totalGml', e.target.value)}
+                          className="w-14 px-1 py-1 text-center bg-white border border-sky-200 rounded text-[11px] focus:outline-none"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center text-slate-400 border-r border-sky-100/60">
-                        {bah?.sparePercent ? `${bah.sparePercent}%` : '-'}
+                      <td className="px-1 py-1 border-r border-sky-200">
+                        <input
+                          type="number"
+                          value={bah?.sparePercent || 0}
+                          onChange={(e) => updatePortionCell(portionType, 'bahan', idx, 'sparePercent', e.target.value)}
+                          className="w-10 px-1 py-1 text-center bg-white border border-sky-200 rounded text-[11px] focus:outline-none"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center font-black text-slate-900 bg-sky-50/30 border-r border-sky-100/60">
-                        {bah ? formatNum(bah.kebutuhan, 1) : ''}
+                      <td className="px-1 py-1 border-r border-sky-200">
+                        <input
+                          type="number"
+                          value={bah?.kebutuhan || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'bahan', idx, 'kebutuhan', e.target.value)}
+                          className="w-14 px-1 py-1 text-center bg-sky-50 border border-sky-300 rounded text-[11px] font-black text-sky-950 focus:outline-none"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center font-bold text-slate-600 border-r border-sky-100/60">
-                        {bah?.satuan || ''}
+                      <td className="px-1 py-1 border-r border-sky-200">
+                        <input
+                          type="text"
+                          value={bah?.satuan || 'kg'}
+                          onChange={(e) => updatePortionCell(portionType, 'bahan', idx, 'satuan', e.target.value)}
+                          className="w-12 px-1 py-1 text-center bg-white border border-sky-200 rounded text-[11px] focus:outline-none font-bold"
+                        />
                       </td>
-                      <td className="px-2 py-1.5 text-right font-bold text-emerald-800 border-r-2 border-slate-300 whitespace-nowrap">
-                        {bah?.harga ? formatRp(bah.harga) : ''}
+                      <td className="px-1 py-1 border-r-2 border-slate-300">
+                        <input
+                          type="number"
+                          value={bah?.harga || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'bahan', idx, 'harga', e.target.value)}
+                          className="w-24 px-1.5 py-1 text-right bg-emerald-50 border border-emerald-300 rounded text-[11px] font-black text-emerald-900 focus:outline-none"
+                        />
                       </td>
 
-                      {/* Bumbu Masak Cells */}
-                      <td className="px-2 py-1.5 text-slate-600 border-r border-amber-100/60 whitespace-nowrap">
-                        {bum?.namaMenu || ''}
+                      {/* Bumbu Inputs */}
+                      <td className="px-1 py-1 border-r border-amber-200">
+                        <input
+                          type="text"
+                          value={bum?.namaMenu || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'bumbu', idx, 'namaMenu', e.target.value)}
+                          placeholder="Menu"
+                          className="w-20 px-1.5 py-1 bg-white border border-amber-200 rounded text-[11px] text-slate-600 focus:outline-none"
+                        />
                       </td>
-                      <td className="px-2 py-1.5 font-bold text-slate-900 border-r border-amber-100/60 whitespace-nowrap">
-                        {bum?.namaBumbu || ''}
+                      <td className="px-1 py-1 border-r border-amber-200">
+                        <input
+                          type="text"
+                          value={bum?.namaBumbu || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'bumbu', idx, 'namaBumbu', e.target.value)}
+                          placeholder="Bumbu"
+                          className="w-28 px-1.5 py-1 bg-white border border-amber-200 rounded text-[11px] font-bold text-slate-900 focus:outline-none"
+                        />
                       </td>
-                      <td className="px-2 py-1.5 text-right text-slate-600 border-r border-amber-100/60 whitespace-nowrap">
-                        {bum?.hargaBumbu ? formatRp(bum.hargaBumbu) : ''}
+                      <td className="px-1 py-1 border-r border-amber-200">
+                        <input
+                          type="number"
+                          value={bum?.hargaBumbu || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'bumbu', idx, 'hargaBumbu', e.target.value)}
+                          placeholder="Harga"
+                          className="w-20 px-1 py-1 text-right bg-white border border-amber-200 rounded text-[11px] focus:outline-none"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center font-black text-slate-900 bg-amber-50/30 border-r border-amber-100/60">
-                        {bum ? formatNum(bum.kebutuhan, 2) : ''}
+                      <td className="px-1 py-1 border-r border-amber-200">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={bum?.kebutuhan || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'bumbu', idx, 'kebutuhan', e.target.value)}
+                          className="w-14 px-1 py-1 text-center bg-amber-50 border border-amber-300 rounded text-[11px] font-black text-amber-950 focus:outline-none"
+                        />
                       </td>
-                      <td className="px-1.5 py-1.5 text-center font-bold text-slate-600 border-r border-amber-100/60">
-                        {bum?.satuan || ''}
+                      <td className="px-1 py-1 border-r border-amber-200">
+                        <input
+                          type="text"
+                          value={bum?.satuan || 'kg'}
+                          onChange={(e) => updatePortionCell(portionType, 'bumbu', idx, 'satuan', e.target.value)}
+                          className="w-12 px-1 py-1 text-center bg-white border border-amber-200 rounded text-[11px] focus:outline-none font-bold"
+                        />
                       </td>
-                      <td className="px-2 py-1.5 text-right font-bold text-amber-900 whitespace-nowrap">
-                        {bum?.harga ? formatRp(bum.harga) : ''}
+                      <td className="px-1 py-1 border-r border-amber-200">
+                        <input
+                          type="number"
+                          value={bum?.harga || ''}
+                          onChange={(e) => updatePortionCell(portionType, 'bumbu', idx, 'harga', e.target.value)}
+                          className="w-22 px-1.5 py-1 text-right bg-amber-50 border border-amber-300 rounded text-[11px] font-black text-amber-900 focus:outline-none"
+                        />
+                      </td>
+                      <td className="px-1 py-1 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePortionRow(portionType, idx)}
+                          className="p-1 hover:bg-red-100 text-red-600 rounded transition-colors cursor-pointer"
+                          title="Hapus baris ini"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mx-auto" />
+                        </button>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
 
-              {/* ─── FOOTER BARIS TOTAL & % PEMENUHAN AKG ─── */}
+              {/* FOOTER TOTAL & % AKG */}
               <tfoot className="border-t-2 border-slate-400 font-['Hanken_Grotesk'] text-[11px] font-black">
-                {/* Baris Total Nilai Gizi & Belanja */}
                 <tr className="bg-[#FFE4E6]/50 text-slate-900 border-b border-slate-300">
                   <td colSpan={3} className="px-3 py-2 text-left uppercase font-black text-rose-950 border-r border-rose-200">
                     Total
@@ -601,9 +1160,10 @@ export function DailyReportExcelSections({
                   <td className="px-2 py-2 text-right font-black text-amber-900 whitespace-nowrap bg-amber-50">
                     {formatRp(data.totalBelanjaBumbu)}
                   </td>
+                  {isEditing && <td></td>}
                 </tr>
 
-                {/* Baris Biaya Per Porsi (Jika Ada) */}
+                {/* Biaya per Porsi */}
                 <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
                   <td colSpan={9} className="px-3 py-1.5 text-right font-bold text-slate-500 border-r-2 border-slate-300">
                     Biaya Bahan Pokok per Porsi:
@@ -611,12 +1171,12 @@ export function DailyReportExcelSections({
                   <td colSpan={9} className="px-3 py-1.5 text-right font-black text-sky-900 border-r-2 border-slate-300">
                     {formatRp(data.hargaBahanPerPorsi || (data.pmCount ? data.totalBelanjaBahan / data.pmCount : 0))} / porsi
                   </td>
-                  <td colSpan={6} className="px-3 py-1.5 text-right font-black text-amber-900">
+                  <td colSpan={isEditing ? 7 : 6} className="px-3 py-1.5 text-right font-black text-amber-900">
                     {formatRp(data.hargaBumbuPerPorsi || (data.pmCount ? data.totalBelanjaBumbu / data.pmCount : 0))} / porsi
                   </td>
                 </tr>
 
-                {/* Baris % Pemenuhan AKG (Persis di Excel) */}
+                {/* AKG Rows */}
                 {data.akgMetrics && Object.keys(data.akgMetrics).length > 0 ? (
                   Object.entries(data.akgMetrics).map(([akgKey, metric], akgIdx) => {
                     const cleanKey = akgKey.replace(/_/g, ' ').toUpperCase();
@@ -633,7 +1193,7 @@ export function DailyReportExcelSections({
                           {metric.percentHarian > 0 ? `Harian: ${formatNum(metric.percentHarian, 1)}%` : 'Standar Kemkes'}
                         </td>
                         <td className="border-r-2 border-slate-300"></td>
-                        <td colSpan={15} className="px-3 py-1.5 text-xs text-slate-500 font-medium italic">
+                        <td colSpan={isEditing ? 16 : 15} className="px-3 py-1.5 text-xs text-slate-500 font-medium italic">
                           Capaian Angka Kecukupan Gizi (AKG) Makan Siang Sasaran {cleanKey}
                         </td>
                       </tr>
@@ -652,7 +1212,7 @@ export function DailyReportExcelSections({
                       Sesuai Standar Gizi
                     </td>
                     <td className="border-r-2 border-slate-300"></td>
-                    <td colSpan={15} className="px-3 py-1.5 text-xs text-slate-500 font-medium italic">
+                    <td colSpan={isEditing ? 16 : 15} className="px-3 py-1.5 text-xs text-slate-500 font-medium italic">
                       Menu Bergizi Gratis Standar Koperasi Al Umanaa
                     </td>
                   </tr>
@@ -678,6 +1238,15 @@ export function DailyReportExcelSections({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => navigate('/mbg/admin')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                title="Buka menu Administrasi MBG untuk mengedit data sekolah/posyandu"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                <span>Kelola di Admin MBG</span>
+              </button>
               <span className="px-3 py-1 bg-amber-400 text-slate-950 rounded-xl text-xs font-black shadow-xs">
                 Total Alokasi: {totalPorsiPm.toLocaleString('id-ID')} Porsi
               </span>
@@ -809,12 +1378,13 @@ export function DailyReportExcelSections({
     );
   };
 
-  // ─── RENDERER: TABEL 5 — TABEL SUPPLIER (SESUAI FOTO SCREENSHOT 5) ───────────
+  // ─── RENDERER: TABEL 5 — TABEL SUPPLIER ──────────────────────────────────────
   const renderSupplierSection = () => {
-    const poList = report.poRows || [];
+    const isEditing = editingTab === 'po';
+    const poList = curReport.poRows || [];
     const grandTotal =
       poList.reduce((s, p) => s + (p.totalHarga || (p.jumlah > 0 && p.hargaSatuan ? p.jumlah * p.hargaSatuan : 0)), 0) ||
-      report.totalPengeluaran ||
+      curReport.totalPengeluaran ||
       0;
 
     // Grouping by supplier for recap cards underneath
@@ -834,7 +1404,7 @@ export function DailyReportExcelSections({
 
     return (
       <div className="space-y-6 animate-in fade-in duration-200 font-['Hanken_Grotesk']">
-        {/* Banner Overview */}
+        {/* Banner Overview & Action Buttons */}
         <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -842,6 +1412,12 @@ export function DailyReportExcelSections({
               <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
                 Tabel Supplier — Pesanan Bahan Makanan & Bumbu
               </h4>
+              {isEditing && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-black bg-amber-500 text-white animate-pulse">
+                  <Pencil className="h-3.5 w-3.5" />
+                  <span>Mode Edit Aktif</span>
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               Format persis sesuai form excel yang di-import: Supplier, List Pesanan Bahan, Kedatangan, Jumlah, Item/Satuan, Harga Satuan, Total Harga.
@@ -855,6 +1431,48 @@ export function DailyReportExcelSections({
             <span className="px-3 py-1 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-black">
               Total Belanja: {formatRp(grandTotal)}
             </span>
+
+            {/* BUTTONS: EDIT SUPPLIER / SIMPAN / BATAL */}
+            {!isEditing ? (
+              <button
+                type="button"
+                onClick={() => handleStartEdit('po')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer"
+                title="Edit data pesanan supplier langsung di tabel ini"
+              >
+                <Pencil className="h-3.5 w-3.5 text-amber-600" />
+                <span>Edit Tabel Supplier</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleAddSupplierRow}
+                  className="inline-flex items-center gap-1 px-3 py-2 bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-300 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer"
+                  title="Tambah baris pesanan supplier baru"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Tambah Item</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span>Batal</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={isSaving}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  <span>Simpan Perubahan</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -864,6 +1482,11 @@ export function DailyReportExcelSections({
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-slate-950"></span>
               <span>Tabel Daftar Pesanan Bahan ke Supplier (Hasil Excel Import)</span>
+              {isEditing && (
+                <span className="text-[10px] font-bold text-slate-900 normal-case bg-white/60 px-2 py-0.5 rounded-md">
+                  (Klik pada sel tabel untuk mengubah nilai)
+                </span>
+              )}
             </div>
             <span className="text-[11px] font-black bg-slate-950 text-amber-300 px-2.5 py-0.5 rounded-full shadow-xs">
               {Object.keys(supplierGroups).length} Supplier Mitra
@@ -876,7 +1499,7 @@ export function DailyReportExcelSections({
             </div>
           ) : (
             <div className="overflow-x-auto max-h-[550px] overflow-y-auto">
-              <table className="w-full text-xs text-left border-collapse min-w-[900px]">
+              <table className="w-full text-xs text-left border-collapse min-w-[950px]">
                 <thead className="sticky top-0 z-10 shadow-xs">
                   <tr className="bg-[#FEF08A] text-[#713F12] font-black text-[11px] border-b-2 border-amber-300">
                     <th className="px-3 py-2 w-10 text-center">No</th>
@@ -887,43 +1510,126 @@ export function DailyReportExcelSections({
                     <th className="px-3 py-2 text-center border-r border-amber-300 whitespace-nowrap">Item (Satuan)</th>
                     <th className="px-3 py-2 text-right border-r border-amber-300 whitespace-nowrap">Harga Satuan</th>
                     <th className="px-4 py-2 text-right whitespace-nowrap font-black">Total Harga</th>
+                    {isEditing && (
+                      <th className="px-2 py-2 text-center w-8 bg-red-100 text-red-900 whitespace-nowrap">Aksi</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-[11px]">
                   {poList.map((po, idx) => {
                     const rowTotal = po.totalHarga || (po.jumlah > 0 && po.hargaSatuan ? po.jumlah * po.hargaSatuan : 0);
 
-                    return (
-                      <tr key={idx} className="hover:bg-amber-50/40 transition-colors font-medium text-slate-800">
-                        <td className="px-3 py-2 text-center text-slate-400">{idx + 1}</td>
-                        <td className="px-4 py-2 font-black text-slate-900 border-r border-slate-100">
-                          <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200/60 font-extrabold text-[10px]">
-                            {po.supplier || 'Koperasi Al Umanaa'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 font-bold text-slate-900 border-r border-slate-100">
-                          {po.item}
-                        </td>
-                        <td className="px-3 py-2 text-center text-slate-500 border-r border-slate-100 whitespace-nowrap">
-                          {po.jamKedatangan && po.jamKedatangan !== '06:00' ? (
-                            <span className="font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md">
-                              {po.jamKedatangan}
+                    if (!isEditing) {
+                      return (
+                        <tr key={idx} className="hover:bg-amber-50/40 transition-colors font-medium text-slate-800">
+                          <td className="px-3 py-2 text-center text-slate-400">{idx + 1}</td>
+                          <td className="px-4 py-2 font-black text-slate-900 border-r border-slate-100">
+                            <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200/60 font-extrabold text-[10px]">
+                              {po.supplier || 'Koperasi Al Umanaa'}
                             </span>
-                          ) : (
-                            <span className="text-slate-400 italic">-</span>
-                          )}
+                          </td>
+                          <td className="px-4 py-2 font-bold text-slate-900 border-r border-slate-100">
+                            {po.item}
+                          </td>
+                          <td className="px-3 py-2 text-center text-slate-500 border-r border-slate-100 whitespace-nowrap">
+                            {po.jamKedatangan && po.jamKedatangan !== '06:00' ? (
+                              <span className="font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md">
+                                {po.jamKedatangan}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic">-</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-center font-black text-slate-900 bg-amber-50/30 border-r border-slate-100">
+                            {po.jumlah > 0 ? formatNum(po.jumlah, 1) : '-'}
+                          </td>
+                          <td className="px-3 py-2 text-center font-bold text-slate-600 border-r border-slate-100">
+                            {po.satuan || 'kg'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-600 border-r border-slate-100 whitespace-nowrap">
+                            {po.hargaSatuan ? formatRp(po.hargaSatuan) : '-'}
+                          </td>
+                          <td className="px-4 py-2 text-right font-black text-emerald-900 whitespace-nowrap bg-emerald-50/20">
+                            {rowTotal > 0 ? formatRp(rowTotal) : '-'}
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    // Interactive Editable Supplier Row
+                    return (
+                      <tr key={idx} className="bg-amber-50/30 font-medium">
+                        <td className="px-2 py-1.5 text-center text-slate-400">{idx + 1}</td>
+                        <td className="px-2 py-1.5">
+                          <input
+                            type="text"
+                            value={po.supplier || ''}
+                            onChange={(e) => updateSupplierCell(idx, 'supplier', e.target.value)}
+                            placeholder="Supplier"
+                            className="w-32 px-1.5 py-1 bg-white border border-amber-300 rounded text-[11px] font-bold text-slate-900 focus:outline-none"
+                          />
                         </td>
-                        <td className="px-3 py-2 text-center font-black text-slate-900 bg-amber-50/30 border-r border-slate-100">
-                          {po.jumlah > 0 ? formatNum(po.jumlah, 1) : '-'}
+                        <td className="px-2 py-1.5">
+                          <input
+                            type="text"
+                            value={po.item || ''}
+                            onChange={(e) => updateSupplierCell(idx, 'item', e.target.value)}
+                            placeholder="Nama Bahan"
+                            className="w-48 px-1.5 py-1 bg-white border border-amber-300 rounded text-[11px] font-bold text-slate-900 focus:outline-none"
+                          />
                         </td>
-                        <td className="px-3 py-2 text-center font-bold text-slate-600 border-r border-slate-100">
-                          {po.satuan || 'kg'}
+                        <td className="px-2 py-1.5 text-center">
+                          <input
+                            type="text"
+                            value={po.jamKedatangan || ''}
+                            onChange={(e) => updateSupplierCell(idx, 'jamKedatangan', e.target.value)}
+                            placeholder="06:00"
+                            className="w-16 px-1 py-1 text-center bg-white border border-amber-300 rounded text-[11px] focus:outline-none"
+                          />
                         </td>
-                        <td className="px-3 py-2 text-right text-slate-600 border-r border-slate-100 whitespace-nowrap">
-                          {po.hargaSatuan ? formatRp(po.hargaSatuan) : '-'}
+                        <td className="px-2 py-1.5 text-center">
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={po.jumlah || ''}
+                            onChange={(e) => updateSupplierCell(idx, 'jumlah', e.target.value)}
+                            className="w-16 px-1 py-1 text-center bg-white border border-amber-300 rounded text-[11px] font-black focus:outline-none"
+                          />
                         </td>
-                        <td className="px-4 py-2 text-right font-black text-emerald-900 whitespace-nowrap bg-emerald-50/20">
-                          {rowTotal > 0 ? formatRp(rowTotal) : '-'}
+                        <td className="px-2 py-1.5 text-center">
+                          <input
+                            type="text"
+                            value={po.satuan || 'kg'}
+                            onChange={(e) => updateSupplierCell(idx, 'satuan', e.target.value)}
+                            className="w-16 px-1 py-1 text-center bg-white border border-amber-300 rounded text-[11px] font-bold focus:outline-none"
+                          />
+                        </td>
+                        <td className="px-2 py-1.5 text-right">
+                          <input
+                            type="number"
+                            value={po.hargaSatuan || ''}
+                            onChange={(e) => updateSupplierCell(idx, 'hargaSatuan', e.target.value)}
+                            placeholder="Harga"
+                            className="w-24 px-1.5 py-1 text-right bg-white border border-amber-300 rounded text-[11px] focus:outline-none"
+                          />
+                        </td>
+                        <td className="px-2 py-1.5 text-right">
+                          <input
+                            type="number"
+                            value={rowTotal || ''}
+                            onChange={(e) => updateSupplierCell(idx, 'totalHarga', Number(e.target.value))}
+                            className="w-28 px-1.5 py-1 text-right bg-emerald-50 border border-emerald-300 rounded text-[11px] font-black text-emerald-900 focus:outline-none"
+                          />
+                        </td>
+                        <td className="px-1 py-1 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSupplierRow(idx)}
+                            className="p-1 hover:bg-red-100 text-red-600 rounded transition-colors cursor-pointer"
+                            title="Hapus baris pesanan ini"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mx-auto" />
+                          </button>
                         </td>
                       </tr>
                     );
@@ -937,6 +1643,7 @@ export function DailyReportExcelSections({
                     <td className="px-4 py-3 text-right font-extrabold text-sm text-amber-300 bg-slate-800 whitespace-nowrap">
                       {formatRp(grandTotal)}
                     </td>
+                    {isEditing && <td></td>}
                   </tr>
                 </tfoot>
               </table>
@@ -1003,7 +1710,7 @@ export function DailyReportExcelSections({
   return (
     <div className="space-y-5 font-['Hanken_Grotesk']">
       {/* Production Notes / Catatan Dapur Banner jika ada */}
-      {report.productionNotes && report.productionNotes.length > 0 && (
+      {curReport.productionNotes && curReport.productionNotes.length > 0 && (
         <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-4 shadow-2xs">
           <div className="flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
@@ -1014,7 +1721,7 @@ export function DailyReportExcelSections({
                 </span>
               </div>
               <ul className="text-xs text-amber-800 space-y-1 list-disc pl-4 font-medium">
-                {report.productionNotes.map((note, idx) => (
+                {curReport.productionNotes.map((note, idx) => (
                   <li key={idx}>{note}</li>
                 ))}
               </ul>
@@ -1102,7 +1809,7 @@ export function DailyReportExcelSections({
         {/* TAB 1: PORSI KECIL */}
         {currentTab === 'kecil' &&
           renderUnifiedExcelPortionTable(
-            report.porsiKecil,
+            curReport.porsiKecil,
             'PORSI KECIL (PAUD / TK & SD 1-3)',
             'kecil'
           )}
@@ -1110,7 +1817,7 @@ export function DailyReportExcelSections({
         {/* TAB 2: PORSI BESAR */}
         {currentTab === 'besar' &&
           renderUnifiedExcelPortionTable(
-            report.porsiBesar,
+            curReport.porsiBesar,
             'PORSI BESAR (SD KELAS 4-6, SMP, SMA)',
             'besar'
           )}
@@ -1118,7 +1825,7 @@ export function DailyReportExcelSections({
         {/* TAB 3: PORSI BALITA */}
         {currentTab === 'balita' &&
           renderUnifiedExcelPortionTable(
-            report.porsiBalita,
+            curReport.porsiBalita,
             'PORSI BALITA (USIA 6-59 BULAN)',
             'balita'
           )}
@@ -1126,7 +1833,7 @@ export function DailyReportExcelSections({
         {/* TAB 4: PORSI BUMIL / BUSUI */}
         {currentTab === 'bumil' &&
           renderUnifiedExcelPortionTable(
-            report.porsiBumilBusui,
+            curReport.porsiBumilBusui,
             'PORSI IBU HAMIL & IBU MENYUSUI (BUMIL / BUSUI)',
             'bumil'
           )}
@@ -1153,7 +1860,7 @@ export function DailyReportExcelSections({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {(report.paketSehat3b?.keringanItems || []).map((k, idx) => (
+                  {(curReport.paketSehat3b?.keringanItems || []).map((k, idx) => (
                     <tr key={idx} className="hover:bg-purple-50/40 transition-colors font-medium">
                       <td className="px-3 py-2 text-center text-slate-400">{idx + 1}</td>
                       <td className="px-3 py-2 font-bold text-slate-900">{k.item}</td>
@@ -1188,7 +1895,7 @@ export function DailyReportExcelSections({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {(report.inspectionForm?.rows || []).map((qc, idx) => (
+                  {(curReport.inspectionForm?.rows || []).map((qc, idx) => (
                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
                       <td className="px-3 py-2 text-center text-slate-400">{idx + 1}</td>
                       <td className="px-3 py-2 font-bold text-slate-900">{qc.jenisBahan}</td>
@@ -1229,7 +1936,7 @@ export function DailyReportExcelSections({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {(report.wasteLogs || []).map((w, idx) => (
+                  {(curReport.wasteLogs || []).map((w, idx) => (
                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
                       <td className="px-3 py-2 text-center text-slate-400">{w.no || idx + 1}</td>
                       <td className="px-3 py-2 font-bold text-slate-900">{w.namaMakanan}</td>
@@ -1260,7 +1967,7 @@ export function DailyReportExcelSections({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {(report.sekolahList || []).map((s, idx) => (
+                  {(curReport.sekolahList || []).map((s, idx) => (
                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
                       <td className="px-3 py-2 text-center text-slate-400">{idx + 1}</td>
                       <td className="px-4 py-2 font-bold text-slate-900">{s.nama}</td>
