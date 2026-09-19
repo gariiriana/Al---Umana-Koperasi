@@ -38,9 +38,38 @@ import {
   MBG_AKG_REFERENCE,
   DEFAULT_WEEKLY_SCHEDULE,
 } from '@/constants/mbgConstants';
-import tkpiDatabase from '@/constants/tkpiDatabase.json';
 import porsiStandardData from '@/constants/standarPorsi.json';
 import resepStandardData from '@/constants/standarResep.json';
+
+export interface TkpiDatabaseItem {
+  nama: string;
+  kode?: string;
+  sumber?: string;
+  berat?: number;
+  air?: number;
+  energi?: number;
+  protein?: number;
+  lemak?: number;
+  kh?: number;
+  serat?: number;
+  abu?: number;
+  kalsium?: number;
+  fosfor?: number;
+  besi?: number;
+  natrium?: number;
+  kalium?: number;
+  tembaga?: number;
+  seng?: number;
+  retinol?: number;
+  bkar?: number;
+  kartotal?: number;
+  thiamin?: number;
+  riboflavin?: number;
+  niasin?: number;
+  vit_c?: number;
+  id?: string;
+  [key: string]: unknown;
+}
 
 interface StandarPorsi {
   kode: number;
@@ -165,10 +194,10 @@ export function MbgProductionPage() {
 
   const [showDbLookup, setShowDbLookup] = useState(false);
   const [dbSearchQuery, setDbSearchQuery] = useState('');
-  const [selectedDbItem, setSelectedDbItem] = useState<typeof tkpiDatabase[number] | null>(null);
+  const [selectedDbItem, setSelectedDbItem] = useState<TkpiDatabaseItem | null>(null);
   const [dbPage, setDbPage] = useState(1);
 
-  const [customTkpiEntries, setCustomTkpiEntries] = useState<(typeof tkpiDatabase[number])[]>([]);
+  const [customTkpiEntries, setCustomTkpiEntries] = useState<TkpiDatabaseItem[]>([]);
   const [isAddingDbItem, setIsAddingDbItem] = useState(false);
   const [newDbItem, setNewDbItem] = useState({
     nama: '',
@@ -229,7 +258,7 @@ export function MbgProductionPage() {
     if (!user) return;
     const unsub = subscribeCustomTkpiEntries(
       (entries) => {
-        setCustomTkpiEntries(entries as unknown as (typeof tkpiDatabase[number])[]);
+        setCustomTkpiEntries(entries as unknown as TkpiDatabaseItem[]);
       },
       (err) => {
         console.warn('Error loading custom TKPI entries:', err);
@@ -253,14 +282,7 @@ export function MbgProductionPage() {
   }, [user]);
 
   const combinedTkpiDatabase = useMemo(() => {
-    const map = new Map<string, typeof tkpiDatabase[number]>();
-    tkpiDatabase.forEach((item) => {
-      map.set(item.nama.toLowerCase().trim(), item);
-    });
-    customTkpiEntries.forEach((item) => {
-      map.set(item.nama.toLowerCase().trim(), item);
-    });
-    return Array.from(map.values());
+    return customTkpiEntries;
   }, [customTkpiEntries]);
 
   // Subscribe batches (Real batches from Firestore, strictly NO auto-created dummy batches)

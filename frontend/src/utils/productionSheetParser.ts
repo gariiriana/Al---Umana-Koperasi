@@ -16,7 +16,6 @@ import type {
 import { getMenuForDate } from '@/services/mbgAdminService';
 import { DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
 import standarResepData from '@/constants/standarResep.json';
-import tkpiData from '@/constants/tkpiDatabase.json';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1010,12 +1009,7 @@ export function generateDailyReportFromBatchData(
     serat?: number;
   }
   const findTkpi = (name: string): TkpiItem => {
-    const q = name.toLowerCase().trim();
-    let match = (tkpiData as TkpiItem[]).find((t) => t.nama.toLowerCase().trim() === q);
-    if (!match) {
-      match = (tkpiData as TkpiItem[]).find((t) => t.nama.toLowerCase().includes(q) || q.includes(t.nama.toLowerCase()));
-    }
-    return match || { nama: name, energi: 150, protein: 7, lemak: 4, kh: 20, serat: 1.5 };
+    return { nama: name, energi: 150, protein: 7, lemak: 4, kh: 20, serat: 1.5 };
   };
 
   const buildPortion = (
