@@ -587,9 +587,9 @@ export function OrdersPage() {
     const matchStatus = statusFilter === "ALL" ? true : o.status === statusFilter;
     const matchPayment = paymentFilter === "ALL" ? true : o.paymentStatus === paymentFilter;
 
-    const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
-    const matchStartDate = startDate ? oDate >= startDate : true;
-    const matchEndDate = endDate ? oDate <= endDate : true;
+    const oDate = o.eventDate ? o.eventDate.slice(0, 10) : (o.createdAt ? o.createdAt.slice(0, 10) : "");
+    const matchStartDate = startDate ? (oDate ? oDate >= startDate : true) : true;
+    const matchEndDate = endDate ? (oDate ? oDate <= endDate : true) : true;
 
     return matchSearch && matchStatus && matchPayment && matchStartDate && matchEndDate;
   });
@@ -1485,7 +1485,7 @@ export function OrdersPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 items-center border-t border-[#F3F4F6] pt-3">
-            <span className="text-xs font-bold text-[#4B5563] self-start sm:self-center shrink-0">Filter Tanggal Acara:</span>
+            <span className="text-xs font-bold text-[#4B5563] self-start sm:self-center shrink-0">Filter Tanggal Acara / Input:</span>
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <input
                 type="date"
