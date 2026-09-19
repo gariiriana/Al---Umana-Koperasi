@@ -16,7 +16,12 @@ import * as XLSX from 'xlsx';
 import type { MbgPmBatch, MbgPmEntry, MbgNutritionEntry, MbgDayMenu, MbgProductionDailyReport } from '@/types/mbg';
 import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
 import { DailyReportExcelSections, type MbgDailyReportSubTab } from '@/components/mbg/DailyReportExcelSections';
-import { subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule, saveWeeklySchedule, getMenuForDate, deleteBatch, createBatch, type MbgPortionClassification } from '@/services/mbgAdminService';
+import {
+  subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule,
+  saveWeeklySchedule, getMenuForDate, deleteBatch, createBatch,
+  addMultipleEntries, recalculateBatchTotals,
+  type MbgPortionClassification
+} from '@/services/mbgAdminService';
 import {
   subscribeNutrition, addNutritionEntry, updateNutritionEntry, deleteNutritionEntry,
   subscribeCustomTkpiEntries, addCustomTkpiEntry, updateCustomTkpiEntry, deleteCustomTkpiEntry,
@@ -26,7 +31,7 @@ import {
 } from '@/services/mbgProductionService';
 import { export8PageDailyReportPdf } from '@/utils/dailyReportPdfExporter';
 import { exportProductionDocx } from '@/utils/mbgProductionDocxGenerator';
-import { parseProductionSheetRows } from '@/utils/productionSheetParser';
+import { parseProductionSheetRows, parsePenerimaManfaatSheet } from '@/utils/productionSheetParser';
 import { updateBatchStatus, updateBatch } from '@/services/mbgAdminService';
 import {
   MBG_BATCH_STATUS_CONFIG,
@@ -142,6 +147,7 @@ export function MbgProductionPage() {
   const [importingSheets, setImportingSheets] = useState(false);
   const [availableSheetNames, setAvailableSheetNames] = useState<string[]>([]);
   const [sheetWorkbook, setSheetWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [importTargetOption, setImportTargetOption] = useState<'current_batch' | 'sheet_date'>('current_batch');
   const [dailyReport, setDailyReport] = useState<MbgProductionDailyReport | null>(null);
   const [showImportedDetails, setShowImportedDetails] = useState(true);
   const [showPmSummaryInGizi, setShowPmSummaryInGizi] = useState(true);
@@ -1775,17 +1781,79 @@ export function MbgProductionPage() {
     return null;
   };
 
+  const handleImportPenerimaManfaatSheet = async (sheetName = 'Penerima Manfaat') => {
+    if (!sheetWorkbook) return;
+
+    try {
+      setImportingSheets(true);
+      const ws = sheetWorkbook.Sheets[sheetName];
+      if (!ws) {
+        showToast({ message: `Sheet '${sheetName}' tidak ditemukan!`, variant: 'error' });
+        return;
+      }
+
+      // Determine target batch
+      let targetBatchId = selectedBatchId;
+      let targetBatchTanggal = selectedBatch?.tanggal || new Date().toISOString().split('T')[0];
+
+      if (!targetBatchId) {
+        const existingBatch = batches.find((b) => b.tanggal === targetBatchTanggal);
+        if (existingBatch) {
+          targetBatchId = existingBatch.id;
+        } else {
+          targetBatchId = await createBatch(targetBatchTanggal, user?.uid || 'user', false, weeklySchedule);
+        }
+      }
+
+      const pmEntries = parsePenerimaManfaatSheet(ws, targetBatchId);
+      if (pmEntries.length === 0) {
+        showToast({ message: 'Tidak ada data penerima manfaat yang dapat dibaca dari sheet ini.', variant: 'error' });
+        return;
+      }
+
+      await addMultipleEntries(pmEntries);
+      await recalculateBatchTotals(targetBatchId);
+
+      setSelectedBatchId(targetBatchId);
+      setShowSheetsImportModal(false);
+      setActiveTab('pm-data');
+
+      const totalPorsi = pmEntries.reduce((s, e) => s + e.jumlah, 0);
+      showToast({
+        message: `Berhasil meng-import ${pmEntries.length} data sekolah & penerima manfaat (Total: ${totalPorsi.toLocaleString()} porsi) ke Batch ${targetBatchTanggal}!`,
+        variant: 'success',
+      });
+    } catch (err) {
+      console.error('Import Penerima Manfaat error:', err);
+      showToast({ message: 'Gagal meng-import sheet Penerima Manfaat', variant: 'error' });
+    } finally {
+      setImportingSheets(false);
+    }
+  };
+
   const handleSelectSheetDay = async (sheetName: string) => {
     if (!sheetWorkbook) return;
+
+    // If user clicked Penerima Manfaat directly, route to dedicated PM importer
+    if (sheetName.toLowerCase().includes('penerima manfaat')) {
+      await handleImportPenerimaManfaatSheet(sheetName);
+      return;
+    }
 
     try {
       setImportingSheets(true);
       const ws = sheetWorkbook.Sheets[sheetName];
       const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-      // Parse date from sheetName (e.g. "04092026" -> "2026-09-04")
       const parsedDateFromSheet = parseSheetNameToDate(sheetName);
-      const targetBatchTanggal = parsedDateFromSheet || selectedBatch?.tanggal || new Date().toISOString().split('T')[0];
+
+      // Determine target batch based on user choice
+      let targetBatchTanggal: string;
+      if (importTargetOption === 'current_batch' && selectedBatch?.tanggal) {
+        targetBatchTanggal = selectedBatch.tanggal;
+      } else {
+        targetBatchTanggal = parsedDateFromSheet || selectedBatch?.tanggal || new Date().toISOString().split('T')[0];
+      }
 
       let targetBatchId = '';
       const existingBatch = batches.find((b) => b.tanggal === targetBatchTanggal);
@@ -1793,7 +1861,6 @@ export function MbgProductionPage() {
       if (existingBatch) {
         targetBatchId = existingBatch.id;
       } else {
-        // Create batch for this date without autoPopulate dummy master entries
         targetBatchId = await createBatch(targetBatchTanggal, user?.uid || 'user', false, weeklySchedule);
       }
 
@@ -1829,12 +1896,25 @@ export function MbgProductionPage() {
         createdBy: user?.uid || '',
       });
 
+      // ALSO import schools from 'Penerima Manfaat' if available in this workbook and target batch has no schools yet
+      const pmSheetName = Object.keys(sheetWorkbook.Sheets).find((name) =>
+        name.toLowerCase().includes('penerima manfaat')
+      );
+      if (pmSheetName && (!entries || entries.length === 0 || targetBatchId !== selectedBatchId)) {
+        const pmWs = sheetWorkbook.Sheets[pmSheetName];
+        const pmEntries = parsePenerimaManfaatSheet(pmWs, targetBatchId);
+        if (pmEntries.length > 0) {
+          await addMultipleEntries(pmEntries);
+          await recalculateBatchTotals(targetBatchId);
+        }
+      }
+
       setSelectedBatchId(targetBatchId);
       setShowImportedDetails(true);
       setShowSheetsImportModal(false);
-      setActiveTab('pm-data');
+      setActiveTab('daily-report');
 
-      showToast({ message: `Berhasil meng-import data Laporan Harian (${sheetName}) ke Batch ${targetBatchTanggal}!`, variant: 'success' });
+      showToast({ message: `Berhasil meng-import Laporan Harian (${sheetName}) ke Batch ${targetBatchTanggal}!`, variant: 'success' });
     } catch (err: unknown) {
       console.error('Parse Sheet error:', err);
       showToast({ message: 'Gagal memproses sheet ter-pilih', variant: 'error' });
@@ -3510,26 +3590,145 @@ export function MbgProductionPage() {
                 />
               </div>
 
-              {/* Available Sheet Day Selection */}
-              {availableSheetNames.length > 0 && (
-                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-3">
-                  <h4 className="text-xs font-extrabold text-emerald-900 flex items-center gap-1.5">
-                    <span>✨ Ditemukan {availableSheetNames.length} Sheet/Tab. Pilih Sheet Hari yang Ingin Di-Import:</span>
-                  </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {availableSheetNames.map((sheetName) => (
-                      <button
-                        key={sheetName}
-                        onClick={() => handleSelectSheetDay(sheetName)}
-                        disabled={importingSheets}
-                        className="py-2.5 px-3 bg-white border border-emerald-300 hover:bg-emerald-600 hover:text-white text-emerald-800 text-xs font-black rounded-xl shadow-sm transition-all text-center cursor-pointer disabled:opacity-50"
-                      >
-                        {sheetName}
-                      </button>
-                    ))}
+              {/* Available Sheet Selection with Smart Categorization */}
+              {availableSheetNames.length > 0 && (() => {
+                const pmSheetNames = availableSheetNames.filter((name) =>
+                  name.toLowerCase().includes('penerima manfaat')
+                );
+                const dailySheetNames = availableSheetNames.filter((name) => {
+                  const lower = name.toLowerCase();
+                  return (
+                    !lower.includes('penerima manfaat') &&
+                    !lower.includes('standar resep') &&
+                    !lower.includes('standar porsi') &&
+                    !lower.includes('data bantu') &&
+                    !lower.includes('akg') &&
+                    !lower.includes('siklus menu')
+                  );
+                });
+                const masterSheetNames = availableSheetNames.filter((name) => {
+                  const lower = name.toLowerCase();
+                  return (
+                    lower.includes('standar resep') ||
+                    lower.includes('standar porsi') ||
+                    lower.includes('data bantu') ||
+                    lower.includes('akg') ||
+                    lower.includes('siklus menu')
+                  );
+                });
+
+                return (
+                  <div className="space-y-4 pt-1">
+                    {/* Target Batch Option */}
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                      <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block">
+                        🎯 Target Batch Tanggal:
+                      </span>
+                      <div className="flex flex-col sm:flex-row gap-2 sm:gap-5">
+                        <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="importTargetOption"
+                            checked={importTargetOption === 'current_batch'}
+                            onChange={() => setImportTargetOption('current_batch')}
+                            className="text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span>Batch Aktif ({selectedBatch?.tanggal || 'Hari Ini'})</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="importTargetOption"
+                            checked={importTargetOption === 'sheet_date'}
+                            onChange={() => setImportTargetOption('sheet_date')}
+                            className="text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span>Sesuai Tanggal pada Sheet</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Group 1: Penerima Manfaat */}
+                    {pmSheetNames.length > 0 && (
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2.5">
+                        <div className="flex items-start sm:items-center justify-between flex-wrap gap-2">
+                          <div>
+                            <h4 className="text-xs font-black text-blue-950 flex items-center gap-1.5">
+                              <span>👥 Data Penerima Manfaat (27 Lembaga / Sekolah)</span>
+                            </h4>
+                            <p className="text-[11px] text-blue-800 mt-0.5">
+                              Import daftar sekolah (PAUD, SD, SMP, SMA, Balita, Bumil, Busui) beserta jumlah murid & guru ke tabel pesanan batch.
+                            </p>
+                          </div>
+                          {pmSheetNames.map((name) => (
+                            <button
+                              key={name}
+                              onClick={() => handleImportPenerimaManfaatSheet(name)}
+                              disabled={importingSheets}
+                              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap"
+                            >
+                              {importingSheets ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <span>📥 Import 27 Sekolah ke Batch</span>}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Group 2: Daily Production Reports */}
+                    {dailySheetNames.length > 0 && (
+                      <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-3">
+                        <div>
+                          <h4 className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                            <span>📅 Laporan Harian Operasional ({dailySheetNames.length} Sheet):</span>
+                          </h4>
+                          <p className="text-[11px] text-emerald-800 mt-0.5">
+                            Pilih sheet tanggal produksi harian untuk meng-import Kandungan Gizi, Pesanan Bahan, Bumbu, PO, & QC:
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto p-1">
+                          {dailySheetNames.map((sheetName) => {
+                            const parsedDate = parseSheetNameToDate(sheetName);
+                            return (
+                              <button
+                                key={sheetName}
+                                onClick={() => handleSelectSheetDay(sheetName)}
+                                disabled={importingSheets}
+                                className="py-2.5 px-3 bg-white border border-emerald-300 hover:bg-emerald-600 hover:text-white text-emerald-900 text-xs font-black rounded-xl shadow-xs transition-all text-center cursor-pointer disabled:opacity-50 flex flex-col items-center justify-center gap-0.5"
+                              >
+                                <span>{sheetName}</span>
+                                {parsedDate && (
+                                  <span className="text-[10px] font-semibold opacity-75">
+                                    {parsedDate}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Group 3: Master Sheets */}
+                    {masterSheetNames.length > 0 && (
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                        <span className="text-[11px] font-bold text-slate-500 block">
+                          ℹ️ Sheet Referensi Master (bukan laporan produksi harian):
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {masterSheetNames.map((name) => (
+                            <span
+                              key={name}
+                              className="px-2.5 py-1 bg-slate-200/80 text-slate-700 text-[10px] font-bold rounded-lg border border-slate-300/60"
+                            >
+                              {name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         </div>

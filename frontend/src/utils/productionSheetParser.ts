@@ -9,6 +9,8 @@ import type {
   MbgRealisasiPembelianRow,
   MbgInspectionFormRow,
   MbgWasteLogRow,
+  MbgPmEntry,
+  MbgInstitutionType,
 } from '@/types/mbg';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -939,4 +941,108 @@ function createEmptyReport(
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
+}
+
+// ─── Penerima Manfaat Sheet Parser ──────────────────────────────────────────
+
+/**
+ * Parses the "Penerima Manfaat" worksheet from the MBG master workbook.
+ * Maps all 27 schools/institutions (PAUD, SD, SMP, SMA, Balita, Bumil, Busui)
+ * into MbgPmEntry objects ready for batch insertion into Firestore.
+ */
+export function parsePenerimaManfaatSheet(
+  ws: XLSX.WorkSheet,
+  batchId: string,
+  pekanIndex = 1,
+  createdBy = 'import_excel'
+): Omit<MbgPmEntry, 'id'>[] {
+  const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+  const entries: Omit<MbgPmEntry, 'id'>[] = [];
+
+  // Determine columns based on pekan:
+  // Pekan 1: Col 2 (Jumlah), Col 3 (PIC/Guru), Col 4 (Total)
+  // Pekan 2: Col 5, 6, 7
+  // Pekan 3: Col 8, 9, 10
+  // Pekan 4: Col 11, 12, 13
+  const colMurid = 2 + (pekanIndex - 1) * 3;
+  const colGuru = colMurid + 1;
+  const colTotal = colMurid + 2;
+
+  for (let r = 2; r < Math.min(rows.length, 35); r++) {
+    const row = rows[r] || [];
+    const no = row[0];
+    const name = str(row[1]);
+    if (!name || name.toLowerCase().includes('total')) continue;
+    if (typeof no !== 'number' && isNaN(Number(no))) continue;
+
+    const murid = num(row[colMurid]) || num(row[2]);
+    const guru = num(row[colGuru]) || num(row[3]);
+    const total = num(row[colTotal]) || (murid + guru);
+
+    const nameLower = name.toLowerCase();
+    let type: MbgInstitutionType = 'sekolah';
+    let schoolLevel: 'tk_paud' | 'sd' | 'sma' | undefined = 'sd';
+    let qtSiswa = murid;
+    let qtBumil = 0;
+    let qtBusui = 0;
+    let qtBumilBusui = 0;
+
+    if (nameLower.includes('balita')) {
+      type = 'posyandu';
+      schoolLevel = undefined;
+    } else if (nameLower.includes('bumil')) {
+      type = 'posyandu';
+      qtBumil = murid;
+      qtBumilBusui = murid;
+      qtSiswa = 0;
+      schoolLevel = undefined;
+    } else if (nameLower.includes('busui')) {
+      type = 'posyandu';
+      qtBusui = murid;
+      qtBumilBusui = murid;
+      qtSiswa = 0;
+      schoolLevel = undefined;
+    } else if (nameLower.includes('tk') || nameLower.includes('paud') || nameLower.includes('sps')) {
+      schoolLevel = 'tk_paud';
+    } else if (nameLower.includes('sd') || nameLower.includes('mi ')) {
+      schoolLevel = 'sd';
+    } else if (
+      nameLower.includes('smp') ||
+      nameLower.includes('mts') ||
+      nameLower.includes('sma') ||
+      nameLower.includes('smk') ||
+      nameLower.includes('ma ')
+    ) {
+      schoolLevel = 'sma';
+    }
+
+    entries.push({
+      batchId,
+      institutionName: name,
+      institutionType: type,
+      schoolLevel,
+      qtSiswaBalita: qtSiswa,
+      qtBumil: qtBumil || undefined,
+      qtBusui: qtBusui || undefined,
+      qtBumilBusui,
+      qtGuruKader: guru,
+      qtPobiaNasi: 0,
+      qtPorsiBalita: type === 'posyandu' && nameLower.includes('balita') ? murid : undefined,
+      qtPorsiBumilBusui: type === 'posyandu' && (qtBumil > 0 || qtBusui > 0) ? murid : undefined,
+      jumlah: total,
+      jadwalPengantaran: '06.30-08.30',
+      assignedPetugasId: '',
+      assignedPetugasName: '',
+      menuItems: [],
+      menuKeringanItems: [],
+      isSekolahLibur: total === 0,
+      notes: '',
+      sortOrder: entries.length + 1,
+      createdBy,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  return entries;
 }
