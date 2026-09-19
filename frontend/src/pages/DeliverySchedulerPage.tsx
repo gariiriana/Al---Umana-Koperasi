@@ -39,8 +39,9 @@ interface Courier {
 }
 
 const getOrderDeadline = (order: Order): number => {
-  if (!order.eventDate) return Infinity;
-  const datePart = order.eventDate.slice(0, 10);
+  const dateStr = order.eventDate || order.createdAt;
+  if (!dateStr) return Infinity;
+  const datePart = dateStr.slice(0, 10);
   let time = "12:00";
   if (order.deliveryTime) {
     const match = order.deliveryTime.match(/(\d{2})[:.](\d{2})/);
@@ -163,7 +164,7 @@ export function DeliverySchedulerPage() {
       if (!isUnassignedActive) return false;
       
       if (filterDate) {
-        const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
+        const oDate = o.eventDate ? o.eventDate.slice(0, 10) : (o.createdAt ? o.createdAt.slice(0, 10) : "");
         if (oDate !== filterDate) return false;
       }
       
@@ -195,7 +196,7 @@ export function DeliverySchedulerPage() {
       if (!isCompleted) return false;
       
       if (filterDate) {
-        const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
+        const oDate = o.eventDate ? o.eventDate.slice(0, 10) : (o.createdAt ? o.createdAt.slice(0, 10) : "");
         if (oDate !== filterDate) return false;
       }
       
@@ -278,7 +279,7 @@ export function DeliverySchedulerPage() {
     }
     
     const targetOrders = orders.filter(o => {
-      const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
+      const oDate = o.eventDate ? o.eventDate.slice(0, 10) : (o.createdAt ? o.createdAt.slice(0, 10) : "");
       return oDate === filterDate && o.status !== "FAILED" && o.status !== "PAYMENT_REJECTED";
     }).sort((a, b) => {
       const deadlineA = getOrderDeadline(a);
@@ -449,7 +450,7 @@ export function DeliverySchedulerPage() {
     }
 
     const targetOrders = orders.filter(o => {
-      const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
+      const oDate = o.eventDate ? o.eventDate.slice(0, 10) : (o.createdAt ? o.createdAt.slice(0, 10) : "");
       return oDate === filterDate && o.status !== "FAILED" && o.status !== "PAYMENT_REJECTED";
     }).sort((a, b) => {
       const deadlineA = getOrderDeadline(a);
@@ -1265,7 +1266,7 @@ export function DeliverySchedulerPage() {
             </thead>
             <tbody>
               {orders.filter(o => {
-                const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
+                const oDate = o.eventDate ? o.eventDate.slice(0, 10) : (o.createdAt ? o.createdAt.slice(0, 10) : "");
                 return oDate === filterDate && o.status !== "FAILED" && o.status !== "PAYMENT_REJECTED";
               }).sort((a, b) => {
                 const deadlineA = getOrderDeadline(a);

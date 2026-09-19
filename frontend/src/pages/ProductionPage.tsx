@@ -494,8 +494,9 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
 }
 
 const getOrderDeadline = (order: Order): number => {
-  if (!order.eventDate) return Infinity;
-  const datePart = order.eventDate.slice(0, 10);
+  const dateStr = order.eventDate || order.createdAt;
+  if (!dateStr) return Infinity;
+  const datePart = dateStr.slice(0, 10);
   let time = "12:00";
   if (order.deliveryTime) {
     const match = order.deliveryTime.match(/(\d{2})[:.](\d{2})/);
@@ -547,14 +548,14 @@ export function ProductionPage() {
 
     if (startDate) {
       rawQueue = rawQueue.filter((o) => {
-        const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
-        return oDate >= startDate;
+        const oDate = o.eventDate ? o.eventDate.slice(0, 10) : (o.createdAt ? o.createdAt.slice(0, 10) : "");
+        return oDate ? oDate >= startDate : true;
       });
     }
     if (endDate) {
       rawQueue = rawQueue.filter((o) => {
-        const oDate = o.eventDate ? o.eventDate.slice(0, 10) : "";
-        return oDate <= endDate;
+        const oDate = o.eventDate ? o.eventDate.slice(0, 10) : (o.createdAt ? o.createdAt.slice(0, 10) : "");
+        return oDate ? oDate <= endDate : true;
       });
     }
 

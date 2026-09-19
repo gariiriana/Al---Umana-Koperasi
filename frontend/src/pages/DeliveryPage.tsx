@@ -394,8 +394,9 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
 }
 
 const getOrderDeadline = (order: Order): number => {
-  if (!order.eventDate) return Infinity;
-  const datePart = order.eventDate.slice(0, 10);
+  const dateStr = order.eventDate || order.createdAt;
+  if (!dateStr) return Infinity;
+  const datePart = dateStr.slice(0, 10);
   let time = "12:00";
   if (order.deliveryTime) {
     const match = order.deliveryTime.match(/(\d{2})[:.](\d{2})/);

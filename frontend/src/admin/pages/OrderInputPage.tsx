@@ -125,9 +125,12 @@ export function OrderInputPage() {
       const parts = template.deliveryTime.split("T");
       setDeliveryDateOnly(parts[0]);
       setDeliveryTimeOnly(parts[1]);
+      setEventDateOnly(parts[0]);
     } else {
-      setDeliveryDateOnly("");
+      const today = new Date().toISOString().split("T")[0];
+      setDeliveryDateOnly(today);
       setDeliveryTimeOnly("12:00");
+      setEventDateOnly(today);
     }
     setFoodDetails(template.foodDetails || "");
     setDrinkDetails(template.drinkDetails || "");
@@ -176,11 +179,11 @@ export function OrderInputPage() {
   const [deliveryTime, setDeliveryTime] = useState("");
 
   // Split states for Jam Pemberangkatan (eventDate: YYYY-MM-DDTHH:MM)
-  const [eventDateOnly, setEventDateOnly] = useState("");
+  const [eventDateOnly, setEventDateOnly] = useState(() => (!isEditMode ? new Date().toISOString().split("T")[0] : ""));
   const [eventTimeOnly, setEventTimeOnly] = useState("08:00");
 
   // Split states for Harus Sampai (deliveryTime: YYYY-MM-DDTHH:MM)
-  const [deliveryDateOnly, setDeliveryDateOnly] = useState("");
+  const [deliveryDateOnly, setDeliveryDateOnly] = useState(() => (!isEditMode ? new Date().toISOString().split("T")[0] : ""));
   const [deliveryTimeOnly, setDeliveryTimeOnly] = useState("12:00");
 
   // Sync with main state
@@ -416,6 +419,21 @@ export function OrderInputPage() {
     setSubmitting(true);
 
     try {
+      const today = new Date().toISOString().split("T")[0];
+      let finalEventDate = eventDate.trim();
+      if (!finalEventDate) {
+        if (deliveryTime && deliveryTime.includes("T")) {
+          finalEventDate = deliveryTime;
+        } else {
+          finalEventDate = `${today}T${eventTimeOnly || "08:00"}`;
+        }
+      }
+
+      let finalDeliveryTime = deliveryTime.trim();
+      if (!finalDeliveryTime) {
+        finalDeliveryTime = finalEventDate;
+      }
+
       const orderPayload = {
         orderType,
         isPreOrder,
@@ -423,9 +441,9 @@ export function OrderInputPage() {
         recipientName: recipientNames.length > 0 ? recipientNames.join(", ") : customerName.trim(),
         recipientPhone: recipientPhone.trim(),
         recipientNotes: recipientNotes.trim(),
-        eventDate,
+        eventDate: finalEventDate,
         deliveryAddress: deliveryAddress.trim(),
-        deliveryTime: deliveryTime.trim(),
+        deliveryTime: finalDeliveryTime,
         foodDetails: foodDetails.trim() || selectedItems.map(s => `${s.itemName}${isPreOrder ? " (Pra-pesanan)" : ` (${s.quantity} ${s.unit})`}`).join(", "),
         drinkDetails: drinkDetails.trim(),
         items: selectedItems.map((s) => ({
@@ -579,12 +597,13 @@ export function OrderInputPage() {
                   setNewRecipientName("");
                   setRecipientPhone("");
                   setRecipientNotes("");
-                  setEventDate("");
-                  setEventDateOnly("");
+                  const today = new Date().toISOString().split("T")[0];
+                  setEventDate(`${today}T08:00`);
+                  setEventDateOnly(today);
                   setEventTimeOnly("08:00");
                   setDeliveryAddress("");
-                  setDeliveryTime("");
-                  setDeliveryDateOnly("");
+                  setDeliveryTime(`${today}T12:00`);
+                  setDeliveryDateOnly(today);
                   setDeliveryTimeOnly("12:00");
                   setFoodDetails("");
                   setDrinkDetails("");
