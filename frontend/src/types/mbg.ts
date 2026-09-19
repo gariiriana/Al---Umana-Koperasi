@@ -651,6 +651,8 @@ export interface MbgProductionDailyReport {
     officerTitle: string;
   };
   wasteLogs: MbgWasteLogRow[];
+  sekolahList?: { nama: string; murid: number; guru: number }[];
+  productionNotes?: string[];
   createdBy: string;
   createdAt: string;
   updatedAt: string;

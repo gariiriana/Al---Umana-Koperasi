@@ -15,7 +15,7 @@ import { useToast } from '@/contexts/ToastContext';
 import * as XLSX from 'xlsx';
 import type { MbgPmBatch, MbgPmEntry, MbgNutritionEntry, MbgDayMenu, MbgProductionDailyReport } from '@/types/mbg';
 import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
-import { DailyReportExcelSections } from '@/components/mbg/DailyReportExcelSections';
+import { DailyReportExcelSections, type MbgDailyReportSubTab } from '@/components/mbg/DailyReportExcelSections';
 import { subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule, saveWeeklySchedule, getMenuForDate, deleteBatch, createBatch, type MbgPortionClassification } from '@/services/mbgAdminService';
 import {
   subscribeNutrition, addNutritionEntry, updateNutritionEntry, deleteNutritionEntry,
@@ -105,7 +105,7 @@ export function MbgProductionPage() {
   const [nutritionData, setNutritionData] = useState<MbgNutritionEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pm-data' | 'nutrition' | 'daily-report' | 'archive'>('pm-data');
-  const [dailyReportSubTab, setDailyReportSubTab] = useState<'kecil' | 'besar' | 'balita' | 'bumil' | 'paket3b' | 'po' | 'qc' | 'waste'>('kecil');
+  const [dailyReportSubTab, setDailyReportSubTab] = useState<MbgDailyReportSubTab>('kecil');
   const [confirmModal, setConfirmModal] = useState<ConfirmModalState | null>(null);
   const [confirmModalLoading, setConfirmModalLoading] = useState(false);
 
@@ -2010,7 +2010,7 @@ export function MbgProductionPage() {
         targetBatchId = await createBatch(targetBatchTanggal, user?.uid || 'user', true, weeklySchedule);
       }
 
-      const parsedReport = parseProductionSheetRows(rows, targetBatchId, targetBatchTanggal, sheetName);
+      const parsedReport = parseProductionSheetRows(rows, targetBatchId, targetBatchTanggal, sheetName, sheetWorkbook);
 
       const totalPorsiFromReport =
         (parsedReport.porsiKecil?.pmCount || 0) +

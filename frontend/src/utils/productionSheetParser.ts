@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx';
 import type {
   MbgProductionDailyReport,
   MbgPortionDailyData,
@@ -38,10 +39,10 @@ function str(v: unknown): string {
 // PM COUNTS (Header block rows 1-4)
 const COL_PM_LABEL = 0; // A: PM labels
 const COL_PM_COUNT1 = 1; // B: count
-// const COL_PM_COUNT2 = 2; // C: total
+const COL_PM_COUNT2 = 2; // C: total
 
 // KANDUNGAN GIZI (Cols E - M)
-const COL_SECTION_HEADER = 4; // E: Porsi Header / Jenis Menu / Total / %Pemenuhan
+const COL_SECTION_HEADER = 4; // E: Porsi Header / Jenis Porsi / Total / %Pemenuhan
 const COL_MENU_NAME = 5; // F: Menu name
 const COL_BAHAN_GIZI = 6; // G: Rincian Bahan
 const COL_BERAT_BERSIH = 7; // H: Berat Bersih (g)
@@ -51,47 +52,44 @@ const COL_LEMAK = 10; // K: Lemak (g)
 const COL_KARBO = 11; // L: Karbohidrat (g)
 const COL_SERAT = 12; // M: Serat (g)
 
-// PESANAN BAHAN MAKANAN (Cols N - W)
-// const COL_SUPPLIER_BAHAN = 13; // N: Supplier
+// PESANAN BAHAN MAKANAN (Cols N - Z)
+const COL_SUPPLIER_BAHAN = 13; // N: Supplier
 const COL_BAHAN_ORDER = 14; // O: Rincian Bahan (pesanan)
 const COL_HARGA_BAHAN = 15; // P: Harga Bahan per unit
-const COL_BDD = 16; // Q: %BDD (e.g. 1.0, 0.89, 0.85)
-const COL_BERAT_KOTOR = 17; // R: Berat Kotor
-const COL_TOTAL_GML = 18; // S: Total (g/ml)
-// const COL_SPARE_VAL = 19; // T: Spare % (Total g/ml + 2%)
-const COL_KEBUTUHAN_BAHAN = 20; // U: Kebutuhan (Per Unit)
-const COL_SATUAN_BAHAN = 21; // V: Satuan (kg, liter, lonjor, pcs)
-const COL_HARGA_TOTAL_BAHAN = 22; // W: Total Harga Bahan
+const COL_SATUAN_BAHAN = 17; // R: Satuan
+const COL_BDD = 18; // S: %BDD (e.g. 1.0, 0.89, 0.85)
+const COL_BERAT_KOTOR = 19; // T: Berat Kotor
+const COL_TOTAL_GML = 20; // U: Total (g/ml)
+const COL_KEBUTUHAN_BAHAN = 21; // V: Kebutuhan (Per Unit / Kg)
+const COL_HARGA_TOTAL_BAHAN = 23; // X: Total Harga Bahan
 
-// PESANAN BUMBU (Cols X - AD)
-// const COL_BUMBU_SUPPLIER = 23; // X: Supplier Bumbu
-const COL_BUMBU_MENU = 24; // Y: Nama Menu
-const COL_BUMBU_NAMA = 25; // Z: Nama Bumbu
-const COL_BUMBU_HARGA_SATUAN = 26; // AA: Harga Bumbu
-const COL_BUMBU_KEBUTUHAN = 27; // AB: Kebutuhan (Per Unit)
-const COL_BUMBU_SATUAN = 28; // AC: Satuan (kg, ikat, pcs)
-const COL_BUMBU_TOTAL_HARGA = 29; // AD: Total Harga Bumbu
+// PESANAN BUMBU (Cols AA - AH)
+const COL_BUMBU_SUPPLIER = 26; // AA: Supplier Bumbu
+const COL_BUMBU_NAMA = 27; // AB: Jenis Bumbu
+const COL_BUMBU_HARGA_SATUAN = 28; // AC: Harga Bumbu
+const COL_BUMBU_SATUAN = 30; // AE: Satuan (kg, ikat, pcs)
+const COL_BUMBU_KEBUTUHAN = 31; // AF: Kebutuhan (Jumlah)
+const COL_BUMBU_TOTAL_HARGA = 32; // AG: Total Harga Bumbu
 
-// MENU 3B KERINGAN (Cols AG - AQ)
-const COL_KERING_ITEM = 32; // AG: Nama Item Keringan
-const COL_KERING_QTY_PCS = 33; // AH: Qty (Pcs) / PM Count
-// const COL_KERING_BERAT = 34; // AI: Berat
-// const COL_KERING_ENERGI = 35; // AJ: Energi
-// const COL_KERING_PROTEIN = 36; // AK: Protein
-// const COL_KERING_LEMAK = 37; // AL: Lemak
-// const COL_KERING_KARBO = 38; // AM: Karbohidrat
-// const COL_KERING_SERAT = 39; // AN: Serat
-const COL_KERING_KEBUTUHAN = 40; // AO: Kebutuhan
-const COL_KERING_HARGA_SATUAN = 41; // AP: Harga
-const COL_KERING_TOTAL = 42; // AQ: Total Biaya
+// MENU 3B KERINGAN (BUMIL & BALITA) (Cols AM - AV)
+const COL_KERING_ITEM = 38; // AM: Nama Item Keringan
+const COL_KERING_QTY_PCS = 39; // AN: Qty (Pcs) / PM Count
+const COL_KERING_ENERGI = 40; // AO: Energi
+const COL_KERING_PROTEIN = 41; // AP: Protein
+const COL_KERING_LEMAK = 42; // AQ: Lemak
+const COL_KERING_KARBO = 43; // AR: Karbohidrat
+const COL_KERING_SERAT = 44; // AS: Serat
+const COL_KERING_KEBUTUHAN = 45; // AT: Kebutuhan
+const COL_KERING_HARGA_SATUAN = 46; // AU: Harga
+const COL_KERING_TOTAL = 47; // AV: Total Biaya
 
-// REKAP LOGISTIK / PO SUPPLIER KEDATANGAN (Cols BE - BJ)
-const COL_PO_SUPPLIER = 56; // BE: Supplier
-const COL_PO_ITEM = 57; // BF: List Pesanan Bahan
-const COL_PO_JAM = 58; // BG: Jam Kedatangan
-const COL_PO_QTY = 59; // BH: Jumlah
-const COL_PO_SATUAN = 60; // BI: Item / Satuan
-const COL_PO_KET = 61; // BJ: Keterangan
+// CATATAN / EVALUASI PRODUKSI
+const COL_EVAL_PRODUKSI = 50; // AY: Catatan Evaluasi Dapur
+
+// SEKOLAH YANG DIKIRIM (Cols BI - BK)
+const COL_SEKOLAH_NAMA = 60; // BI: Nama Sekolah
+const COL_SEKOLAH_MURID = 61; // BJ: Jumlah Murid
+const COL_SEKOLAH_GURU = 62; // BK: Jumlah Guru
 
 // ─── Extract Menu List from Column A or F ────────────────────────────────────
 
@@ -99,14 +97,19 @@ function extractMenuList(rows: unknown[][]): string[] {
   const menuNames: string[] = [];
   const seen = new Set<string>();
 
-  // 1. Scan Column A (rows 7-12)
-  for (let i = 6; i <= 14 && i < rows.length; i++) {
+  // 1. Scan Column A (rows 7-14)
+  for (let i = 5; i <= 15 && i < rows.length; i++) {
     const name = str(rows[i]?.[COL_PM_LABEL]);
     if (
       name &&
       !name.toLowerCase().startsWith('pm ') &&
       name.toLowerCase() !== 'ompreng' &&
       name.toLowerCase() !== 'keringan' &&
+      !name.toLowerCase().includes('karbohidrat') &&
+      !name.toLowerCase().includes('protein') &&
+      !name.toLowerCase().includes('sayur') &&
+      !name.toLowerCase().includes('buah') &&
+      !name.toLowerCase().includes('note') &&
       !seen.has(name)
     ) {
       menuNames.push(name);
@@ -182,7 +185,7 @@ function parsePortionBlock(
       });
     }
 
-    // B. Pesanan Bahan Makanan (Col O - W)
+    // B. Pesanan Bahan Makanan (Col O - X)
     const bahanOrder = str(row[COL_BAHAN_ORDER]);
     if (
       bahanOrder &&
@@ -190,7 +193,6 @@ function parsePortionBlock(
       bahanOrder.toLowerCase() !== 'total pembelanjaan'
     ) {
       const bddRaw = num(row[COL_BDD]);
-      // If BDD is decimal e.g. 0.89 -> convert to 89, if already 89 or 1 -> handle properly
       const bddPercent = bddRaw > 0 && bddRaw <= 1 ? bddRaw * 100 : bddRaw || 100;
 
       bahanItems.push({
@@ -206,15 +208,15 @@ function parsePortionBlock(
       });
     }
 
-    // C. Pesanan Bumbu (Col Z - AD)
+    // C. Pesanan Bumbu (Col AB - AG)
     const bumbuNama = str(row[COL_BUMBU_NAMA]);
     if (
       bumbuNama &&
-      bumbuNama.toLowerCase() !== 'nama bumbu' &&
       bumbuNama.toLowerCase() !== 'jenis bumbu' &&
+      bumbuNama.toLowerCase() !== 'nama bumbu' &&
       bumbuNama.toLowerCase() !== 'total pembelanjaan bumbu'
     ) {
-      const bumbuMenu = str(row[COL_BUMBU_MENU]) || currentMenuName || '';
+      const bumbuMenu = currentMenuName || '';
       bumbuItems.push({
         namaMenu: bumbuMenu,
         namaBumbu: bumbuNama,
@@ -310,11 +312,11 @@ function parsePortionBlock(
 
 function findPortionRanges(rows: unknown[][]): RawBlockRange[] {
   const ranges: RawBlockRange[] = [];
-  let currentRange: { title: string; portionType: 'kecil' | 'besar' | 'balita' | 'bumil_busui'; startRow: number } | null = null;
 
+  // Strategy 1: Explicit headers (if sheet has PORSI KECIL / PORSI BESAR)
+  let currentRange: { title: string; portionType: 'kecil' | 'besar' | 'balita' | 'bumil_busui'; startRow: number } | null = null;
   for (let i = 0; i < rows.length; i++) {
     const headerCell = str(rows[i]?.[COL_SECTION_HEADER]).toUpperCase();
-
     if (headerCell.includes('PORSI KECIL')) {
       currentRange = { title: 'PORSI KECIL', portionType: 'kecil', startRow: i };
     } else if (headerCell.includes('PORSI BESAR')) {
@@ -324,11 +326,59 @@ function findPortionRanges(rows: unknown[][]): RawBlockRange[] {
     } else if (headerCell.includes('PORSI BUMIL') || headerCell.includes('PORSI BUSUI')) {
       currentRange = { title: 'PORSI BUMIL/BUSUI', portionType: 'bumil_busui', startRow: i };
     } else if (headerCell === 'TOTAL' && currentRange) {
-      ranges.push({
-        ...currentRange,
-        endRow: i,
-      });
+      ranges.push({ ...currentRange, endRow: i });
       currentRange = null;
+    }
+  }
+
+  if (ranges.length > 0) {
+    return ranges;
+  }
+
+  // Strategy 2: Standard MBG Daily Template layout (Column E has Totals at rows 14, 31, 50, etc.)
+  const totals: number[] = [];
+  for (let i = 0; i < Math.min(rows.length, 80); i++) {
+    const val = str(rows[i]?.[COL_SECTION_HEADER]).toUpperCase();
+    if (val === 'TOTAL') {
+      totals.push(i);
+    }
+  }
+
+  if (totals.length >= 1) {
+    // Block 1 is Porsi Kecil: starts row 2, ends at totals[0]
+    ranges.push({
+      title: 'PORSI KECIL',
+      portionType: 'kecil',
+      startRow: 2,
+      endRow: totals[0],
+    });
+
+    if (totals.length >= 2) {
+      // Block 2 is Porsi Besar: starts after %pemenuhan of block 1, ends at totals[1]
+      let startBesar = totals[0] + 1;
+      while (startBesar < totals[1] && (str(rows[startBesar]?.[COL_SECTION_HEADER]).startsWith('%') || !str(rows[startBesar]?.[COL_BAHAN_GIZI]))) {
+        startBesar++;
+      }
+      ranges.push({
+        title: 'PORSI BESAR',
+        portionType: 'besar',
+        startRow: startBesar,
+        endRow: totals[1],
+      });
+
+      if (totals.length >= 3) {
+        // Block 3 is Ompreng Balita: starts after %pemenuhan of block 2, ends at totals[2]
+        let startBalita = totals[1] + 1;
+        while (startBalita < totals[2] && (str(rows[startBalita]?.[COL_SECTION_HEADER]).startsWith('%') || !str(rows[startBalita]?.[COL_BAHAN_GIZI]))) {
+          startBalita++;
+        }
+        ranges.push({
+          title: 'PORSI BALITA',
+          portionType: 'balita',
+          startRow: startBalita,
+          endRow: totals[2],
+        });
+      }
     }
   }
 
@@ -341,22 +391,32 @@ export function parseProductionSheetRows(
   rows: unknown[][],
   batchId: string,
   tanggal: string,
-  sheetDayName: string
+  sheetDayName: string,
+  workbook?: unknown
 ): Omit<MbgProductionDailyReport, 'id'> {
   if (!rows || rows.length < 10) {
     return createEmptyReport(batchId, tanggal, sheetDayName);
   }
 
   // 1. Extract PM counts from top-left block
-  const pmOmprengKecil = num(rows[0]?.[COL_PM_COUNT1]);
-  const pmOmprengBesar = num(rows[1]?.[COL_PM_COUNT1]);
-  const pmBalita = num(rows[2]?.[COL_PM_COUNT1]);
-  const pmBumil = num(rows[3]?.[COL_PM_COUNT1]);
+  let pmOmprengKecil = num(rows[0]?.[COL_PM_COUNT1]);
+  let pmOmprengBesar = num(rows[1]?.[COL_PM_COUNT1]);
+  let pmBalita = num(rows[2]?.[COL_PM_COUNT1]);
+  let pmBumil = num(rows[3]?.[COL_PM_COUNT1]);
+
+  for (let r = 0; r < 6; r++) {
+    const lbl = str(rows[r]?.[COL_PM_LABEL]).toUpperCase();
+    const count = num(rows[r]?.[COL_PM_COUNT1]) || num(rows[r]?.[COL_PM_COUNT2]);
+    if (lbl.includes('KECIL') && count > 0) pmOmprengKecil = count;
+    if (lbl.includes('BESAR') && count > 0) pmOmprengBesar = count;
+    if (lbl.includes('BALITA') && count > 0) pmBalita = count;
+    if ((lbl.includes('BUMIL') || lbl.includes('BUSUI')) && count > 0) pmBumil = count;
+  }
 
   // 2. Extract Menu List
   const menuList = extractMenuList(rows);
 
-  // 3. Find and parse 4 portion blocks
+  // 3. Find and parse portion blocks
   const ranges = findPortionRanges(rows);
 
   const rangeKecil = ranges.find((r) => r.portionType === 'kecil');
@@ -372,11 +432,11 @@ export function parseProductionSheetRows(
     ? parsePortionBlock(rows, rangeBesar, menuList, pmOmprengBesar)
     : createEmptyPortionData('besar', 'PORSI BESAR');
 
-  const porsiBalita = rangeBalita
+  let porsiBalita = rangeBalita
     ? parsePortionBlock(rows, rangeBalita, menuList, pmBalita)
     : createEmptyPortionData('balita', 'PORSI BALITA');
 
-  const porsiBumilBusui = rangeBumil
+  let porsiBumilBusui = rangeBumil
     ? parsePortionBlock(rows, rangeBumil, menuList, pmBumil)
     : createEmptyPortionData('bumil_busui', 'PORSI BUMIL/BUSUI');
 
@@ -393,127 +453,373 @@ export function parseProductionSheetRows(
     }
   }
 
-  // 4. Parse Menu 3B Keringan (Col AG - AQ)
-  const keringanItems: {
+  // 4. Parse Menu 3B Keringan (Bumil & Balita) from Col AM (38)
+  const bumilKeringanItems: {
     item: string;
     qtyPcs: number;
     qty: number;
     satuan: string;
-    hargaSatuan?: number;
-    totalHarga?: number;
+    energi: number;
+    protein: number;
+    lemak: number;
+    karbo: number;
+    serat: number;
+    hargaSatuan: number;
+    totalHarga: number;
   }[] = [];
 
-  for (let i = 2; i < Math.min(rows.length, 35); i++) {
-    const itemName = str(rows[i]?.[COL_KERING_ITEM]);
-    if (
-      itemName &&
-      itemName.toLowerCase() !== 'list bahan keringan' &&
-      itemName.toLowerCase() !== 'item' &&
-      itemName.toLowerCase() !== 'total' &&
-      !itemName.toLowerCase().includes('bumil') &&
-      !itemName.toLowerCase().includes('balita')
-    ) {
-      const qtyPcs = num(rows[i]?.[COL_KERING_KEBUTUHAN]) || num(rows[i]?.[COL_KERING_QTY_PCS]) || 1;
-      const hargaSatuan = num(rows[i]?.[COL_KERING_HARGA_SATUAN]);
-      const totalHarga = num(rows[i]?.[COL_KERING_TOTAL]) || qtyPcs * hargaSatuan;
+  const balitaKeringanItems: {
+    item: string;
+    qtyPcs: number;
+    qty: number;
+    satuan: string;
+    energi: number;
+    protein: number;
+    lemak: number;
+    karbo: number;
+    serat: number;
+    hargaSatuan: number;
+    totalHarga: number;
+  }[] = [];
 
-      keringanItems.push({
+  let current3bGroup: 'bumil' | 'balita' | null = null;
+  for (let r = 2; r < Math.min(rows.length, 35); r++) {
+    const row = rows[r] || [];
+    const label = str(row[COL_KERING_ITEM]).toUpperCase();
+
+    if (label.includes('BUMIL') && !label.includes('%')) {
+      current3bGroup = 'bumil';
+      const count = num(row[COL_KERING_QTY_PCS]);
+      if (count > 0) pmBumil = count;
+      continue;
+    } else if (label.includes('BALITA') && !label.includes('%')) {
+      current3bGroup = 'balita';
+      const count = num(row[COL_KERING_QTY_PCS]);
+      if (count > 0) pmBalita = count;
+      continue;
+    } else if (label === 'TOTAL') {
+      current3bGroup = null;
+      continue;
+    }
+
+    const itemName = str(row[COL_KERING_ITEM]);
+    if (itemName && current3bGroup && !itemName.startsWith('%') && itemName.toLowerCase() !== 'item') {
+      const qtyPcs = num(row[COL_KERING_QTY_PCS]) || 1;
+      const energi = num(row[COL_KERING_ENERGI]);
+      const protein = num(row[COL_KERING_PROTEIN]);
+      const lemak = num(row[COL_KERING_LEMAK]);
+      const karbo = num(row[COL_KERING_KARBO]);
+      const serat = num(row[COL_KERING_SERAT]);
+      const kebutuhan = num(row[COL_KERING_KEBUTUHAN]) || qtyPcs;
+      const hargaSatuan = num(row[COL_KERING_HARGA_SATUAN]);
+      const totalHarga = num(row[COL_KERING_TOTAL]) || kebutuhan * hargaSatuan;
+
+      const itemObj = {
         item: itemName,
         qtyPcs,
-        qty: qtyPcs,
+        qty: kebutuhan,
         satuan: 'pcs',
+        energi,
+        protein,
+        lemak,
+        karbo,
+        serat,
         hargaSatuan,
         totalHarga,
-      });
+      };
+
+      if (current3bGroup === 'bumil') {
+        bumilKeringanItems.push(itemObj);
+      } else {
+        balitaKeringanItems.push(itemObj);
+      }
     }
+  }
+
+  // Populate porsiBumilBusui from Keringan items if empty
+  if (porsiBumilBusui.nutritionItems.length === 0 && bumilKeringanItems.length > 0) {
+    const totalHargaBumil = bumilKeringanItems.reduce((s, it) => s + it.totalHarga, 0);
+    porsiBumilBusui = {
+      portionType: 'bumil_busui',
+      portionTitle: 'PORSI BUMIL/BUSUI',
+      pmCount: pmBumil || 0,
+      menuList: ['Paket Sehat 3B Bumil & Busui'],
+      nutritionItems: bumilKeringanItems.map((it) => ({
+        menuName: 'Paket Sehat 3B Bumil',
+        rincianBahan: it.item,
+        beratBersih: 0,
+        energi: it.energi,
+        protein: it.protein,
+        lemak: it.lemak,
+        karbohidrat: it.karbo,
+        serat: it.serat,
+      })),
+      bahanItems: bumilKeringanItems.map((it) => ({
+        rincianBahan: it.item,
+        hargaBahan: it.hargaSatuan,
+        bddPercent: 100,
+        beratKotor: it.qty,
+        totalGml: it.qty,
+        sparePercent: 0,
+        kebutuhan: it.qty,
+        satuan: it.satuan,
+        harga: it.totalHarga,
+      })),
+      bumbuItems: [],
+      totalGizi: {
+        beratBersih: 0,
+        energi: bumilKeringanItems.reduce((s, it) => s + it.energi, 0),
+        protein: bumilKeringanItems.reduce((s, it) => s + it.protein, 0),
+        lemak: bumilKeringanItems.reduce((s, it) => s + it.lemak, 0),
+        karbohidrat: bumilKeringanItems.reduce((s, it) => s + it.karbo, 0),
+        serat: bumilKeringanItems.reduce((s, it) => s + it.serat, 0),
+      },
+      akgMetrics: {},
+      totalBelanjaBahan: totalHargaBumil,
+      hargaBahanPerPorsi: pmBumil > 0 ? totalHargaBumil / pmBumil : 0,
+      totalBelanjaBumbu: 0,
+      hargaBumbuPerPorsi: 0,
+      totalBelanjaOverall: totalHargaBumil,
+      hargaPerPorsiOverall: pmBumil > 0 ? totalHargaBumil / pmBumil : 0,
+    };
+  }
+
+  // Populate porsiBalita from Keringan items if empty
+  if (porsiBalita.nutritionItems.length === 0 && balitaKeringanItems.length > 0) {
+    const totalHargaBalita = balitaKeringanItems.reduce((s, it) => s + it.totalHarga, 0);
+    porsiBalita = {
+      portionType: 'balita',
+      portionTitle: 'PORSI BALITA',
+      pmCount: pmBalita || 0,
+      menuList: ['Paket Sehat 3B Balita'],
+      nutritionItems: balitaKeringanItems.map((it) => ({
+        menuName: 'Paket Sehat 3B Balita',
+        rincianBahan: it.item,
+        beratBersih: 0,
+        energi: it.energi,
+        protein: it.protein,
+        lemak: it.lemak,
+        karbohidrat: it.karbo,
+        serat: it.serat,
+      })),
+      bahanItems: balitaKeringanItems.map((it) => ({
+        rincianBahan: it.item,
+        hargaBahan: it.hargaSatuan,
+        bddPercent: 100,
+        beratKotor: it.qty,
+        totalGml: it.qty,
+        sparePercent: 0,
+        kebutuhan: it.qty,
+        satuan: it.satuan,
+        harga: it.totalHarga,
+      })),
+      bumbuItems: [],
+      totalGizi: {
+        beratBersih: 0,
+        energi: balitaKeringanItems.reduce((s, it) => s + it.energi, 0),
+        protein: balitaKeringanItems.reduce((s, it) => s + it.protein, 0),
+        lemak: balitaKeringanItems.reduce((s, it) => s + it.lemak, 0),
+        karbohidrat: balitaKeringanItems.reduce((s, it) => s + it.karbo, 0),
+        serat: balitaKeringanItems.reduce((s, it) => s + it.serat, 0),
+      },
+      akgMetrics: {},
+      totalBelanjaBahan: totalHargaBalita,
+      hargaBahanPerPorsi: pmBalita > 0 ? totalHargaBalita / pmBalita : 0,
+      totalBelanjaBumbu: 0,
+      hargaBumbuPerPorsi: 0,
+      totalBelanjaOverall: totalHargaBalita,
+      hargaPerPorsiOverall: pmBalita > 0 ? totalHargaBalita / pmBalita : 0,
+    };
   }
 
   const paketSehat3b = {
     balitaCount: pmBalita || 0,
     bumilBusuiCount: pmBumil || 0,
-    keringanItems,
+    keringanItems: [...bumilKeringanItems, ...balitaKeringanItems],
   };
 
-  // 5. Parse PO Rows / Logistik Kedatangan (Col BE - BJ)
-  const poRows: MbgPoReportRow[] = [];
-  for (let i = 1; i < Math.min(rows.length, 50); i++) {
-    const supplier = str(rows[i]?.[COL_PO_SUPPLIER]);
-    const item = str(rows[i]?.[COL_PO_ITEM]);
-    if (
-      supplier &&
-      item &&
-      item.toLowerCase() !== 'list pesanan bahan' &&
-      supplier.toLowerCase() !== 'supplier'
-    ) {
-      poRows.push({
-        supplier,
-        item,
-        jamKedatangan: str(rows[i]?.[COL_PO_JAM]) || '06:00',
-        jumlah: num(rows[i]?.[COL_PO_QTY]),
-        satuan: str(rows[i]?.[COL_PO_SATUAN]) || 'kg',
-        keterangan: str(rows[i]?.[COL_PO_KET]) || 'Sesuai',
-      });
-    }
-  }
+  // 5. Extract Sekolah Yang Dikirim
+  const sekolahList: { nama: string; murid: number; guru: number }[] = [];
 
-  // Fallback: If Col BE-BJ was empty, aggregate all bahan items from porsi kecil & besar
-  if (poRows.length === 0) {
-    const allBahan = [
-      ...porsiKecil.bahanItems,
-      ...porsiBesar.bahanItems,
-      ...porsiBalita.bahanItems,
-      ...porsiBumilBusui.bahanItems,
-    ];
-    const uniqueBahan = new Map<string, { bahan: string; qty: number; satuan: string; harga: number; total: number }>();
-
-    for (const b of allBahan) {
-      if (!uniqueBahan.has(b.rincianBahan)) {
-        uniqueBahan.set(b.rincianBahan, {
-          bahan: b.rincianBahan,
-          qty: b.kebutuhan,
-          satuan: b.satuan,
-          harga: b.hargaBahan,
-          total: b.harga,
-        });
-      } else {
-        const exist = uniqueBahan.get(b.rincianBahan)!;
-        exist.qty += b.kebutuhan;
-        exist.total += b.harga;
+  // Find "Sekolah Yang Dikirim" header dynamically across columns in rows 0-5
+  let colSekolahNama = -1;
+  let rowSekolahHeader = -1;
+  for (let r = 0; r < Math.min(rows.length, 6); r++) {
+    const row = rows[r] || [];
+    for (let c = 0; c < row.length; c++) {
+      const cellVal = str(row[c]).toLowerCase();
+      if (cellVal.includes('sekolah') && cellVal.includes('dikirim')) {
+        colSekolahNama = c;
+        rowSekolahHeader = r;
+        break;
       }
     }
+    if (colSekolahNama !== -1) break;
+  }
 
-    for (const item of uniqueBahan.values()) {
-      poRows.push({
-        supplier: 'Koperasi Al Umanaa Sejahtera Mandiri',
-        item: item.bahan,
-        jamKedatangan: '06:00',
-        jumlah: Math.round(item.qty * 10) / 10,
-        satuan: item.satuan,
-        keterangan: 'Sesuai',
+  if (colSekolahNama !== -1) {
+    const startR = rowSekolahHeader + 2; // skip header and 'Murid'/'Guru' subheader
+    for (let r = startR; r < Math.min(rows.length, startR + 40); r++) {
+      const row = rows[r] || [];
+      const nama = str(row[colSekolahNama]);
+      if (nama && !nama.toLowerCase().includes('total') && !nama.toLowerCase().includes('murid')) {
+        sekolahList.push({
+          nama,
+          murid: num(row[colSekolahNama + 1]),
+          guru: num(row[colSekolahNama + 2]),
+        });
+      }
+    }
+  } else {
+    // Fallback: check fixed COL_SEKOLAH_NAMA
+    for (let r = 2; r < Math.min(rows.length, 50); r++) {
+      const row = rows[r] || [];
+      const nama = str(row[COL_SEKOLAH_NAMA]);
+      if (nama && nama !== 'Sekolah Yang Dikirim:' && !nama.toLowerCase().includes('murid') && !nama.toLowerCase().includes('total')) {
+        sekolahList.push({
+          nama,
+          murid: num(row[COL_SEKOLAH_MURID]),
+          guru: num(row[COL_SEKOLAH_GURU]),
+        });
+      }
+    }
+  }
+
+  // Fallback: if not found in current sheet, check workbook 'Penerima Manfaat' sheets
+  if (sekolahList.length === 0 && workbook && typeof workbook === 'object' && 'Sheets' in (workbook as Record<string, unknown>)) {
+    const wb = workbook as { Sheets: Record<string, unknown> };
+    const pmSheetNames = Object.keys(wb.Sheets).filter((name) =>
+      name.toLowerCase().includes('penerima manfaat')
+    );
+    for (const pmName of pmSheetNames) {
+      const pmWs = wb.Sheets[pmName];
+      const pmRows = XLSX.utils.sheet_to_json(pmWs as XLSX.WorkSheet, { header: 1 }) as unknown[][];
+      for (let r = 1; r < Math.min(pmRows.length, 35); r++) {
+        const row = pmRows[r] || [];
+        const no = row[0];
+        const nama = str(row[1]);
+        const murid = num(row[2]);
+        const guru = num(row[3]);
+        if (
+          nama &&
+          !nama.toLowerCase().includes('total') &&
+          !nama.toLowerCase().includes('porsi') &&
+          !nama.toLowerCase().includes('paud/tk') &&
+          !nama.toLowerCase().includes('sd/mi') &&
+          !nama.toLowerCase().includes('smp/mts') &&
+          !nama.toLowerCase().includes('sma/ma') &&
+          (typeof no === 'number' || (typeof no === 'string' && !isNaN(Number(no))))
+        ) {
+          sekolahList.push({ nama, murid, guru });
+        }
+      }
+      if (sekolahList.length > 0) break;
+    }
+  }
+
+  // 6. Extract Production Notes / Catatan Dapur dynamically
+  const productionNotes: string[] = [];
+  let colNotes = -1;
+  let rowNotes = -1;
+  for (let r = 0; r < Math.min(rows.length, 15); r++) {
+    const row = rows[r] || [];
+    for (let c = 0; c < row.length; c++) {
+      const cellVal = str(row[c]).toLowerCase();
+      if (cellVal.startsWith('catatan') || cellVal.includes('catatan :') || cellVal.includes('evaluasi produksi')) {
+        colNotes = c;
+        rowNotes = r;
+        break;
+      }
+    }
+    if (colNotes !== -1) break;
+  }
+
+  if (colNotes !== -1) {
+    for (let r = rowNotes; r < Math.min(rows.length, rowNotes + 15); r++) {
+      const note = str(rows[r]?.[colNotes]);
+      if (note && !productionNotes.includes(note)) {
+        productionNotes.push(note);
+      }
+    }
+  } else {
+    // Fallback to COL_EVAL_PRODUKSI
+    for (let r = 0; r < Math.min(rows.length, 50); r++) {
+      const note = str(rows[r]?.[COL_EVAL_PRODUKSI]);
+      if (note && !note.toLowerCase().includes('catatan') && !productionNotes.includes(note)) {
+        productionNotes.push(note);
+      }
+    }
+  }
+
+  // 7. Extract PO Rows / Logistik Kedatangan with Real Suppliers
+  const rawPoItems: { supplier: string; item: string; jumlah: number; satuan: string; harga: number }[] = [];
+
+  for (let r = 2; r < Math.min(rows.length, 60); r++) {
+    const row = rows[r] || [];
+    const bSup = str(row[COL_SUPPLIER_BAHAN]);
+    const bName = str(row[COL_BAHAN_ORDER]);
+    if (bName && bName.toLowerCase() !== 'rincian bahan' && bName.toLowerCase() !== 'total pembelanjaan') {
+      rawPoItems.push({
+        supplier: bSup || 'Koperasi Al Umanaa',
+        item: bName,
+        jumlah: num(row[COL_KEBUTUHAN_BAHAN]),
+        satuan: str(row[COL_SATUAN_BAHAN]) || 'kg',
+        harga: num(row[COL_HARGA_TOTAL_BAHAN]),
+      });
+    }
+
+    const bmSup = str(row[COL_BUMBU_SUPPLIER]);
+    const bmName = str(row[COL_BUMBU_NAMA]);
+    if (bmName && bmName.toLowerCase() !== 'jenis bumbu' && bmName.toLowerCase() !== 'total pembelanjaan bumbu') {
+      rawPoItems.push({
+        supplier: bmSup || 'Supplier Bumbu',
+        item: bmName,
+        jumlah: num(row[COL_BUMBU_KEBUTUHAN]),
+        satuan: str(row[COL_BUMBU_SATUAN]) || 'kg',
+        harga: num(row[COL_BUMBU_TOTAL_HARGA]),
       });
     }
   }
 
-  // 6. Realisasi Pembelian Rows
-  const realisasiPembelianRows: MbgRealisasiPembelianRow[] = poRows.map((po) => {
-    // Find matching bahan price if available
-    const matchedBahan = [
-      ...porsiKecil.bahanItems,
-      ...porsiBesar.bahanItems,
-    ].find((b) => b.rincianBahan.toLowerCase() === po.item.toLowerCase());
+  for (const it of paketSehat3b.keringanItems) {
+    rawPoItems.push({
+      supplier: 'Supplier Keringan 3B',
+      item: it.item,
+      jumlah: it.qty,
+      satuan: it.satuan,
+      harga: it.totalHarga || 0,
+    });
+  }
 
-    const hargaPerUnit = matchedBahan ? matchedBahan.hargaBahan : 0;
-    const totalHarga = hargaPerUnit > 0 ? po.jumlah * hargaPerUnit : matchedBahan ? matchedBahan.harga : 0;
+  // Consolidate duplicates by supplier + item
+  const poMap = new Map<string, MbgPoReportRow>();
+  for (const entry of rawPoItems) {
+    const key = `${entry.supplier.toLowerCase()}___${entry.item.toLowerCase()}`;
+    if (!poMap.has(key)) {
+      poMap.set(key, {
+        supplier: entry.supplier,
+        item: entry.item,
+        jamKedatangan: '06:00',
+        jumlah: Math.round(entry.jumlah * 100) / 100,
+        satuan: entry.satuan,
+        keterangan: 'Sesuai Spesifikasi',
+      });
+    } else {
+      const exist = poMap.get(key)!;
+      exist.jumlah = Math.round((exist.jumlah + entry.jumlah) * 100) / 100;
+    }
+  }
+  const poRows: MbgPoReportRow[] = Array.from(poMap.values());
 
-    return {
-      tanggal: tanggal || '',
-      namaBahan: po.item,
-      kuantitas: po.jumlah,
-      satuan: po.satuan,
-      hargaPerUnit,
-      totalHarga,
-    };
-  });
+  // 8. Realisasi Pembelian Rows
+  const realisasiPembelianRows: MbgRealisasiPembelianRow[] = rawPoItems.map((item) => ({
+    tanggal: tanggal || '',
+    namaBahan: item.item,
+    kuantitas: item.jumlah,
+    satuan: item.satuan,
+    hargaPerUnit: item.jumlah > 0 ? Math.round(item.harga / item.jumlah) : 0,
+    totalHarga: item.harga,
+  }));
 
   const totalPengeluaran =
     porsiKecil.totalBelanjaOverall +
@@ -522,7 +828,7 @@ export function parseProductionSheetRows(
     porsiBumilBusui.totalBelanjaOverall ||
     realisasiPembelianRows.reduce((s, r) => s + r.totalHarga, 0);
 
-  // 7. Inspection Form
+  // 9. Inspection Form
   const inspectionRows: MbgInspectionFormRow[] = poRows.map((po) => ({
     jenisBahan: po.item,
     banyaknya: po.jumlah,
@@ -532,7 +838,7 @@ export function parseProductionSheetRows(
     notes: 'Kualitas Segar & Sesuai Spesifikasi',
   }));
 
-  // 8. Food Waste Logs
+  // 10. Food Waste Logs
   const wasteLogs: MbgWasteLogRow[] = (menuList.length > 0 ? menuList : ['Nasi Putih', 'Lauk Hewani', 'Lauk Nabati', 'Sayuran', 'Buah']).map(
     (name, idx) => ({
       no: idx + 1,
@@ -567,6 +873,8 @@ export function parseProductionSheetRows(
       officerTitle: 'Kepala Satuan Pelayanan Pemenuhan Gizi',
     },
     wasteLogs,
+    sekolahList,
+    productionNotes,
     createdBy: '',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

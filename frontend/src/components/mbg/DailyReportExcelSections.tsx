@@ -15,13 +15,25 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
+  School,
 } from 'lucide-react';
+
+export type MbgDailyReportSubTab =
+  | 'kecil'
+  | 'besar'
+  | 'balita'
+  | 'bumil'
+  | 'paket3b'
+  | 'po'
+  | 'qc'
+  | 'waste'
+  | 'sekolah';
 
 interface DailyReportExcelSectionsProps {
   report?: MbgProductionDailyReport | null;
-  defaultSubTab?: 'kecil' | 'besar' | 'balita' | 'bumil' | 'paket3b' | 'po' | 'qc' | 'waste';
-  activeSubTab?: 'kecil' | 'besar' | 'balita' | 'bumil' | 'paket3b' | 'po' | 'qc' | 'waste';
-  onSubTabChange?: (tab: 'kecil' | 'besar' | 'balita' | 'bumil' | 'paket3b' | 'po' | 'qc' | 'waste') => void;
+  defaultSubTab?: MbgDailyReportSubTab;
+  activeSubTab?: MbgDailyReportSubTab;
+  onSubTabChange?: (tab: MbgDailyReportSubTab) => void;
 }
 
 function formatRp(val: number | undefined | null): string {
@@ -41,14 +53,14 @@ export function DailyReportExcelSections({
   activeSubTab,
   onSubTabChange,
 }: DailyReportExcelSectionsProps) {
-  const [internalSubTab, setInternalSubTab] = useState<'kecil' | 'besar' | 'balita' | 'bumil' | 'paket3b' | 'po' | 'qc' | 'waste'>(defaultSubTab);
+  const [internalSubTab, setInternalSubTab] = useState<MbgDailyReportSubTab>(defaultSubTab);
 
   if (!report) {
     return null;
   }
 
   const currentTab = activeSubTab || internalSubTab;
-  const setTab = (tab: 'kecil' | 'besar' | 'balita' | 'bumil' | 'paket3b' | 'po' | 'qc' | 'waste') => {
+  const setTab = (tab: MbgDailyReportSubTab) => {
     if (onSubTabChange) {
       onSubTabChange(tab);
     } else {
@@ -121,6 +133,18 @@ export function DailyReportExcelSections({
       itemCount: (report.wasteLogs || []).length,
       color: 'slate',
     },
+    ...(report.sekolahList && report.sekolahList.length > 0
+      ? [
+          {
+            key: 'sekolah' as const,
+            label: 'Distribusi Sekolah / PM',
+            icon: School,
+            countBadge: `${report.sekolahList.length} lembaga`,
+            itemCount: report.sekolahList.length,
+            color: 'emerald',
+          },
+        ]
+      : []),
   ];
 
   // Helper renderer for portion data (Kecil, Besar, Balita, Bumil)
@@ -430,6 +454,30 @@ export function DailyReportExcelSections({
 
   return (
     <div className="space-y-4 font-['Hanken_Grotesk']">
+      {/* Production Notes / Catatan Dapur Banner dari Excel */}
+      {report.productionNotes && report.productionNotes.length > 0 && (
+        <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-4 shadow-2xs">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-amber-900">
+                  Catatan / Evaluasi Produksi Dapur
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200/80 text-amber-900">
+                  Dari Lembar Excel
+                </span>
+              </div>
+              <ul className="text-xs text-amber-800 space-y-1 list-disc pl-4 font-medium">
+                {report.productionNotes.map((note, idx) => (
+                  <li key={idx}>{note}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* NAVBAR / TAB SELECTION BAR */}
       <div className="bg-slate-900 p-1.5 rounded-2xl shadow-sm border border-slate-800">
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
@@ -839,6 +887,104 @@ export function DailyReportExcelSections({
             </div>
           </div>
         )}
+
+        {/* TAB 9: DISTRIBUSI SEKOLAH / SASARAN PENERIMA */}
+        {currentTab === 'sekolah' && (() => {
+          const list = report.sekolahList || [];
+          const totalMurid = list.reduce((s, it) => s + (it.murid || 0), 0);
+          const totalGuru = list.reduce((s, it) => s + (it.guru || 0), 0);
+          const totalPorsi = totalMurid + totalGuru;
+
+          return (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h4 className="text-sm font-black text-slate-900">
+                    Daftar Distribusi Sekolah & Sasaran Penerima Manfaat
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Rincian alokasi porsi yang dikirimkan ke masing-masing sekolah, lembaga, dan posyandu sesuai dokumen Excel MBG.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold">
+                    {list.length} Titik Sasaran
+                  </span>
+                  <span className="px-3 py-1 bg-slate-100 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold">
+                    Total Murid: {totalMurid.toLocaleString('id-ID')}
+                  </span>
+                  <span className="px-3 py-1 bg-slate-100 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold">
+                    Total Guru: {totalGuru.toLocaleString('id-ID')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs">
+                <div className="px-4 py-2.5 bg-slate-900 text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between">
+                  <span>Rincian Distribusi Lembaga / Sekolah Penerima</span>
+                  <span className="text-amber-300 text-xs font-bold">
+                    Grand Total Porsi: {totalPorsi.toLocaleString('id-ID')}
+                  </span>
+                </div>
+                {!list.length ? (
+                  <div className="p-6 text-center text-xs text-slate-500 italic bg-slate-50/50">
+                    Tidak ada data daftar distribusi sekolah pada laporan harian ini.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+                          <th className="px-3 py-2.5 w-12 text-center">No</th>
+                          <th className="px-4 py-2.5">Nama Sekolah / Sasaran Penerima</th>
+                          <th className="px-3 py-2.5 text-center">Porsi Murid / Balita</th>
+                          <th className="px-3 py-2.5 text-center">Porsi Guru / Petugas</th>
+                          <th className="px-3 py-2.5 text-right font-black">Total Porsi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {list.map((item, idx) => {
+                          const itemTotal = (item.murid || 0) + (item.guru || 0);
+                          return (
+                            <tr key={idx} className="hover:bg-slate-50 transition-colors font-medium text-slate-800">
+                              <td className="px-3 py-2 text-center text-slate-400 text-[11px]">{idx + 1}</td>
+                              <td className="px-4 py-2 font-bold text-slate-900">{item.nama}</td>
+                              <td className="px-3 py-2 text-center font-bold text-emerald-800 bg-emerald-50/30">
+                                {item.murid ? item.murid.toLocaleString('id-ID') : '-'}
+                              </td>
+                              <td className="px-3 py-2 text-center font-medium text-slate-700">
+                                {item.guru ? item.guru.toLocaleString('id-ID') : '-'}
+                              </td>
+                              <td className="px-3 py-2 text-right font-black text-slate-900 bg-slate-50">
+                                {itemTotal.toLocaleString('id-ID')}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-900 text-white font-black text-xs border-t-2 border-slate-900">
+                          <td colSpan={2} className="px-4 py-3 uppercase tracking-wider">
+                            Total Keseluruhan ({list.length} Lembaga):
+                          </td>
+                          <td className="px-3 py-3 text-center text-emerald-300 font-black">
+                            {totalMurid.toLocaleString('id-ID')}
+                          </td>
+                          <td className="px-3 py-3 text-center text-slate-200">
+                            {totalGuru.toLocaleString('id-ID')}
+                          </td>
+                          <td className="px-3 py-3 text-right text-amber-300 font-extrabold text-sm">
+                            {totalPorsi.toLocaleString('id-ID')}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
