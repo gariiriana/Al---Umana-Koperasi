@@ -1445,7 +1445,7 @@ export function DailyReportExcelSections({
               )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Format persis sesuai form excel yang di-import: Supplier, List Pesanan Bahan, Jumlah, Item/Satuan, Harga Satuan, Total Harga.
+              Format persis sesuai form excel yang di-import: Supplier, List Pesanan Bahan, Jumlah, Item/Satuan, Total Harga.
             </p>
           </div>
 
@@ -1544,7 +1544,6 @@ export function DailyReportExcelSections({
                     <th className="px-4 py-2 border-r border-amber-300">List Pesanan Bahan</th>
                     <th className="px-3 py-2 text-center border-r border-amber-300 whitespace-nowrap">Jumlah</th>
                     <th className="px-3 py-2 text-center border-r border-amber-300 whitespace-nowrap">Item (Satuan)</th>
-                    <th className="px-3 py-2 text-right border-r border-amber-300 whitespace-nowrap">Harga Satuan</th>
                     <th className="px-4 py-2 text-right whitespace-nowrap font-black">Total Harga</th>
                     {isEditing && (
                       <th className="px-2 py-2 text-center w-8 bg-red-100 text-red-900 whitespace-nowrap">Aksi</th>
@@ -1592,9 +1591,6 @@ export function DailyReportExcelSections({
                           </td>
                           <td className="px-3 py-2 text-center font-bold text-slate-600 border-r border-slate-100">
                             {po.satuan || 'kg'}
-                          </td>
-                          <td className="px-3 py-2 text-right text-slate-600 border-r border-slate-100 whitespace-nowrap">
-                            {po.hargaSatuan ? formatRp(po.hargaSatuan) : '-'}
                           </td>
                           <td className="px-4 py-2 text-right font-black text-emerald-900 whitespace-nowrap bg-emerald-50/20">
                             {rowTotal > 0 ? formatRp(rowTotal) : '-'}
@@ -1657,15 +1653,6 @@ export function DailyReportExcelSections({
                         <td className="px-2 py-1.5 text-right">
                           <input
                             type="number"
-                            value={po.hargaSatuan || ''}
-                            onChange={(e) => updateSupplierCell(idx, 'hargaSatuan', e.target.value)}
-                            placeholder="Harga"
-                            className="w-24 px-1.5 py-1 text-right bg-white border border-amber-300 rounded text-[11px] focus:outline-none"
-                          />
-                        </td>
-                        <td className="px-2 py-1.5 text-right">
-                          <input
-                            type="number"
                             value={rowTotal || ''}
                             onChange={(e) => updateSupplierCell(idx, 'totalHarga', Number(e.target.value))}
                             className="w-28 px-1.5 py-1 text-right bg-emerald-50 border border-emerald-300 rounded text-[11px] font-black text-emerald-900 focus:outline-none"
@@ -1687,7 +1674,7 @@ export function DailyReportExcelSections({
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-900 text-white font-black text-xs border-t-2 border-slate-900">
-                    <td colSpan={7} className="px-4 py-3 uppercase tracking-wider text-right">
+                    <td colSpan={5} className="px-4 py-3 uppercase tracking-wider text-right">
                       Grand Total Belanja Supplier:
                     </td>
                     <td className="px-4 py-3 text-right font-extrabold text-sm text-amber-300 bg-slate-800 whitespace-nowrap">

@@ -1081,7 +1081,6 @@ export function parseProductionSheetRows(
     let colItem = c + 1;
     let colJumlah = c + 3;
     let colSatuan = c + 4;
-    let colHargaSatuan = c + 6;
     let colTotalHarga = c + 7;
 
     const headRow = rows[dedicatedSupplierRow] || [];
@@ -1093,8 +1092,6 @@ export function parseProductionSheetRows(
         colJumlah = colIdx;
       } else if (headerText.includes('satuan') && !headerText.includes('harga')) {
         colSatuan = colIdx;
-      } else if (headerText.includes('harga satuan') || headerText.includes('harga / unit') || (headerText.includes('harga') && !headerText.includes('total') && colIdx > c + 4)) {
-        colHargaSatuan = colIdx;
       } else if (headerText.includes('total harga') || (headerText.includes('total') && colIdx > c + 5)) {
         colTotalHarga = colIdx;
       }
@@ -1120,24 +1117,11 @@ export function parseProductionSheetRows(
 
       const satuan = str(row[colSatuan]) || 'kg';
 
-      let hargaSatuan = num(row[colHargaSatuan]);
-      if ((!hargaSatuan || hargaSatuan === 0) && ws) {
-        const cellObj = ws[XLSX.utils.encode_cell({ r, c: colHargaSatuan })];
-        if (cellObj?.v != null && cellObj.v !== '' && cellObj.v !== 0) hargaSatuan = num(cellObj.v);
-        else if (cellObj?.w != null && cellObj.w !== '' && cellObj.w !== '0') hargaSatuan = num(cellObj.w);
-      }
-
       let totalHarga = num(row[colTotalHarga]);
       if ((!totalHarga || totalHarga === 0) && ws) {
         const cellObj = ws[XLSX.utils.encode_cell({ r, c: colTotalHarga })];
         if (cellObj?.v != null && cellObj.v !== '' && cellObj.v !== 0) totalHarga = num(cellObj.v);
         else if (cellObj?.w != null && cellObj.w !== '' && cellObj.w !== '0') totalHarga = num(cellObj.w);
-      }
-
-      if (!totalHarga && jumlah > 0 && hargaSatuan > 0) {
-        totalHarga = Math.round(jumlah * hargaSatuan);
-      } else if (!hargaSatuan && totalHarga > 0 && jumlah > 0) {
-        hargaSatuan = Math.round(totalHarga / jumlah);
       }
 
       dedicatedPoRows.push({
@@ -1147,7 +1131,7 @@ export function parseProductionSheetRows(
         jumlah: Math.round(jumlah),
         satuan,
         keterangan: 'Sesuai Spesifikasi',
-        hargaSatuan: hargaSatuan > 0 ? hargaSatuan : 0,
+        hargaSatuan: 0,
         totalHarga: totalHarga > 0 ? totalHarga : 0,
       });
     }
