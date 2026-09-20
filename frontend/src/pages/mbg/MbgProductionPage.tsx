@@ -3,7 +3,6 @@
 // ============================================================================
 
 import { useEffect, useMemo, useState, Fragment } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import {
   Plus, Trash2, FileDown, Calendar, Loader2, CheckCircle2, Search, X, Folder, Send,
   ClipboardList, FileText, FolderOpen, FileUp, Save, Sparkles, FileSpreadsheet, ChevronDown, ChevronUp,
@@ -129,12 +128,26 @@ const standarResep: StandarResep[] = [];
 export function MbgProductionPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const [searchParams, setSearchParams] = useSearchParams();
 
   const [batches, setBatches] = useState<MbgPmBatch[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(() => {
     return new URLSearchParams(window.location.search).get('batchId') || null;
   });
+
+  const handleSelectBatch = (batchId: string | null) => {
+    setSelectedBatchId(batchId);
+    try {
+      const url = new URL(window.location.href);
+      if (batchId) {
+        url.searchParams.set('batchId', batchId);
+      } else {
+        url.searchParams.delete('batchId');
+      }
+      window.history.replaceState(null, '', url.toString());
+    } catch {
+      // ignore
+    }
+  };
   const [entries, setEntries] = useState<MbgPmEntry[]>([]);
   const [nutritionData, setNutritionData] = useState<MbgNutritionEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -311,17 +324,6 @@ export function MbgProductionPage() {
 
         if (finalizedBatches.length > 0) {
           setSelectedBatchId((curr) => {
-            const urlBatchId = searchParams.get('batchId');
-            const urlDate = searchParams.get('date');
-
-            if (urlBatchId && finalizedBatches.some((b) => b.id === urlBatchId)) {
-              return urlBatchId;
-            }
-            if (urlDate) {
-              const matchedByDate = finalizedBatches.find((b) => b.tanggal === urlDate);
-              if (matchedByDate) return matchedByDate.id;
-            }
-
             if (curr && finalizedBatches.some((b) => b.id === curr)) return curr;
             const todayStr = new Date().toISOString().split('T')[0];
             const todayBatch = finalizedBatches.find((b) => b.tanggal === todayStr);
@@ -407,41 +409,39 @@ export function MbgProductionPage() {
 
   // Auto-select batch if none selected: check query param first, then today, then latest
   useEffect(() => {
-    if (batches.length > 0) {
-      const urlBatchId = searchParams.get('batchId');
-      const urlDate = searchParams.get('date');
+    if (batches.length === 0) {
+      setSelectedBatchId(null);
+      return;
+    }
 
-      if (urlBatchId && batches.some((b) => b.id === urlBatchId)) {
-        if (selectedBatchId !== urlBatchId) {
-          setSelectedBatchId(urlBatchId);
-        }
+    // If current selectedBatchId is already valid, do not change it
+    if (selectedBatchId && batches.some((b) => b.id === selectedBatchId)) {
+      return;
+    }
+
+    // Check URL query param
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlBatchId = urlParams.get('batchId');
+    const urlDate = urlParams.get('date');
+
+    if (urlBatchId && batches.some((b) => b.id === urlBatchId)) {
+      handleSelectBatch(urlBatchId);
+      return;
+    }
+
+    if (urlDate) {
+      const matched = batches.find((b) => b.tanggal === urlDate);
+      if (matched) {
+        handleSelectBatch(matched.id);
         return;
       }
-
-      if (urlDate) {
-        const matched = batches.find((b) => b.tanggal === urlDate);
-        if (matched) {
-          if (selectedBatchId !== matched.id) {
-            setSelectedBatchId(matched.id);
-          }
-          return;
-        }
-      }
-
-      if (!selectedBatchId || !batches.some((b) => b.id === selectedBatchId)) {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const todayBatch = batches.find((b) => b.tanggal === todayStr);
-        setSelectedBatchId(todayBatch ? todayBatch.id : batches[0].id);
-      }
     }
-  }, [batches, selectedBatchId, searchParams]);
 
-  // Sync selectedBatchId to URL searchParams
-  useEffect(() => {
-    if (selectedBatchId && searchParams.get('batchId') !== selectedBatchId) {
-      setSearchParams({ batchId: selectedBatchId }, { replace: true });
-    }
-  }, [selectedBatchId, searchParams, setSearchParams]);
+    // Fallback: pick today's batch or latest batch
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayBatch = batches.find((b) => b.tanggal === todayStr);
+    handleSelectBatch(todayBatch ? todayBatch.id : batches[0].id);
+  }, [batches, selectedBatchId]);
 
   // Subscribe all daily reports to track which batches have saved reports
   useEffect(() => {
@@ -2013,7 +2013,7 @@ export function MbgProductionPage() {
                   <div
                     key={b.id}
                     onClick={() => {
-                      setSelectedBatchId(b.id);
+                      handleSelectBatch(b.id);
                       setActiveTab('pm-data');
                     }}
                     className="bg-white rounded-2xl border border-[#E5E7EB] hover:border-amber-300 p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden group hover:-translate-y-0.5"
@@ -2267,7 +2267,7 @@ export function MbgProductionPage() {
                             <button
                               key={b.id}
                               onClick={() => {
-                                setSelectedBatchId(b.id);
+                                handleSelectBatch(b.id);
                                 setIsBatchDropdownOpen(false);
                                 setBatchSearchQuery('');
                               }}
@@ -2339,7 +2339,7 @@ export function MbgProductionPage() {
                       <button
                         key={b.id}
                         type="button"
-                        onClick={() => setSelectedBatchId(b.id)}
+                        onClick={() => handleSelectBatch(b.id)}
                         className="p-3.5 bg-slate-50 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-xl transition-all text-left cursor-pointer group shadow-sm"
                       >
                         <div className="flex items-center justify-between mb-1">
