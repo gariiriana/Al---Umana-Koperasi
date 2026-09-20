@@ -749,7 +749,7 @@ export function DailyReportExcelSections({
                       <tr key={idx} className="hover:bg-slate-50 transition-colors">
                         {/* Gizi Cells */}
                         <td className="px-2 py-1.5 font-bold text-slate-700 border-r border-rose-100/60 whitespace-nowrap bg-rose-50/20">
-                          {idx === 0 ? (data.portionTitle || defaultTitle) : ''}
+                          {nut?.jenisMenu || (idx === 0 ? (data.portionTitle || defaultTitle) : '')}
                         </td>
                         <td className="px-2 py-1.5 font-bold text-slate-900 border-r border-rose-100/60 whitespace-nowrap">
                           {nut?.menuName || ''}

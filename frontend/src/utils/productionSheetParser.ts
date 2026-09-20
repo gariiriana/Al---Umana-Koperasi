@@ -236,23 +236,39 @@ function extractMenuList(rows: unknown[][]): string[] {
   const menuNames: string[] = [];
   const seen = new Set<string>();
 
-  // 1. Scan Column A (rows 7-14)
+  // 1. Scan Column A (rows 5-15)
   for (let i = 5; i <= 15 && i < rows.length; i++) {
-    const name = str(rows[i]?.[COL_PM_LABEL]);
+    let name = str(rows[i]?.[COL_PM_LABEL]);
     if (
       name &&
       !name.toLowerCase().startsWith('pm ') &&
       name.toLowerCase() !== 'ompreng' &&
       name.toLowerCase() !== 'keringan' &&
-      !name.toLowerCase().includes('karbohidrat') &&
-      !name.toLowerCase().includes('protein') &&
-      !name.toLowerCase().includes('sayur') &&
-      !name.toLowerCase().includes('buah') &&
       !name.toLowerCase().includes('note') &&
-      !seen.has(name)
+      !name.toLowerCase().includes('evaluasi')
     ) {
-      menuNames.push(name);
-      seen.add(name);
+      // If label has format "Category : Menu Name" or "Category - Menu Name", strip category prefix
+      const match = name.match(/^(?:karbohidrat|protein\s+hewani|protein\s+nabati|protein|sayur|buah(?:-buahan)?)\s*[:\-–]\s*(.+)$/i);
+      if (match && match[1]) {
+        name = match[1].trim();
+      }
+      const lower = name.toLowerCase();
+      // Skip pure category headers without dish name
+      if (
+        lower === 'karbohidrat' ||
+        lower === 'protein' ||
+        lower === 'protein hewani' ||
+        lower === 'protein nabati' ||
+        lower === 'sayur' ||
+        lower === 'buah' ||
+        lower === 'buah-buahan'
+      ) {
+        continue;
+      }
+      if (!seen.has(lower)) {
+        menuNames.push(name);
+        seen.add(lower);
+      }
     }
   }
 
@@ -264,10 +280,10 @@ function extractMenuList(rows: unknown[][]): string[] {
         name &&
         name.toLowerCase() !== 'menu' &&
         name.toLowerCase() !== 'nama menu' &&
-        !seen.has(name)
+        !seen.has(name.toLowerCase())
       ) {
         menuNames.push(name);
-        seen.add(name);
+        seen.add(name.toLowerCase());
       }
     }
   }
@@ -297,12 +313,29 @@ function parsePortionBlock(
   const nutritionItems: MbgPortionNutritionItem[] = [];
   const bahanItems: MbgPortionBahanItem[] = [];
   const bumbuItems: MbgPortionBumbuItem[] = [];
+  let currentJenisMenu = '';
   let currentMenuName = '';
   let currentMenuBumbu = '';
 
   for (let i = startRow; i < endRow && i < rows.length; i++) {
     const row = rows[i];
     if (!row) continue;
+
+    // Track category in Col E (Jenis Menu: Karbohidrat, Hewani, Nabati, Sayur, Buah)
+    const catCol = str(row[map.colSectionHeader]);
+    if (
+      catCol &&
+      !catCol.toLowerCase().includes('total') &&
+      !catCol.startsWith('%') &&
+      !catCol.toLowerCase().includes('porsi')
+    ) {
+      currentJenisMenu = catCol;
+      // If category transitions to fruit and Col F is blank on this row, reset currentMenuName
+      // so previous dishes (e.g. Sayur Sop or Nasi) do not contaminate fruit row!
+      if (catCol.toLowerCase().includes('buah')) {
+        currentMenuName = '';
+      }
+    }
 
     // Check menu name update in Col F (Gizi) or Col Y (Bumbu)
     const menuCol = str(row[map.colMenuName]);
@@ -321,10 +354,15 @@ function parsePortionBlock(
       bahanGizi.toLowerCase() !== 'rincian bahan' &&
       bahanGizi.toLowerCase() !== 'total'
     ) {
-      const itemMenuName =
-        currentMenuName || currentMenuBumbu || menuList[nutritionItems.length] || bahanGizi;
+      // Determine menu name directly and dynamically from cell data
+      let itemMenuName = menuCol || currentMenuName;
+      if (!itemMenuName) {
+        // If fruit category, or if menu was blank, use bahanGizi (e.g. "Jeruk", "Pisang", etc.)
+        itemMenuName = bahanGizi;
+      }
 
       nutritionItems.push({
+        jenisMenu: currentJenisMenu,
         menuName: itemMenuName,
         rincianBahan: bahanGizi,
         beratBersih: num(row[map.colBeratBersih]),
@@ -743,15 +781,11 @@ export function parseProductionSheetRows(
     ? parsePortionBlock(rows, rangeBumil, menuList, pmBumil, colMap, ws)
     : createEmptyPortionData('bumil_busui', 'PORSI BUMIL/BUSUI');
 
-  // Fill in menu names for porsi kecil if col F was blank
-  if (porsiKecil.nutritionItems.length > 0 && menuList.length > 0) {
-    let menuIdx = 0;
-    let lastAssigned = menuList[0];
-    for (const item of porsiKecil.nutritionItems) {
-      if (!item.menuName || item.menuName === item.rincianBahan) {
-        item.menuName = menuList[menuIdx] || lastAssigned;
-        lastAssigned = item.menuName;
-        if (menuIdx < menuList.length - 1) menuIdx++;
+  // Pure data-driven fallback: only if menuName is completely empty/whitespace, use rincianBahan
+  for (const portion of [porsiKecil, porsiBesar, porsiBalita, porsiBumilBusui]) {
+    for (const item of portion.nutritionItems) {
+      if (!item.menuName || item.menuName.trim() === '') {
+        item.menuName = item.rincianBahan || '-';
       }
     }
   }

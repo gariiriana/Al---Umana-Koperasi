@@ -536,6 +536,7 @@ export interface MbgSubPurchasingTask {
   updatedAt: string;
 }
 export interface MbgPortionNutritionItem {
+  jenisMenu?: string;
   menuName: string;
   rincianBahan: string;
   beratBersih: number;
