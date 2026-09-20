@@ -1546,12 +1546,22 @@ export function MbgArchivePage() {
       {/* Custom Confirm Dialog */}
       <AnimatePresence>
         {confirmState && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 font-['Hanken_Grotesk']">
+          <motion.div
+            key="confirm-modal-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setConfirmState(null);
+            }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 font-['Hanken_Grotesk']"
+          >
             <motion.div
+              key="confirm-modal-dialog"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 relative"
             >
               <div className="flex items-center gap-3 mb-4">
                 <div className={`p-2.5 rounded-xl ${
@@ -1576,6 +1586,7 @@ export function MbgArchivePage() {
               </p>
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={() => setConfirmState(null)}
                   disabled={saving}
                   className="flex-1 py-2.5 rounded-xl border border-[#E5E7EB] text-xs font-bold text-[#6B7280] hover:bg-gray-50 cursor-pointer transition-colors disabled:opacity-50"
@@ -1583,30 +1594,29 @@ export function MbgArchivePage() {
                   Batal
                 </button>
                 <button
-                  disabled={saving}
+                  type="button"
                   onClick={async () => {
                     const fn = confirmState.onConfirm;
-                    await fn();
                     setConfirmState(null);
+                    if (fn) {
+                      try {
+                        await fn();
+                      } catch (err) {
+                        console.error('Error executing confirm action:', err);
+                      }
+                    }
                   }}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                     confirmState.variant === 'danger'
                       ? 'bg-red-600 hover:bg-red-700'
                       : 'bg-[#FBBF24] text-[#111827] hover:bg-[#F59E0B]'
                   }`}
                 >
-                  {saving ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      <span>Menghapus...</span>
-                    </>
-                  ) : (
-                    'Ya, Lanjutkan'
-                  )}
+                  Ya, Lanjutkan
                 </button>
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
