@@ -1,6 +1,6 @@
 // ============================================================================
 // MBG Daily Report PDF Exporter — Landscape Official Layout
-// Badan Gizi Nasional & Koperasi Konsumen Al-Umanaa Mandiri Berkah
+// Badan Gizi Nasional & Koperasi Al Umanaa Sejahtera Mandiri
 // ============================================================================
 
 import jsPDF from 'jspdf';
@@ -128,7 +128,7 @@ const drawLandscapeHeader = (
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(100, 116, 139); // slate 500
-  doc.text(`Tanggal Batch: ${tanggal} • Sasaran Produksi: ${totalPorsi.toLocaleString('id-ID')} Porsi • Koperasi Konsumen Al-Umanaa Mandiri Berkah`, pageW / 2, 22.5, { align: 'center' });
+  doc.text(`Tanggal Batch: ${tanggal} • Sasaran Produksi: ${totalPorsi.toLocaleString('id-ID')} Porsi • Koperasi Al Umanaa Sejahtera Mandiri`, pageW / 2, 22.5, { align: 'center' });
 
   // Dividing line
   doc.setDrawColor(203, 213, 225);
@@ -917,12 +917,11 @@ const renderSupplierPage = (
     row.item,
     formatNum(Math.round(row.jumlah), 0),
     row.satuan || 'kg',
-    row.hargaSatuan ? formatRp(row.hargaSatuan) : '-',
     formatRp(row.totalHarga || (Math.round(row.jumlah) * (row.hargaSatuan || 0))),
   ]);
 
   if (poTableBody.length === 0) {
-    poTableBody.push(['1', 'Koperasi Al Umanaa Sejahtera Mandiri', 'Bahan Baku & Bumbu Masak Terintegrasi', '1', 'paket', formatRp(poGrandTotal), formatRp(poGrandTotal)]);
+    poTableBody.push(['1', 'Koperasi Al Umanaa Sejahtera Mandiri', 'Bahan Baku & Bumbu Masak Terintegrasi', '1', 'paket', formatRp(poGrandTotal)]);
   }
 
   autoTable(doc, {
@@ -932,7 +931,7 @@ const renderSupplierPage = (
       [
         {
           content: 'DAFTAR PESANAN BAHAN — DAFTAR PESANAN BAHAN KE MITRA SUPPLIER',
-          colSpan: 7,
+          colSpan: 6,
           styles: {
             fillColor: [15, 45, 89],
             textColor: [255, 255, 255],
@@ -949,14 +948,13 @@ const renderSupplierPage = (
         { content: 'List Pesanan Bahan', styles: { halign: 'center' } },
         { content: 'Jumlah', styles: { halign: 'center' } },
         { content: 'Satuan', styles: { halign: 'center' } },
-        { content: 'Harga Satuan', styles: { halign: 'center' } },
         { content: 'Total Harga', styles: { halign: 'center' } },
       ],
     ],
     body: poTableBody,
     foot: [
       [
-        { content: `TOTAL BELANJA (${poList.length || 1} ITEM):`, colSpan: 6, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+        { content: `TOTAL BELANJA (${poList.length || 1} ITEM):`, colSpan: 5, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
         { content: formatRp(poGrandTotal), styles: { halign: 'right', fontStyle: 'bold', fillColor: [220, 252, 231], textColor: [22, 101, 52] } },
       ],
     ],
@@ -965,12 +963,11 @@ const renderSupplierPage = (
     headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
     columnStyles: {
       0: { cellWidth: 10, halign: 'center' },
-      1: { cellWidth: 70, fontStyle: 'bold' },
-      2: { cellWidth: 85 },
-      3: { cellWidth: 24, halign: 'center', fontStyle: 'bold' },
+      1: { cellWidth: 80, fontStyle: 'bold' },
+      2: { cellWidth: 106 },
+      3: { cellWidth: 25, halign: 'center', fontStyle: 'bold' },
       4: { cellWidth: 20, halign: 'center' },
-      5: { cellWidth: 34, halign: 'right' },
-      6: { cellWidth: 34, halign: 'right', fontStyle: 'bold', textColor: [22, 101, 52] },
+      5: { cellWidth: 36, halign: 'right', fontStyle: 'bold', textColor: [22, 101, 52] },
     },
     margin: { top: 28, bottom: 12, left: 10, right: 10 },
     didDrawPage: () => {

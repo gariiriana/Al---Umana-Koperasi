@@ -1,6 +1,6 @@
 // ============================================================================
 // MBG Production Report DOCX Generator — Landscape Official Layout
-// Badan Gizi Nasional & Koperasi Konsumen Al-Umanaa Mandiri Berkah
+// Badan Gizi Nasional & Koperasi Al Umanaa Sejahtera Mandiri
 // ============================================================================
 
 import {
@@ -385,7 +385,7 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
         spacing: { before: 0, after: 80 },
         children: [
           new TextRun({
-            text: `Tanggal Batch: ${batch.tanggal} • Sasaran: ${(batch.totalJumlah || 0).toLocaleString('id-ID')} Porsi • Koperasi Konsumen Al-Umanaa Mandiri Berkah`,
+            text: `Tanggal Batch: ${batch.tanggal} • Sasaran: ${(batch.totalJumlah || 0).toLocaleString('id-ID')} Porsi • Koperasi Al Umanaa Sejahtera Mandiri`,
             size: 14, // 7pt
             font: 'Arial',
             color: '64748B',
@@ -942,7 +942,7 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
       tableHeader: true,
       children: [
         new TableCell({
-          columnSpan: 7,
+          columnSpan: 6,
           shading: { fill: '0F2D59' }, // Navy #0F2D59
           margins: COMPACT_CELL_MARGINS,
           children: [
@@ -958,12 +958,11 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
       tableHeader: true,
       children: [
         new TableCell({ width: { size: 5, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'No', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 26, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Supplier', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 31, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'List Pesanan Bahan', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+        new TableCell({ width: { size: 28, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Supplier', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+        new TableCell({ width: { size: 38, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'List Pesanan Bahan', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
         new TableCell({ width: { size: 8, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Jumlah', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
         new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Satuan', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 11, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Harga Satuan', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
-        new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Total Harga', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
+        new TableCell({ width: { size: 14, type: WidthType.PERCENTAGE }, shading: { fill: '1E293B' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'Total Harga', bold: true, color: 'FFFFFF', size: 13, font: 'Arial' })] })] }),
       ],
     }),
   ];
@@ -977,7 +976,6 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
           new TableCell({ shading: { fill: 'FFFFFF' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: 'Bahan Baku & Bumbu Masak Terintegrasi', size: 13, font: 'Arial' })] })] }),
           new TableCell({ shading: { fill: 'FFFFFF' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '1', size: 13, font: 'Arial' })] })] }),
           new TableCell({ shading: { fill: 'FFFFFF' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'paket', size: 13, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: 'FFFFFF' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(poGrandTotal), size: 13, font: 'Arial' })] })] }),
           new TableCell({ shading: { fill: 'DCFCE7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(poGrandTotal), bold: true, color: '166534', size: 13, font: 'Arial' })] })] }),
         ],
       })
@@ -992,12 +990,11 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
         new TableRow({
           children: [
             new TableCell({ width: { size: 5, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${idx + 1}`, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 26, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.supplier || 'Koperasi Al Umanaa Sejahtera Mandiri', bold: true, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 31, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.item, size: 13, font: 'Arial' })] })] }),
+            new TableCell({ width: { size: 28, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.supplier || 'Koperasi Al Umanaa Sejahtera Mandiri', bold: true, size: 13, font: 'Arial' })] })] }),
+            new TableCell({ width: { size: 38, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.item, size: 13, font: 'Arial' })] })] }),
             new TableCell({ width: { size: 8, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: Math.round(r.jumlah || 0).toString(), bold: true, size: 13, font: 'Arial' })] })] }),
             new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: r.satuan || 'kg', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 11, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: r.hargaSatuan ? formatRp(r.hargaSatuan) : '-', size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: 'DCFCE7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(totalHargaItem), bold: true, color: '166534', size: 13, font: 'Arial' })] })] }),
+            new TableCell({ width: { size: 14, type: WidthType.PERCENTAGE }, shading: { fill: 'DCFCE7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(totalHargaItem), bold: true, color: '166534', size: 13, font: 'Arial' })] })] }),
           ],
         })
       );
@@ -1009,14 +1006,14 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
     new TableRow({
       children: [
         new TableCell({
-          columnSpan: 6,
-          width: { size: 88, type: WidthType.PERCENTAGE },
+          columnSpan: 5,
+          width: { size: 86, type: WidthType.PERCENTAGE },
           shading: { fill: '0F172A' },
           margins: COMPACT_CELL_MARGINS,
           children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `TOTAL BELANJA (${poList.length || 1} ITEM):`, bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })] })],
         }),
         new TableCell({
-          width: { size: 12, type: WidthType.PERCENTAGE },
+          width: { size: 14, type: WidthType.PERCENTAGE },
           shading: { fill: 'DCFCE7' },
           margins: COMPACT_CELL_MARGINS,
           children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(poGrandTotal), bold: true, color: '166534', size: 14, font: 'Arial' })] })],
