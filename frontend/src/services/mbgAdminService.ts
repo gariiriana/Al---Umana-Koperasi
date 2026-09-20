@@ -198,8 +198,13 @@ export async function updateBatchStatus(
 }
 
 export async function deleteBatch(batchId: string): Promise<void> {
+  // 1. Delete the batch document immediately so real-time listeners and database reflect removal without delay
+  await deleteDoc(doc(db, BATCHES_COLLECTION, batchId));
+
+  // 2. Clean up all associated collections (entries, reports, cooking sessions, delivery tasks, etc.) concurrently
   const collectionsWithBatchId = [
     ENTRIES_COLLECTION,
+    'mbg_daily_reports',
     'mbg_cooking_sessions',
     'mbg_delivery_tasks',
     'mbg_qc_checks',
@@ -208,24 +213,29 @@ export async function deleteBatch(batchId: string): Promise<void> {
     'mbg_recipe_adjustments',
   ];
 
-  for (const col of collectionsWithBatchId) {
-    try {
-      const q = query(
-        collection(db, col),
-        where('batchId', '==', batchId)
-      );
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const batch = writeBatch(db);
-        snapshot.docs.forEach((d) => batch.delete(d.ref));
-        await batch.commit();
+  await Promise.allSettled(
+    collectionsWithBatchId.map(async (col) => {
+      try {
+        const q = query(
+          collection(db, col),
+          where('batchId', '==', batchId)
+        );
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          // Process in chunks of 450 to strictly respect Firestore 500 batch limit
+          const chunkSize = 450;
+          for (let i = 0; i < snapshot.docs.length; i += chunkSize) {
+            const chunk = snapshot.docs.slice(i, i + chunkSize);
+            const batch = writeBatch(db);
+            chunk.forEach((d) => batch.delete(d.ref));
+            await batch.commit();
+          }
+        }
+      } catch (e) {
+        console.warn(`Could not clear related batch items in ${col}:`, e);
       }
-    } catch (e) {
-      console.warn(`Could not clear related batch items in ${col}:`, e);
-    }
-  }
-
-  await deleteDoc(doc(db, BATCHES_COLLECTION, batchId));
+    })
+  );
 }
 
 // ---- PM Entry Operations ----
@@ -260,7 +270,7 @@ export function subscribeAllEntries(
 ): Unsubscribe {
   const q = query(
     collection(db, ENTRIES_COLLECTION),
-    limit(5000)
+    limit(1000)
   );
   return subscriptionManager.subscribe(
     q,
@@ -506,9 +516,7 @@ export async function restoreMultipleBatchesFromBackup(
 export async function deleteMultipleBatches(
   batchIds: string[]
 ): Promise<void> {
-  for (const id of batchIds) {
-    await deleteBatch(id);
-  }
+  await Promise.all(batchIds.map((id) => deleteBatch(id)));
 }
 
 /**

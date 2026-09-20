@@ -1645,11 +1645,15 @@ export function MbgAdminPage() {
     const confirmText = `Apakah Anda yakin ingin menghapus seluruh data batch untuk tanggal ${selectedBatch.tanggal}? Tindakan ini tidak dapat dibatalkan.`;
     if (!window.confirm(confirmText)) return;
 
+    const idToDelete = selectedBatchId;
+    // Optimistic update
+    setBatches((prev) => prev.filter((b) => b.id !== idToDelete));
+    setSelectedBatchId(null);
+
     setSaving(true);
     try {
-      await deleteBatch(selectedBatchId);
+      await deleteBatch(idToDelete);
       showToast({ message: 'Batch berhasil dihapus!', variant: 'success' });
-      setSelectedBatchId(null);
     } catch (err) {
       console.error(err);
       showToast({ message: 'Gagal menghapus batch', variant: 'error' });

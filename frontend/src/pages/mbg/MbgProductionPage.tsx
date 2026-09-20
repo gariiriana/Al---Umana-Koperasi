@@ -924,12 +924,14 @@ export function MbgProductionPage() {
       variant: 'danger',
       icon: 'delete',
       onConfirm: async () => {
+        // Optimistic update: immediately remove from UI
+        setBatches((prev) => prev.filter((b) => b.id !== batchId));
+        if (selectedBatchId === batchId) {
+          setSelectedBatchId(null);
+        }
         try {
           await deleteBatch(batchId);
           showToast({ message: `Data batch ${tanggal} berhasil dihapus!`, variant: 'success' });
-          if (selectedBatchId === batchId) {
-            setSelectedBatchId(null);
-          }
         } catch (err) {
           console.error('Error deleting batch:', err);
           showToast({ message: 'Gagal menghapus batch', variant: 'error' });

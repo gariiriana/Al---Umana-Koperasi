@@ -592,6 +592,9 @@ export function MbgArchivePage() {
 
   const handleDeleteEntry = useCallback(
     async (entryId: string) => {
+      // Optimistic update
+      setSelectedBatchEntries((prev) => prev.filter((e) => e.id !== entryId));
+      setEntries((prev) => prev.filter((e) => e.id !== entryId));
       try {
         await deleteEntry(entryId);
         if (selectedBatchId) {
@@ -660,13 +663,19 @@ export function MbgArchivePage() {
       message: `Apakah Anda yakin ingin menghapus seluruh data batch arsip untuk tanggal ${tanggal}? Data batch dan seluruh data PM di dalamnya akan dihapus permanen.`,
       variant: 'danger',
       onConfirm: async () => {
+        // 1. Optimistic update: immediately remove batch and its entries from UI
+        setBatches((prev) => prev.filter((b) => b.id !== batchId));
+        setEntries((prev) => prev.filter((e) => e.batchId !== batchId));
+        setSelectedBatchEntries((prev) => prev.filter((e) => e.batchId !== batchId));
+        setSelectedBatchIds((prev) => prev.filter((id) => id !== batchId));
+        if (selectedBatchId === batchId) {
+          setSelectedBatchId(null);
+        }
+
         setSaving(true);
         try {
           await deleteBatch(batchId);
           showToast({ message: `Batch arsip ${tanggal} berhasil dihapus!`, variant: 'success' });
-          if (selectedBatchId === batchId) {
-            setSelectedBatchId(null);
-          }
         } catch (err) {
           console.error(err);
           showToast({ message: 'Gagal menghapus batch arsip', variant: 'error' });
@@ -688,13 +697,17 @@ export function MbgArchivePage() {
       message: `Pindahkan seluruh data PM untuk batch tanggal ${tanggal} ke Arsip Backup? Data ini akan otomatis disembunyikan dari seluruh divisi/role lain (Produksi, Distribusi, Kurir, Purchasing). Anda dapat melihat dan memulihkannya kembali kapan saja melalui tab Data Arsip Backup.`,
       variant: 'warning',
       onConfirm: async () => {
+        // Optimistic update: mark as backup immediately
+        setBatches((prev) => prev.map((b) => (b.id === batchId ? { ...b, isBackup: true } : b)));
+        setSelectedBatchIds((prev) => prev.filter((id) => id !== batchId));
+        if (selectedBatchId === batchId) {
+          setSelectedBatchId(null);
+        }
+
         setSaving(true);
         try {
           await moveBatchToBackup(batchId, user?.uid);
           showToast({ message: `Batch ${tanggal} berhasil dipindahkan ke Arsip Backup!`, variant: 'success' });
-          if (selectedBatchId === batchId) {
-            setSelectedBatchId(null);
-          }
         } catch (err) {
           console.error(err);
           showToast({ message: 'Gagal memindahkan batch ke backup', variant: 'error' });
@@ -711,13 +724,17 @@ export function MbgArchivePage() {
       message: `Kembalikan batch tanggal ${tanggal} ke Arsip Aktif? Data PM akan kembali terlihat oleh divisi operasional terkait (Produksi, Distribusi, Kurir, Purchasing).`,
       variant: 'info',
       onConfirm: async () => {
+        // Optimistic update: restore from backup immediately
+        setBatches((prev) => prev.map((b) => (b.id === batchId ? { ...b, isBackup: false } : b)));
+        setSelectedBatchIds((prev) => prev.filter((id) => id !== batchId));
+        if (selectedBatchId === batchId) {
+          setSelectedBatchId(null);
+        }
+
         setSaving(true);
         try {
           await restoreBatchFromBackup(batchId);
           showToast({ message: `Batch ${tanggal} berhasil dipulihkan ke Arsip Aktif!`, variant: 'success' });
-          if (selectedBatchId === batchId) {
-            setSelectedBatchId(null);
-          }
         } catch (err) {
           console.error(err);
           showToast({ message: 'Gagal memulihkan batch dari backup', variant: 'error' });
@@ -753,19 +770,26 @@ export function MbgArchivePage() {
   const handleBulkMoveToBackup = useCallback(() => {
     if (selectedBatchIds.length === 0) return;
     const count = selectedBatchIds.length;
+    const idsToMove = new Set(selectedBatchIds);
     setConfirmState({
       title: `Pindahkan ${count} Batch ke Arsip Backup`,
       message: `Pindahkan ${count} batch terpilih ke Data Arsip Backup? Seluruh data PM di dalamnya akan disembunyikan dari semua divisi/role operasional terkait (Produksi, Distribusi, Kurir, Purchasing). Anda dapat melihat dan memulihkannya kembali kapan saja melalui tab Data Arsip Backup.`,
       variant: 'warning',
       onConfirm: async () => {
+        // Optimistic update
+        setBatches((prev) => prev.map((b) => (idsToMove.has(b.id) ? { ...b, isBackup: true } : b)));
+        setSelectedBatchIds([]);
+        if (selectedBatchId && idsToMove.has(selectedBatchId)) {
+          setSelectedBatchId(null);
+        }
+
         setSaving(true);
         try {
-          await moveMultipleBatchesToBackup(selectedBatchIds, user?.uid);
+          await moveMultipleBatchesToBackup(Array.from(idsToMove), user?.uid);
           showToast({
             message: `Berhasil memindahkan ${count} batch ke Arsip Backup!`,
             variant: 'success',
           });
-          setSelectedBatchIds([]);
         } catch (err) {
           console.error(err);
           showToast({ message: 'Gagal memindahkan beberapa batch ke backup', variant: 'error' });
@@ -774,24 +798,31 @@ export function MbgArchivePage() {
         }
       },
     });
-  }, [selectedBatchIds, user, showToast]);
+  }, [selectedBatchIds, selectedBatchId, user, showToast]);
 
   const handleBulkRestoreFromBackup = useCallback(() => {
     if (selectedBatchIds.length === 0) return;
     const count = selectedBatchIds.length;
+    const idsToRestore = new Set(selectedBatchIds);
     setConfirmState({
       title: `Pulihkan ${count} Batch ke Arsip Aktif`,
       message: `Kembalikan ${count} batch terpilih dari Arsip Backup ke Arsip Aktif? Data PM akan kembali dapat diakses oleh divisi operasional terkait (Produksi, Distribusi, Kurir, Purchasing).`,
       variant: 'info',
       onConfirm: async () => {
+        // Optimistic update
+        setBatches((prev) => prev.map((b) => (idsToRestore.has(b.id) ? { ...b, isBackup: false } : b)));
+        setSelectedBatchIds([]);
+        if (selectedBatchId && idsToRestore.has(selectedBatchId)) {
+          setSelectedBatchId(null);
+        }
+
         setSaving(true);
         try {
-          await restoreMultipleBatchesFromBackup(selectedBatchIds);
+          await restoreMultipleBatchesFromBackup(Array.from(idsToRestore));
           showToast({
             message: `Berhasil memulihkan ${count} batch ke Arsip Aktif!`,
             variant: 'success',
           });
-          setSelectedBatchIds([]);
         } catch (err) {
           console.error(err);
           showToast({ message: 'Gagal memulihkan batch dari backup', variant: 'error' });
@@ -800,24 +831,33 @@ export function MbgArchivePage() {
         }
       },
     });
-  }, [selectedBatchIds, showToast]);
+  }, [selectedBatchIds, selectedBatchId, showToast]);
 
   const handleBulkDeleteBatches = useCallback(() => {
     if (selectedBatchIds.length === 0) return;
     const count = selectedBatchIds.length;
+    const idsToDelete = new Set(selectedBatchIds);
     setConfirmState({
       title: `Hapus ${count} Batch Terpilih`,
       message: `Apakah Anda yakin ingin menghapus ${count} batch yang dipilih secara permanen beserta seluruh data PM di dalamnya? Tindakan ini tidak dapat dibatalkan.`,
       variant: 'danger',
       onConfirm: async () => {
+        // Optimistic update: immediately remove from UI
+        setBatches((prev) => prev.filter((b) => !idsToDelete.has(b.id)));
+        setEntries((prev) => prev.filter((e) => !idsToDelete.has(e.batchId)));
+        setSelectedBatchEntries((prev) => prev.filter((e) => !idsToDelete.has(e.batchId)));
+        setSelectedBatchIds([]);
+        if (selectedBatchId && idsToDelete.has(selectedBatchId)) {
+          setSelectedBatchId(null);
+        }
+
         setSaving(true);
         try {
-          await deleteMultipleBatches(selectedBatchIds);
+          await deleteMultipleBatches(Array.from(idsToDelete));
           showToast({
             message: `Berhasil menghapus ${count} batch arsip!`,
             variant: 'success',
           });
-          setSelectedBatchIds([]);
         } catch (err) {
           console.error(err);
           showToast({ message: 'Gagal menghapus batch arsip terpilih', variant: 'error' });
@@ -826,7 +866,7 @@ export function MbgArchivePage() {
         }
       },
     });
-  }, [selectedBatchIds, showToast]);
+  }, [selectedBatchIds, selectedBatchId, showToast]);
 
   const handleSaveMenu = async (
     entryId: string,
