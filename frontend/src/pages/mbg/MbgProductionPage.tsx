@@ -471,11 +471,18 @@ export function MbgProductionPage() {
 
 
 
-  // Group PM entries by petugas
+  // Group PM entries by petugas (with deduplication by institutionName)
   const groupedEntries = useMemo(() => {
     const groups: Record<string, MbgPmEntry[]> = {};
+    const seenNames = new Set<string>();
+
     entries.forEach((e) => {
-      const key = e.assignedPetugasName || 'Belum Ditugaskan';
+      const normName = (e.institutionName || '').toLowerCase().trim();
+      if (normName) {
+        if (seenNames.has(normName)) return;
+        seenNames.add(normName);
+      }
+      const key = e.assignedPetugasName?.trim() || '';
       if (!groups[key]) groups[key] = [];
       groups[key].push(e);
     });
@@ -2308,8 +2315,7 @@ export function MbgProductionPage() {
               {activeTab === 'pm-data' ? (
                 /* PM Data View (Read-Only) */
                 <div className="space-y-4 font-['Hanken_Grotesk']">
-                  {/* Card Data Hasil Import Laporan Harian (Excel / Google Sheets) */}
-                  {(dailyReport || effectiveDailyReport) && (() => {
+                  {(dailyReport || effectiveDailyReport) ? (() => {
                     const curReport = dailyReport || effectiveDailyReport;
                     if (!curReport) return null;
                     const totalPorsiReport =
@@ -2424,53 +2430,27 @@ export function MbgProductionPage() {
                         )}
                       </div>
                     );
-                  })()}
-
-                  {Object.entries(groupedEntries).map(([petugasName, petugasEntries]) => (
-                    <div key={petugasName} className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
-                      <div className="px-4 py-3 bg-[#111827] flex items-center gap-2">
-                        <span className="text-sm font-extrabold text-white uppercase">
-                          PETUGAS: {petugasName}
-                        </span>
-                        <span className="text-[10px] font-bold text-[#FBBF24] bg-[#FBBF24]/10 rounded-full px-2.5 py-0.5 ml-auto">
-                          {petugasEntries.reduce((s, e) => s + (e.jumlah || 0), 0)} porsi
-                        </span>
+                  })() : (
+                    <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-3 shadow-xs font-['Hanken_Grotesk']">
+                      <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-2xl w-fit mx-auto shadow-xs border border-emerald-100">
+                        <FileSpreadsheet className="h-8 w-8" />
                       </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs min-w-[650px]">
-                          <thead>
-                            <tr className="bg-[#FEF3C7] text-[10px] font-extrabold text-[#92400E] uppercase">
-                              <th className="px-3 py-2 text-left">Institusi</th>
-                              <th className="px-2 py-2 text-center">Siswa/Balita</th>
-                              <th className="px-2 py-2 text-center">Bumil/Busui</th>
-                              <th className="px-2 py-2 text-center">Guru/Kader</th>
-                              <th className="px-2 py-2 text-center">Pobia Nasi</th>
-                              <th className="px-2 py-2 text-center">Jumlah</th>
-                              <th className="px-2 py-2 text-center">Jadwal</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {petugasEntries.map((e) => (
-                              <tr key={e.id} className={`border-b border-[#F3F4F6] ${e.isSekolahLibur ? 'bg-red-50 opacity-50 line-through' : ''}`}>
-                                <td className="px-3 py-2 font-bold text-[#111827]">
-                                  {e.institutionName}
-                                  {e.isSekolahLibur && <span className="ml-1 text-[9px] text-red-500 font-extrabold">LIBUR</span>}
-                                </td>
-                                <td className="px-2 py-2 text-center font-bold">{e.qtSiswaBalita || '-'}</td>
-                                <td className="px-2 py-2 text-center font-bold">{e.qtBumilBusui || '-'}</td>
-                                <td className="px-2 py-2 text-center font-bold">{e.qtGuruKader || '-'}</td>
-                                <td className="px-2 py-2 text-center font-bold text-red-600">{e.qtPobiaNasi || '-'}</td>
-                                <td className="px-2 py-2 text-center">
-                                  <span className="font-extrabold text-[#92400E] bg-[#FBBF24]/20 rounded-full px-2 py-0.5">{e.jumlah}</span>
-                                </td>
-                                <td className="px-2 py-2 text-center font-semibold text-[#6B7280]">{e.jadwalPengantaran}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      <h3 className="text-sm font-black text-slate-900">
+                        Data Laporan Harian Belum Di-import
+                      </h3>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                        Batch ini belum memiliki data import Excel / Google Sheets Laporan Harian. Silakan klik tombol <strong>"Import Google Sheets / Excel"</strong> di atas untuk menyinkronkan data realisasi menu, gizi, dan sasaran PM.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowSheetsImportModal(true)}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-sm cursor-pointer"
+                      >
+                        <FileUp className="h-4 w-4 text-white" />
+                        <span>Import Google Sheets / Excel Sekarang</span>
+                      </button>
                     </div>
-                  ))}
+                  )}
 
                   {/* Action Toolbar: Export DOCX, Export PDF, Simpan Laporan */}
                   <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm mt-5 space-y-4">
@@ -2608,16 +2588,23 @@ export function MbgProductionPage() {
 
                     {showPmSummaryInGizi && (
                       <div className="p-4 border-t border-[#E5E7EB] space-y-4 bg-gray-50/50">
-                        {Object.entries(groupedEntries).map(([petugasName, petugasEntries]) => (
-                          <div key={petugasName} className="border border-[#E5E7EB] rounded-xl overflow-hidden bg-white">
-                            <div className="px-3 py-2 bg-[#111827] flex items-center gap-2">
-                              <span className="text-[11px] font-extrabold text-white uppercase">
-                                PETUGAS: {petugasName}
-                              </span>
-                              <span className="text-[9px] font-bold text-[#FBBF24] bg-[#FBBF24]/10 rounded-full px-2 py-0.5 ml-auto">
-                                {petugasEntries.reduce((s, e) => s + (e.jumlah || 0), 0)} porsi
-                              </span>
-                            </div>
+                        {Object.entries(groupedEntries).map(([petugasName, petugasEntries]) => {
+                          const isUnassigned = !petugasName || petugasName === 'Belum Ditugaskan';
+                          const hasMultipleGroups = Object.keys(groupedEntries).length > 1;
+                          const groupTitle = isUnassigned
+                            ? (hasMultipleGroups ? 'PENERIMA MANFAAT (UMUM)' : 'DAFTAR PENERIMA MANFAAT')
+                            : `PETUGAS: ${petugasName}`;
+
+                          return (
+                            <div key={petugasName || 'unassigned'} className="border border-[#E5E7EB] rounded-xl overflow-hidden bg-white">
+                              <div className="px-3 py-2 bg-[#111827] flex items-center gap-2">
+                                <span className="text-[11px] font-extrabold text-white uppercase">
+                                  {groupTitle}
+                                </span>
+                                <span className="text-[9px] font-bold text-[#FBBF24] bg-[#FBBF24]/10 rounded-full px-2.5 py-0.5 ml-auto">
+                                  {petugasEntries.reduce((s, e) => s + (e.jumlah || 0), 0)} porsi
+                                </span>
+                              </div>
                             <div className="overflow-x-auto">
                               <table className="w-full text-[11px] min-w-[750px]">
                                 <thead>
@@ -2701,8 +2688,9 @@ export function MbgProductionPage() {
                                 </tbody>
                               </table>
                             </div>
-                          </div>
-                        ))}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

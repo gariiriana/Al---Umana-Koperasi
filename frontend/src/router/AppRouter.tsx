@@ -926,7 +926,12 @@ export function AppRouter() {
   }
 
   return (
-    <BrowserRouter>
+    <BrowserRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
       <AuthProvider>
         <BrowserNotificationListener />
         <Suspense fallback={<LoadingScreen message="Memuat halaman..." />}>

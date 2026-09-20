@@ -99,6 +99,10 @@ export interface MbgPmEntry {
   menuKeringanItems: string[];
   /** Flag institusi libur (skip delivery) */
   isSekolahLibur: boolean;
+  /** Flag apakah entry dipindahkan ke arsip backup */
+  isBackup?: boolean;
+  /** Timestamp arsip backup */
+  backedUpAt?: string;
   /** Catatan tambahan */
   notes: string;
   /** Sort order within petugas group */
@@ -195,6 +199,14 @@ export interface MbgPmBatch {
   petugasList: string[];
   /** Catatan khusus batch (e.g., "GANTI MENU KERINGAN") */
   batchNotes: string;
+  /** Flag apakah batch dipindahkan ke arsip backup (disembunyikan dari divisi operasional) */
+  isBackup?: boolean;
+  /** Timestamp arsip backup */
+  backedUpAt?: string;
+  /** UID pengguna yang melakukan backup */
+  backedUpBy?: string;
+  /** Timestamp saat dipulihkan kembali dari backup */
+  restoredAt?: string;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

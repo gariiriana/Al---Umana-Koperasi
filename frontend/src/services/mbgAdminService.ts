@@ -124,7 +124,8 @@ export async function saveWeeklySchedule(
 
 export function subscribeBatches(
   callback: (batches: MbgPmBatch[]) => void,
-  onError?: (error: Error) => void
+  onError?: (error: Error) => void,
+  includeBackup = false
 ): Unsubscribe {
   const q = query(
     collection(db, BATCHES_COLLECTION),
@@ -137,8 +138,9 @@ export function subscribeBatches(
         id: d.id,
         ...d.data(),
       })) as MbgPmBatch[];
-      batches.sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
-      callback(batches);
+      const filtered = includeBackup ? batches : batches.filter((b) => !b.isBackup);
+      filtered.sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
+      callback(filtered);
     },
     (error) => {
       console.error("subscribeBatches error:", error);
@@ -196,16 +198,34 @@ export async function updateBatchStatus(
 }
 
 export async function deleteBatch(batchId: string): Promise<void> {
-  // Delete all entries in this batch first
-  const q = query(
-    collection(db, ENTRIES_COLLECTION),
-    where('batchId', '==', batchId)
-  );
-  const snapshot = await getDocs(q);
-  const batch = writeBatch(db);
-  snapshot.docs.forEach((d) => batch.delete(d.ref));
-  batch.delete(doc(db, BATCHES_COLLECTION, batchId));
-  await batch.commit();
+  const collectionsWithBatchId = [
+    ENTRIES_COLLECTION,
+    'mbg_cooking_sessions',
+    'mbg_delivery_tasks',
+    'mbg_qc_checks',
+    'mbg_purchase_orders',
+    'mbg_delivery_documents',
+    'mbg_recipe_adjustments',
+  ];
+
+  for (const col of collectionsWithBatchId) {
+    try {
+      const q = query(
+        collection(db, col),
+        where('batchId', '==', batchId)
+      );
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const batch = writeBatch(db);
+        snapshot.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+    } catch (e) {
+      console.warn(`Could not clear related batch items in ${col}:`, e);
+    }
+  }
+
+  await deleteDoc(doc(db, BATCHES_COLLECTION, batchId));
 }
 
 // ---- PM Entry Operations ----
@@ -235,7 +255,8 @@ export function subscribeEntries(
 
 export function subscribeAllEntries(
   callback: (entries: MbgPmEntry[]) => void,
-  onError?: (error: Error) => void
+  onError?: (error: Error) => void,
+  includeBackup = false
 ): Unsubscribe {
   const q = query(
     collection(db, ENTRIES_COLLECTION),
@@ -248,8 +269,9 @@ export function subscribeAllEntries(
         id: d.id,
         ...d.data(),
       })) as MbgPmEntry[];
-      entries.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-      callback(entries);
+      const filtered = includeBackup ? entries : entries.filter((e) => !e.isBackup);
+      filtered.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      callback(filtered);
     },
     (error) => onError?.(error)
   );
@@ -351,12 +373,7 @@ export async function cleanDuplicateBatchEntries(batchId: string): Promise<numbe
 
   snapshot.docs.forEach((d) => {
     const data = d.data() as MbgPmEntry;
-    const cleanName = (data.institutionName || '').toLowerCase()
-      .replace(/kelas\s*[0-9-]+/gi, '')
-      .replace(/kls\s*[0-9-]+/gi, '')
-      .replace(/[^a-z0-9]/g, '')
-      .trim();
-    const key = cleanName || (data.institutionName || '').toLowerCase().trim();
+    const key = (data.institutionName || '').toLowerCase().trim();
     if (seen.has(key)) {
       toDelete.push(d.id);
     } else {
@@ -413,6 +430,84 @@ export async function recalculateBatchTotals(batchId: string): Promise<void> {
     totalJumlah,
     petugasList: Array.from(petugasSet),
   });
+}
+
+/**
+ * Pindahkan batch dan seluruh data PM di dalamnya ke Arsip Backup.
+ * Data di arsip backup akan disembunyikan dari seluruh divisi operasional (Produksi, Distribusi, Kurir, Purchasing).
+ */
+export async function moveBatchToBackup(batchId: string, backedUpBy?: string): Promise<void> {
+  const batchRef = doc(db, BATCHES_COLLECTION, batchId);
+  const now = new Date().toISOString();
+  await updateDoc(batchRef, {
+    isBackup: true,
+    backedUpAt: now,
+    backedUpBy: backedUpBy || 'admin',
+  });
+
+  // Flag semua entry di dalam batch ini sebagai backup
+  const q = query(collection(db, ENTRIES_COLLECTION), where('batchId', '==', batchId));
+  const snap = await getDocs(q);
+  if (!snap.empty) {
+    const wb = writeBatch(db);
+    snap.docs.forEach((d) => {
+      wb.update(d.ref, { isBackup: true, backedUpAt: now });
+    });
+    await wb.commit();
+  }
+}
+
+/**
+ * Pulihkan batch dari Arsip Backup kembali ke Arsip Aktif utama.
+ * Data PM akan kembali terlihat oleh divisi operasional terkait.
+ */
+export async function restoreBatchFromBackup(batchId: string): Promise<void> {
+  const batchRef = doc(db, BATCHES_COLLECTION, batchId);
+  await updateDoc(batchRef, {
+    isBackup: false,
+    restoredAt: new Date().toISOString(),
+  });
+
+  // Pulihkan semua entry di dalam batch ini
+  const q = query(collection(db, ENTRIES_COLLECTION), where('batchId', '==', batchId));
+  const snap = await getDocs(q);
+  if (!snap.empty) {
+    const wb = writeBatch(db);
+    snap.docs.forEach((d) => {
+      wb.update(d.ref, { isBackup: false });
+    });
+    await wb.commit();
+  }
+}
+
+/**
+ * Pindahkan beberapa batch sekaligus ke Arsip Backup.
+ */
+export async function moveMultipleBatchesToBackup(
+  batchIds: string[],
+  backedUpBy?: string
+): Promise<void> {
+  await Promise.all(batchIds.map((id) => moveBatchToBackup(id, backedUpBy)));
+}
+
+/**
+ * Pulihkan beberapa batch sekaligus dari Arsip Backup.
+ */
+export async function restoreMultipleBatchesFromBackup(
+  batchIds: string[]
+): Promise<void> {
+  await Promise.all(batchIds.map((id) => restoreBatchFromBackup(id)));
+}
+
+/**
+ * Hapus beberapa batch sekaligus beserta seluruh data di dalamnya.
+ */
+export async function deleteMultipleBatches(
+  batchIds: string[]
+): Promise<void> {
+  for (const id of batchIds) {
+    await deleteBatch(id);
+  }
 }
 
 /**

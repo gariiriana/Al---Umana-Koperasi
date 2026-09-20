@@ -171,13 +171,239 @@ export function getFilteredPmEntries(
         categoryLabel: cat,
         portionCount: count,
         totalJumlah: e.jumlah || count,
-        petugasName: e.assignedPetugasName || 'Belum Ditugaskan',
+        petugasName: e.assignedPetugasName || '-',
         jadwal: e.jadwalPengantaran || '06.30 - 08.00',
         isLibur: !!e.isSekolahLibur,
         address: e.address,
         detailBreakdown: detail,
       });
     }
+  });
+
+  return result;
+}
+
+export interface DetailedPmRow {
+  id: string;
+  institutionName: string;
+  categoryLabel: string;
+  porsiKecil: number;
+  porsiBesar: number;
+  porsiBalita: number;
+  porsiBumilBusui: number;
+  totalJumlah: number;
+  rincian?: string;
+  petugasName: string;
+  jadwal: string;
+  isLibur: boolean;
+  address?: string;
+}
+
+export function getAllDetailedPmEntries(
+  entries: MbgPmEntry[] = [],
+  fallbackSekolahList: { nama: string; murid: number; guru: number }[] = []
+): DetailedPmRow[] {
+  if (!entries || entries.length === 0) {
+    if (fallbackSekolahList && fallbackSekolahList.length > 0) {
+      return fallbackSekolahList.map((s, idx) => {
+        const name = (s.nama || '').toLowerCase().trim();
+        const isTk = name.includes('tk') || name.includes('paud') || name.includes('sps') || name.includes('kober');
+        const isSma = name.includes('sma') || name.includes('smk') || name.includes('ma ') || name.includes('aliyah');
+        const isSmp = name.includes('smp') || name.includes('mts');
+        const isPosyandu = name.includes('posyandu');
+
+        let cat = 'SD / MI';
+        let pKecil = 0;
+        let pBesar = 0;
+        let pBalita = 0;
+        let pBumil = 0;
+
+        if (isPosyandu) {
+          cat = 'Posyandu';
+          pBalita = s.murid || 0;
+          pBumil = 0;
+          pBesar = s.guru || 0;
+        } else if (isTk) {
+          cat = 'TK / PAUD';
+          pKecil = s.murid || 0;
+          pBesar = s.guru || 0;
+        } else if (isSma || isSmp) {
+          cat = isSma ? 'SMA / SMK' : 'SMP / MTs';
+          pBesar = (s.murid || 0) + (s.guru || 0);
+        } else {
+          cat = 'SD / MI';
+          pKecil = Math.ceil((s.murid || 0) / 2);
+          pBesar = Math.floor((s.murid || 0) / 2) + (s.guru || 0);
+        }
+
+        const total = pKecil + pBesar + pBalita + pBumil;
+
+        return {
+          id: `fallback-${idx}`,
+          institutionName: s.nama,
+          categoryLabel: cat,
+          porsiKecil: pKecil,
+          porsiBesar: pBesar,
+          porsiBalita: pBalita,
+          porsiBumilBusui: pBumil,
+          totalJumlah: total || (s.murid + s.guru),
+          rincian: `${s.murid} Murid + ${s.guru} Guru`,
+          petugasName: 'Tim Distribusi MBG',
+          jadwal: '06.30 - 08.00',
+          isLibur: false,
+        };
+      });
+    }
+    return [];
+  }
+
+  const seenNames = new Set<string>();
+  const result: DetailedPmRow[] = [];
+
+  entries.forEach((e) => {
+    const cleanName = (e.institutionName || '')
+      .toLowerCase()
+      .replace(/kelas\s*[0-9-]+/gi, '')
+      .replace(/kls\s*[0-9-]+/gi, '')
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
+    const normKey = cleanName || (e.institutionName || '').toLowerCase().trim();
+    if (!normKey) return;
+    if (seenNames.has(normKey)) return;
+    seenNames.add(normKey);
+
+    const name = (e.institutionName || '').toLowerCase().trim();
+    const isPosyandu = e.institutionType === 'posyandu' || name.includes('posyandu');
+    const isTk =
+      e.schoolLevel === 'tk_paud' ||
+      name.includes('tk') ||
+      name.includes('paud') ||
+      name.includes('sps') ||
+      name.includes('kober');
+    const isSd =
+      e.schoolLevel === 'sd' ||
+      name.includes('sd') ||
+      name.includes('mi');
+    const isSma =
+      e.schoolLevel === 'sma' ||
+      name.includes('sma') ||
+      name.includes('smk') ||
+      name.includes('ma ') ||
+      name.includes('aliyah');
+    const isSmp =
+      (e.schoolLevel as string) === 'smp' ||
+      name.includes('smp') ||
+      name.includes('mts');
+
+    let cat = 'Sekolah';
+    if (isPosyandu) cat = 'Posyandu';
+    else if (isTk) cat = 'TK / PAUD';
+    else if (isSd) cat = 'SD / MI';
+    else if (isSmp) cat = 'SMP / MTs';
+    else if (isSma) cat = 'SMA / SMK';
+
+    let pKecil = 0;
+    let pBesar = 0;
+    let pBalita = 0;
+    let pBumil = 0;
+
+    // Check classes breakdown if specified
+    if (e.classesBreakdown && e.classesBreakdown.length > 0) {
+      e.classesBreakdown.forEach((c) => {
+        const q = c.totalSiswa || c.jumlah || 0;
+        if (c.portionType === 'kecil') pKecil += q;
+        else pBesar += q;
+      });
+      if (pBesar > 0 || e.qtGuruKader) {
+        pBesar += (e.qtGuruKader || 0);
+      }
+    }
+
+    if (isPosyandu) {
+      pBalita = e.qtPorsiBalita || e.qtSiswaBalita || 0;
+      const bumil = e.qtBumil || 0;
+      const busui = e.qtBusui || 0;
+      pBumil = e.qtPorsiBumilBusui || e.qtBumilBusui || (bumil + busui);
+      pBesar = e.qtGuruKader || 0; // kader makan porsi besar
+    } else {
+      // Sekolah
+      if (pKecil === 0 && pBesar === 0) {
+        if (e.qtPorsiKecil && e.qtPorsiKecil > 0) {
+          pKecil = e.qtPorsiKecil;
+        }
+        if (e.qtPorsiBesar && e.qtPorsiBesar > 0) {
+          pBesar = e.qtPorsiBesar;
+        }
+      }
+
+      if (isTk) {
+        if (pKecil === 0) {
+          pKecil = e.qtSiswaBalita || (e.jumlah ? Math.max(0, e.jumlah - (e.qtGuruKader || 0)) : 0);
+        }
+        if (pBesar === 0) {
+          pBesar = e.qtGuruKader || 0;
+        }
+      } else if (isSd) {
+        if (pKecil === 0 && pBesar === 0) {
+          const siswa = e.qtSiswaBalita || (e.jumlah ? Math.max(0, e.jumlah - (e.qtGuruKader || 0)) : 0);
+          pKecil = Math.ceil(siswa / 2);
+          pBesar = Math.floor(siswa / 2) + (e.qtGuruKader || 0);
+        } else if (pBesar === 0 && e.qtGuruKader) {
+          pBesar += e.qtGuruKader;
+        }
+      } else if (isSma || isSmp) {
+        if (pBesar === 0) {
+          const siswa = e.qtSiswaBalita || (e.jumlah ? Math.max(0, e.jumlah - (e.qtGuruKader || 0)) : 0);
+          pBesar = siswa + (e.qtGuruKader || 0);
+        }
+      } else {
+        if (pKecil === 0 && pBesar === 0) {
+          pBesar = (e.qtSiswaBalita || 0) + (e.qtGuruKader || 0);
+        }
+      }
+    }
+
+    const calculatedTotal = pKecil + pBesar + pBalita + pBumil;
+    const finalTotal = calculatedTotal > 0 ? calculatedTotal : (e.jumlah || 0);
+
+    // Build detail / rincian string
+    const rincianParts: string[] = [];
+    if (isTk) {
+      if (pKecil > 0) rincianParts.push(`${pKecil} Siswa TK`);
+      if (pBesar > 0) rincianParts.push(`${pBesar} Guru`);
+    } else if (isSd) {
+      if (pKecil > 0) rincianParts.push(`${pKecil} Kls 1-3`);
+      const kls46 = Math.max(0, pBesar - (e.qtGuruKader || 0));
+      if (kls46 > 0) rincianParts.push(`${kls46} Kls 4-6`);
+      if (e.qtGuruKader) rincianParts.push(`${e.qtGuruKader} Guru`);
+    } else if (isSma || isSmp) {
+      const siswa = Math.max(0, pBesar - (e.qtGuruKader || 0));
+      if (siswa > 0) rincianParts.push(`${siswa} Siswa`);
+      if (e.qtGuruKader) rincianParts.push(`${e.qtGuruKader} Guru/Staff`);
+    } else if (isPosyandu) {
+      if (pBalita > 0) rincianParts.push(`${pBalita} Balita`);
+      if (pBumil > 0) rincianParts.push(`${pBumil} Bumil/Busui`);
+      if (pBesar > 0) rincianParts.push(`${pBesar} Kader`);
+    } else {
+      if (pKecil > 0) rincianParts.push(`${pKecil} Porsi Kecil`);
+      if (pBesar > 0) rincianParts.push(`${pBesar} Porsi Besar`);
+    }
+
+    result.push({
+      id: e.id,
+      institutionName: e.institutionName,
+      categoryLabel: cat,
+      porsiKecil: pKecil,
+      porsiBesar: pBesar,
+      porsiBalita: pBalita,
+      porsiBumilBusui: pBumil,
+      totalJumlah: finalTotal,
+      rincian: rincianParts.join(' + ') || '-',
+      petugasName: e.assignedPetugasName || '-',
+      jadwal: e.jadwalPengantaran || '06.30 - 08.30',
+      isLibur: !!e.isSekolahLibur,
+      address: e.address,
+    });
   });
 
   return result;

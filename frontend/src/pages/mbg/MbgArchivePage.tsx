@@ -16,6 +16,14 @@ import {
   Folder,
   ChevronLeft,
   BookOpen,
+  Archive,
+  ArchiveRestore,
+  ShieldCheck,
+  Shield,
+  Check,
+  CheckSquare,
+  Square,
+  MinusSquare,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -29,6 +37,11 @@ import {
   deleteEntry,
   recalculateBatchTotals,
   deleteBatch,
+  moveBatchToBackup,
+  restoreBatchFromBackup,
+  moveMultipleBatchesToBackup,
+  restoreMultipleBatchesFromBackup,
+  deleteMultipleBatches,
 } from '@/services/mbgAdminService';
 import { MBG_BATCH_STATUS_CONFIG } from '@/constants/mbgConstants';
 
@@ -401,7 +414,15 @@ export function MbgArchivePage() {
     variant?: 'danger' | 'warning' | 'info';
   } | null>(null);
 
-  // Subscribe to submitted/archived batches (status !== 'DRAFT') and all entries
+  const [archiveTab, setArchiveTab] = useState<'active' | 'backup'>('active');
+  const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
+
+  // Reset selection when tab changes or navigating between batch views
+  useEffect(() => {
+    setSelectedBatchIds([]);
+  }, [archiveTab, selectedBatchId]);
+
+  // Subscribe to submitted/archived batches (status !== 'DRAFT') and all entries (including backup)
   useEffect(() => {
     const unsubBatches = subscribeBatches(
       (b) => {
@@ -412,7 +433,8 @@ export function MbgArchivePage() {
       (err) => {
         console.error('Error loading batches:', err);
         setLoadingBatches(false);
-      }
+      },
+      true // includeBackup = true for MbgArchivePage
     );
 
     setLoadingEntries(true);
@@ -424,7 +446,8 @@ export function MbgArchivePage() {
       (err) => {
         console.error('Error loading entries:', err);
         setLoadingEntries(false);
-      }
+      },
+      true // includeBackup = true for MbgArchivePage
     );
 
     return () => {
@@ -432,6 +455,18 @@ export function MbgArchivePage() {
       unsubEntries();
     };
   }, []);
+
+  const regularBatches = useMemo(() => {
+    return batches.filter((b) => !b.isBackup);
+  }, [batches]);
+
+  const backupBatches = useMemo(() => {
+    return batches.filter((b) => !!b.isBackup);
+  }, [batches]);
+
+  const currentTabBatches = useMemo(() => {
+    return archiveTab === 'active' ? regularBatches : backupBatches;
+  }, [archiveTab, regularBatches, backupBatches]);
 
   const selectedBatch = useMemo(() => {
     return batches.find((b) => b.id === selectedBatchId);
@@ -454,7 +489,7 @@ export function MbgArchivePage() {
 
   // Filtered batches for folder list view
   const filteredBatches = useMemo(() => {
-    return batches.filter((b) => {
+    return currentTabBatches.filter((b) => {
       // 1. Date filter
       if (searchDate && b.tanggal !== searchDate) {
         return false;
@@ -472,7 +507,22 @@ export function MbgArchivePage() {
       }
       return true;
     });
-  }, [batches, entries, searchDate, searchQuery]);
+  }, [currentTabBatches, entries, searchDate, searchQuery]);
+
+  const isAllFilteredSelected = useMemo(() => {
+    return (
+      filteredBatches.length > 0 &&
+      filteredBatches.every((b) => selectedBatchIds.includes(b.id))
+    );
+  }, [filteredBatches, selectedBatchIds]);
+
+  const isSomeFilteredSelected = useMemo(() => {
+    return (
+      selectedBatchIds.length > 0 &&
+      !isAllFilteredSelected &&
+      filteredBatches.some((b) => selectedBatchIds.includes(b.id))
+    );
+  }, [filteredBatches, selectedBatchIds, isAllFilteredSelected]);
 
   // Grand totals
   const grandTotals = useMemo(() => {
@@ -573,23 +623,179 @@ export function MbgArchivePage() {
     }
   };
 
-  const handleDeleteBatch = async () => {
-    if (!selectedBatchId || !selectedBatch) return;
-    const confirmText = `Apakah Anda yakin ingin menghapus seluruh data batch untuk tanggal ${selectedBatch.tanggal}? Tindakan ini tidak dapat dibatalkan.`;
-    if (!window.confirm(confirmText)) return;
+  const handleDeleteBatchById = useCallback((batchId: string, tanggal: string) => {
+    setConfirmState({
+      title: 'Hapus Batch Arsip',
+      message: `Apakah Anda yakin ingin menghapus seluruh data batch arsip untuk tanggal ${tanggal}? Data batch dan seluruh data PM di dalamnya akan dihapus permanen.`,
+      variant: 'danger',
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          await deleteBatch(batchId);
+          showToast({ message: `Batch arsip ${tanggal} berhasil dihapus!`, variant: 'success' });
+          if (selectedBatchId === batchId) {
+            setSelectedBatchId(null);
+          }
+        } catch (err) {
+          console.error(err);
+          showToast({ message: 'Gagal menghapus batch arsip', variant: 'error' });
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
+  }, [selectedBatchId, showToast]);
 
-    setSaving(true);
-    try {
-      await deleteBatch(selectedBatchId);
-      showToast({ message: 'Batch arsip berhasil dihapus!', variant: 'success' });
-      setSelectedBatchId(null);
-    } catch (err) {
-      console.error(err);
-      showToast({ message: 'Gagal menghapus batch', variant: 'error' });
-    } finally {
-      setSaving(false);
-    }
+  const handleDeleteBatch = () => {
+    if (!selectedBatchId || !selectedBatch) return;
+    handleDeleteBatchById(selectedBatchId, selectedBatch.tanggal);
   };
+
+  const handleMoveToBackup = useCallback((batchId: string, tanggal: string) => {
+    setConfirmState({
+      title: 'Pindahkan ke Arsip Backup',
+      message: `Pindahkan seluruh data PM untuk batch tanggal ${tanggal} ke Arsip Backup? Data ini akan otomatis disembunyikan dari seluruh divisi/role lain (Produksi, Distribusi, Kurir, Purchasing). Anda dapat melihat dan memulihkannya kembali kapan saja melalui tab Data Arsip Backup.`,
+      variant: 'warning',
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          await moveBatchToBackup(batchId, user?.uid);
+          showToast({ message: `Batch ${tanggal} berhasil dipindahkan ke Arsip Backup!`, variant: 'success' });
+          if (selectedBatchId === batchId) {
+            setSelectedBatchId(null);
+          }
+        } catch (err) {
+          console.error(err);
+          showToast({ message: 'Gagal memindahkan batch ke backup', variant: 'error' });
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
+  }, [user, selectedBatchId, showToast]);
+
+  const handleRestoreFromBackup = useCallback((batchId: string, tanggal: string) => {
+    setConfirmState({
+      title: 'Pulihkan dari Arsip Backup',
+      message: `Kembalikan batch tanggal ${tanggal} ke Arsip Aktif? Data PM akan kembali terlihat oleh divisi operasional terkait (Produksi, Distribusi, Kurir, Purchasing).`,
+      variant: 'info',
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          await restoreBatchFromBackup(batchId);
+          showToast({ message: `Batch ${tanggal} berhasil dipulihkan ke Arsip Aktif!`, variant: 'success' });
+          if (selectedBatchId === batchId) {
+            setSelectedBatchId(null);
+          }
+        } catch (err) {
+          console.error(err);
+          showToast({ message: 'Gagal memulihkan batch dari backup', variant: 'error' });
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
+  }, [selectedBatchId, showToast]);
+
+  const handleToggleSelectBatch = useCallback((batchId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedBatchIds((prev) =>
+      prev.includes(batchId) ? prev.filter((id) => id !== batchId) : [...prev, batchId]
+    );
+  }, []);
+
+  const handleSelectAllBatches = useCallback(() => {
+    if (filteredBatches.length === 0) return;
+    const allFilteredIds = filteredBatches.map((b) => b.id);
+    const allSelected = allFilteredIds.every((id) => selectedBatchIds.includes(id));
+    if (allSelected) {
+      setSelectedBatchIds((prev) => prev.filter((id) => !allFilteredIds.includes(id)));
+    } else {
+      setSelectedBatchIds((prev) => Array.from(new Set([...prev, ...allFilteredIds])));
+    }
+  }, [filteredBatches, selectedBatchIds]);
+
+  const handleDeselectAllBatches = useCallback(() => {
+    setSelectedBatchIds([]);
+  }, []);
+
+  const handleBulkMoveToBackup = useCallback(() => {
+    if (selectedBatchIds.length === 0) return;
+    const count = selectedBatchIds.length;
+    setConfirmState({
+      title: `Pindahkan ${count} Batch ke Arsip Backup`,
+      message: `Pindahkan ${count} batch terpilih ke Data Arsip Backup? Seluruh data PM di dalamnya akan disembunyikan dari semua divisi/role operasional terkait (Produksi, Distribusi, Kurir, Purchasing). Anda dapat melihat dan memulihkannya kembali kapan saja melalui tab Data Arsip Backup.`,
+      variant: 'warning',
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          await moveMultipleBatchesToBackup(selectedBatchIds, user?.uid);
+          showToast({
+            message: `Berhasil memindahkan ${count} batch ke Arsip Backup!`,
+            variant: 'success',
+          });
+          setSelectedBatchIds([]);
+        } catch (err) {
+          console.error(err);
+          showToast({ message: 'Gagal memindahkan beberapa batch ke backup', variant: 'error' });
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
+  }, [selectedBatchIds, user, showToast]);
+
+  const handleBulkRestoreFromBackup = useCallback(() => {
+    if (selectedBatchIds.length === 0) return;
+    const count = selectedBatchIds.length;
+    setConfirmState({
+      title: `Pulihkan ${count} Batch ke Arsip Aktif`,
+      message: `Kembalikan ${count} batch terpilih dari Arsip Backup ke Arsip Aktif? Data PM akan kembali dapat diakses oleh divisi operasional terkait (Produksi, Distribusi, Kurir, Purchasing).`,
+      variant: 'info',
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          await restoreMultipleBatchesFromBackup(selectedBatchIds);
+          showToast({
+            message: `Berhasil memulihkan ${count} batch ke Arsip Aktif!`,
+            variant: 'success',
+          });
+          setSelectedBatchIds([]);
+        } catch (err) {
+          console.error(err);
+          showToast({ message: 'Gagal memulihkan batch dari backup', variant: 'error' });
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
+  }, [selectedBatchIds, showToast]);
+
+  const handleBulkDeleteBatches = useCallback(() => {
+    if (selectedBatchIds.length === 0) return;
+    const count = selectedBatchIds.length;
+    setConfirmState({
+      title: `Hapus ${count} Batch Terpilih`,
+      message: `Apakah Anda yakin ingin menghapus ${count} batch yang dipilih secara permanen beserta seluruh data PM di dalamnya? Tindakan ini tidak dapat dibatalkan.`,
+      variant: 'danger',
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          await deleteMultipleBatches(selectedBatchIds);
+          showToast({
+            message: `Berhasil menghapus ${count} batch arsip!`,
+            variant: 'success',
+          });
+          setSelectedBatchIds([]);
+        } catch (err) {
+          console.error(err);
+          showToast({ message: 'Gagal menghapus batch arsip terpilih', variant: 'error' });
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
+  }, [selectedBatchIds, showToast]);
 
   const handleSaveMenu = async (
     entryId: string,
@@ -737,11 +943,173 @@ export function MbgArchivePage() {
       ) : !selectedBatchId ? (
         /* Folder List View */
         <>
+          {/* ─── TAB NAVIGATION: ARSIP AKTIF vs ARSIP BACKUP ─── */}
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2 rounded-2xl border border-[#E5E7EB] shadow-2xs">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setArchiveTab('active')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  archiveTab === 'active'
+                    ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
+                    : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+                }`}
+              >
+                <Folder className="h-4 w-4" />
+                <span>Arsip PM Aktif</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  archiveTab === 'active' ? 'bg-slate-950 text-amber-300' : 'bg-gray-200 text-gray-700'
+                }`}>
+                  {regularBatches.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setArchiveTab('backup')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  archiveTab === 'backup'
+                    ? 'bg-slate-900 text-amber-300 font-black shadow-xs'
+                    : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+                }`}
+              >
+                <Archive className="h-4 w-4 text-amber-400" />
+                <span>Data Arsip Backup</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  archiveTab === 'backup' ? 'bg-amber-400 text-slate-950' : 'bg-gray-200 text-gray-700'
+                }`}>
+                  {backupBatches.length}
+                </span>
+              </button>
+            </div>
+
+            <div className="text-[11px] text-gray-500 px-2 font-medium">
+              {archiveTab === 'active' ? (
+                <span>Data PM aktif terlihat oleh divisi operasional terkait</span>
+              ) : (
+                <span className="text-amber-700 font-bold flex items-center gap-1">
+                  <ShieldCheck className="h-3.5 w-3.5 text-amber-600" />
+                  Data backup disembunyikan dari seluruh divisi/role lain
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Notice Banner for Backup Tab */}
+          {archiveTab === 'backup' && (
+            <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white border border-slate-700 shadow-xs flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-400/20 text-amber-400 rounded-xl shrink-0">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-amber-300">
+                    Zona Data Arsip Backup (Tersembunyi)
+                  </h4>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    Batch dan data PM di tab ini disimpan sebagai backup cadangan dan <strong>tidak terlihat oleh divisi manapun</strong> (Produksi MBG, Distribusi MBG, Kurir, dan Purchasing). Anda dapat mengembalikannya ke Arsip Aktif kapan saja dengan menekan tombol <em>Pulihkan</em>.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ─── SELECTION TOOLBAR & BULK ACTIONS ─── */}
+          {filteredBatches.length > 0 && (
+            <div className="mb-5 sticky top-3 z-20 bg-white/95 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-3 transition-all">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleSelectAllBatches}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-gray-300 hover:border-amber-400 bg-gray-50 hover:bg-amber-50/50 text-xs font-bold text-gray-700 transition-colors cursor-pointer"
+                >
+                  {isAllFilteredSelected ? (
+                    <CheckSquare className="h-4 w-4 text-amber-600" />
+                  ) : isSomeFilteredSelected ? (
+                    <MinusSquare className="h-4 w-4 text-amber-600" />
+                  ) : (
+                    <Square className="h-4 w-4 text-gray-400" />
+                  )}
+                  <span>{isAllFilteredSelected ? 'Batalkan Semua' : 'Pilih Semua'}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-200 text-gray-700 font-extrabold">
+                    {filteredBatches.length}
+                  </span>
+                </button>
+
+                {selectedBatchIds.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-amber-100 text-amber-950 border border-amber-300">
+                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                    {selectedBatchIds.length} batch dipilih
+                  </span>
+                )}
+              </div>
+
+              {selectedBatchIds.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {archiveTab === 'active' ? (
+                    <button
+                      type="button"
+                      onClick={handleBulkMoveToBackup}
+                      disabled={saving}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black bg-slate-900 hover:bg-black text-amber-300 border border-slate-700 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                      title="Pindahkan semua batch terpilih ke Arsip Backup"
+                    >
+                      <Archive className="h-4 w-4 text-amber-400" />
+                      <span>Pindahkan ke Arsip Backup ({selectedBatchIds.length})</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleBulkRestoreFromBackup}
+                      disabled={saving}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                      title="Pulihkan semua batch terpilih ke Arsip Aktif"
+                    >
+                      <ArchiveRestore className="h-4 w-4" />
+                      <span>Pulihkan ke Arsip Aktif ({selectedBatchIds.length})</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleBulkDeleteBatches}
+                    disabled={saving}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition-all cursor-pointer disabled:opacity-50"
+                    title="Hapus permanen batch terpilih"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Hapus ({selectedBatchIds.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDeselectAllBatches}
+                    className="px-3 py-2 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
+                  >
+                    Batal Pilih
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {filteredBatches.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm">
-              <Folder className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm font-bold text-gray-600">Arsip tidak ditemukan</p>
-              <p className="text-xs text-gray-400 mt-1">Coba sesuaikan tanggal filter atau kata kunci pencarian Anda.</p>
+              {archiveTab === 'backup' ? (
+                <>
+                  <Archive className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm font-bold text-gray-600">Belum ada batch di Arsip Backup</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Gunakan checkbox atau tombol "Backup" pada kartu batch di Arsip Aktif untuk memindahkan data PM ke arsip cadangan tersembunyi.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Folder className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm font-bold text-gray-600">Arsip tidak ditemukan</p>
+                  <p className="text-xs text-gray-400 mt-1">Coba sesuaikan tanggal filter atau kata kunci pencarian Anda.</p>
+                </>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
@@ -755,25 +1123,74 @@ export function MbgArchivePage() {
                         (e.assignedPetugasName || '').toLowerCase().includes(matchingQuery)
                     )
                   : [];
+                const isSelected = selectedBatchIds.includes(b.id);
                 
                 return (
                   <motion.div
                     key={b.id}
                     whileHover={{ y: -4, scale: 1.02 }}
                     onClick={() => setSelectedBatchId(b.id)}
-                    className="bg-white rounded-2xl border border-[#E5E7EB] hover:border-amber-300 p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden group font-['Hanken_Grotesk']"
+                    className={`bg-white rounded-2xl border p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden group font-['Hanken_Grotesk'] ${
+                      isSelected
+                        ? 'ring-2 ring-amber-400 border-amber-400 bg-amber-50/30 shadow-md'
+                        : b.isBackup
+                        ? 'border-slate-300 hover:border-slate-500 bg-slate-50/40'
+                        : 'border-[#E5E7EB] hover:border-amber-300'
+                    }`}
                   >
                     {/* Visual tab of a folder */}
-                    <div className="absolute top-0 left-0 w-24 h-1 bg-amber-400 group-hover:bg-[#F59E0B] transition-colors" />
+                    <div className={`absolute top-0 left-0 w-24 h-1 transition-colors ${
+                      isSelected
+                        ? 'bg-amber-500'
+                        : b.isBackup
+                        ? 'bg-slate-700 group-hover:bg-slate-900'
+                        : 'bg-amber-400 group-hover:bg-[#F59E0B]'
+                    }`} />
                     
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <div className="p-2.5 bg-amber-50 rounded-xl text-amber-500 group-hover:bg-amber-100 transition-colors">
-                          <Folder className="h-5 w-5 fill-amber-100" />
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleSelectBatch(b.id, e)}
+                            className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-400 border-amber-500 text-slate-950 shadow-xs'
+                                : 'bg-white border-gray-300 text-transparent hover:border-amber-400 hover:text-gray-300'
+                            }`}
+                            title={isSelected ? 'Batalkan pilihan batch ini' : 'Pilih batch ini'}
+                          >
+                            <Check className={`h-4 w-4 stroke-[3] ${isSelected ? 'opacity-100 text-slate-950' : 'opacity-0'}`} />
+                          </button>
+                          <div className={`p-2.5 rounded-xl transition-colors ${
+                            b.isBackup ? 'bg-slate-100 text-slate-700 group-hover:bg-slate-200' : 'bg-amber-50 text-amber-500 group-hover:bg-amber-100'
+                          }`}>
+                            {b.isBackup ? <Archive className="h-5 w-5" /> : <Folder className="h-5 w-5 fill-amber-100" />}
+                          </div>
                         </div>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-[#FEF3C7] text-[#92400E]">
-                          {MBG_BATCH_STATUS_CONFIG[b.status]?.label || b.status}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {b.isBackup ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-900 text-amber-300 border border-slate-700">
+                              <Shield className="h-3 w-3 text-amber-400" />
+                              Backup
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-[#FEF3C7] text-[#92400E]">
+                              {MBG_BATCH_STATUS_CONFIG[b.status]?.label || b.status}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteBatchById(b.id, b.tanggal);
+                            }}
+                            title={`Hapus arsip batch ${b.tanggal}`}
+                            className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                       
                       <div>
@@ -816,15 +1233,56 @@ export function MbgArchivePage() {
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-[10px]">
-                      <span className="text-gray-400 font-medium truncate max-w-[90px]">
+                      <span className="text-gray-400 font-medium truncate max-w-[80px]">
                         {b.petugasList && b.petugasList.length > 0 
                           ? `${b.petugasList.length} Kurir`
                           : 'Belum ada kurir'
                         }
                       </span>
-                      <span className="font-bold text-amber-600 group-hover:text-amber-700 flex items-center gap-0.5">
-                        Buka Arsip →
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {b.isBackup ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRestoreFromBackup(b.id, b.tanggal);
+                            }}
+                            className="px-2 py-1 rounded-lg text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100 font-bold flex items-center gap-1 transition-colors cursor-pointer border border-emerald-300 bg-emerald-50"
+                            title={`Kembalikan batch ${b.tanggal} ke Arsip Aktif`}
+                          >
+                            <ArchiveRestore className="h-3 w-3" />
+                            Pulihkan
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMoveToBackup(b.id, b.tanggal);
+                            }}
+                            className="px-2 py-1 rounded-lg text-slate-700 hover:text-slate-950 hover:bg-slate-200 font-bold flex items-center gap-1 transition-colors cursor-pointer border border-slate-300 bg-slate-100"
+                            title={`Pindahkan batch ${b.tanggal} ke Arsip Backup (sembunyikan dari divisi operasional)`}
+                          >
+                            <Archive className="h-3 w-3 text-amber-600" />
+                            Backup
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteBatchById(b.id, b.tanggal);
+                          }}
+                          className="px-2 py-1 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                          title={`Hapus arsip batch ${b.tanggal}`}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          Hapus
+                        </button>
+                        <span className="font-bold text-amber-600 group-hover:text-amber-700 flex items-center gap-0.5 ml-0.5">
+                          Buka →
+                        </span>
+                      </div>
                     </div>
                   </motion.div>
                 );
@@ -836,25 +1294,58 @@ export function MbgArchivePage() {
         /* Batch Detail View (Existing Table view for selected batch) */
         <>
           {/* Selected Batch Details Bar */}
-          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 mb-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 mb-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-amber-50 rounded-xl text-amber-500">
-                <Calendar className="h-5 w-5" />
+              <div className={`p-3 rounded-xl ${selectedBatch?.isBackup ? 'bg-slate-100 text-slate-700' : 'bg-amber-50 text-amber-500'}`}>
+                {selectedBatch?.isBackup ? <Archive className="h-5 w-5 text-slate-800" /> : <Calendar className="h-5 w-5" />}
               </div>
               <div className="space-y-1">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Tanggal Pengiriman (Arsip)</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                  Tanggal Pengiriman {selectedBatch?.isBackup ? '(Arsip Backup)' : '(Arsip Aktif)'}
+                </span>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-extrabold text-[#111827]">{selectedBatch?.tanggal}</span>
-                  {selectedBatch && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-200">
-                      {MBG_BATCH_STATUS_CONFIG[selectedBatch.status]?.label || selectedBatch.status}
+                  {selectedBatch?.isBackup ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-900 text-amber-300 border border-slate-700">
+                      <Shield className="h-3 w-3 text-amber-400" />
+                      Backup Tersembunyi
                     </span>
+                  ) : (
+                    selectedBatch && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-200">
+                        {MBG_BATCH_STATUS_CONFIG[selectedBatch.status]?.label || selectedBatch.status}
+                      </span>
+                    )
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              {selectedBatch?.isBackup ? (
+                <button
+                  type="button"
+                  onClick={() => selectedBatch && handleRestoreFromBackup(selectedBatch.id, selectedBatch.tanggal)}
+                  disabled={saving}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer shadow-md transition-colors disabled:opacity-50"
+                  title="Kembalikan batch ini ke Arsip Aktif"
+                >
+                  <ArchiveRestore className="h-4 w-4" />
+                  <span>Pulihkan ke Arsip Aktif</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => selectedBatch && handleMoveToBackup(selectedBatch.id, selectedBatch.tanggal)}
+                  disabled={saving}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-900 text-amber-300 border border-slate-700 text-xs font-bold rounded-xl cursor-pointer shadow-md transition-colors disabled:opacity-50"
+                  title="Pindahkan batch ini ke Arsip Backup (sembunyikan dari divisi operasional)"
+                >
+                  <Archive className="h-4 w-4 text-amber-400" />
+                  <span>Pindahkan ke Arsip Backup</span>
+                </button>
+              )}
+
               <button
                 onClick={handleDeleteBatch}
                 disabled={saving}
@@ -865,6 +1356,25 @@ export function MbgArchivePage() {
               </button>
             </div>
           </div>
+
+          {/* Warning banner inside details view if it is a backup batch */}
+          {selectedBatch?.isBackup && (
+            <div className="mb-4 p-3.5 rounded-xl bg-slate-900 text-white border border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck className="h-4 w-4 text-amber-400 shrink-0" />
+                <span>
+                  <strong>Data Arsip Backup:</strong> Data PM ini tersimpan di arsip backup dan <strong>tidak terlihat</strong> oleh divisi manapun (Produksi, Distribusi, Kurir, Purchasing).
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => selectedBatch && handleRestoreFromBackup(selectedBatch.id, selectedBatch.tanggal)}
+                className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-lg text-xs font-black transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
+              >
+                Pulihkan Sekarang
+              </button>
+            </div>
+          )}
 
           {/* Search bar inside details view */}
           <div className="mb-4">
@@ -1015,22 +1525,32 @@ export function MbgArchivePage() {
               <div className="flex gap-3">
                 <button
                   onClick={() => setConfirmState(null)}
-                  className="flex-1 py-2.5 rounded-xl border border-[#E5E7EB] text-xs font-bold text-[#6B7280] hover:bg-gray-50 cursor-pointer transition-colors"
+                  disabled={saving}
+                  className="flex-1 py-2.5 rounded-xl border border-[#E5E7EB] text-xs font-bold text-[#6B7280] hover:bg-gray-50 cursor-pointer transition-colors disabled:opacity-50"
                 >
                   Batal
                 </button>
                 <button
-                  onClick={() => {
-                    confirmState.onConfirm();
+                  disabled={saving}
+                  onClick={async () => {
+                    const fn = confirmState.onConfirm;
+                    await fn();
                     setConfirmState(null);
                   }}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-colors cursor-pointer ${
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 ${
                     confirmState.variant === 'danger'
                       ? 'bg-red-600 hover:bg-red-700'
                       : 'bg-[#FBBF24] text-[#111827] hover:bg-[#F59E0B]'
                   }`}
                 >
-                  Ya, Lanjutkan
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Menghapus...</span>
+                    </>
+                  ) : (
+                    'Ya, Lanjutkan'
+                  )}
                 </button>
               </div>
             </motion.div>

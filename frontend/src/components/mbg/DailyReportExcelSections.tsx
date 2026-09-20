@@ -67,8 +67,12 @@ function formatNum(val: number | undefined | null, decimals = 2): string {
 }
 
 // ─── HELPER: Filter PM Entries Inputted by Admin MBG for each Portion ──────────
-import { getFilteredPmEntries, type FilteredPmRow } from '../../utils/mbgPmFilter';
-export type { FilteredPmRow };
+import {
+  getAllDetailedPmEntries,
+  type FilteredPmRow,
+  type DetailedPmRow,
+} from '../../utils/mbgPmFilter';
+export type { FilteredPmRow, DetailedPmRow };
 
 
 // ─── COMPONENT UTAMA ─────────────────────────────────────────────────────────
@@ -527,14 +531,30 @@ export function DailyReportExcelSections({
       1
     );
 
-    // Filter PM data from Admin MBG input
-    const pmRows = getFilteredPmEntries(entries, portionType, curReport.sekolahList);
-    const filteredPmRows = pmRows.filter((p) =>
+    // Filter PM data from Admin MBG input (semua kategori porsi lengkap)
+    const detailedPmRows = getAllDetailedPmEntries(entries, curReport.sekolahList);
+    const filteredDetailedPmRows = detailedPmRows.filter((p) =>
       p.institutionName.toLowerCase().includes(pmSearchQuery.toLowerCase()) ||
       p.petugasName.toLowerCase().includes(pmSearchQuery.toLowerCase()) ||
-      p.categoryLabel.toLowerCase().includes(pmSearchQuery.toLowerCase())
+      p.categoryLabel.toLowerCase().includes(pmSearchQuery.toLowerCase()) ||
+      (p.rincian && p.rincian.toLowerCase().includes(pmSearchQuery.toLowerCase()))
     );
-    const totalPorsiPm = pmRows.reduce((s, p) => s + (p.isLibur ? 0 : p.portionCount), 0);
+
+    // Tab-specific portion count for top metric bar fallback if data.pmCount is 0
+    const currentTabPortionCount = detailedPmRows.reduce((s, p) => {
+      if (p.isLibur) return s;
+      if (portionType === 'kecil') return s + p.porsiKecil;
+      if (portionType === 'besar') return s + p.porsiBesar;
+      if (portionType === 'balita') return s + p.porsiBalita;
+      if (portionType === 'bumil') return s + p.porsiBumilBusui;
+      return s + p.totalJumlah;
+    }, 0);
+
+    const sumPorsiKecil = detailedPmRows.reduce((s, p) => s + (p.isLibur ? 0 : p.porsiKecil), 0);
+    const sumPorsiBesar = detailedPmRows.reduce((s, p) => s + (p.isLibur ? 0 : p.porsiBesar), 0);
+    const sumPorsiBalita = detailedPmRows.reduce((s, p) => s + (p.isLibur ? 0 : p.porsiBalita), 0);
+    const sumPorsiBumil = detailedPmRows.reduce((s, p) => s + (p.isLibur ? 0 : p.porsiBumilBusui), 0);
+    const grandTotalAllPorsi = detailedPmRows.reduce((s, p) => s + (p.isLibur ? 0 : p.totalJumlah), 0);
 
     return (
       <div className="space-y-6 animate-in fade-in duration-200">
@@ -545,7 +565,7 @@ export function DailyReportExcelSections({
               {data.portionTitle || defaultTitle}
             </span>
             <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-100 text-emerald-900 border border-emerald-300">
-              🎯 Sasaran: {data.pmCount || totalPorsiPm || 0} Porsi
+              🎯 Sasaran: {data.pmCount || currentTabPortionCount || 0} Porsi
             </span>
 
             {/* EDIT STATUS NOTICE */}
@@ -1153,19 +1173,16 @@ export function DailyReportExcelSections({
           </div>
         </div>
 
-        {/* ─── DATA INPUT ADMIN MBG (LANGSUNG DI BAWAH TABEL) ─── */}
+        {/* ─── DATA INPUT ADMIN MBG (TABEL PENERIMA MANFAAT LENGKAP: PORSI KECIL, BESAR, BALITA, BUMIL/BUSUI) ─── */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden font-['Hanken_Grotesk']">
           <div className="px-4 py-3 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-amber-400" />
                 <h4 className="text-xs font-black uppercase tracking-wider">
-                  Data Penerima Manfaat (Input Admin MBG) — Sasaran {data.portionTitle || defaultTitle}
+                  Data Penerima Manfaat (Input Admin MBG)
                 </h4>
               </div>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                Daftar institusi, sekolah, dan sasaran yang menerima alokasi porsi ini pada batch produksi aktif.
-              </p>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
@@ -1179,10 +1196,10 @@ export function DailyReportExcelSections({
                 <span>Kelola di Admin MBG</span>
               </button>
               <span className="px-3 py-1 bg-amber-400 text-slate-950 rounded-xl text-xs font-black shadow-xs">
-                Total Alokasi: {totalPorsiPm.toLocaleString('id-ID')} Porsi
+                Total Alokasi: {grandTotalAllPorsi.toLocaleString('id-ID')} Porsi
               </span>
               <span className="px-2.5 py-1 bg-slate-800 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold">
-                {pmRows.length} Lembaga
+                {detailedPmRows.length} Lembaga
               </span>
             </div>
           </div>
@@ -1200,16 +1217,16 @@ export function DailyReportExcelSections({
               />
             </div>
             <span className="text-[11px] text-slate-500 font-bold hidden sm:inline">
-              Menampilkan {filteredPmRows.length} dari {pmRows.length} sasaran
+              Menampilkan {filteredDetailedPmRows.length} dari {detailedPmRows.length} sasaran
             </span>
           </div>
 
           {/* Table Data Admin MBG */}
-          {filteredPmRows.length === 0 ? (
+          {filteredDetailedPmRows.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 space-y-2">
               <School className="h-8 w-8 text-slate-300 mx-auto" />
               <p className="font-bold text-slate-700">
-                Belum ada data input Admin MBG yang cocok untuk kategori {data.portionTitle || defaultTitle}.
+                Belum ada data input Admin MBG.
               </p>
               <p className="text-[11px] text-slate-400">
                 Pastikan Admin MBG telah menginput data sekolah/posyandu di menu Admin MBG atau mengimport data penerima manfaat.
@@ -1221,20 +1238,47 @@ export function DailyReportExcelSections({
                 <thead>
                   <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
                     <th className="px-3 py-2.5 w-10 text-center">No</th>
-                    <th className="px-4 py-2.5">Nama Institusi / Lembaga</th>
-                    <th className="px-3 py-2.5">Kategori / Jenjang</th>
-                    <th className="px-3 py-2.5 text-center font-black text-amber-900 bg-amber-50/60">
-                      Porsi Sasaran Ini
+                    <th className="px-4 py-2.5 min-w-[190px]">Nama Institusi / Lembaga</th>
+                    <th className="px-3 py-2.5 min-w-[95px]">Kategori / Jenjang</th>
+                    <th className={`px-3 py-2.5 text-center font-black transition-colors ${
+                      portionType === 'kecil'
+                        ? 'bg-amber-100/90 text-amber-950 border-b-2 border-amber-500'
+                        : 'text-slate-800 bg-slate-50/80'
+                    }`}>
+                      Porsi Kecil
                     </th>
-                    <th className="px-3 py-2.5 text-center">Rincian / Catatan</th>
-                    <th className="px-3 py-2.5 text-center font-bold">Total Seluruh Porsi</th>
-                    <th className="px-3 py-2.5">Petugas Kurir</th>
-                    <th className="px-3 py-2.5 text-center">Jadwal Pengantaran</th>
+                    <th className={`px-3 py-2.5 text-center font-black transition-colors ${
+                      portionType === 'besar'
+                        ? 'bg-amber-100/90 text-amber-950 border-b-2 border-amber-500'
+                        : 'text-slate-800 bg-slate-50/80'
+                    }`}>
+                      Porsi Besar
+                    </th>
+                    <th className={`px-3 py-2.5 text-center font-black transition-colors ${
+                      portionType === 'balita'
+                        ? 'bg-amber-100/90 text-amber-950 border-b-2 border-amber-500'
+                        : 'text-slate-800 bg-slate-50/80'
+                    }`}>
+                      Porsi Balita
+                    </th>
+                    <th className={`px-3 py-2.5 text-center font-black transition-colors ${
+                      portionType === 'bumil'
+                        ? 'bg-amber-100/90 text-amber-950 border-b-2 border-amber-500'
+                        : 'text-slate-800 bg-slate-50/80'
+                    }`}>
+                      Porsi Bumil / Busui
+                    </th>
+                    <th className="px-3 py-2.5 text-center font-black text-amber-950 bg-amber-50/80">
+                      Total Porsi
+                    </th>
+                    <th className="px-3 py-2.5 text-center min-w-[140px]">Rincian / Catatan</th>
+                    <th className="px-3 py-2.5 min-w-[120px]">Petugas Kurir</th>
+                    <th className="px-3 py-2.5 text-center min-w-[110px]">Jadwal Pengantaran</th>
                     <th className="px-3 py-2.5 text-center">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                  {filteredPmRows.map((row, idx) => (
+                  {filteredDetailedPmRows.map((row, idx) => (
                     <tr
                       key={row.id || idx}
                       className={`hover:bg-amber-50/30 transition-colors ${
@@ -1251,22 +1295,45 @@ export function DailyReportExcelSections({
                         )}
                       </td>
                       <td className="px-3 py-2 text-slate-600">
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700">
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700 whitespace-nowrap">
                           {row.categoryLabel}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-center font-black text-amber-800 bg-amber-50/50 text-sm">
-                        {row.portionCount.toLocaleString('id-ID')}
+                      <td className={`px-3 py-2 text-center font-bold ${
+                        portionType === 'kecil' ? 'bg-amber-50/80 font-black text-amber-900' : 'text-slate-700'
+                      }`}>
+                        {row.porsiKecil > 0 ? row.porsiKecil.toLocaleString('id-ID') : '-'}
                       </td>
-                      <td className="px-3 py-2 text-center text-slate-500 text-[11px]">
-                        {row.detailBreakdown || '-'}
+                      <td className={`px-3 py-2 text-center font-bold ${
+                        portionType === 'besar' ? 'bg-amber-50/80 font-black text-amber-900' : 'text-slate-700'
+                      }`}>
+                        {row.porsiBesar > 0 ? row.porsiBesar.toLocaleString('id-ID') : '-'}
                       </td>
-                      <td className="px-3 py-2 text-center font-bold text-slate-800">
+                      <td className={`px-3 py-2 text-center font-bold ${
+                        portionType === 'balita' ? 'bg-amber-50/80 font-black text-amber-900' : 'text-slate-700'
+                      }`}>
+                        {row.porsiBalita > 0 ? row.porsiBalita.toLocaleString('id-ID') : '-'}
+                      </td>
+                      <td className={`px-3 py-2 text-center font-bold ${
+                        portionType === 'bumil' ? 'bg-amber-50/80 font-black text-amber-900' : 'text-slate-700'
+                      }`}>
+                        {row.porsiBumilBusui > 0 ? row.porsiBumilBusui.toLocaleString('id-ID') : '-'}
+                      </td>
+                      <td className="px-3 py-2 text-center font-black text-amber-900 bg-amber-50/60 text-sm">
                         {row.totalJumlah.toLocaleString('id-ID')}
                       </td>
-                      <td className="px-3 py-2 text-slate-700 flex items-center gap-1.5 mt-1">
-                        <UserCheck className="h-3 w-3 text-emerald-600 shrink-0" />
-                        <span>{row.petugasName}</span>
+                      <td className="px-3 py-2 text-center text-slate-500 text-[11px] whitespace-nowrap">
+                        {row.rincian || '-'}
+                      </td>
+                      <td className="px-3 py-2 text-slate-700">
+                        {row.petugasName && row.petugasName !== '-' && row.petugasName !== 'Belum Ditugaskan' ? (
+                          <div className="flex items-center gap-1.5">
+                            <UserCheck className="h-3 w-3 text-emerald-600 shrink-0" />
+                            <span>{row.petugasName}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 font-medium">-</span>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-center text-slate-600 font-bold whitespace-nowrap">
                         <span className="inline-flex items-center gap-1">
@@ -1291,12 +1358,32 @@ export function DailyReportExcelSections({
                 <tfoot>
                   <tr className="bg-slate-900 text-white font-black text-xs border-t-2 border-slate-900">
                     <td colSpan={3} className="px-4 py-2.5 text-right uppercase tracking-wider">
-                      Total Porsi Sasaran ({filteredPmRows.length} Lembaga):
+                      Total ({filteredDetailedPmRows.length} Lembaga):
                     </td>
-                    <td className="px-3 py-2.5 text-center text-amber-300 font-extrabold text-sm bg-slate-800">
-                      {totalPorsiPm.toLocaleString('id-ID')}
+                    <td className={`px-3 py-2.5 text-center font-black ${
+                      portionType === 'kecil' ? 'text-amber-300 bg-slate-800 text-sm' : 'text-slate-300 bg-slate-850'
+                    }`}>
+                      {sumPorsiKecil.toLocaleString('id-ID')}
                     </td>
-                    <td colSpan={5} className="px-3 py-2.5 text-slate-400 font-medium italic">
+                    <td className={`px-3 py-2.5 text-center font-black ${
+                      portionType === 'besar' ? 'text-amber-300 bg-slate-800 text-sm' : 'text-slate-300 bg-slate-850'
+                    }`}>
+                      {sumPorsiBesar.toLocaleString('id-ID')}
+                    </td>
+                    <td className={`px-3 py-2.5 text-center font-black ${
+                      portionType === 'balita' ? 'text-amber-300 bg-slate-800 text-sm' : 'text-slate-300 bg-slate-850'
+                    }`}>
+                      {sumPorsiBalita.toLocaleString('id-ID')}
+                    </td>
+                    <td className={`px-3 py-2.5 text-center font-black ${
+                      portionType === 'bumil' ? 'text-amber-300 bg-slate-800 text-sm' : 'text-slate-300 bg-slate-850'
+                    }`}>
+                      {sumPorsiBumil.toLocaleString('id-ID')}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-amber-400 font-black text-sm bg-slate-950">
+                      {grandTotalAllPorsi.toLocaleString('id-ID')}
+                    </td>
+                    <td colSpan={4} className="px-3 py-2.5 text-slate-400 font-medium italic">
                       Data otomatis terhubung dengan inputan Administrasi PM MBG.
                     </td>
                   </tr>

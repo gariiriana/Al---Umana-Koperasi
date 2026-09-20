@@ -136,7 +136,7 @@ export function MbgReportPage() {
         const snap = await getDocs(q);
         const rangeBatches = snap.docs
           .map((d) => ({ id: d.id, ...d.data() } as MbgPmBatch))
-          .filter((b) => b.status !== 'DRAFT' || ((b.totalJumlah ?? 0) > 0));
+          .filter((b) => !b.isBackup && (b.status !== 'DRAFT' || ((b.totalJumlah ?? 0) > 0)));
 
         const groups: {
           tanggal: string;
@@ -631,10 +631,10 @@ export function MbgReportPage() {
         return;
       }
 
-      const dateRangeBatches = batchesSnapshot.docs.map((d) => ({
+      const dateRangeBatches = (batchesSnapshot.docs.map((d) => ({
         id: d.id,
         ...d.data(),
-      })) as MbgPmBatch[];
+      })) as MbgPmBatch[]).filter((b) => !b.isBackup);
 
       // 2. Fetch all entries for these batches by chunking batchIds in 10s
       const batchIds = dateRangeBatches.map((b) => b.id);
