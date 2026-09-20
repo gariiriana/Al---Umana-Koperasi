@@ -197,6 +197,8 @@ export interface MbgPmBatch {
   totalJumlah: number;
   /** List unique petugas names in this batch */
   petugasList: string[];
+  /** Total institusi / sekolah penerima manfaat dalam batch ini */
+  totalInstitusi?: number;
   /** Catatan khusus batch (e.g., "GANTI MENU KERINGAN") */
   batchNotes: string;
   /** Flag apakah batch dipindahkan ke arsip backup (disembunyikan dari divisi operasional) */

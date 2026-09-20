@@ -1762,11 +1762,16 @@ export function MbgProductionPage() {
         });
       }
 
+      // Only populate PM entries into mbg_pm_entries if the target batch is currently empty
+      // to avoid accidentally overwriting entries already inputted by Admin MBG
       if (importedPmEntries.length > 0) {
-        await clearBatchEntries(targetBatchId);
-        await addMultipleEntries(importedPmEntries);
-        await recalculateBatchTotals(targetBatchId);
-        await updateBatchStatus(targetBatchId, 'PM_SUBMITTED');
+        const hasExistingEntries = targetBatchId === selectedBatchId && entries.length > 0;
+        if (!hasExistingEntries) {
+          await clearBatchEntries(targetBatchId);
+          await addMultipleEntries(importedPmEntries);
+          await recalculateBatchTotals(targetBatchId);
+          await updateBatchStatus(targetBatchId, 'PM_SUBMITTED');
+        }
       }
 
       setSelectedBatchId(targetBatchId);

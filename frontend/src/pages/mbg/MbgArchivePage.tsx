@@ -33,6 +33,7 @@ import { ManageMenuModal } from './MbgAdminPage';
 import type { MbgPmBatch, MbgPmEntry, MbgInstitutionType, MbgClassBreakdown } from '@/types/mbg';
 import {
   subscribeBatches,
+  subscribeEntries,
   subscribeAllEntries,
   addEntry,
   updateEntry,
@@ -404,8 +405,10 @@ export function MbgArchivePage() {
   const [batches, setBatches] = useState<MbgPmBatch[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [entries, setEntries] = useState<MbgPmEntry[]>([]);
+  const [selectedBatchEntries, setSelectedBatchEntries] = useState<MbgPmEntry[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
   const [loadingEntries, setLoadingEntries] = useState(false);
+  const [loadingBatchDetail, setLoadingBatchDetail] = useState(false);
   const [selectedEntryForMenu, setSelectedEntryForMenu] = useState<MbgPmEntry | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchDate, setSearchDate] = useState('');
@@ -459,6 +462,28 @@ export function MbgArchivePage() {
     };
   }, []);
 
+  // Dedicated subscription for selected batch entries (fetches ALL entries for the active batch without truncation)
+  useEffect(() => {
+    if (!selectedBatchId) {
+      setSelectedBatchEntries([]);
+      setLoadingBatchDetail(false);
+      return;
+    }
+    setLoadingBatchDetail(true);
+    const unsub = subscribeEntries(
+      selectedBatchId,
+      (batchEntries) => {
+        setSelectedBatchEntries(batchEntries);
+        setLoadingBatchDetail(false);
+      },
+      (err) => {
+        console.error('Error loading selected batch entries:', err);
+        setLoadingBatchDetail(false);
+      }
+    );
+    return () => unsub();
+  }, [selectedBatchId]);
+
   const regularBatches = useMemo(() => {
     return batches.filter((b) => !b.isBackup);
   }, [batches]);
@@ -476,8 +501,11 @@ export function MbgArchivePage() {
   }, [batches, selectedBatchId]);
 
   const activeEntries = useMemo(() => {
-    return entries.filter((e) => e.batchId === selectedBatchId);
-  }, [entries, selectedBatchId]);
+    if (selectedBatchId) {
+      return selectedBatchEntries;
+    }
+    return [];
+  }, [selectedBatchId, selectedBatchEntries]);
 
   // Filtered entries within the selected batch
   const filteredEntries = useMemo(() => {
@@ -1229,7 +1257,7 @@ export function MbgArchivePage() {
                         <div>
                           <span className="text-gray-400 block font-medium">Sekolah/PM</span>
                           <span className="font-extrabold text-gray-800 text-xs">
-                            {batchEntries.length}
+                            {b.totalInstitusi || batchEntries.length}
                           </span>
                         </div>
                       </div>
@@ -1424,7 +1452,16 @@ export function MbgArchivePage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredEntries.length === 0 ? (
+                {loadingBatchDetail ? (
+                  <tr>
+                    <td colSpan={11} className="px-4 py-12 text-center text-xs font-bold text-gray-500">
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-5 w-5 animate-spin text-amber-500" />
+                        <span>Memuat data lengkap penerima manfaat batch...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredEntries.length === 0 ? (
                   <tr>
                     <td colSpan={11} className="px-4 py-8 text-center text-xs font-semibold text-gray-400 italic">
                       Belum ada data institusi dalam batch arsip ini.

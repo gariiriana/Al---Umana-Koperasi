@@ -260,7 +260,7 @@ export function subscribeAllEntries(
 ): Unsubscribe {
   const q = query(
     collection(db, ENTRIES_COLLECTION),
-    limit(150)
+    limit(5000)
   );
   return subscriptionManager.subscribe(
     q,
@@ -428,6 +428,7 @@ export async function recalculateBatchTotals(batchId: string): Promise<void> {
     totalGuruKader,
     totalPobiaNasi,
     totalJumlah,
+    totalInstitusi: entries.length,
     petugasList: Array.from(petugasSet),
   });
 }
