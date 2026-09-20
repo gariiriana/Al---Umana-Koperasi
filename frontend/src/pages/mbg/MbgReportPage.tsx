@@ -147,8 +147,7 @@ export function MbgReportPage() {
         for (const batch of rangeBatches) {
           const entriesQ = query(
             collection(db, 'mbg_pm_entries'),
-            where('batchId', '==', batch.id),
-            orderBy('sortOrder', 'asc')
+            where('batchId', '==', batch.id)
           );
           const entriesSnap = await getDocs(entriesQ);
           const entries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgPmEntry));

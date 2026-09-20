@@ -24,7 +24,9 @@ import {
   CheckSquare,
   Square,
   MinusSquare,
+  ExternalLink,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { ManageMenuModal } from './MbgAdminPage';
@@ -397,6 +399,7 @@ function PmEntryRow({
 export function MbgArchivePage() {
   const { user } = useAuth();
   const { showToast } = useToast();
+  const navigate = useNavigate();
 
   const [batches, setBatches] = useState<MbgPmBatch[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
@@ -1343,6 +1346,18 @@ export function MbgArchivePage() {
                 >
                   <Archive className="h-4 w-4 text-amber-400" />
                   <span>Pindahkan ke Arsip Backup</span>
+                </button>
+              )}
+
+              {selectedBatch && !selectedBatch.isBackup && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/mbg/production?batchId=${selectedBatch.id}`)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black rounded-xl cursor-pointer shadow-md transition-all hover:scale-[1.02]"
+                  title="Lihat data batch ini langsung di menu Produksi MBG"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  <span>Buka di Produksi MBG</span>
                 </button>
               )}
 

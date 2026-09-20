@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { useEffect, useMemo, useState, Fragment } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plus, Trash2, FileDown, Calendar, Loader2, CheckCircle2, Search, X, Folder, Send,
   ClipboardList, FileText, FolderOpen, FileUp, Save, Sparkles, FileSpreadsheet, ChevronDown, ChevronUp,
@@ -25,7 +26,7 @@ import {
   subscribeCustomTkpiEntries, addCustomTkpiEntry, updateCustomTkpiEntry, deleteCustomTkpiEntry,
   subscribeCustomRecipes, addCustomRecipe, updateCustomRecipe, deleteCustomRecipe,
   subscribeRecipeAdjustments, saveRecipeAdjustment, deleteRecipeAdjustment,
-  subscribeDailyReport, saveDailyReport, subscribeAllDailyReports,
+  subscribeDailyReport, saveDailyReport, deleteDailyReport, subscribeAllDailyReports,
 } from '@/services/mbgProductionService';
 import { export8PageDailyReportPdf } from '@/utils/dailyReportPdfExporter';
 import { exportProductionDocx } from '@/utils/mbgProductionDocxGenerator';
@@ -128,9 +129,12 @@ const standarResep: StandarResep[] = [];
 export function MbgProductionPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [batches, setBatches] = useState<MbgPmBatch[]>([]);
-  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(() => {
+    return new URLSearchParams(window.location.search).get('batchId') || null;
+  });
   const [entries, setEntries] = useState<MbgPmEntry[]>([]);
   const [nutritionData, setNutritionData] = useState<MbgNutritionEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -307,6 +311,17 @@ export function MbgProductionPage() {
 
         if (finalizedBatches.length > 0) {
           setSelectedBatchId((curr) => {
+            const urlBatchId = searchParams.get('batchId');
+            const urlDate = searchParams.get('date');
+
+            if (urlBatchId && finalizedBatches.some((b) => b.id === urlBatchId)) {
+              return urlBatchId;
+            }
+            if (urlDate) {
+              const matchedByDate = finalizedBatches.find((b) => b.tanggal === urlDate);
+              if (matchedByDate) return matchedByDate.id;
+            }
+
             if (curr && finalizedBatches.some((b) => b.id === curr)) return curr;
             const todayStr = new Date().toISOString().split('T')[0];
             const todayBatch = finalizedBatches.find((b) => b.tanggal === todayStr);
@@ -390,14 +405,43 @@ export function MbgProductionPage() {
     return batches;
   }, [batches]);
 
-  // Auto-select latest batch if none is currently selected
+  // Auto-select batch if none selected: check query param first, then today, then latest
   useEffect(() => {
     if (batches.length > 0) {
+      const urlBatchId = searchParams.get('batchId');
+      const urlDate = searchParams.get('date');
+
+      if (urlBatchId && batches.some((b) => b.id === urlBatchId)) {
+        if (selectedBatchId !== urlBatchId) {
+          setSelectedBatchId(urlBatchId);
+        }
+        return;
+      }
+
+      if (urlDate) {
+        const matched = batches.find((b) => b.tanggal === urlDate);
+        if (matched) {
+          if (selectedBatchId !== matched.id) {
+            setSelectedBatchId(matched.id);
+          }
+          return;
+        }
+      }
+
       if (!selectedBatchId || !batches.some((b) => b.id === selectedBatchId)) {
-        setSelectedBatchId(batches[0].id);
+        const todayStr = new Date().toISOString().split('T')[0];
+        const todayBatch = batches.find((b) => b.tanggal === todayStr);
+        setSelectedBatchId(todayBatch ? todayBatch.id : batches[0].id);
       }
     }
-  }, [batches, selectedBatchId]);
+  }, [batches, selectedBatchId, searchParams]);
+
+  // Sync selectedBatchId to URL searchParams
+  useEffect(() => {
+    if (selectedBatchId && searchParams.get('batchId') !== selectedBatchId) {
+      setSearchParams({ batchId: selectedBatchId }, { replace: true });
+    }
+  }, [selectedBatchId, searchParams, setSearchParams]);
 
   // Subscribe all daily reports to track which batches have saved reports
   useEffect(() => {
@@ -846,6 +890,29 @@ export function MbgProductionPage() {
   const effectiveDailyReport = useMemo(() => {
     return dailyReport;
   }, [dailyReport]);
+
+  const handleResetDailyReport = (report: MbgProductionDailyReport) => {
+    if (!report.id) return;
+    setConfirmModal({
+      isOpen: true,
+      title: 'Reset / Hapus Data Import Excel',
+      message: `Apakah Anda yakin ingin menghapus data laporan harian Excel (${report.sheetDayName || report.tanggal || 'Ter-import'}) dari batch ini? Tampilan data PM akan kembali otomatis menampilkan data asli yang diinput oleh Admin MBG (${entries.length} institusi, ${selectedBatch?.totalJumlah || 0} porsi).`,
+      confirmLabel: 'Ya, Hapus Data Import',
+      cancelLabel: 'Batal',
+      variant: 'danger',
+      icon: 'delete',
+      onConfirm: async () => {
+        try {
+          await deleteDailyReport(report.id!);
+          setDailyReport(null);
+          showToast({ message: 'Data import Excel berhasil dihapus! Menampilkan data PM asli Admin MBG.', variant: 'success' });
+        } catch (err) {
+          console.error('Error deleting daily report:', err);
+          showToast({ message: 'Gagal menghapus data laporan Excel', variant: 'error' });
+        }
+      },
+    });
+  };
 
   const handleDeleteBatch = (batchId: string, tanggal: string) => {
     setConfirmModal({
@@ -2352,7 +2419,16 @@ export function MbgProductionPage() {
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 self-start sm:self-auto">
+                          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => handleResetDailyReport(curReport)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 hover:border-rose-400 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                              title="Hapus data import Excel dan kembalikan ke data PM asli Admin MBG"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                              <span>Reset Import Excel</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => setShowImportedDetails(!showImportedDetails)}
@@ -2425,30 +2501,87 @@ export function MbgProductionPage() {
                               onSubTabChange={setDailyReportSubTab}
                               entries={entries}
                               onSaveReport={handleSaveDailyReportFromTable}
+                              batchTanggal={selectedBatch?.tanggal}
                             />
                           </div>
                         )}
                       </div>
                     );
                   })() : (
-                    <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-3 shadow-xs font-['Hanken_Grotesk']">
-                      <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-2xl w-fit mx-auto shadow-xs border border-emerald-100">
-                        <FileSpreadsheet className="h-8 w-8" />
+                    <div className="space-y-4">
+                      <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-3 shadow-xs font-['Hanken_Grotesk']">
+                        <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-2xl w-fit mx-auto shadow-xs border border-emerald-100">
+                          <FileSpreadsheet className="h-8 w-8" />
+                        </div>
+                        <h3 className="text-sm font-black text-slate-900">
+                          Data Laporan Harian Belum Di-import
+                        </h3>
+                        <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                          Batch tanggal <strong>{selectedBatch?.tanggal}</strong> belum memiliki data import Excel / Google Sheets Laporan Harian. Anda dapat meng-import file Excel/Sheets untuk analisis gizi, atau memantau data penerima manfaat di bawah.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setShowSheetsImportModal(true)}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-sm cursor-pointer"
+                        >
+                          <FileUp className="h-4 w-4 text-white" />
+                          <span>Import Google Sheets / Excel Sekarang</span>
+                        </button>
                       </div>
-                      <h3 className="text-sm font-black text-slate-900">
-                        Data Laporan Harian Belum Di-import
-                      </h3>
-                      <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                        Batch ini belum memiliki data import Excel / Google Sheets Laporan Harian. Silakan klik tombol <strong>"Import Google Sheets / Excel"</strong> di atas untuk menyinkronkan data realisasi menu, gizi, dan sasaran PM.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setShowSheetsImportModal(true)}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-sm cursor-pointer"
-                      >
-                        <FileUp className="h-4 w-4 text-white" />
-                        <span>Import Google Sheets / Excel Sekarang</span>
-                      </button>
+
+                      {/* Display PM data table directly if entries exist */}
+                      {entries.length > 0 && (
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden font-['Hanken_Grotesk']">
+                          <div className="px-4 py-3 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="text-xs font-black uppercase tracking-wider">
+                                Data Penerima Manfaat (Input Admin MBG)
+                              </h4>
+                              <span className="px-2.5 py-0.5 bg-amber-400/20 text-amber-300 border border-amber-400/40 rounded-full text-[11px] font-black">
+                                Batch: {selectedBatch?.tanggal}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="px-3 py-1 bg-amber-400 text-slate-950 rounded-xl text-xs font-black shadow-xs">
+                                Total Alokasi: {entries.reduce((s, e) => s + (e.jumlah || 0), 0).toLocaleString('id-ID')} Porsi
+                              </span>
+                              <span className="px-2.5 py-1 bg-slate-800 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold">
+                                {entries.length} Lembaga
+                              </span>
+                            </div>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs text-left">
+                              <thead>
+                                <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+                                  <th className="px-3 py-2.5 w-10 text-center">No</th>
+                                  <th className="px-4 py-2.5 min-w-[190px]">Nama Institusi / Lembaga</th>
+                                  <th className="px-3 py-2.5 text-center">Siswa / Balita</th>
+                                  <th className="px-3 py-2.5 text-center">Bumil / Busui</th>
+                                  <th className="px-3 py-2.5 text-center">Guru / Kader</th>
+                                  <th className="px-3 py-2.5 text-center font-black">Total Porsi</th>
+                                  <th className="px-3 py-2.5">Petugas Kurir</th>
+                                  <th className="px-3 py-2.5">Jadwal</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {entries.map((e, idx) => (
+                                  <tr key={e.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="px-3 py-2.5 text-center text-slate-400 font-bold">{idx + 1}</td>
+                                    <td className="px-4 py-2.5 font-bold text-slate-900">{e.institutionName}</td>
+                                    <td className="px-3 py-2.5 text-center text-slate-700">{e.qtSiswaBalita || '-'}</td>
+                                    <td className="px-3 py-2.5 text-center text-slate-700">{e.qtBumilBusui || '-'}</td>
+                                    <td className="px-3 py-2.5 text-center text-slate-700">{e.qtGuruKader || '-'}</td>
+                                    <td className="px-3 py-2.5 text-center font-black text-amber-700">{e.jumlah || 0}</td>
+                                    <td className="px-3 py-2.5 text-slate-600">{e.assignedPetugasName || '-'}</td>
+                                    <td className="px-3 py-2.5 text-slate-500 text-[11px]">{e.jadwalPengantaran || '-'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 

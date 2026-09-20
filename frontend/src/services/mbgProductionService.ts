@@ -294,3 +294,8 @@ export async function saveDailyReport(
   }
 }
 
+export async function deleteDailyReport(id: string): Promise<void> {
+  await deleteDoc(doc(db, DAILY_REPORTS_COLLECTION, id));
+}
+
+

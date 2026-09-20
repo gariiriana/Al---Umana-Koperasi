@@ -1803,22 +1803,6 @@ export function MbgAdminPage() {
                   className="text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/30 rounded-lg border border-slate-300 px-2 py-1 bg-slate-50 cursor-pointer"
                 />
 
-                {batches.length > 1 && (
-                  <select
-                    value={selectedBatchId || ''}
-                    onChange={(e) => setSelectedBatchId(e.target.value)}
-                    title="Pilih Batch Terdaftar"
-                    aria-label="Pilih Batch Terdaftar"
-                    className="text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/30 rounded-lg border border-slate-300 px-2 py-1 bg-white cursor-pointer"
-                  >
-                    {batches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        Batch {b.tanggal}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
                 {selectedBatch && (
                   <div className="text-xs text-slate-600 font-medium pl-2 border-l border-slate-200 flex items-center gap-1.5">
                     <span className="font-extrabold text-slate-800">

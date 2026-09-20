@@ -53,6 +53,7 @@ interface DailyReportExcelSectionsProps {
   onSubTabChange?: (tab: MbgDailyReportSubTab) => void;
   entries?: MbgPmEntry[];
   onSaveReport?: (updatedReport: MbgProductionDailyReport) => Promise<void>;
+  batchTanggal?: string;
 }
 
 function formatRp(val: number | undefined | null): string {
@@ -84,6 +85,7 @@ export function DailyReportExcelSections({
   onSubTabChange,
   entries = [],
   onSaveReport,
+  batchTanggal,
 }: DailyReportExcelSectionsProps) {
   const navigate = useNavigate();
   const [internalSubTab, setInternalSubTab] = useState<MbgDailyReportSubTab>(defaultSubTab);
@@ -1177,11 +1179,16 @@ export function DailyReportExcelSections({
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden font-['Hanken_Grotesk']">
           <div className="px-4 py-3 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Building2 className="h-4 w-4 text-amber-400" />
                 <h4 className="text-xs font-black uppercase tracking-wider">
                   Data Penerima Manfaat (Input Admin MBG)
                 </h4>
+                {(batchTanggal || curReport.tanggal) && (
+                  <span className="px-2.5 py-0.5 bg-amber-400/20 text-amber-300 border border-amber-400/40 rounded-full text-[11px] font-black">
+                    Batch: {batchTanggal || curReport.tanggal}
+                  </span>
+                )}
               </div>
             </div>
 
