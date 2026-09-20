@@ -17,7 +17,7 @@ import { DailyReportExcelSections, type MbgDailyReportSubTab } from '@/component
 import {
   subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule,
   saveWeeklySchedule, getMenuForDate, deleteBatch, createBatch,
-  addMultipleEntries, recalculateBatchTotals, clearBatchEntries, cleanDuplicateBatchEntries,
+  addMultipleEntries, recalculateBatchTotals, clearBatchEntries,
   type MbgPortionClassification
 } from '@/services/mbgAdminService';
 import {
@@ -1240,26 +1240,6 @@ export function MbgProductionPage() {
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingDocx, setExportingDocx] = useState(false);
   const [savingReport, setSavingReport] = useState(false);
-  const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
-
-  const handleCleanDuplicates = async () => {
-    if (!selectedBatchId) return;
-    setIsCleaningDuplicates(true);
-    try {
-      const removed = await cleanDuplicateBatchEntries(selectedBatchId);
-      if (removed > 0) {
-        await recalculateBatchTotals(selectedBatchId);
-        showToast({ message: `Berhasil membersihkan ${removed} data lembaga yang duplikat!`, variant: 'success' });
-      } else {
-        showToast({ message: 'Tidak ditemukan data lembaga yang duplikat pada batch ini.', variant: 'info' });
-      }
-    } catch (err) {
-      console.error('Clean duplicate error:', err);
-      showToast({ message: 'Gagal membersihkan data duplikat', variant: 'error' });
-    } finally {
-      setIsCleaningDuplicates(false);
-    }
-  };
 
   const handleExportDocxAction = async (targetBatch?: MbgPmBatch, targetEntries?: MbgPmEntry[]) => {
     const batchToUse = targetBatch || selectedBatch;
@@ -1851,17 +1831,6 @@ export function MbgProductionPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {selectedBatchId && (
-            <button
-              onClick={handleCleanDuplicates}
-              disabled={isCleaningDuplicates}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50"
-              title="Periksa dan bersihkan data lembaga penerima manfaat yang ter-input duplikat"
-            >
-              {isCleaningDuplicates ? <Loader2 className="h-4 w-4 animate-spin text-amber-600" /> : <Sparkles className="h-4 w-4 text-amber-600" />}
-              <span>Bersihkan Duplikat PM</span>
-            </button>
-          )}
           <button
             onClick={() => setShowSheetsImportModal(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#10B981] hover:bg-[#059669] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap"
@@ -1869,40 +1838,6 @@ export function MbgProductionPage() {
           >
             <FileUp className="h-4 w-4 text-white" />
             <span>Import Google Sheets / Excel</span>
-          </button>
-          <button
-            onClick={() => handleExportPdf()}
-            disabled={exportingPdf}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50"
-            title="Export Laporan Harian Operasional PDF Landscape Resmi"
-          >
-            {exportingPdf ? (
-              <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
-            ) : (
-              <FileDown className="h-4 w-4 text-amber-400" />
-            )}
-            <span>Export PDF</span>
-          </button>
-          <button
-            onClick={() => handleExportDocxAction()}
-            disabled={exportingDocx}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#1E3A8A] hover:bg-[#1D4ED8] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50"
-            title="Export Laporan Harian Operasional DOCX (Word) Landscape Resmi"
-          >
-            {exportingDocx ? (
-              <Loader2 className="h-4 w-4 animate-spin text-blue-200" />
-            ) : (
-              <FileText className="h-4 w-4 text-blue-200" />
-            )}
-            <span>Export DOCX</span>
-          </button>
-          <button
-            onClick={() => setShowScheduleModal(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#059669] hover:bg-[#047857] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap"
-            title="Lihat / Edit Master Jadwal Menu Mingguan MBG"
-          >
-            <Calendar className="h-4 w-4 text-emerald-200" />
-            <span>Master Jadwal Menu</span>
           </button>
           {activeTab === 'nutrition' && selectedBatchId && (
             <>
