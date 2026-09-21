@@ -11,6 +11,7 @@ import type {
   MbgPmEntry,
   MbgPortionDailyData,
 } from '@/types/mbg';
+import { getAllDetailedPmEntries } from '@/utils/mbgPmFilter';
 
 const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
   try {
@@ -178,10 +179,52 @@ const getUniquePmEntries = (entries: MbgPmEntry[]): MbgPmEntry[] => {
   });
 };
 
+const splitForPdf = (total: number): [number, number] => [
+  Math.ceil(Math.max(0, total) / 2),
+  Math.floor(Math.max(0, total) / 2),
+];
+
+/**
+ * The recipient table in the PDF must use the very same row and portion
+ * calculation used by the website, otherwise aggregated PM data diverges.
+ */
+const buildWebsiteAlignedRekapRows = (
+  entries: MbgPmEntry[],
+  sekolahList: { nama: string; murid: number; guru: number }[]
+): RekapPmRowData[] => {
+  const entriesById = new Map(entries.map((entry) => [entry.id, entry]));
+  return getAllDetailedPmEntries(entries, sekolahList).map((row) => {
+    const source = entriesById.get(row.id);
+    const [kecilL, kecilP] = splitForPdf(row.porsiKecil);
+    const [besarL, besarP] = splitForPdf(row.porsiBesar);
+    const [balitaL, balitaP] = splitForPdf(row.porsiBalita);
+    const [bumilL, bumilP] = splitForPdf(row.porsiBumilBusui);
+    const guruTotal = source?.qtGuruKader || 0;
+    const [guruL, guruP] = splitForPdf(guruTotal);
+    const siswaJumlah = Math.max(0, row.totalJumlah - guruTotal);
+    const [siswaL, siswaP] = splitForPdf(siswaJumlah);
+    const tendikL = source?.qtTendikL || 0;
+    const tendikP = source?.qtTendikP || 0;
+
+    return {
+      nama: row.institutionName + (row.isLibur ? ' (Libur)' : ''),
+      kecilL, kecilP, besarL, besarP, balitaL, balitaP, bumilL, bumilP,
+      siswaL, siswaP, siswaJumlah,
+      guruL, guruP,
+      tendikL, tendikP, tendikJumlah: tendikL + tendikP,
+      totalAkhir: row.isLibur ? 0 : row.totalJumlah,
+    };
+  });
+};
+
 export const buildRekapPmRows = (
   entries: MbgPmEntry[] = [],
   sekolahList: { nama: string; murid: number; guru: number }[] = []
 ): RekapPmRowData[] => {
+  if (entries.length > 0) {
+    return buildWebsiteAlignedRekapRows(entries, sekolahList);
+  }
+
   if (entries && entries.length > 0) {
     const uniqueEntries = getUniquePmEntries(entries);
     return uniqueEntries.map((e) => {
@@ -1056,8 +1099,8 @@ export async function export8PageDailyReportPdf(
   const logoBadanGizi = await getBase64ImageFromUrl('/logo_badan_gizi.png');
 
   const tanggalStr = report.tanggal || batch?.tanggal || new Date().toISOString().split('T')[0];
-  const totalDariEntries = getUniquePmEntries(entries)
-    .reduce((sum, entry) => sum + (entry.isSekolahLibur ? 0 : (entry.jumlah || 0)), 0);
+  const totalDariEntries = buildRekapPmRows(entries, report.sekolahList)
+    .reduce((sum, row) => sum + row.totalAkhir, 0);
   const totalPorsiBatch =
     totalDariEntries ||
     batch?.totalJumlah ||
