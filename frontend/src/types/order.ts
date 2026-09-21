@@ -128,8 +128,13 @@ export interface Order {
 
 export interface KitchenSignature {
   kitchenName: string;
-  signatureDataUrl: string;
+  /**
+   * Legacy inline photo payload. Kept so old delivery records remain readable.
+   * New records store the original photos in `delivery_files` instead.
+   */
+  signatureDataUrl?: string;
+  /** IDs of chunked handover photos in the `delivery_files` collection. */
+  photoFileIds?: string[];
   staffName: string;
   signedAt: string;
 }
-

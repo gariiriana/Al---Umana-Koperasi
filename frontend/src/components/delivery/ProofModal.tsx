@@ -5,6 +5,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/Button";
 import type { KitchenSignature } from "@/types/order";
+import { fetchDeliveryFile } from "@/services/deliveryFileService";
 
 interface ProofModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ export function ProofModal({ isOpen, onClose, proofFileIds, deliveryStartPhotoId
   const [photos, setPhotos] = useState<{ src: string; description?: string }[]>([]);
   const [sigSrc, setSigSrc] = useState<string | null>(null);
   const [startPhotoSrc, setStartPhotoSrc] = useState<string | null>(null);
+  const [kitchenPhotoSources, setKitchenPhotoSources] = useState<Record<number, string[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,6 +28,7 @@ export function ProofModal({ isOpen, onClose, proofFileIds, deliveryStartPhotoId
       setPhotos([]);
       setSigSrc(null);
       setStartPhotoSrc(null);
+      setKitchenPhotoSources({});
       return;
     }
 
@@ -98,6 +101,28 @@ export function ProofModal({ isOpen, onClose, proofFileIds, deliveryStartPhotoId
           setPhotos([]);
           setSigSrc(null);
         }
+
+        const loadedKitchenPhotos = await Promise.all(
+          (kitchenSignatures || []).map(async (signature) => {
+            if (signature.photoFileIds?.length) {
+              const files = await Promise.all(signature.photoFileIds.map(fetchDeliveryFile));
+              return files.flatMap((file) => (file ? [file.src] : []));
+            }
+            const legacyValue = signature.signatureDataUrl || "";
+            try {
+              return legacyValue.startsWith("[") && legacyValue.endsWith("]")
+                ? JSON.parse(legacyValue)
+                : legacyValue
+                  ? [legacyValue]
+                  : [];
+            } catch {
+              return legacyValue ? [legacyValue] : [];
+            }
+          }),
+        );
+        setKitchenPhotoSources(
+          Object.fromEntries(loadedKitchenPhotos.map((sources, index) => [index, sources])),
+        );
       } catch (err) {
         console.error("Gagal memuat bukti pengiriman:", err);
         setError("Gagal memuat bukti pengiriman.");
@@ -107,7 +132,7 @@ export function ProofModal({ isOpen, onClose, proofFileIds, deliveryStartPhotoId
     };
 
     loadProofs();
-  }, [isOpen, proofFileIds, deliveryStartPhotoId]);
+  }, [isOpen, proofFileIds, deliveryStartPhotoId, kitchenSignatures]);
 
   if (!isOpen) return null;
 
@@ -228,16 +253,7 @@ export function ProofModal({ isOpen, onClose, proofFileIds, deliveryStartPhotoId
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 {kitchenSignatures.map((ks, idx) => {
-                  let photos: string[] = [];
-                  try {
-                    if (ks.signatureDataUrl.startsWith("[") && ks.signatureDataUrl.endsWith("]")) {
-                      photos = JSON.parse(ks.signatureDataUrl);
-                    } else {
-                      photos = ks.signatureDataUrl ? [ks.signatureDataUrl] : [];
-                    }
-                  } catch {
-                    photos = ks.signatureDataUrl ? [ks.signatureDataUrl] : [];
-                  }
+                  const photos = kitchenPhotoSources[idx] || [];
 
                   return (
                     <div key={idx} className="border border-[#E5E7EB] rounded-2xl p-4 bg-neutral-50 flex flex-col justify-between space-y-3 shadow-2xs font-['Hanken_Grotesk']">

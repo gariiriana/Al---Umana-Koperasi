@@ -143,6 +143,7 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     kitchen: data.kitchen as string | undefined,
     itemKitchens: data.itemKitchens as Record<string, string> | undefined,
     qaStartChecklist: data.qaStartChecklist as Order["qaStartChecklist"] | undefined,
+    kitchenSignatures: data.kitchenSignatures as Order["kitchenSignatures"],
     isPreOrder: !!data.isPreOrder,
   };
 }

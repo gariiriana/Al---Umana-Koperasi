@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { Order } from '@/types/order';
+import { fetchDeliveryFile } from '@/services/deliveryFileService';
 
 // Helper to load image as base64 with natural dimensions
 export const getBase64ImageWithDimensions = async (
@@ -259,13 +260,31 @@ export const exportCateringDeliveryProofPdf = async (
   curY += 4;
 
   // Load photos (proof photos + signatures)
-  const proofUrls: string[] = order.proofFileIds || [];
+  const proofUrls = (
+    await Promise.all((order.proofFileIds || []).map(async (fileId) => (await fetchDeliveryFile(fileId))?.src || null))
+  ).flatMap((src) => (src ? [src] : []));
   const kitchenPhotos: string[] = [];
-  (order.kitchenSignatures || []).forEach((ks) => {
-    if (ks.signatureDataUrl) {
-      kitchenPhotos.push(ks.signatureDataUrl);
+  for (const signature of order.kitchenSignatures || []) {
+    if (signature.photoFileIds?.length) {
+      const storedPhotos = await Promise.all(
+        signature.photoFileIds.map(async (fileId) => (await fetchDeliveryFile(fileId))?.src || null),
+      );
+      kitchenPhotos.push(...storedPhotos.flatMap((src) => (src ? [src] : [])));
+      continue;
     }
-  });
+
+    const legacyValue = signature.signatureDataUrl || '';
+    if (legacyValue) {
+      try {
+        const parsed = legacyValue.startsWith('[') && legacyValue.endsWith(']')
+          ? JSON.parse(legacyValue)
+          : [legacyValue];
+        kitchenPhotos.push(...parsed);
+      } catch {
+        kitchenPhotos.push(legacyValue);
+      }
+    }
+  }
 
 
   // Calculate box positions

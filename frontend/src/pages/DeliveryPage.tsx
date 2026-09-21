@@ -17,6 +17,12 @@ import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import { dispatchOrder } from "@/services/orderService";
 import { pushNotification } from "@/services/notificationWriter";
+import { uploadFileInChunks } from "@/services/chunkUploadService";
+import {
+  canStartCourierDelivery,
+  isActiveCourierAssignment,
+  isAssignedToCourier,
+} from "@/lib/deliveryAssignment";
 
 const renderFormattedAddress = (address: string) => {
   if (!address) return null;
@@ -95,29 +101,31 @@ interface StartDeliveryFormProps {
   onCancel: () => void;
 }
 
+interface HandoverPhoto {
+  file: File;
+  previewUrl: string;
+}
+
 function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitLabel, setSubmitLabel] = useState("Mulai Pengantaran (Sudah QC & Serah Terima)");
 
   // QC Checklist states
   const [qcProductCheck, setQcProductCheck] = useState<Record<string, boolean>>({});
   const [qcQuantityCheck, setQcQuantityCheck] = useState<Record<string, boolean>>({});
 
   // Kitchen signatures (now photos) and staff names states
-  const [signatures, setSignatures] = useState<Record<string, string[]>>({});
+  const [signatures, setSignatures] = useState<Record<string, HandoverPhoto[]>>({});
   const [staffNames, setStaffNames] = useState<Record<string, string>>({});
   const [activeKitchenCamera, setActiveKitchenCamera] = useState<string | null>(null);
 
   const handleCapturePhoto = (kitchen: string, file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      setSignatures((prev) => {
-        const existing = prev[kitchen] || [];
-        return { ...prev, [kitchen]: [...existing, dataUrl] };
-      });
-    };
-    reader.readAsDataURL(file);
+    const photo: HandoverPhoto = { file, previewUrl: URL.createObjectURL(file) };
+    setSignatures((prev) => {
+      const existing = prev[kitchen] || [];
+      return { ...prev, [kitchen]: [...existing, photo] };
+    });
   };
 
   const uniqueKitchens = useMemo(() => {
@@ -166,19 +174,44 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
     setError(null);
     try {
       const now = new Date().toISOString();
-      const kitchenSignaturesList: KitchenSignature[] = uniqueKitchens
-        .filter((k) => (signatures[k] || []).length >= 2 && staffNames[k]?.trim().length > 0)
-        .map((k) => ({
-          kitchenName: k,
-          signatureDataUrl: JSON.stringify(signatures[k] || []),
-          staffName: staffNames[k].trim(),
+      const completedKitchens = uniqueKitchens.filter(
+        (k) => (signatures[k] || []).length >= 2 && staffNames[k]?.trim().length > 0,
+      );
+      const totalPhotos = completedKitchens.reduce((sum, kitchen) => sum + signatures[kitchen].length, 0);
+      let uploadedPhotos = 0;
+      const kitchenSignaturesList: KitchenSignature[] = [];
+
+      for (const kitchen of completedKitchens) {
+        const photoFileIds: string[] = [];
+        for (const photo of signatures[kitchen]) {
+          setSubmitLabel(`Mengunggah dokumentasi ${uploadedPhotos + 1}/${totalPhotos}…`);
+          const result = await uploadFileInChunks(photo.file, {
+            orderId: order.id,
+            description: `Serah terima dapur ${kitchen}`,
+          });
+          photoFileIds.push(result.fileId);
+          uploadedPhotos += 1;
+        }
+        kitchenSignaturesList.push({
+          kitchenName: kitchen,
+          photoFileIds,
+          staffName: staffNames[kitchen].trim(),
           signedAt: now,
-        }));
+        });
+      }
+
+      setSubmitLabel("Memulai pengantaran…");
       await onStart(kitchenSignaturesList);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      console.error("Gagal memulai pengantaran:", err);
+      setError(
+        err instanceof Error
+          ? `Gagal memulai pengantaran: ${err.message}`
+          : "Gagal memulai pengantaran. Silakan coba lagi.",
+      );
     } finally {
       setSubmitting(false);
+      setSubmitLabel("Mulai Pengantaran (Sudah QC & Serah Terima)");
     }
   };
 
@@ -320,13 +353,14 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
                 {/* Captured photos list */}
                 {(signatures[kitchen] || []).length > 0 && (
                   <div className="flex flex-wrap gap-2 justify-center py-1 bg-neutral-50 rounded-lg border border-neutral-100 p-2">
-                    {(signatures[kitchen] || []).map((imgUrl, imgIdx) => (
+                    {(signatures[kitchen] || []).map((photo, imgIdx) => (
                       <div key={imgIdx} className="relative border border-[#E5E7EB] rounded-lg overflow-hidden w-20 h-20 bg-white shadow-3xs">
-                        <img src={imgUrl} alt={`Handover ${kitchen} #${imgIdx + 1}`} className="w-full h-full object-cover" />
+                        <img src={photo.previewUrl} alt={`Handover ${kitchen} #${imgIdx + 1}`} className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() => setSignatures(prev => {
                             const existing = prev[kitchen] || [];
+                            URL.revokeObjectURL(existing[imgIdx]?.previewUrl || "");
                             const updated = existing.filter((_, idx) => idx !== imgIdx);
                             return { ...prev, [kitchen]: updated };
                           })}
@@ -365,11 +399,11 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
       <div className="flex gap-3 pt-2">
         <button
           onClick={handleSubmit}
-          disabled={submitting || !isFormValid}
+          disabled={submitting}
           className="flex-1 flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold rounded-xl transition shadow-md shadow-amber-700/15 disabled:from-neutral-100 disabled:to-neutral-100 disabled:text-neutral-400 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer text-center text-xs"
         >
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          Mulai Pengantaran (Sudah QC & Serah Terima)
+          {submitLabel}
         </button>
         <button
           onClick={onCancel}
@@ -406,6 +440,36 @@ const getOrderDeadline = (order: Order): number => {
   }
   const ts = Date.parse(`${datePart}T${time}`);
   return isNaN(ts) ? Infinity : ts;
+};
+
+const getCourierStatusMeta = (status: Order["status"]) => {
+  if (status === "READY_TO_DELIVER" || status === "READY") {
+    return {
+      label: "Siap Diambil",
+      barClass: "bg-gradient-to-r from-blue-400 to-cyan-400",
+      badgeClass: "bg-blue-100 text-blue-700",
+      iconClass: "bg-blue-50 border-blue-200 text-blue-600",
+    };
+  }
+  if (status === "OUT_FOR_DELIVERY") {
+    return {
+      label: "Sedang Jalan",
+      barClass: "bg-gradient-to-r from-orange-400 to-amber-400",
+      badgeClass: "bg-orange-100 text-orange-700",
+      iconClass: "bg-orange-50 border-orange-200 text-orange-600",
+    };
+  }
+  const label = status === "IN_PRODUCTION"
+    ? "Sedang Dimasak"
+    : status === "QC"
+      ? "Menunggu QC"
+      : "Antre Masak";
+  return {
+    label,
+    barClass: "bg-gradient-to-r from-slate-300 to-slate-400",
+    badgeClass: "bg-slate-100 text-slate-600",
+    iconClass: "bg-slate-50 border-slate-200 text-slate-500",
+  };
 };
 
 export function DeliveryPage() {
@@ -493,15 +557,10 @@ export function DeliveryPage() {
   useEffect(() => subscribeOrders(setOrders, console.error), []);
 
   const myDeliveries = useMemo(
-    () =>
-      orders.filter(
-        (o) =>
-          (o.status === "OUT_FOR_DELIVERY" || o.status === "READY_TO_DELIVER") &&
-          (!user || 
-            o.assignedCourierId === user.uid || 
-            o.assignedCourierId === profile?.displayName ||
-            o.assignedCourierId === user.email?.split("@")[0] ||
-            (profile?.displayName && o.assignedCourierId?.toLowerCase() === profile.displayName.toLowerCase()))
+    () => {
+      const courierIdentities = [user?.uid, profile?.uid, profile?.displayName, user?.email?.split("@")[0]];
+      return orders.filter(
+        (o) => isActiveCourierAssignment(o.status) && isAssignedToCourier(o, courierIdentities),
       ).sort((a, b) => {
         const deadlineA = getOrderDeadline(a);
         const deadlineB = getOrderDeadline(b);
@@ -509,25 +568,24 @@ export function DeliveryPage() {
           return deadlineA - deadlineB;
         }
         return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      }),
+      });
+    },
     [orders, user, profile]
   );
 
   const myCompletedDeliveries = useMemo(
-    () =>
-      orders.filter(
+    () => {
+      const courierIdentities = [user?.uid, profile?.uid, profile?.displayName, user?.email?.split("@")[0]];
+      return orders.filter(
         (o) =>
           (o.status === "DELIVERED" || o.status === "COMPLETED") &&
-          (!user || 
-            o.assignedCourierId === user.uid || 
-            o.assignedCourierId === profile?.displayName ||
-            o.assignedCourierId === user.email?.split("@")[0] ||
-            (profile?.displayName && o.assignedCourierId?.toLowerCase() === profile.displayName.toLowerCase()))
+          isAssignedToCourier(o, courierIdentities),
       ).sort((a, b) => {
         const timeA = a.deliveredAt ? new Date(a.deliveredAt).getTime() : 0;
         const timeB = b.deliveredAt ? new Date(b.deliveredAt).getTime() : 0;
         return timeB - timeA;
-      }),
+      });
+    },
     [orders, user, profile]
   );
 
@@ -627,11 +685,17 @@ export function DeliveryPage() {
   };
 
   const open = (o: Order) => {
-    setActiveId(o.id);
-    if (o.status === "READY_TO_DELIVER") {
+    if (canStartCourierDelivery(o.status)) {
+      setActiveId(o.id);
       setStep("start");
-    } else {
+    } else if (o.status === "OUT_FOR_DELIVERY") {
+      setActiveId(o.id);
       setStep("proof");
+    } else {
+      showToast({
+        message: "Tugas sudah tercatat, tetapi belum siap diambil dari dapur.",
+        variant: "info",
+      });
     }
   };
 
@@ -768,23 +832,15 @@ export function DeliveryPage() {
                     >
                       <div
                         onClick={() => open(o)}
-                        className="w-full text-left bg-white rounded-lg border border-[#E5E7EB] shadow-xs overflow-hidden hover:border-[#FBBF24] hover:shadow-sm transition-all active:scale-[0.99] cursor-pointer"
+                        className={`w-full text-left bg-white rounded-lg border border-[#E5E7EB] shadow-xs overflow-hidden hover:border-[#FBBF24] hover:shadow-sm transition-all active:scale-[0.99] cursor-pointer ${
+                          canStartCourierDelivery(o.status) || o.status === "OUT_FOR_DELIVERY" ? "" : "opacity-80"
+                        }`}
                       >
-                        <div className={
-                          "h-1.5 " +
-                          (o.status === "READY_TO_DELIVER" 
-                            ? "bg-gradient-to-r from-blue-400 to-cyan-400" 
-                            : "bg-gradient-to-r from-orange-400 to-amber-400")
-                        } />
+                        <div className={`h-1.5 ${getCourierStatusMeta(o.status).barClass}`} />
                         <div className="p-4 sm:p-5">
                           <div className="flex items-center gap-4">
                             {/* Number badge */}
-                            <div className={
-                              "h-11 w-11 rounded-lg flex items-center justify-center shrink-0 border " +
-                              (o.status === "READY_TO_DELIVER"
-                                ? "bg-blue-50 border-blue-200 text-blue-600"
-                                : "bg-orange-50 border-orange-200 text-orange-600")
-                            }>
+                            <div className={`h-11 w-11 rounded-lg flex items-center justify-center shrink-0 border ${getCourierStatusMeta(o.status).iconClass}`}>
                               <span className="text-lg font-extrabold font-['Manrope',system-ui,sans-serif]">
                                 {idx + 1}
                               </span>
@@ -797,13 +853,8 @@ export function DeliveryPage() {
                                   {o.institutionName || o.customerName}
                                 </p>
                                 <div className="flex flex-col items-end gap-1 shrink-0">
-                                  <span className={
-                                    "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold " +
-                                    (o.status === "READY_TO_DELIVER"
-                                      ? "bg-blue-100 text-blue-700"
-                                      : "bg-orange-100 text-orange-700")
-                                  }>
-                                    {o.status === "READY_TO_DELIVER" ? "Siap Diambil" : "Sedang Jalan"}
+                                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${getCourierStatusMeta(o.status).badgeClass}`}>
+                                    {getCourierStatusMeta(o.status).label}
                                   </span>
                                   {(() => {
                                     const deadline = getOrderDeadline(o);
@@ -1020,9 +1071,8 @@ export function DeliveryPage() {
             order={active}
             onStart={async (kitchenSignatures) => {
               const now = new Date();
-              await dispatchOrder(active.id);
-              await updateDoc(doc(db, "orders", active.id), {
-                deliveryStartedAt: now.toISOString(),
+              await dispatchOrder(active.id, {
+                deliveryStartedAt: now,
                 kitchenSignatures,
               });
               setStep("proof");

@@ -33,7 +33,7 @@ import {
 
 import { db } from "@/lib/firebase";
 import { currentUser } from "@/services/authService";
-import type { Order, OrderLineItem, OrderStatus, OrderType, PaymentStatus } from "@/types/order";
+import type { KitchenSignature, Order, OrderLineItem, OrderStatus, OrderType, PaymentStatus } from "@/types/order";
 import { sendWhatsAppNotification, sendWhatsAppNotificationDirect, WA_MESSAGES } from "./whatsappService";
 import { pushNotification, shortOrderId } from "./notificationWriter";
 
@@ -151,6 +151,7 @@ function localDataToOrder(id: string, data: DocumentData): Order {
     kitchen: data.kitchen as string | undefined,
     itemKitchens: data.itemKitchens as Record<string, string> | undefined,
     qaStartChecklist: data.qaStartChecklist as Order["qaStartChecklist"] | undefined,
+    kitchenSignatures: data.kitchenSignatures as Order["kitchenSignatures"],
     isPreOrder: !!data.isPreOrder,
   };
 }
@@ -225,6 +226,7 @@ function snapshotToOrder(snap: DocumentSnapshot<DocumentData>): Order {
     kitchen: data.kitchen as string | undefined,
     itemKitchens: data.itemKitchens as Record<string, string> | undefined,
     qaStartChecklist: data.qaStartChecklist as Order["qaStartChecklist"] | undefined,
+    kitchenSignatures: data.kitchenSignatures as Order["kitchenSignatures"],
     isPreOrder: !!data.isPreOrder,
   };
 }
@@ -744,12 +746,44 @@ export async function assignCourier(id: string, courierId: string): Promise<Orde
   return updatedOrder;
 }
 
-/** Confirm dispatch for an assigned order. */
-export async function dispatchOrder(id: string): Promise<Order> {
+export interface DispatchOrderOptions {
+  kitchenSignatures?: KitchenSignature[];
+  deliveryStartedAt?: Date;
+}
+
+/**
+ * Confirm dispatch for an assigned order.
+ *
+ * The status and handover evidence are written atomically so an upload/write
+ * failure can never leave an order marked OUT_FOR_DELIVERY without its QC
+ * handover record. `READY` is accepted for legacy orders.
+ */
+export async function dispatchOrder(id: string, options: DispatchOrderOptions = {}): Promise<Order> {
   const docRef = doc(db, "orders", id);
-  await updateDocAndReturn(docRef, {
-    status: "OUT_FOR_DELIVERY",
-    updatedAt: new Date(),
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(docRef);
+    if (!snap.exists()) {
+      throw new Error("Order not found");
+    }
+
+    const currentStatus = snap.data().status as OrderStatus;
+    if (currentStatus !== "READY_TO_DELIVER" && currentStatus !== "READY") {
+      throw new Error(`Pesanan belum siap dikirim (status: ${currentStatus})`);
+    }
+    if (!snap.data().assignedCourierId) {
+      throw new Error("Pesanan belum ditugaskan ke kurir");
+    }
+
+    const now = options.deliveryStartedAt ?? new Date();
+    const updates: Record<string, unknown> = {
+      status: "OUT_FOR_DELIVERY",
+      deliveryStartedAt: now,
+      updatedAt: now,
+    };
+    if (options.kitchenSignatures) {
+      updates.kitchenSignatures = options.kitchenSignatures;
+    }
+    tx.update(docRef, updates);
   });
 
   const updatedOrder = await getOrder(id);

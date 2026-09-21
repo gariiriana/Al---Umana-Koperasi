@@ -21,6 +21,7 @@ import html2canvas from "html2canvas-pro";
 import { aggregateIngredients } from "@/lib/ingredientsParser";
 import { getProduct } from "@/services/catalogService";
 import { isOrderPastDeadline } from "@/lib/orderHelpers";
+import { KitchenHandoverPhotos } from "@/components/delivery/KitchenHandoverPhotos";
 
 const statusShortLabels: Record<OrderStatus, string> = {
   PENDING: "Pending",
@@ -3095,17 +3096,6 @@ export function OrdersPage() {
                   <div className="border border-[#E5E7EB] rounded-xl overflow-hidden bg-neutral-50 p-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       {previewInvoiceOrder.kitchenSignatures.map((ks, idx) => {
-                        let photos: string[] = [];
-                        try {
-                          if (ks.signatureDataUrl.startsWith("[") && ks.signatureDataUrl.endsWith("]")) {
-                            photos = JSON.parse(ks.signatureDataUrl);
-                          } else {
-                            photos = ks.signatureDataUrl ? [ks.signatureDataUrl] : [];
-                          }
-                        } catch {
-                          photos = ks.signatureDataUrl ? [ks.signatureDataUrl] : [];
-                        }
-
                         return (
                           <div key={idx} className="bg-white border border-[#E5E7EB] rounded-xl p-3 shadow-2xs flex flex-col justify-between space-y-2">
                             <div className="flex justify-between items-center bg-neutral-50 rounded-lg px-2 py-0.5 border border-[#E5E7EB]">
@@ -3114,13 +3104,7 @@ export function OrdersPage() {
                                 {new Date(ks.signedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB
                               </span>
                             </div>
-                            <div className="flex flex-wrap gap-2 justify-center w-full">
-                              {photos.map((url, pIdx) => (
-                                <div key={pIdx} className="aspect-video w-full flex items-center justify-center bg-neutral-50/30 rounded-lg border border-[#E5E7EB] p-2 max-h-24 overflow-hidden">
-                                  <img src={url} alt={`TTD ${ks.kitchenName} #${pIdx + 1}`} className="max-h-full object-contain" />
-                                </div>
-                              ))}
-                            </div>
+                            <KitchenHandoverPhotos signature={ks} />
                             <div className="text-center text-[11px]">
                               <span className="text-neutral-400 font-medium">Staf: </span>
                               <span className="font-extrabold text-[#374151]">{ks.staffName}</span>
