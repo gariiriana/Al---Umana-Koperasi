@@ -15,12 +15,15 @@ import {
   AlertTriangle,
   ChefHat,
   Upload,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import * as XLSX from 'xlsx';
 import type { MbgPmBatch, MbgPmEntry, MbgInstitutionType, MbgClassBreakdown, MbgDayMenu } from '@/types/mbg';
 import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
+import { SpreadsheetImportModal } from '@/components/mbg/SpreadsheetImportModal';
+import { parsePmRowsToEntries } from '@/utils/mbgSpreadsheetParser';
 import {
   subscribeBatches,
   subscribeEntries,
@@ -37,6 +40,9 @@ import {
   getMenuForDate,
   bulkAddEntriesFromMaster,
   deleteAllMbgData,
+  cleanDuplicateBatchEntries,
+  clearBatchEntries,
+  addMultipleEntries,
   type MbgPortionClassification,
 } from '@/services/mbgAdminService';
 import { subscribeCustomRecipes } from '@/services/mbgProductionService';
@@ -1051,6 +1057,7 @@ export function MbgAdminPage() {
   } | null>(null);
 
   const csvFileInputRef = useRef<HTMLInputElement>(null);
+  const [showSpreadsheetModal, setShowSpreadsheetModal] = useState(false);
 
   const [selectedPortionClassification, setSelectedPortionClassification] = useState<MbgPortionClassification>('porsi_besar');
 
@@ -1065,14 +1072,27 @@ export function MbgAdminPage() {
 
     reader.onload = async (e) => {
       try {
+        setSaving(true);
         let rows: Array<Array<string | number | undefined | null>> = [];
         const isBinary = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
 
         if (isBinary) {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
+          
+          // Smart sheet detection: prioritas sheet Penerima Manfaat / Rekapitulasi / Data PM
+          const pmSheetName = workbook.SheetNames.find((name) => {
+            const l = name.toLowerCase();
+            return (
+              l.includes('penerima manfaat') ||
+              l.includes('rekapitulasi') ||
+              l.includes('rekap pm') ||
+              l.includes('data pm') ||
+              l.includes('sasaran')
+            );
+          }) || workbook.SheetNames[0];
+
+          const worksheet = workbook.Sheets[pmSheetName];
           rows = XLSX.utils.sheet_to_json<Array<string | number | undefined | null>>(worksheet, { header: 1 });
         } else {
           const text = e.target?.result as string;
@@ -1084,155 +1104,102 @@ export function MbgAdminPage() {
         }
 
         if (!rows || rows.length < 1) {
-          showToast({ message: 'File Excel / CSV kosong atau format salah', variant: 'error' });
+          showToast({ message: 'File Excel / CSV kosong atau format tidak sesuai', variant: 'error' });
           return;
         }
 
-        const num = (val: unknown): number => {
-          if (val === null || val === undefined) return 0;
-          if (typeof val === 'number') return isNaN(val) ? 0 : val;
-          if (typeof val === 'string') {
-            const cleaned = val.replace(/[^0-9.-]/g, '');
-            return parseInt(cleaned, 10) || 0;
-          }
-          return 0;
-        };
+        const parsedEntries = parsePmRowsToEntries(
+          rows,
+          selectedBatchId,
+          user.uid,
+          weeklySchedule,
+          selectedBatch?.tanggal
+        );
 
-        let importedCount = 0;
-        for (let i = 0; i < rows.length; i++) {
-          const cols = rows[i] || [];
-          const rawInst = cols[0];
-          if (rawInst === undefined || rawInst === null) continue;
-
-          const instName = String(rawInst).trim();
-          if (!instName) continue;
-
-          const firstColUpper = instName.toUpperCase();
-          if (
-            firstColUpper === 'SEKOLAH' ||
-            firstColUpper === 'TOTAL' ||
-            firstColUpper.includes('REKAPITULASI') ||
-            firstColUpper.includes('PERIODE') ||
-            firstColUpper.includes('NAMA') ||
-            firstColUpper === 'L' ||
-            firstColUpper === 'P'
-          ) {
-            continue;
-          }
-
-          const lowerName = instName.toLowerCase();
-
-          // Only classify as posyandu if explicitly balita/bumil/busui/posyandu (SPS and TK are PAUD/TK Schools with Porsi Kecil)
-          const isPosyandu =
-            lowerName.includes('posyandu') ||
-            lowerName.startsWith('balita') ||
-            lowerName.startsWith('bumil') ||
-            lowerName.startsWith('busui') ||
-            lowerName.includes('3b') ||
-            lowerName.includes('3b') ||
-            lowerName.includes('paket 3b') ||
-            lowerName.includes('paket3b') ||
-            (lowerName.includes('balita') && !lowerName.includes('tk') && !lowerName.includes('sps') && !lowerName.includes('sd') && !lowerName.includes('smp')) ||
-            (lowerName.includes('bumil') && !lowerName.includes('sd') && !lowerName.includes('smp')) ||
-            (lowerName.includes('busui') && !lowerName.includes('sd') && !lowerName.includes('smp'));
-
-          const instType: MbgInstitutionType = isPosyandu ? 'posyandu' : 'sekolah';
-
-          // Direct mapping from Excel Rekapitulasi photo:
-          // Col 0: SEKOLAH
-          // Col 1: Porsi Kecil L, Col 2: Porsi Kecil P
-          // Col 3: Porsi Besar L, Col 4: Porsi Besar P
-          // Col 5: TOTAL L, Col 6: TOTAL P, Col 7: JML Siswa
-          // Col 8: GURU L, Col 9: GURU P
-          // Col 10: TENDIK L, Col 11: TENDIK P
-          // Col 12: JML Staf, Col 13: TOTAL KESELURUHAN
-          const qtPorsiKecilL = num(cols[1]);
-          const qtPorsiKecilP = num(cols[2]);
-          const qtPorsiBesarL = num(cols[3]);
-          let qtPorsiBesarP = num(cols[4]);
-
-          let guruL = num(cols[8]);
-          let guruP = num(cols[9]);
-          let tendikL = num(cols[10]);
-          const tendikP = num(cols[11]);
-
-          // Fallback if simplified table (without total columns)
-          if (guruL === 0 && guruP === 0 && tendikL === 0 && tendikP === 0 && cols.length >= 6 && cols.length < 10) {
-            guruL = num(cols[5]);
-            guruP = num(cols[6]);
-            tendikL = num(cols[7]);
-          }
-
-          const qtGuruKader = guruL + guruP + tendikL + tendikP || num(cols[12]);
-          let qtSiswaBalita = qtPorsiKecilL + qtPorsiKecilP + qtPorsiBesarL + qtPorsiBesarP || num(cols[7]);
-          let qtBumilBusui = 0;
-          let qtBumil = 0;
-          let qtBusui = 0;
-          const qtPobiaNasi = 0;
-
-          if (lowerName.includes('bumil')) {
-            const val = num(cols[4]) || num(cols[6]) || qtSiswaBalita || num(cols[13]);
-            qtBumil = val;
-            qtBumilBusui = val;
-            qtSiswaBalita = 0;
-            qtPorsiBesarP = 0;
-          } else if (lowerName.includes('busui')) {
-            const val = num(cols[4]) || num(cols[6]) || qtSiswaBalita || num(cols[13]);
-            qtBusui = val;
-            qtBumilBusui = val;
-            qtSiswaBalita = 0;
-            qtPorsiBesarP = 0;
-          }
-
-          const jumlah = num(cols[13]) || (qtSiswaBalita + qtBumilBusui + qtGuruKader);
-
-          const { menuItems, menuKeringanItems } = selectedBatch
-            ? getMenuForDate(selectedBatch.tanggal, weeklySchedule)
-            : { menuItems: [], menuKeringanItems: [] };
-
-          await addEntry({
-            batchId: selectedBatchId,
-            institutionName: instName,
-            institutionType: instType,
-            qtSiswaBalita,
-            qtBumilBusui,
-            qtBumil: qtBumil || undefined,
-            qtBusui: qtBusui || undefined,
-            qtGuruKader,
-            qtPobiaNasi,
-            qtPorsiKecilL: qtPorsiKecilL || undefined,
-            qtPorsiKecilP: qtPorsiKecilP || undefined,
-            qtPorsiBesarL: qtPorsiBesarL || undefined,
-            qtPorsiBesarP: qtPorsiBesarP || undefined,
-            qtGuruL: guruL || undefined,
-            qtGuruP: guruP || undefined,
-            qtTendikL: tendikL || undefined,
-            qtTendikP: tendikP || undefined,
-            jumlah,
-            jadwalPengantaran: '',
-            assignedPetugasId: '',
-            assignedPetugasName: '',
-            isSekolahLibur: false,
-            sortOrder: entries.length + importedCount,
-            notes: '',
-            menuItems: [...menuItems],
-            menuKeringanItems: [...menuKeringanItems],
-            createdBy: user.uid,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          });
-          importedCount++;
+        if (parsedEntries.length === 0) {
+          showToast({ message: 'Tidak ditemukan data institusi yang valid di dalam file Excel / CSV ini.', variant: 'error' });
+          setSaving(false);
+          return;
         }
 
-        await recalculateBatchTotals(selectedBatchId);
-        const dayInfo = selectedBatch ? getMenuForDate(selectedBatch.tanggal, weeklySchedule).dayMenu.dayName : '';
-        showToast({
-          message: `Berhasil mengimpor ${importedCount} data PM & meng-generate Menu (${dayInfo}) untuk ${selectedBatch?.tanggal}!`,
-          variant: 'success',
-        });
+        const executeImport = async () => {
+          let targetBatchId = selectedBatchId;
+          let targetDate = selectedBatch?.tanggal;
+
+          const currentBatch = targetBatchId
+            ? (allBatches.find((b) => b.id === targetBatchId) || batches.find((b) => b.id === targetBatchId))
+            : null;
+
+          if (currentBatch && !targetDate) {
+            targetDate = currentBatch.tanggal;
+          }
+
+          if (!targetBatchId || !targetDate) {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const existing = allBatches.find((b) => b.tanggal === todayStr) || batches.find((b) => b.tanggal === todayStr);
+            if (existing) {
+              targetBatchId = existing.id;
+              targetDate = existing.tanggal;
+              setSelectedBatchId(existing.id);
+            } else {
+              try {
+                targetBatchId = await createBatch(todayStr, user?.uid || 'admin', false, weeklySchedule);
+                targetDate = todayStr;
+                setSelectedBatchId(targetBatchId);
+              } catch (err) {
+                console.error('Failed to create batch for excel import:', err);
+              }
+            }
+          }
+
+          if (!targetBatchId) {
+            showToast({ message: 'Gagal menentukan batch pengiriman!', variant: 'error' });
+            return;
+          }
+
+          try {
+            setSaving(true);
+            // Bersihkan orphan entries jika ada
+            await clearBatchEntries('');
+
+            const { menuItems, menuKeringanItems } = targetDate
+              ? getMenuForDate(targetDate, weeklySchedule)
+              : { menuItems: [], menuKeringanItems: [] };
+
+            // Pastikan setiap entry memiliki batchId target yang valid dan menu lengkap!
+            const entriesToSave = parsedEntries.map((e, idx) => ({
+              ...e,
+              batchId: targetBatchId!,
+              createdBy: user?.uid || e.createdBy || 'system',
+              sortOrder: idx,
+              menuItems: (e.menuItems && e.menuItems.length > 0) ? e.menuItems : menuItems,
+              menuKeringanItems: (e.menuKeringanItems && e.menuKeringanItems.length > 0) ? e.menuKeringanItems : menuKeringanItems,
+            }));
+
+            await clearBatchEntries(targetBatchId);
+            await addMultipleEntries(entriesToSave);
+            await recalculateBatchTotals(targetBatchId);
+
+            setSelectedBatchId(targetBatchId);
+
+            const dayInfo = targetDate ? getMenuForDate(targetDate, weeklySchedule).dayMenu.dayName : '';
+            showToast({
+              message: `Berhasil mengimpor ${entriesToSave.length} data PM baru dari file Excel & generate Menu (${dayInfo}) untuk ${targetDate}!`,
+              variant: 'success',
+            });
+          } catch (err) {
+            console.error('Import execution error:', err);
+            showToast({ message: 'Gagal mengimpor data PM', variant: 'error' });
+          } finally {
+            setSaving(false);
+          }
+        };
+
+        await executeImport();
       } catch (err) {
         console.error('Excel / CSV import error:', err);
-        showToast({ message: 'Gagal mengimpor file Excel / CSV', variant: 'error' });
+        showToast({ message: 'Gagal membaca atau memproses file Excel / CSV', variant: 'error' });
+        setSaving(false);
       }
     };
 
@@ -1240,6 +1207,83 @@ export function MbgAdminPage() {
       reader.readAsArrayBuffer(file);
     } else {
       reader.readAsText(file);
+    }
+  };
+
+  const handleApplySpreadsheetEntries = async (
+    parsedEntries: Omit<MbgPmEntry, 'id'>[]
+  ) => {
+    let targetBatchId = selectedBatchId;
+    let targetDate = selectedBatch?.tanggal;
+
+    const currentBatch = targetBatchId
+      ? (allBatches.find((b) => b.id === targetBatchId) || batches.find((b) => b.id === targetBatchId))
+      : null;
+
+    if (currentBatch && !targetDate) {
+      targetDate = currentBatch.tanggal;
+    }
+
+    if (!targetBatchId || !targetDate) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const existing = allBatches.find((b) => b.tanggal === todayStr) || batches.find((b) => b.tanggal === todayStr);
+      if (existing) {
+        targetBatchId = existing.id;
+        targetDate = existing.tanggal;
+        setSelectedBatchId(existing.id);
+      } else {
+        try {
+          targetBatchId = await createBatch(todayStr, user?.uid || 'admin', false, weeklySchedule);
+          targetDate = todayStr;
+          setSelectedBatchId(targetBatchId);
+        } catch (err) {
+          console.error('Failed to create batch for spreadsheet import:', err);
+        }
+      }
+    }
+
+    if (!targetBatchId) {
+      showToast({ message: 'Gagal menentukan batch target. Silakan pilih atau buat batch baru terlebih dahulu.', variant: 'error' });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      // Bersihkan orphan entries jika ada
+      await clearBatchEntries('');
+
+      // Pastikan SEMUA data yang disimpan memiliki batchId target yang aktif dan menu valid
+      const { menuItems, menuKeringanItems } = targetDate
+        ? getMenuForDate(targetDate, weeklySchedule)
+        : { menuItems: [], menuKeringanItems: [] };
+
+      const entriesToSave = parsedEntries.map((e, idx) => ({
+        ...e,
+        batchId: targetBatchId!,
+        createdBy: user?.uid || e.createdBy || 'system',
+        sortOrder: idx,
+        menuItems: (e.menuItems && e.menuItems.length > 0) ? e.menuItems : menuItems,
+        menuKeringanItems: (e.menuKeringanItems && e.menuKeringanItems.length > 0) ? e.menuKeringanItems : menuKeringanItems,
+      }));
+
+      await clearBatchEntries(targetBatchId);
+      await addMultipleEntries(entriesToSave);
+      await recalculateBatchTotals(targetBatchId);
+
+      // Pastikan selectedBatchId aktif mengarah ke batch yang baru saja diisi
+      setSelectedBatchId(targetBatchId);
+
+      const dayInfo = targetDate ? getMenuForDate(targetDate, weeklySchedule).dayMenu.dayName : '';
+      showToast({
+        message: `Berhasil memasukkan ${entriesToSave.length} data PM baru dari Spreadsheet & generate Menu (${dayInfo}) untuk ${targetDate}!`,
+        variant: 'success',
+      });
+    } catch (err) {
+      console.error('Apply spreadsheet entries error:', err);
+      showToast({ message: 'Gagal menerapkan data spreadsheet ke batch', variant: 'error' });
+      throw err;
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1261,22 +1305,26 @@ export function MbgAdminPage() {
 
         const todayStr = new Date().toISOString().split('T')[0];
         const todayBatch = draftBatches.find((batch) => batch.tanggal === todayStr);
+        const anyTodayBatch = b.find((batch) => batch.tanggal === todayStr);
 
-        if (todayBatch) {
-          setSelectedBatchId((current) => current || todayBatch.id);
-        } else if (user) {
-          // Check if today's batch exists in the master list at all (including submitted)
-          const anyTodayBatch = b.find((batch) => batch.tanggal === todayStr);
-          if (!anyTodayBatch) {
-            try {
-              const newId = await createBatch(todayStr, user.uid, false, weeklySchedule);
-              setSelectedBatchId(newId);
-            } catch (err) {
-              console.error('Failed to auto-create batch for today:', err);
-            }
+        setSelectedBatchId((current) => {
+          const isCurrentValid = current ? b.some((batch) => batch.id === current) : false;
+          if (isCurrentValid) return current;
+          if (todayBatch) return todayBatch.id;
+          if (anyTodayBatch) return anyTodayBatch.id;
+          if (draftBatches.length > 0) return draftBatches[0].id;
+          if (b.length > 0) return b[0].id;
+          return null;
+        });
+
+        // Auto-create batch for today if completely absent from Firestore
+        if (!todayBatch && !anyTodayBatch) {
+          try {
+            const newId = await createBatch(todayStr, user?.uid || 'admin', false, weeklySchedule);
+            setSelectedBatchId((current) => current || newId);
+          } catch (err) {
+            console.error('Failed to auto-create batch for today:', err);
           }
-        } else if (draftBatches.length > 0) {
-          setSelectedBatchId((current) => current || draftBatches[0].id);
         }
       },
       (err) => {
@@ -1308,12 +1356,12 @@ export function MbgAdminPage() {
     return unsub;
   }, [selectedBatchId]);
 
-  const selectedBatch = batches.find((b) => b.id === selectedBatchId);
+  const selectedBatch = allBatches.find((b) => b.id === selectedBatchId) || batches.find((b) => b.id === selectedBatchId);
 
   const handleSelectOrPickDate = async (newDateStr: string) => {
     if (!newDateStr || !user) return;
 
-    const existing = batches.find((b) => b.tanggal === newDateStr);
+    const existing = allBatches.find((b) => b.tanggal === newDateStr) || batches.find((b) => b.tanggal === newDateStr);
     if (existing) {
       setSelectedBatchId(existing.id);
       return;
@@ -1351,7 +1399,40 @@ export function MbgAdminPage() {
     return entries.filter((e) => isPosyanduName(e.institutionName) && e.institutionType !== 'posyandu').length;
   }, [entries]);
 
-  // Grand totals
+  // Deteksi jika terdapat data institusi duplikat (menyebabkan total ganda)
+  const duplicateEntriesCount = useMemo(() => {
+    const seen = new Set<string>();
+    let count = 0;
+    for (const e of entries) {
+      const key = (e.institutionName || '').trim().toLowerCase();
+      if (!key) continue;
+      if (seen.has(key)) {
+        count++;
+      } else {
+        seen.add(key);
+      }
+    }
+    return count;
+  }, [entries]);
+
+  const handleCleanDuplicates = async () => {
+    if (!selectedBatchId) return;
+    try {
+      setSaving(true);
+      const deletedCount = await cleanDuplicateBatchEntries(selectedBatchId);
+      showToast({
+        message: `Berhasil membersihkan ${deletedCount} data institusi duplikat! Total porsi kini sudah normal.`,
+        variant: 'success',
+      });
+    } catch (err) {
+      console.error('Failed to clean duplicates:', err);
+      showToast({ message: 'Gagal membersihkan data duplikat', variant: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Grand totals perhitungan akurat murni dari entri aktif
   const grandTotals = useMemo(() => {
     const active = entries.filter((e) => !e.isSekolahLibur);
     const petugasSet = new Set<string>();
@@ -1371,7 +1452,7 @@ export function MbgAdminPage() {
     const porsiKecilP = sekolahActive.reduce((s, e) => s + (e.qtPorsiKecilP || 0), 0);
 
     // Porsi Balita (Posyandu)
-    const porsiBalitaL = posyanduActive.reduce((s, e) => s + (e.qtPorsiKecilL || e.qtSiswaBalita || 0), 0);
+    const porsiBalitaL = posyanduActive.reduce((s, e) => s + (e.qtPorsiKecilL || 0), 0);
     const porsiBalitaP = posyanduActive.reduce((s, e) => s + (e.qtPorsiKecilP || 0), 0);
 
     // Porsi Bumil & Busui (Posyandu)
@@ -1383,20 +1464,20 @@ export function MbgAdminPage() {
     const totalSiswaP = porsiBesarP + porsiKecilP + porsiBalitaP + porsiBumil + porsiBusui;
     const totalSiswaJml = totalSiswaL + totalSiswaP;
 
-    // Guru
-    const guruL = active.reduce((s, e) => s + (e.qtGuruL || 0), 0);
-    const guruP = active.reduce((s, e) => s + (e.qtGuruP || 0), 0);
+    // Guru (HANYA SEKOLAH)
+    const guruL = sekolahActive.reduce((s, e) => s + (e.qtGuruL || 0), 0);
+    const guruP = sekolahActive.reduce((s, e) => s + (e.qtGuruP || 0), 0);
 
-    // Kader
+    // Kader (HANYA POSYANDU)
     const kaderL = posyanduActive.reduce((s, e) => s + (e.qtGuruL || 0), 0);
     const kaderP = posyanduActive.reduce((s, e) => s + (e.qtGuruP || 0), 0);
 
-    // Tendik
-    const tendikL = active.reduce((s, e) => s + (e.qtTendikL || 0), 0);
-    const tendikP = active.reduce((s, e) => s + (e.qtTendikP || 0), 0);
+    // Tendik (HANYA SEKOLAH)
+    const tendikL = sekolahActive.reduce((s, e) => s + (e.qtTendikL || 0), 0);
+    const tendikP = sekolahActive.reduce((s, e) => s + (e.qtTendikP || 0), 0);
 
-    const totalStafKader = active.reduce((s, e) => s + (e.qtGuruKader || 0), 0);
-    const totalKeseluruhan = active.reduce((s, e) => s + (e.jumlah || 0), 0);
+    const totalStafKader = guruL + guruP + kaderL + kaderP + tendikL + tendikP;
+    const totalKeseluruhan = totalSiswaJml + totalStafKader;
 
     return {
       porsiBesarL,
@@ -1420,8 +1501,8 @@ export function MbgAdminPage() {
       totalKeseluruhan,
 
       // Summary
-      siswa: active.reduce((s, e) => s + (e.qtSiswaBalita || 0), 0),
-      bumil: active.reduce((s, e) => s + (e.qtBumilBusui || 0), 0),
+      siswa: totalSiswaJml,
+      bumil: porsiBumil + porsiBusui,
       guru: totalStafKader,
       pobia: active.reduce((s, e) => s + (e.qtPobiaNasi || 0), 0),
       alergi: active.reduce((s, e) => s + (e.qtAlergi || 0), 0),
@@ -1444,10 +1525,22 @@ export function MbgAdminPage() {
           const pkl = e.qtPorsiKecilL || 0;
           const pkp = e.qtPorsiKecilP || 0;
 
-          const balitaL = pbl || pkl;
-          const balitaP = pbp || pkp;
-          const bumil = pbl ? pkl : (e.qtBumil || 0);
-          const busui = pbp ? pkp : (e.qtBusui || 0);
+          const lowerName = e.institutionName.toLowerCase();
+          let balitaL = 0;
+          let balitaP = 0;
+          let bumil = 0;
+          let busui = 0;
+
+          if (lowerName.includes('bumil')) {
+            bumil = pbl || pkl || pbp || pkp || e.qtBumil || e.qtSiswaBalita || 0;
+          } else if (lowerName.includes('busui')) {
+            busui = pbl || pkl || pbp || pkp || e.qtBusui || e.qtSiswaBalita || 0;
+          } else {
+            // Balita
+            balitaL = pbl || pkl;
+            balitaP = pbp || pkp;
+          }
+
           const totalBalita = balitaL + balitaP;
           const totalBumilBusui = bumil + busui;
           const totalKader = (e.qtGuruL || 0) + (e.qtGuruP || 0) + (e.qtTendikL || 0) + (e.qtTendikP || 0) || e.qtGuruKader || 0;
@@ -1839,6 +1932,17 @@ export function MbgAdminPage() {
 
               <button
                 type="button"
+                onClick={() => setShowSpreadsheetModal(true)}
+                disabled={!selectedBatchId}
+                title="Import data PM langsung dari link Google Spreadsheet"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-extrabold hover:bg-emerald-100 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs whitespace-nowrap"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                Import Link Spreadsheet
+              </button>
+
+              <button
+                type="button"
                 onClick={() => csvFileInputRef.current?.click()}
                 disabled={!selectedBatchId}
                 title="Import data PM langsung dari file Excel (.xlsx, .xls) atau CSV"
@@ -1911,6 +2015,31 @@ export function MbgAdminPage() {
                   />
                 </div>
               </div>
+
+              {/* Alert Banner: Duplicate Entries Detected */}
+              {duplicateEntriesCount > 0 && (
+                <div className="mb-4 bg-amber-50 border border-amber-300 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-in fade-in">
+                  <div className="flex items-center gap-2.5">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+                    <div>
+                      <h4 className="text-xs font-extrabold text-amber-950">
+                        Terdeteksi {duplicateEntriesCount} Data Institusi Duplikat (Total Porsi Menjadi Ganda)!
+                      </h4>
+                      <p className="text-[11px] text-amber-800 mt-0.5">
+                        Import Excel sebelumnya menyebabkan nama institusi terinput lebih dari satu kali sehingga total menjadi ganda ({grandTotals.totalKeseluruhan}). Klik tombol di samping untuk otomatis membersihkan duplikat.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCleanDuplicates}
+                    disabled={saving}
+                    className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-extrabold flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    <span>🧹 Bersihkan Duplikat Sekarang</span>
+                  </button>
+                </div>
+              )}
 
               {/* Alert Banner: Misclassified Posyandu */}
               {misclassifiedPosyanduCount > 0 && (
@@ -2166,6 +2295,20 @@ export function MbgAdminPage() {
           onSubmit={handleCreateBatch}
           batches={allBatches.length > 0 ? allBatches : batches}
         />
+      </AnimatePresence>
+
+      {/* Google Spreadsheet Import Modal */}
+      <AnimatePresence>
+        {showSpreadsheetModal && (
+          <SpreadsheetImportModal
+            isOpen={showSpreadsheetModal}
+            onClose={() => setShowSpreadsheetModal(false)}
+            selectedBatch={selectedBatch}
+            weeklySchedule={weeklySchedule}
+            userUid={user?.uid || ''}
+            onApplyEntries={handleApplySpreadsheetEntries}
+          />
+        )}
       </AnimatePresence>
 
       {/* Manage Menu & Portion Modal */}
