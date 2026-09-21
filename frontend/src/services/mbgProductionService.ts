@@ -282,46 +282,43 @@ export async function saveDailyReport(
   report: Omit<MbgProductionDailyReport, 'id'>
 ): Promise<string> {
   const cleaned = cleanUndefinedDeep(report);
-  if (reportId) {
-    await updateDoc(doc(db, DAILY_REPORTS_COLLECTION, reportId), {
-      ...cleaned,
-      updatedAt: new Date().toISOString(),
-    });
-    return reportId;
-  } else {
-    // Imports may target a batch that is not currently open in the UI.  Find
-    // its existing report by batch id so a re-import updates it rather than
-    // creating a second, randomly-selected report.
-    const existing = await getDocs(query(
-      collection(db, DAILY_REPORTS_COLLECTION),
-      where('batchId', '==', report.batchId)
-    ));
-    if (existing.empty) {
-      const ref = await addDoc(collection(db, DAILY_REPORTS_COLLECTION), {
+  // Every save resolves one report per batch.  This covers imports into the
+  // current batch as well as imports that create/select another batch.
+  const existing = await getDocs(query(
+    collection(db, DAILY_REPORTS_COLLECTION),
+    where('batchId', '==', report.batchId)
+  ));
+  if (existing.empty) {
+    if (reportId) {
+      await updateDoc(doc(db, DAILY_REPORTS_COLLECTION, reportId), {
         ...cleaned,
-        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
-      return ref.id;
+      return reportId;
     }
-
-    const docs = [...existing.docs].sort((a, b) => {
-      const aTime = String(a.data().updatedAt || a.data().createdAt || '');
-      const bTime = String(b.data().updatedAt || b.data().createdAt || '');
-      return bTime.localeCompare(aTime);
+    const ref = await addDoc(collection(db, DAILY_REPORTS_COLLECTION), {
+      ...cleaned,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
-    const primary = docs[0];
-    const writes = writeBatch(db);
-    writes.update(primary.ref, { ...cleaned, updatedAt: new Date().toISOString() });
-    // Clean up legacy duplicates at the same time; all readers then resolve
-    // one deterministic report for the batch.
-    docs.slice(1).forEach((duplicate) => writes.delete(duplicate.ref));
-    await writes.commit();
-    return primary.id;
+    return ref.id;
   }
+
+  const docs = [...existing.docs].sort((a, b) => {
+    const aTime = String(a.data().updatedAt || a.data().createdAt || '');
+    const bTime = String(b.data().updatedAt || b.data().createdAt || '');
+    return bTime.localeCompare(aTime);
+  });
+  const primary = reportId ? docs.find((item) => item.id === reportId) || docs[0] : docs[0];
+  const writes = writeBatch(db);
+  writes.update(primary.ref, { ...cleaned, updatedAt: new Date().toISOString() });
+  // Clean up legacy duplicates at the same time; all readers then resolve
+  // one deterministic report for the batch.
+  docs.filter((item) => item.id !== primary.id).forEach((duplicate) => writes.delete(duplicate.ref));
+  await writes.commit();
+  return primary.id;
 }
 
 export async function deleteDailyReport(id: string): Promise<void> {
   await deleteDoc(doc(db, DAILY_REPORTS_COLLECTION, id));
 }
-
