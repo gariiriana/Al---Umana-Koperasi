@@ -16,6 +16,7 @@ import {
   ChefHat,
   Upload,
   FileSpreadsheet,
+  Edit,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -63,20 +64,15 @@ function getAutoPortions(entry: Partial<MbgPmEntry>) {
     const balita = (entry.qtPorsiKecilL || 0) + (entry.qtPorsiKecilP || 0) || entry.qtSiswaBalita || entry.qtPorsiBalita || 0;
     qtPorsiBalita = balita;
     qtPorsiBumilBusui = (entry.qtBumil || 0) + (entry.qtBusui || 0) || entry.qtBumilBusui || 0;
-    qtPorsiBesar = entry.qtGuruKader || 0;
+    qtPorsiBesar = (entry.qtPorsiBesarL || 0) + (entry.qtPorsiBesarP || 0) + (entry.qtGuruKader || 0);
     qtPorsiKecil = 0;
   } else {
     // sekolah
-    if (entry.schoolLevel === 'tk_paud') {
-      qtPorsiKecil = entry.qtSiswaBalita || 0;
-      qtPorsiBesar = entry.qtGuruKader || 0;
-    } else if (entry.schoolLevel === 'sma') {
-      qtPorsiBesar = (entry.qtSiswaBalita || 0) + (entry.qtGuruKader || 0);
-    } else {
-      // SD
-      qtPorsiKecil = entry.qtSiswaBalita || 0;
-      qtPorsiBesar = entry.qtGuruKader || 0;
-    }
+    const pkl = (entry.qtPorsiKecilL || 0) + (entry.qtPorsiKecilP || 0);
+    const pbl = (entry.qtPorsiBesarL || 0) + (entry.qtPorsiBesarP || 0);
+    qtPorsiKecil = pkl || (entry.schoolLevel === 'sma' ? 0 : entry.qtSiswaBalita || 0);
+    qtPorsiBesar = pbl || ((entry.schoolLevel === 'sma' ? (entry.qtSiswaBalita || 0) : 0) + (entry.qtGuruKader || 0));
+    qtPorsiBumilBusui = (entry.qtBumil || 0) + (entry.qtBusui || 0) || entry.qtBumilBusui || 0;
   }
   return { qtPorsiBalita, qtPorsiKecil, qtPorsiBesar, qtPorsiBumilBusui };
 }
@@ -625,8 +621,6 @@ function PmEntryRow({
     onUpdate(entry.id, updates);
   };
 
-  const isMasterSelected = MBG_MASTER_INSTITUTIONS.some((m) => m.institutionName === entry.institutionName);
-
   if (isLibur) {
     return (
       <tr className="bg-[#DC2626] text-white font-extrabold border-b border-red-700 text-xs text-center">
@@ -665,59 +659,60 @@ function PmEntryRow({
   return (
     <tr className="border-b border-slate-300 hover:bg-slate-50 text-xs font-semibold text-slate-800">
       {/* 1. SEKOLAH / POSYANDU */}
-      <td className="px-3 py-2.5 border-r border-slate-200">
+      <td className="px-2.5 py-2 border-r border-slate-200">
         <div className="flex flex-col gap-1 min-w-[170px]">
-          <select
-            value={isMasterSelected ? entry.institutionName : entry.institutionName ? '_custom_' : ''}
+          <input
+            type="text"
+            list="master-institutions-datalist"
+            value={entry.institutionName}
             onChange={(e) => {
-              if (e.target.value === '_custom_') {
-                if (!entry.institutionName) {
-                  handleFieldChange('institutionName', 'Institusi Baru');
-                }
-              } else {
-                handleSelectMaster(e.target.value);
-              }
+              const val = e.target.value;
+              handleFieldChange('institutionName', val);
             }}
-            title="Pilih Master Institusi"
-            className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs font-bold text-slate-900 bg-white focus:outline-none focus:ring-1 focus:ring-slate-500 cursor-pointer"
-          >
-            <option value="">— Pilih Master Institusi —</option>
+            placeholder="Nama Sekolah / Posyandu"
+            title="Ketik nama institusi atau pilih dari master"
+            className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs font-bold text-slate-900 bg-white focus:outline-none focus:ring-1 focus:ring-slate-500"
+          />
+          <datalist id="master-institutions-datalist">
             {MBG_MASTER_INSTITUTIONS.map((inst) => (
-              <option key={inst.institutionName} value={inst.institutionName}>
-                {inst.institutionName}
-              </option>
+              <option key={inst.institutionName} value={inst.institutionName} />
             ))}
-            <option value="_custom_">✍️ Input Manual Custom...</option>
-          </select>
-
-          {(!isMasterSelected || entry.institutionName === '') && (
-            <input
-              type="text"
-              value={entry.institutionName}
-              onChange={(e) => handleFieldChange('institutionName', e.target.value)}
-              placeholder="Nama Institusi Custom"
-              className="w-full rounded-md border border-slate-300 px-2 py-0.5 text-xs text-slate-800 focus:outline-none bg-slate-50"
-            />
-          )}
+          </datalist>
 
           <div className="flex items-center gap-1 mt-0.5">
             <select
               value={entry.institutionType}
               onChange={(e) => handleFieldChange('institutionType', e.target.value as MbgInstitutionType)}
-              title="Tipe Institusi"
-              className={`text-[10px] font-bold rounded border px-1.5 py-0.5 cursor-pointer ${
-                isPosyandu ? 'bg-purple-100 text-purple-800 border-purple-300' : 'bg-slate-100 text-slate-700 border-slate-200'
+              title="Tipe Institusi: Sekolah atau Posyandu"
+              className={`text-[10px] font-bold rounded border px-1.5 py-0.5 cursor-pointer transition-colors ${
+                isPosyandu ? 'bg-purple-100 text-purple-800 border-purple-300 font-extrabold' : 'bg-slate-100 text-slate-700 border-slate-200'
               }`}
             >
-              <option value="sekolah">Sekolah</option>
-              <option value="posyandu">Posyandu</option>
+              <option value="sekolah">🏫 Sekolah</option>
+              <option value="posyandu">👶 Posyandu</option>
+            </select>
+
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) handleSelectMaster(e.target.value);
+              }}
+              title="Pilih Master Institusi untuk mengisi otomatis standar porsi"
+              className="text-[10px] font-semibold rounded border border-slate-200 px-1 py-0.5 bg-slate-50 text-slate-600 max-w-[85px] truncate cursor-pointer"
+            >
+              <option value="">Master...</option>
+              {MBG_MASTER_INSTITUTIONS.map((inst) => (
+                <option key={inst.institutionName} value={inst.institutionName}>
+                  {inst.institutionName}
+                </option>
+              ))}
             </select>
 
             {!isPosyandu && (
               <button
                 type="button"
                 onClick={onManageClasses}
-                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors cursor-pointer shrink-0 ${
                   hasClasses ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}
                 title="Atur Kelas"
@@ -729,144 +724,152 @@ function PmEntryRow({
         </div>
       </td>
 
-      {/* 2. PORSI BESAR L (Sekolah) */}
+      {/* 2. PORSI BESAR L */}
       <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {!isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            disabled={hasClasses}
-            value={entry.qtPorsiBesarL || ''}
-            onChange={(e) => handleFieldChange('qtPorsiBesarL', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="Porsi Besar (Laki-laki)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+        <input
+          type="number"
+          min={0}
+          value={entry.qtPorsiBesarL || ''}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (isPosyandu && val > 0) handleFieldChange('institutionType', 'sekolah');
+            handleFieldChange('qtPorsiBesarL', val);
+          }}
+          placeholder="0"
+          title="Porsi Besar (Laki-laki)"
+          className={`w-8 rounded border px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900 ${
+            isPosyandu ? 'border-slate-200 bg-slate-50/60 text-slate-400 placeholder:text-slate-300' : 'border-slate-300 bg-white'
+          }`}
+        />
       </td>
 
-      {/* 3. PORSI BESAR P (Sekolah) */}
+      {/* 3. PORSI BESAR P */}
       <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {!isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            disabled={hasClasses}
-            value={entry.qtPorsiBesarP || ''}
-            onChange={(e) => handleFieldChange('qtPorsiBesarP', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="Porsi Besar (Perempuan)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+        <input
+          type="number"
+          min={0}
+          value={entry.qtPorsiBesarP || ''}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (isPosyandu && val > 0) handleFieldChange('institutionType', 'sekolah');
+            handleFieldChange('qtPorsiBesarP', val);
+          }}
+          placeholder="0"
+          title="Porsi Besar (Perempuan)"
+          className={`w-8 rounded border px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900 ${
+            isPosyandu ? 'border-slate-200 bg-slate-50/60 text-slate-400 placeholder:text-slate-300' : 'border-slate-300 bg-white'
+          }`}
+        />
       </td>
 
       {/* 4. PORSI KECIL L (Sekolah) */}
       <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {!isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            disabled={hasClasses}
-            value={entry.qtPorsiKecilL || ''}
-            onChange={(e) => handleFieldChange('qtPorsiKecilL', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="Porsi Kecil (Laki-laki)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+        <input
+          type="number"
+          min={0}
+          value={!isPosyandu ? (entry.qtPorsiKecilL || '') : ''}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (isPosyandu) handleFieldChange('institutionType', 'sekolah');
+            handleFieldChange('qtPorsiKecilL', val);
+          }}
+          placeholder={!isPosyandu ? "0" : "—"}
+          title={!isPosyandu ? "Porsi Kecil (Laki-laki)" : "Klik untuk beralih ke Sekolah dan isi Porsi Kecil"}
+          className={`w-8 rounded border px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900 ${
+            isPosyandu ? 'border-slate-200 bg-slate-50/50 text-slate-400 placeholder:text-slate-300' : 'border-slate-300 bg-white'
+          }`}
+        />
       </td>
 
       {/* 5. PORSI KECIL P (Sekolah) */}
       <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {!isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            disabled={hasClasses}
-            value={entry.qtPorsiKecilP || ''}
-            onChange={(e) => handleFieldChange('qtPorsiKecilP', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="Porsi Kecil (Perempuan)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+        <input
+          type="number"
+          min={0}
+          value={!isPosyandu ? (entry.qtPorsiKecilP || '') : ''}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (isPosyandu) handleFieldChange('institutionType', 'sekolah');
+            handleFieldChange('qtPorsiKecilP', val);
+          }}
+          placeholder={!isPosyandu ? "0" : "—"}
+          title={!isPosyandu ? "Porsi Kecil (Perempuan)" : "Klik untuk beralih ke Sekolah dan isi Porsi Kecil"}
+          className={`w-8 rounded border px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900 ${
+            isPosyandu ? 'border-slate-200 bg-slate-50/50 text-slate-400 placeholder:text-slate-300' : 'border-slate-300 bg-white'
+          }`}
+        />
       </td>
 
       {/* 6. PORSI BALITA L (Posyandu) */}
-      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            value={entry.qtPorsiKecilL || ''}
-            onChange={(e) => handleFieldChange('qtPorsiKecilL', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="Porsi Balita (Laki-laki)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center bg-amber-50/30">
+        <input
+          type="number"
+          min={0}
+          value={isPosyandu ? (entry.qtPorsiKecilL || '') : ''}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (!isPosyandu) handleFieldChange('institutionType', 'posyandu');
+            handleFieldChange('qtPorsiKecilL', val);
+          }}
+          placeholder={isPosyandu ? "0" : "—"}
+          title={isPosyandu ? "Porsi Balita (Laki-laki)" : "Klik untuk beralih ke Posyandu dan isi Balita"}
+          className={`w-8 rounded border px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900 ${
+            !isPosyandu ? 'border-slate-200 bg-slate-50/50 text-slate-400 placeholder:text-slate-300' : 'border-amber-300 bg-white'
+          }`}
+        />
       </td>
 
       {/* 7. PORSI BALITA P (Posyandu) */}
-      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            value={entry.qtPorsiKecilP || ''}
-            onChange={(e) => handleFieldChange('qtPorsiKecilP', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="Porsi Balita (Perempuan)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center bg-amber-50/30">
+        <input
+          type="number"
+          min={0}
+          value={isPosyandu ? (entry.qtPorsiKecilP || '') : ''}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (!isPosyandu) handleFieldChange('institutionType', 'posyandu');
+            handleFieldChange('qtPorsiKecilP', val);
+          }}
+          placeholder={isPosyandu ? "0" : "—"}
+          title={isPosyandu ? "Porsi Balita (Perempuan)" : "Klik untuk beralih ke Posyandu dan isi Balita"}
+          className={`w-8 rounded border px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900 ${
+            !isPosyandu ? 'border-slate-200 bg-slate-50/50 text-slate-400 placeholder:text-slate-300' : 'border-amber-300 bg-white'
+          }`}
+        />
       </td>
 
-      {/* 8. PORSI BUMIL & BUSUI L (BUMIL - Posyandu) */}
-      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            value={entry.qtBumil ?? (entry.institutionName.toLowerCase().includes('bumil') ? entry.qtBumilBusui || '' : '')}
-            onChange={(e) => handleFieldChange('qtBumil', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="Porsi Ibu Hamil (Bumil)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+      {/* 8. PORSI BUMIL */}
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center bg-purple-50/30">
+        <input
+          type="number"
+          min={0}
+          value={entry.qtBumil ?? (entry.institutionName.toLowerCase().includes('bumil') ? entry.qtBumilBusui || '' : '')}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (!isPosyandu && val > 0) handleFieldChange('institutionType', 'posyandu');
+            handleFieldChange('qtBumil', val);
+          }}
+          placeholder="0"
+          title="Porsi Ibu Hamil (Bumil)"
+          className="w-8 rounded border border-purple-200 bg-white px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900"
+        />
       </td>
 
-      {/* 9. PORSI BUMIL & BUSUI P (BUSUI - Posyandu) */}
-      <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            value={entry.qtBusui ?? (entry.institutionName.toLowerCase().includes('busui') ? entry.qtBumilBusui || '' : '')}
-            onChange={(e) => handleFieldChange('qtBusui', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="Porsi Ibu Menyusui (Busui)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+      {/* 9. PORSI BUSUI */}
+      <td className="px-0.5 py-1 border-r border-slate-200 text-center bg-purple-50/30">
+        <input
+          type="number"
+          min={0}
+          value={entry.qtBusui ?? (entry.institutionName.toLowerCase().includes('busui') ? entry.qtBumilBusui || '' : '')}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (!isPosyandu && val > 0) handleFieldChange('institutionType', 'posyandu');
+            handleFieldChange('qtBusui', val);
+          }}
+          placeholder="0"
+          title="Porsi Ibu Menyusui (Busui)"
+          className="w-8 rounded border border-purple-200 bg-white px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900"
+        />
       </td>
 
       {/* 10. TOTAL L */}
@@ -886,104 +889,112 @@ function PmEntryRow({
 
       {/* 13. PIC / GURU L (Sekolah) */}
       <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {!isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            value={entry.qtGuruL || ''}
-            onChange={(e) => handleFieldChange('qtGuruL', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="PIC / Guru Sekolah (Laki-laki)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+        <input
+          type="number"
+          min={0}
+          value={!isPosyandu ? (entry.qtGuruL || '') : ''}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (isPosyandu) handleFieldChange('institutionType', 'sekolah');
+            handleFieldChange('qtGuruL', val);
+          }}
+          placeholder={!isPosyandu ? "0" : "—"}
+          title={!isPosyandu ? "PIC / Guru Sekolah (Laki-laki)" : "Klik untuk beralih ke Sekolah dan isi Guru L"}
+          className={`w-8 rounded border px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900 ${
+            isPosyandu ? 'border-slate-200 bg-slate-50/50 text-slate-400 placeholder:text-slate-300' : 'border-slate-300 bg-white'
+          }`}
+        />
       </td>
 
       {/* 14. PIC / GURU P (Sekolah) */}
       <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {!isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            value={entry.qtGuruP || ''}
-            onChange={(e) => handleFieldChange('qtGuruP', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="PIC / Guru Sekolah (Perempuan)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+        <input
+          type="number"
+          min={0}
+          value={!isPosyandu ? (entry.qtGuruP || '') : ''}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (isPosyandu) handleFieldChange('institutionType', 'sekolah');
+            handleFieldChange('qtGuruP', val);
+          }}
+          placeholder={!isPosyandu ? "0" : "—"}
+          title={!isPosyandu ? "PIC / Guru Sekolah (Perempuan)" : "Klik untuk beralih ke Sekolah dan isi Guru P"}
+          className={`w-8 rounded border px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900 ${
+            isPosyandu ? 'border-slate-200 bg-slate-50/50 text-slate-400 placeholder:text-slate-300' : 'border-slate-300 bg-white'
+          }`}
+        />
       </td>
 
       {/* 15. KADER L (Posyandu) */}
       <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            value={entry.qtGuruL || ''}
-            onChange={(e) => handleFieldChange('qtGuruL', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="Kader Posyandu (Laki-laki)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+        <input
+          type="number"
+          min={0}
+          value={isPosyandu ? (entry.qtGuruL || '') : ''}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (!isPosyandu) handleFieldChange('institutionType', 'posyandu');
+            handleFieldChange('qtGuruL', val);
+          }}
+          placeholder={isPosyandu ? "0" : "—"}
+          title={isPosyandu ? "Kader Posyandu (Laki-laki)" : "Klik untuk beralih ke Posyandu dan isi Kader L"}
+          className={`w-8 rounded border px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900 ${
+            !isPosyandu ? 'border-slate-200 bg-slate-50/50 text-slate-400 placeholder:text-slate-300' : 'border-slate-300 bg-white'
+          }`}
+        />
       </td>
 
       {/* 16. KADER P (Posyandu) */}
       <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            value={entry.qtGuruP || ''}
-            onChange={(e) => handleFieldChange('qtGuruP', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="Kader Posyandu (Perempuan)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+        <input
+          type="number"
+          min={0}
+          value={isPosyandu ? (entry.qtGuruP || '') : ''}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (!isPosyandu) handleFieldChange('institutionType', 'posyandu');
+            handleFieldChange('qtGuruP', val);
+          }}
+          placeholder={isPosyandu ? "0" : "—"}
+          title={isPosyandu ? "Kader Posyandu (Perempuan)" : "Klik untuk beralih ke Posyandu dan isi Kader P"}
+          className={`w-8 rounded border px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900 ${
+            !isPosyandu ? 'border-slate-200 bg-slate-50/50 text-slate-400 placeholder:text-slate-300' : 'border-slate-300 bg-white'
+          }`}
+        />
       </td>
 
       {/* 17. TENDIK L (Sekolah) */}
       <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {!isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            value={entry.qtTendikL || ''}
-            onChange={(e) => handleFieldChange('qtTendikL', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="Tendik / Staf Sekolah (Laki-laki)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+        <input
+          type="number"
+          min={0}
+          value={entry.qtTendikL || ''}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (isPosyandu && val > 0) handleFieldChange('institutionType', 'sekolah');
+            handleFieldChange('qtTendikL', val);
+          }}
+          placeholder="0"
+          title="Tendik / Staf Sekolah (Laki-laki)"
+          className="w-8 rounded border border-slate-300 bg-white px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900"
+        />
       </td>
 
       {/* 18. TENDIK P (Sekolah) */}
       <td className="px-0.5 py-1 border-r border-slate-200 text-center">
-        {!isPosyandu ? (
-          <input
-            type="number"
-            min={0}
-            value={entry.qtTendikP || ''}
-            onChange={(e) => handleFieldChange('qtTendikP', parseInt(e.target.value) || 0)}
-            placeholder="0"
-            title="Tendik / Staf Sekolah (Perempuan)"
-            className="w-8 rounded border border-slate-300 px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 bg-white text-slate-900"
-          />
-        ) : (
-          <span className="text-slate-300 text-xs">—</span>
-        )}
+        <input
+          type="number"
+          min={0}
+          value={entry.qtTendikP || ''}
+          onChange={(e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (isPosyandu && val > 0) handleFieldChange('institutionType', 'sekolah');
+            handleFieldChange('qtTendikP', val);
+          }}
+          placeholder="0"
+          title="Tendik / Staf Sekolah (Perempuan)"
+          className="w-8 rounded border border-slate-300 bg-white px-0.5 py-0.5 text-xs text-center font-bold focus:ring-1 focus:ring-slate-500 text-slate-900"
+        />
       </td>
 
       {/* 19. JML STAF / KADER */}
@@ -1179,6 +1190,7 @@ export function MbgAdminPage() {
             await clearBatchEntries(targetBatchId);
             await addMultipleEntries(entriesToSave);
             await recalculateBatchTotals(targetBatchId);
+            await updateBatchStatus(targetBatchId, 'DRAFT');
 
             setSelectedBatchId(targetBatchId);
 
@@ -1269,6 +1281,7 @@ export function MbgAdminPage() {
       await clearBatchEntries(targetBatchId);
       await addMultipleEntries(entriesToSave);
       await recalculateBatchTotals(targetBatchId);
+      await updateBatchStatus(targetBatchId, 'DRAFT');
 
       // Pastikan selectedBatchId aktif mengarah ke batch yang baru saja diisi
       setSelectedBatchId(targetBatchId);
@@ -1298,27 +1311,23 @@ export function MbgAdminPage() {
     const unsub = subscribeBatches(
       async (b) => {
         setAllBatches(b);
-        // Only show DRAFT batches on the active input page
-        const draftBatches = b.filter((batch) => batch.status === 'DRAFT');
-        setBatches(draftBatches);
+        // Tampilkan semua batch agar batch yang telah disubmit tetap dapat diakses dan diedit/reopen
+        setBatches(b);
         setLoadingBatches(false);
 
         const todayStr = new Date().toISOString().split('T')[0];
-        const todayBatch = draftBatches.find((batch) => batch.tanggal === todayStr);
-        const anyTodayBatch = b.find((batch) => batch.tanggal === todayStr);
+        const todayBatch = b.find((batch) => batch.tanggal === todayStr);
 
         setSelectedBatchId((current) => {
           const isCurrentValid = current ? b.some((batch) => batch.id === current) : false;
           if (isCurrentValid) return current;
           if (todayBatch) return todayBatch.id;
-          if (anyTodayBatch) return anyTodayBatch.id;
-          if (draftBatches.length > 0) return draftBatches[0].id;
           if (b.length > 0) return b[0].id;
           return null;
         });
 
         // Auto-create batch for today if completely absent from Firestore
-        if (!todayBatch && !anyTodayBatch) {
+        if (!todayBatch) {
           try {
             const newId = await createBatch(todayStr, user?.uid || 'admin', false, weeklySchedule);
             setSelectedBatchId((current) => current || newId);
@@ -1443,9 +1452,9 @@ export function MbgAdminPage() {
     const posyanduActive = active.filter((e) => e.institutionType === 'posyandu');
     const sekolahActive = active.filter((e) => e.institutionType !== 'posyandu');
 
-    // Porsi Besar (Sekolah)
-    const porsiBesarL = sekolahActive.reduce((s, e) => s + (e.qtPorsiBesarL || 0), 0);
-    const porsiBesarP = sekolahActive.reduce((s, e) => s + (e.qtPorsiBesarP || 0), 0);
+    // Porsi Besar (Sekolah & Umum)
+    const porsiBesarL = active.reduce((s, e) => s + (e.qtPorsiBesarL || 0), 0);
+    const porsiBesarP = active.reduce((s, e) => s + (e.qtPorsiBesarP || 0), 0);
 
     // Porsi Kecil (Sekolah)
     const porsiKecilL = sekolahActive.reduce((s, e) => s + (e.qtPorsiKecilL || 0), 0);
@@ -1455,9 +1464,9 @@ export function MbgAdminPage() {
     const porsiBalitaL = posyanduActive.reduce((s, e) => s + (e.qtPorsiKecilL || 0), 0);
     const porsiBalitaP = posyanduActive.reduce((s, e) => s + (e.qtPorsiKecilP || 0), 0);
 
-    // Porsi Bumil & Busui (Posyandu)
-    const porsiBumil = posyanduActive.reduce((s, e) => s + (e.qtBumil ?? (e.institutionName.toLowerCase().includes('bumil') ? e.qtBumilBusui || 0 : 0)), 0);
-    const porsiBusui = posyanduActive.reduce((s, e) => s + (e.qtBusui ?? (e.institutionName.toLowerCase().includes('busui') ? e.qtBumilBusui || 0 : 0)), 0);
+    // Porsi Bumil & Busui (Posyandu & Institusi dengan Bumil/Busui)
+    const porsiBumil = active.reduce((s, e) => s + (e.qtBumil ?? (e.institutionName.toLowerCase().includes('bumil') ? e.qtBumilBusui || 0 : 0)), 0);
+    const porsiBusui = active.reduce((s, e) => s + (e.qtBusui ?? (e.institutionName.toLowerCase().includes('busui') ? e.qtBumilBusui || 0 : 0)), 0);
 
     // Total Siswa
     const totalSiswaL = porsiBesarL + porsiKecilL + porsiBalitaL;
@@ -1472,9 +1481,9 @@ export function MbgAdminPage() {
     const kaderL = posyanduActive.reduce((s, e) => s + (e.qtGuruL || 0), 0);
     const kaderP = posyanduActive.reduce((s, e) => s + (e.qtGuruP || 0), 0);
 
-    // Tendik (HANYA SEKOLAH)
-    const tendikL = sekolahActive.reduce((s, e) => s + (e.qtTendikL || 0), 0);
-    const tendikP = sekolahActive.reduce((s, e) => s + (e.qtTendikP || 0), 0);
+    // Tendik (Semua Institusi)
+    const tendikL = active.reduce((s, e) => s + (e.qtTendikL || 0), 0);
+    const tendikP = active.reduce((s, e) => s + (e.qtTendikP || 0), 0);
 
     const totalStafKader = guruL + guruP + kaderL + kaderP + tendikL + tendikP;
     const totalKeseluruhan = totalSiswaJml + totalStafKader;
@@ -1650,6 +1659,21 @@ export function MbgAdminPage() {
 
   const handleUpdateEntry = useCallback(
     async (entryId: string, updates: Partial<MbgPmEntry>) => {
+      // 1. Instant optimistic local state update for zero-latency typing
+      setEntries((prev) =>
+        prev.map((e) => {
+          if (e.id !== entryId) return e;
+          const merged = { ...e, ...updates };
+          const newJumlah = calcJumlah(merged);
+          merged.jumlah = newJumlah;
+          if (updates.qtAlergi !== undefined || updates.jumlah !== undefined) {
+            merged.qtTidakAlergi = Math.max(0, newJumlah - (merged.qtAlergi || 0));
+          }
+          return merged;
+        })
+      );
+
+      // 2. Persist to Firestore in background
       try {
         await updateEntry(entryId, updates);
       } catch (err) {
@@ -1715,7 +1739,7 @@ export function MbgAdminPage() {
 
     setConfirmState({
       title: 'Submit Data PM',
-      message: `Apakah Anda yakin ingin men-submit seluruh data PM untuk tanggal ${selectedBatch.tanggal}? Setelah disubmit, data tidak dapat diubah lagi di halaman Administrasi dan akan diteruskan ke departemen Purchasing.`,
+      message: `Apakah Anda yakin ingin men-submit seluruh data PM untuk tanggal ${selectedBatch.tanggal}? Setelah disubmit, data akan diteruskan ke departemen Purchasing dan status batch menjadi PM_SUBMITTED.`,
       variant: 'warning',
       onConfirm: async () => {
         setSaving(true);
@@ -1726,6 +1750,28 @@ export function MbgAdminPage() {
         } catch (err) {
           console.error(err);
           showToast({ message: 'Gagal submit data', variant: 'error' });
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
+  };
+
+  const handleReopenBatchToDraft = () => {
+    if (!selectedBatchId || !selectedBatch) return;
+
+    setConfirmState({
+      title: 'Buka Kembali Batch',
+      message: `Apakah Anda ingin membuka kembali batch untuk tanggal ${selectedBatch.tanggal} ke status DRAFT agar dapat diedit dan disubmit ulang?`,
+      variant: 'info',
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          await updateBatchStatus(selectedBatchId, 'DRAFT');
+          showToast({ message: 'Batch berhasil dibuka kembali ke status DRAFT!', variant: 'success' });
+        } catch (err) {
+          console.error(err);
+          showToast({ message: 'Gagal membuka kembali batch', variant: 'error' });
         } finally {
           setSaving(false);
         }
@@ -1952,6 +1998,43 @@ export function MbgAdminPage() {
                 Import Excel / CSV
               </button>
 
+              {/* Submit / Reopen Button in Top Action Bar */}
+              {selectedBatch && entries.length > 0 && (
+                selectedBatch.status === 'DRAFT' ? (
+                  <button
+                    type="button"
+                    onClick={handleSubmitBatch}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#059669] hover:bg-[#047857] text-white text-xs font-extrabold transition-all cursor-pointer shadow-sm disabled:opacity-50 whitespace-nowrap active:scale-95"
+                    title="Submit Data PM untuk diteruskan ke Purchasing dan Produksi"
+                  >
+                    {saving ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    )}
+                    Submit Data PM
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300 whitespace-nowrap">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      PM Disubmit
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleReopenBatchToDraft}
+                      disabled={saving}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 text-xs font-extrabold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
+                      title="Buka kembali batch ke mode DRAFT untuk mengedit data dan submit ulang"
+                    >
+                      <Edit className="h-3.5 w-3.5 text-amber-700" />
+                      Buka / Edit Batch
+                    </button>
+                  </div>
+                )
+              )}
+
               <button
                 onClick={() => setShowScheduleModal(true)}
                 title="Master Jadwal Menu Mingguan MBG"
@@ -2005,7 +2088,7 @@ export function MbgAdminPage() {
 
             {/* Right Panel: Batch Entries Table */}
             <div className="flex-1 w-full min-w-0">
-              {/* Search Bar */}
+              {/* Search Bar & Actions */}
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="relative max-w-sm flex-1 min-w-[200px]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
@@ -2016,6 +2099,36 @@ export function MbgAdminPage() {
                     placeholder="Cari institusi atau petugas..."
                     className="w-full rounded-xl border border-[#E5E7EB] bg-white pl-9 pr-4 py-2.5 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                   />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1.5 rounded-lg">
+                    Total: {filteredEntries.length} Institusi
+                  </span>
+
+                  {selectedBatch && entries.length > 0 && (
+                    selectedBatch.status === 'DRAFT' ? (
+                      <button
+                        type="button"
+                        onClick={handleSubmitBatch}
+                        disabled={saving}
+                        className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#059669] hover:bg-[#047857] text-white text-xs font-extrabold transition-all cursor-pointer shadow-md shadow-green-600/20 disabled:opacity-50 whitespace-nowrap active:scale-95"
+                      >
+                        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                        Submit Data PM
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleReopenBatchToDraft}
+                        disabled={saving}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-extrabold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
+                      >
+                        <Edit className="h-3.5 w-3.5 text-amber-700" />
+                        Edit / Buka Batch
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
 
@@ -2199,21 +2312,32 @@ export function MbgAdminPage() {
                     </button>
                   </div>
 
-                  {/* Submit Button */}
-                  {selectedBatch && selectedBatch.status === 'DRAFT' && entries.length > 0 && (
-                    <div className="mt-8 flex justify-end">
-                      <button
-                        onClick={handleSubmitBatch}
-                        disabled={saving}
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-[#059669] text-white text-sm font-extrabold rounded-xl hover:bg-[#047857] cursor-pointer transition-colors shadow-lg shadow-green-500/20 disabled:opacity-50"
-                      >
-                        {saving ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="h-4 w-4" />
-                        )}
-                        Submit Data PM
-                      </button>
+                  {/* Submit / Reopen Bottom Bar */}
+                  {selectedBatch && entries.length > 0 && (
+                    <div className="mt-8 flex justify-end gap-3">
+                      {selectedBatch.status === 'DRAFT' ? (
+                        <button
+                          onClick={handleSubmitBatch}
+                          disabled={saving}
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-[#059669] text-white text-sm font-extrabold rounded-xl hover:bg-[#047857] cursor-pointer transition-colors shadow-lg shadow-green-500/20 disabled:opacity-50"
+                        >
+                          {saving ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4" />
+                          )}
+                          Submit Data PM
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleReopenBatchToDraft}
+                          disabled={saving}
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-sm font-extrabold rounded-xl cursor-pointer transition-colors shadow-sm disabled:opacity-50"
+                        >
+                          <Edit className="h-4 w-4 text-amber-700" />
+                          Buka Kembali / Edit Data PM
+                        </button>
+                      )}
                     </div>
                   )}
                 </>
