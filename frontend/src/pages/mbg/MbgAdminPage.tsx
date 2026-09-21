@@ -1875,15 +1875,15 @@ export function MbgAdminPage() {
       ) : (
         <>
           {/* Dropdown Selector Card */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-3.5 mb-6 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="bg-white rounded-2xl border border-slate-200 p-3.5 mb-6 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-3.5">
             {/* Left Info: Calendar Icon + Date Picker + Batch Select + Status + Menu Preview */}
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5 flex-wrap min-w-0">
               <div className="p-2 bg-amber-500/10 rounded-xl text-amber-600 flex items-center justify-center shrink-0">
                 <Calendar className="h-4.5 w-4.5" />
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider hidden sm:inline">Pengiriman:</span>
                   {selectedBatch && (
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200">
@@ -1897,16 +1897,16 @@ export function MbgAdminPage() {
                   title="Pilih Tanggal Pengiriman"
                   value={selectedBatch ? selectedBatch.tanggal : new Date().toISOString().split('T')[0]}
                   onChange={(e) => handleSelectOrPickDate(e.target.value)}
-                  className="text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/30 rounded-lg border border-slate-300 px-2 py-1 bg-slate-50 cursor-pointer"
+                  className="text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/30 rounded-lg border border-slate-300 px-2 py-1 bg-slate-50 cursor-pointer shrink-0"
                 />
 
                 {selectedBatch && (
-                  <div className="text-xs text-slate-600 font-medium pl-2 border-l border-slate-200 flex items-center gap-1.5">
-                    <span className="font-extrabold text-slate-800">
+                  <div className="text-xs text-slate-600 font-medium pl-2 border-l border-slate-200 flex items-center gap-1.5 min-w-0">
+                    <span className="font-extrabold text-slate-800 shrink-0">
                       {getMenuForDate(selectedBatch.tanggal, weeklySchedule).dayMenu.dayName}
                     </span>
-                    <span className="text-slate-300">•</span>
-                    <span className="text-slate-500 text-xs truncate max-w-[180px] xl:max-w-[260px]">
+                    <span className="text-slate-300 shrink-0">•</span>
+                    <span className="text-slate-500 text-xs truncate max-w-[160px] md:max-w-[220px] 2xl:max-w-[320px]">
                       {getMenuForDate(selectedBatch.tanggal, weeklySchedule).menuItems.join(', ') || 'Tanpa Menu'}
                     </span>
                   </div>
@@ -1914,8 +1914,8 @@ export function MbgAdminPage() {
               </div>
             </div>
 
-            {/* Right Action Buttons: All 5 Buttons in 1 Row */}
-            <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+            {/* Right Action Buttons: Responsive & Neatly Grouped */}
+            <div className="flex items-center gap-1.5 flex-wrap justify-start xl:justify-end">
               <input
                 type="file"
                 ref={csvFileInputRef}
@@ -1935,10 +1935,10 @@ export function MbgAdminPage() {
                 onClick={() => setShowSpreadsheetModal(true)}
                 disabled={!selectedBatchId}
                 title="Import data PM langsung dari link Google Spreadsheet"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-extrabold hover:bg-emerald-100 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs whitespace-nowrap"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold hover:bg-emerald-100 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs whitespace-nowrap"
               >
                 <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-                Import Link Spreadsheet
+                Import Spreadsheet
               </button>
 
               <button
@@ -1946,22 +1946,24 @@ export function MbgAdminPage() {
                 onClick={() => csvFileInputRef.current?.click()}
                 disabled={!selectedBatchId}
                 title="Import data PM langsung dari file Excel (.xlsx, .xls) atau CSV"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-extrabold hover:bg-blue-100 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs whitespace-nowrap"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold hover:bg-blue-100 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs whitespace-nowrap"
               >
                 <Upload className="h-3.5 w-3.5 text-blue-600" />
-                Import Excel / CSV PM
+                Import Excel / CSV
               </button>
 
               <button
                 onClick={() => setShowScheduleModal(true)}
+                title="Master Jadwal Menu Mingguan MBG"
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors cursor-pointer whitespace-nowrap"
               >
                 <ChefHat className="h-3.5 w-3.5 text-slate-600" />
-                Master Jadwal Menu
+                Jadwal Menu
               </button>
 
               <button
                 onClick={() => setShowNewBatchModal(true)}
+                title="Buat batch pengiriman baru"
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#FBBF24] hover:bg-[#F59E0B] text-slate-900 text-xs font-extrabold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -1971,6 +1973,7 @@ export function MbgAdminPage() {
               {selectedBatchId && (
                 <button
                   onClick={handleDeleteBatch}
+                  title="Hapus batch pengiriman yang sedang dipilih"
                   className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-red-200 hover:border-red-300 text-red-600 text-xs font-bold hover:bg-red-50 transition-colors cursor-pointer whitespace-nowrap"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -1984,7 +1987,7 @@ export function MbgAdminPage() {
                 title="Hapus seluruh data operasional MBG (Admin, Produksi, Distribusi, Purchasing, Kurir)"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                Hapus Semua Data MBG
+                Hapus Semua Data
               </button>
             </div>
           </div>
