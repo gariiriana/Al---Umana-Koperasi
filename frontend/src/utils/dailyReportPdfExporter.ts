@@ -159,19 +159,31 @@ interface RekapPmRowData {
   totalAkhir: number;
 }
 
-const buildRekapPmRows = (
+/** Keep PDF row identity identical to the PM table in the production page. */
+const normalizePmInstitutionName = (name: string): string =>
+  (name || '')
+    .toLowerCase()
+    .replace(/kelas\s*[0-9-]+/gi, '')
+    .replace(/kls\s*[0-9-]+/gi, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+
+const getUniquePmEntries = (entries: MbgPmEntry[]): MbgPmEntry[] => {
+  const seenNames = new Set<string>();
+  return entries.filter((entry) => {
+    const key = normalizePmInstitutionName(entry.institutionName);
+    if (!key || seenNames.has(key)) return false;
+    seenNames.add(key);
+    return true;
+  });
+};
+
+export const buildRekapPmRows = (
   entries: MbgPmEntry[] = [],
   sekolahList: { nama: string; murid: number; guru: number }[] = []
 ): RekapPmRowData[] => {
   if (entries && entries.length > 0) {
-    const seenNames = new Set<string>();
-    const uniqueEntries: MbgPmEntry[] = [];
-    for (const e of entries) {
-      const norm = (e.institutionName || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-      if (norm && seenNames.has(norm)) continue;
-      if (norm) seenNames.add(norm);
-      uniqueEntries.push(e);
-    }
+    const uniqueEntries = getUniquePmEntries(entries);
     return uniqueEntries.map((e) => {
       const isTk =
         e.schoolLevel === 'tk_paud' ||
@@ -263,7 +275,10 @@ const buildRekapPmRows = (
       const tendikJumlah = tendikL + tendikP;
 
       // 8. Total Akhir
-      const totalAkhir = siswaJumlah + (guruL + guruP) + tendikJumlah;
+      // `jumlah` is the imported source total used by the website.  Do not
+      // recompute it from display-only gender/category splits, which can
+      // double-count recipients and make the PDF disagree with the app.
+      const totalAkhir = e.isSekolahLibur ? 0 : (e.jumlah || 0);
 
       return {
         nama: e.institutionName + (e.isSekolahLibur ? ' (Libur)' : ''),
@@ -1041,9 +1056,11 @@ export async function export8PageDailyReportPdf(
   const logoBadanGizi = await getBase64ImageFromUrl('/logo_badan_gizi.png');
 
   const tanggalStr = report.tanggal || batch?.tanggal || new Date().toISOString().split('T')[0];
+  const totalDariEntries = getUniquePmEntries(entries)
+    .reduce((sum, entry) => sum + (entry.isSekolahLibur ? 0 : (entry.jumlah || 0)), 0);
   const totalPorsiBatch =
+    totalDariEntries ||
     batch?.totalJumlah ||
-    entries.reduce((s, e) => s + (e.isSekolahLibur ? 0 : (e.jumlah || 0)), 0) ||
     (report.sekolahList || []).reduce((s, sk) => s + sk.murid + sk.guru, 0) ||
     0;
 
