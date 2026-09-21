@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseProductionSheetRows } from '../utils/productionSheetParser';
+import * as XLSX from 'xlsx';
+import { parsePenerimaManfaatSheet, parseProductionSheetRows } from '../utils/productionSheetParser';
 
 describe('productionSheetParser - Dynamic Menu & Fruit Parsing', () => {
   it('correctly detects fruit as "Jeruk" and does not overwrite it with "Nasi"', () => {
@@ -229,5 +230,41 @@ describe('productionSheetParser - Dynamic Menu & Fruit Parsing', () => {
     expect(semangkaPo?.supplier).toBe('Toko Buah Berkah Abadi');
     expect(semangkaPo?.totalHarga).toBe(500000);
     expect(semangkaPo?.hargaSatuan).toBe(0); // Harga satuan not detected, as requested
+  });
+});
+
+describe('productionSheetParser - Penerima Manfaat import fidelity', () => {
+  it('imports every institution and preserves zero values in the selected week', () => {
+    const rows: unknown[][] = [
+      ['No', 'Nama', 'Pekan 1', '', '', 'Pekan 2'],
+      ['', '', 'Murid', 'Guru', 'Total', 'Murid', 'Guru', 'Total'],
+    ];
+    for (let index = 1; index <= 40; index += 1) {
+      rows.push([index, `SD Contoh ${index}`, 100, 5, 105, 0, 0, 0]);
+    }
+    const sheet = XLSX.utils.aoa_to_sheet(rows);
+
+    const weekTwo = parsePenerimaManfaatSheet(sheet, 'batch-1', 2);
+
+    expect(weekTwo).toHaveLength(40);
+    expect(weekTwo[0]).toMatchObject({
+      institutionName: 'SD Contoh 1',
+      qtSiswaBalita: 0,
+      qtGuruKader: 0,
+      jumlah: 0,
+      isSekolahLibur: true,
+    });
+    expect(weekTwo[39].institutionName).toBe('SD Contoh 40');
+  });
+
+  it('uses the source total exactly, including an explicit zero', () => {
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ['No', 'Nama', 'Pekan 1'],
+      ['', '', 'Murid', 'Guru', 'Total'],
+      [1, 'SD Uji', 100, 5, 0],
+    ]);
+
+    const [entry] = parsePenerimaManfaatSheet(sheet, 'batch-1', 1);
+    expect(entry).toMatchObject({ qtSiswaBalita: 100, qtGuruKader: 5, jumlah: 0 });
   });
 });

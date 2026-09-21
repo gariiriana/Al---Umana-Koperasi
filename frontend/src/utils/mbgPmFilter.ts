@@ -231,9 +231,9 @@ export function getAllDetailedPmEntries(
           cat = isSma ? 'SMA / SMK' : 'SMP / MTs';
           pBesar = (s.murid || 0) + (s.guru || 0);
         } else {
+          // The fallback sheet only gives Murid and Guru, not a class-level
+          // split. Keep the category columns empty rather than inventing one.
           cat = 'SD / MI';
-          pKecil = Math.ceil((s.murid || 0) / 2);
-          pBesar = Math.floor((s.murid || 0) / 2) + (s.guru || 0);
         }
 
         const total = pKecil + pBesar + pBalita + pBumil;
@@ -306,6 +306,13 @@ export function getAllDetailedPmEntries(
     let pBesar = 0;
     let pBalita = 0;
     let pBumil = 0;
+    const hasExplicitSchoolPortions = Boolean(
+      (e.qtPorsiKecil && e.qtPorsiKecil > 0) ||
+      (e.qtPorsiBesar && e.qtPorsiBesar > 0) ||
+      (e.classesBreakdown && e.classesBreakdown.length > 0)
+    );
+    const importedWithoutSchoolPortions =
+      e.createdBy === 'import_excel' && e.institutionType === 'sekolah' && !hasExplicitSchoolPortions;
 
     // Check classes breakdown if specified
     if (e.classesBreakdown && e.classesBreakdown.length > 0) {
@@ -325,7 +332,7 @@ export function getAllDetailedPmEntries(
       const busui = e.qtBusui || 0;
       pBumil = e.qtPorsiBumilBusui || e.qtBumilBusui || (bumil + busui);
       pBesar = e.qtGuruKader || 0; // kader makan porsi besar
-    } else {
+    } else if (!importedWithoutSchoolPortions) {
       // Sekolah
       if (pKecil === 0 && pBesar === 0) {
         if (e.qtPorsiKecil && e.qtPorsiKecil > 0) {
@@ -368,7 +375,12 @@ export function getAllDetailedPmEntries(
 
     // Build detail / rincian string
     const rincianParts: string[] = [];
-    if (isTk) {
+    if (importedWithoutSchoolPortions) {
+      const siswa = e.qtSiswaBalita || 0;
+      const guru = e.qtGuruKader || 0;
+      if (siswa > 0) rincianParts.push(`${siswa} Murid`);
+      if (guru > 0) rincianParts.push(`${guru} Guru/Kader`);
+    } else if (isTk) {
       if (pKecil > 0) rincianParts.push(`${pKecil} Siswa TK`);
       if (pBesar > 0) rincianParts.push(`${pBesar} Guru`);
     } else if (isSd) {

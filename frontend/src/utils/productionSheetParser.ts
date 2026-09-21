@@ -820,7 +820,9 @@ export function parseProductionSheetRows(
   }[] = [];
 
   let current3bGroup: 'bumil' | 'balita' | null = null;
-  for (let r = 2; r < Math.min(rows.length, 35); r++) {
+  // Read every populated institution row.  The old 35-row limit silently
+  // discarded valid schools whenever the source workbook grew.
+  for (let r = 2; r < rows.length; r++) {
     const row = rows[r] || [];
     const label = str(row[COL_KERING_ITEM]).toUpperCase();
 
@@ -1410,16 +1412,19 @@ export function parsePenerimaManfaatSheet(
   const colGuru = colMurid + 1;
   const colTotal = colMurid + 2;
 
-  for (let r = 2; r < Math.min(rows.length, 35); r++) {
+  // Do not cap the institution count: each populated source row is an entry.
+  for (let r = 2; r < rows.length; r++) {
     const row = rows[r] || [];
     const no = row[0];
     const name = str(row[1]);
     if (!name || name.toLowerCase().includes('total')) continue;
     if (typeof no !== 'number' && isNaN(Number(no))) continue;
 
-    const murid = num(row[colMurid]) || num(row[2]);
-    const guru = num(row[colGuru]) || num(row[3]);
-    const total = num(row[colTotal]) || (murid + guru);
+    // A numeric zero is meaningful (for example a school closed in week 2),
+    // so never fall back to another week's value with `||`.
+    const murid = num(row[colMurid]);
+    const guru = num(row[colGuru]);
+    const total = num(row[colTotal]);
 
     const nameLower = name.toLowerCase();
     let type: MbgInstitutionType = 'sekolah';
@@ -1471,7 +1476,9 @@ export function parsePenerimaManfaatSheet(
       qtPobiaNasi: 0,
       qtPorsiBalita: type === 'posyandu' && nameLower.includes('balita') ? murid : 0,
       qtPorsiBumilBusui: type === 'posyandu' && (qtBumil > 0 || qtBusui > 0) ? murid : 0,
-      jumlah: total,
+      // Total is taken directly when present.  Some templates intentionally
+      // leave it blank, in which case the only safe derived value is murid + guru.
+      jumlah: row[colTotal] == null || row[colTotal] === '' ? murid + guru : total,
       jadwalPengantaran: '06.30-08.30',
       assignedPetugasId: '',
       assignedPetugasName: '',

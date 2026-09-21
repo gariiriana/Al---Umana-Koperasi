@@ -4,7 +4,7 @@
 
 import {
   collection, doc, addDoc, updateDoc, deleteDoc,
-  query, where, onSnapshot, type Unsubscribe,
+  query, where, onSnapshot, getDocs, writeBatch, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { MbgNutritionEntry, MbgCookingSession, MbgCookingPhoto, MbgProductionDailyReport } from '@/types/mbg';
@@ -238,7 +238,11 @@ export function subscribeDailyReport(
     if (snap.empty) {
       callback(null);
     } else {
-      const docData = snap.docs[0];
+      const docData = [...snap.docs].sort((a, b) => {
+        const aTime = String(a.data().updatedAt || a.data().createdAt || '');
+        const bTime = String(b.data().updatedAt || b.data().createdAt || '');
+        return bTime.localeCompare(aTime);
+      })[0];
       callback({ id: docData.id, ...docData.data() } as MbgProductionDailyReport);
     }
   }, onError);
@@ -285,17 +289,39 @@ export async function saveDailyReport(
     });
     return reportId;
   } else {
-    const ref = await addDoc(collection(db, DAILY_REPORTS_COLLECTION), {
-      ...cleaned,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+    // Imports may target a batch that is not currently open in the UI.  Find
+    // its existing report by batch id so a re-import updates it rather than
+    // creating a second, randomly-selected report.
+    const existing = await getDocs(query(
+      collection(db, DAILY_REPORTS_COLLECTION),
+      where('batchId', '==', report.batchId)
+    ));
+    if (existing.empty) {
+      const ref = await addDoc(collection(db, DAILY_REPORTS_COLLECTION), {
+        ...cleaned,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      return ref.id;
+    }
+
+    const docs = [...existing.docs].sort((a, b) => {
+      const aTime = String(a.data().updatedAt || a.data().createdAt || '');
+      const bTime = String(b.data().updatedAt || b.data().createdAt || '');
+      return bTime.localeCompare(aTime);
     });
-    return ref.id;
+    const primary = docs[0];
+    const writes = writeBatch(db);
+    writes.update(primary.ref, { ...cleaned, updatedAt: new Date().toISOString() });
+    // Clean up legacy duplicates at the same time; all readers then resolve
+    // one deterministic report for the batch.
+    docs.slice(1).forEach((duplicate) => writes.delete(duplicate.ref));
+    await writes.commit();
+    return primary.id;
   }
 }
 
 export async function deleteDailyReport(id: string): Promise<void> {
   await deleteDoc(doc(db, DAILY_REPORTS_COLLECTION, id));
 }
-
 

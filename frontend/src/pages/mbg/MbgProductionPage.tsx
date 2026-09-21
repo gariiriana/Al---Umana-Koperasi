@@ -17,7 +17,7 @@ import { DailyReportExcelSections, type MbgDailyReportSubTab } from '@/component
 import {
   subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule,
   saveWeeklySchedule, getMenuForDate, deleteBatch, createBatch,
-  addMultipleEntries, recalculateBatchTotals, clearBatchEntries,
+  replaceBatchEntries,
   type MbgPortionClassification
 } from '@/services/mbgAdminService';
 import {
@@ -163,6 +163,7 @@ export function MbgProductionPage() {
   const [availableSheetNames, setAvailableSheetNames] = useState<string[]>([]);
   const [sheetWorkbook, setSheetWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [importTargetOption, setImportTargetOption] = useState<'current_batch' | 'sheet_date'>('current_batch');
+  const [pmImportWeek, setPmImportWeek] = useState<1 | 2 | 3 | 4>(1);
   const [dailyReport, setDailyReport] = useState<MbgProductionDailyReport | null>(null);
   const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
   const [batchExcelFilter, setBatchExcelFilter] = useState<'all' | 'unimported' | 'imported'>('all');
@@ -1605,15 +1606,13 @@ export function MbgProductionPage() {
         }
       }
 
-      const pmEntries = parsePenerimaManfaatSheet(ws, targetBatchId);
+      const pmEntries = parsePenerimaManfaatSheet(ws, targetBatchId, pmImportWeek, user?.uid || 'import_excel');
       if (pmEntries.length === 0) {
         showToast({ message: 'Tidak ada data penerima manfaat yang dapat dibaca dari sheet ini.', variant: 'error' });
         return;
       }
 
-      await clearBatchEntries(targetBatchId);
-      await addMultipleEntries(pmEntries);
-      await recalculateBatchTotals(targetBatchId);
+      await replaceBatchEntries(targetBatchId, pmEntries);
 
       setSelectedBatchId(targetBatchId);
       setShowSheetsImportModal(false);
@@ -1705,7 +1704,7 @@ export function MbgProductionPage() {
       );
       if (pmSheetName) {
         const pmWs = sheetWorkbook.Sheets[pmSheetName];
-        importedPmEntries = parsePenerimaManfaatSheet(pmWs, targetBatchId);
+        importedPmEntries = parsePenerimaManfaatSheet(pmWs, targetBatchId, pmImportWeek, user?.uid || 'import_excel');
       }
 
       // If no 'Penerima Manfaat' sheet or 0 entries, fallback to parsedReport.sekolahList (from cols BI-BK or daily sheet)
@@ -1737,23 +1736,17 @@ export function MbgProductionPage() {
             isSekolahLibur: total === 0,
             notes: '',
             sortOrder: idx + 1,
-            createdBy: user?.uid || '',
+            createdBy: 'import_excel',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           };
         });
       }
 
-      // Only populate PM entries into mbg_pm_entries if the target batch is currently empty
-      // to avoid accidentally overwriting entries already inputted by Admin MBG
+      // The selected workbook is authoritative for an import. Replace the
+      // target batch atomically so no rows from a prior workbook remain.
       if (importedPmEntries.length > 0) {
-        const hasExistingEntries = targetBatchId === selectedBatchId && entries.length > 0;
-        if (!hasExistingEntries) {
-          await clearBatchEntries(targetBatchId);
-          await addMultipleEntries(importedPmEntries);
-          await recalculateBatchTotals(targetBatchId);
-          await updateBatchStatus(targetBatchId, 'PM_SUBMITTED');
-        }
+        await replaceBatchEntries(targetBatchId, importedPmEntries);
       }
 
       setSelectedBatchId(targetBatchId);
@@ -3533,6 +3526,18 @@ export function MbgProductionPage() {
                     {/* Group 1: Penerima Manfaat */}
                     {pmSheetNames.length > 0 && (
                       <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2.5">
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-950">
+                          <label htmlFor="pm-import-week">Pekan data pada sheet:</label>
+                          <select
+                            id="pm-import-week"
+                            value={pmImportWeek}
+                            onChange={(event) => setPmImportWeek(Number(event.target.value) as 1 | 2 | 3 | 4)}
+                            className="rounded-lg border border-blue-300 bg-white px-2 py-1.5 text-xs font-black text-blue-900"
+                          >
+                            {[1, 2, 3, 4].map((week) => <option key={week} value={week}>Pekan {week}</option>)}
+                          </select>
+                          <span className="text-[10px] font-medium text-blue-700">Nilai nol dari pekan ini tetap dipertahankan.</span>
+                        </div>
                         <div className="flex items-start sm:items-center justify-between flex-wrap gap-2">
                           <div>
                             <h4 className="text-xs font-black text-blue-950 flex items-center gap-1.5">

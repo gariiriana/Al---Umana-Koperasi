@@ -370,6 +370,70 @@ export async function clearBatchEntries(batchId: string): Promise<void> {
   await batch.commit();
 }
 
+/**
+ * Replaces all PM entries for a batch in one Firestore commit.  Importing is
+ * therefore all-or-nothing: a failed write cannot leave the batch empty or
+ * mixed with records from an older workbook.
+ */
+export async function replaceBatchEntries(
+  batchId: string,
+  entries: Omit<MbgPmEntry, 'id'>[]
+): Promise<void> {
+  const existingSnapshot = await getDocs(query(
+    collection(db, ENTRIES_COLLECTION),
+    where('batchId', '==', batchId)
+  ));
+
+  // Firestore allows at most 500 writes in a batch.  Refuse before changing
+  // anything instead of performing a partial replacement.
+  const writeCount = existingSnapshot.size + entries.length + 1;
+  if (writeCount > 500) {
+    throw new Error(`Import terlalu besar (${entries.length} baris). Maksimal 500 perubahan per batch.`);
+  }
+
+  const now = new Date().toISOString();
+  const writes = writeBatch(db);
+  existingSnapshot.docs.forEach((entry) => writes.delete(entry.ref));
+
+  let totalSiswaBalita = 0;
+  let totalBumilBusui = 0;
+  let totalGuruKader = 0;
+  let totalPobiaNasi = 0;
+  let totalJumlah = 0;
+  const petugasSet = new Set<string>();
+
+  entries.forEach((entry) => {
+    writes.set(doc(collection(db, ENTRIES_COLLECTION)), cleanUndefined({
+      ...entry,
+      batchId,
+      createdAt: now,
+      updatedAt: now,
+    }));
+
+    if (!entry.isSekolahLibur) {
+      totalSiswaBalita += entry.qtSiswaBalita || 0;
+      totalBumilBusui += entry.qtBumilBusui || 0;
+      totalGuruKader += entry.qtGuruKader || 0;
+      totalPobiaNasi += entry.qtPobiaNasi || 0;
+      totalJumlah += entry.jumlah || 0;
+    }
+    if (entry.assignedPetugasName) petugasSet.add(entry.assignedPetugasName);
+  });
+
+  writes.update(doc(db, BATCHES_COLLECTION, batchId), {
+    totalSiswaBalita,
+    totalBumilBusui,
+    totalGuruKader,
+    totalPobiaNasi,
+    totalJumlah,
+    totalInstitusi: entries.length,
+    petugasList: Array.from(petugasSet),
+    status: 'PM_SUBMITTED',
+    updatedAt: now,
+  });
+  await writes.commit();
+}
+
 export async function cleanDuplicateBatchEntries(batchId: string): Promise<number> {
   const q = query(
     collection(db, ENTRIES_COLLECTION),
