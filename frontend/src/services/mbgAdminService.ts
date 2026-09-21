@@ -679,4 +679,3 @@ export async function deleteAllMbgData(): Promise<void> {
     }
   }
 }
-

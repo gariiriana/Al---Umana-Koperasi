@@ -428,12 +428,11 @@ export function MbgArchivePage() {
     setSelectedBatchIds([]);
   }, [archiveTab, selectedBatchId]);
 
-  // Subscribe to submitted/archived batches (status !== 'DRAFT') and all entries (including backup)
+  // Subscribe to all batches (termasuk DRAFT dan backup agar tidak ada data PM yang tersembunyi dari arsip)
   useEffect(() => {
     const unsubBatches = subscribeBatches(
       (b) => {
-        const archived = b.filter((batch) => batch.status !== 'DRAFT');
-        setBatches(archived);
+        setBatches(b);
         setLoadingBatches(false);
       },
       (err) => {
@@ -1418,15 +1417,27 @@ export function MbgArchivePage() {
               )}
 
               {selectedBatch && !selectedBatch.isBackup && (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/mbg/production?batchId=${selectedBatch.id}`)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black rounded-xl cursor-pointer shadow-md transition-all hover:scale-[1.02]"
-                  title="Lihat data batch ini langsung di menu Produksi MBG"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  <span>Buka di Produksi MBG</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/mbg/admin')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl cursor-pointer shadow-md transition-all hover:scale-[1.02]"
+                    title="Buka dan kelola batch ini di menu Admin MBG (Input / Submit Data PM)"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    <span>Buka di Admin MBG</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/mbg/production?batchId=${selectedBatch.id}`)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black rounded-xl cursor-pointer shadow-md transition-all hover:scale-[1.02]"
+                    title="Lihat data batch ini langsung di menu Produksi MBG"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    <span>Buka di Produksi MBG</span>
+                  </button>
+                </>
               )}
 
               <button

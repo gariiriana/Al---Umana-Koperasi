@@ -17,6 +17,7 @@ import {
   Upload,
   FileSpreadsheet,
   Edit,
+  Archive,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -35,7 +36,7 @@ import {
   deleteEntry,
   recalculateBatchTotals,
   copyFromBatch,
-  deleteBatch,
+  moveBatchToBackup,
   subscribeWeeklySchedule,
   saveWeeklySchedule,
   getMenuForDate,
@@ -1781,7 +1782,7 @@ export function MbgAdminPage() {
 
   const handleDeleteBatch = async () => {
     if (!selectedBatchId || !selectedBatch) return;
-    const confirmText = `Apakah Anda yakin ingin menghapus seluruh data batch untuk tanggal ${selectedBatch.tanggal}? Tindakan ini tidak dapat dibatalkan.`;
+    const confirmText = `Pindahkan batch tanggal ${selectedBatch.tanggal} ke Arsip Backup? Data PM ini akan diamankan di tab Arsip Backup (menu Arsip PM) dan dapat Anda pulihkan kembali kapan saja.`;
     if (!window.confirm(confirmText)) return;
 
     const idToDelete = selectedBatchId;
@@ -1791,11 +1792,11 @@ export function MbgAdminPage() {
 
     setSaving(true);
     try {
-      await deleteBatch(idToDelete);
-      showToast({ message: 'Batch berhasil dihapus!', variant: 'success' });
+      await moveBatchToBackup(idToDelete, user?.uid);
+      showToast({ message: `Batch ${selectedBatch.tanggal} berhasil diamankan ke Arsip Backup!`, variant: 'success' });
     } catch (err) {
       console.error(err);
-      showToast({ message: 'Gagal menghapus batch', variant: 'error' });
+      showToast({ message: 'Gagal memindahkan batch ke arsip backup', variant: 'error' });
     } finally {
       setSaving(false);
     }
@@ -2056,11 +2057,11 @@ export function MbgAdminPage() {
               {selectedBatchId && (
                 <button
                   onClick={handleDeleteBatch}
-                  title="Hapus batch pengiriman yang sedang dipilih"
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-red-200 hover:border-red-300 text-red-600 text-xs font-bold hover:bg-red-50 transition-colors cursor-pointer whitespace-nowrap"
+                  title="Amankan batch pengiriman ini ke Arsip Backup agar tidak hilang dan dapat dipulihkan kapan saja"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-amber-300 hover:border-amber-400 text-amber-900 bg-amber-50/70 hover:bg-amber-100 text-xs font-bold transition-colors cursor-pointer whitespace-nowrap"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Hapus Batch
+                  <Archive className="h-3.5 w-3.5 text-amber-700" />
+                  Hapus / Pindah Arsip
                 </button>
               )}
 
