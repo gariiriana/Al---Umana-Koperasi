@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
 import { Eraser } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -32,12 +32,6 @@ export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
     const containerRef = useRef<HTMLDivElement | null>(null);
     const [hasInk, setHasInk] = useState(false);
 
-    useEffect(() => {
-      if (containerRef.current) {
-        containerRef.current.style.height = `${height}px`;
-      }
-    }, [height]);
-
     useImperativeHandle(ref, () => ({
       hasStrokes: () => Boolean(padRef.current && !padRef.current.isEmpty()),
       toFile: (filename = "signature.png") => {
@@ -69,24 +63,34 @@ export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
       },
     }));
 
-    const canvasStyle = {
-      width: "100%",
-      height: "100%",
-      touchAction: "none",
-    };
+    const canvasProps = useMemo(
+      () => ({
+        style: {
+          width: "100%",
+          height: "100%",
+          touchAction: "none",
+        },
+        "aria-label": "Area tanda tangan penerima",
+      }),
+      [],
+    );
 
     return (
       <div>
         <div
           ref={containerRef}
           className="rounded-lg border-2 border-dashed border-[#D1D5DB] bg-white"
+          style={{ height }}
         >
           <SignatureCanvas
             ref={padRef}
             penColor="#111827"
-            canvasProps={{
-              style: canvasStyle,
-            }}
+            canvasProps={canvasProps}
+            // Mobile browsers emit resize events when their address bar changes
+            // height. The library clears the canvas on every resize by default,
+            // which made a completed signature disappear as soon as the user
+            // lifted their finger or the browser chrome moved.
+            clearOnResize={false}
             onBegin={() => setHasInk(true)}
             onEnd={() => {
               setHasInk(true);
