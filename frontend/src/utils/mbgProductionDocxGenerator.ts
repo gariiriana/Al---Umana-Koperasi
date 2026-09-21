@@ -26,6 +26,13 @@ import type {
   MbgProductionDailyReport,
   MbgPortionDailyData,
 } from '@/types/mbg';
+import {
+  buildMbgPmRecipientTable,
+  formatMbgPmRecipientName,
+  formatMbgPmRecipientPetugas,
+  formatMbgPmRecipientValue,
+  MBG_PM_RECIPIENT_TABLE_COLUMNS,
+} from '@/utils/mbgPmRecipientTable';
 
 export interface MbgProductionDocxData {
   batch: MbgPmBatch;
@@ -100,7 +107,8 @@ interface RekapPmRowData {
   totalAkhir: number;
 }
 
-function buildRekapPmRows(
+/** @deprecated Recipient exports use buildMbgPmRecipientTable instead. */
+export function buildRekapPmRows(
   entries: MbgPmEntry[] = [],
   sekolahList: { nama: string; murid: number; guru: number }[] = []
 ): RekapPmRowData[] {
@@ -311,7 +319,11 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
   // ==========================================================================
   // HELPER: KOP RESMI
   // ==========================================================================
-  const appendOfficialHeader = (sectionTitle: string, pageBreak = false) => {
+  const appendOfficialHeader = (
+    sectionTitle: string,
+    pageBreak = false,
+    totalPorsi = batch.totalJumlah || 0
+  ) => {
     if (pageBreak) {
       docChildren.push(
         new Paragraph({
@@ -385,7 +397,7 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
         spacing: { before: 0, after: 80 },
         children: [
           new TextRun({
-            text: `Tanggal Batch: ${batch.tanggal} • Sasaran: ${(batch.totalJumlah || 0).toLocaleString('id-ID')} Porsi • Koperasi Al Umanaa Sejahtera Mandiri`,
+            text: `Tanggal Batch: ${batch.tanggal} • Sasaran: ${totalPorsi.toLocaleString('id-ID')} Porsi • Koperasi Al Umanaa Sejahtera Mandiri`,
             size: 14, // 7pt
             font: 'Arial',
             color: '64748B',
@@ -409,8 +421,13 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
   // ==========================================================================
   // HALAMAN 1 (FOTO 1): REKAPITULASI PENERIMA MANFAAT
   // ==========================================================================
-  appendOfficialHeader('REKAPITULASI PENERIMA MANFAAT', false);
+  const recipientTable = buildMbgPmRecipientTable(entries, dailyReport.sekolahList);
+  appendOfficialHeader('REKAPITULASI PENERIMA MANFAAT', false, recipientTable.totals.totalPorsi);
 
+  // The former 18-column gender recap is retained below only until the next
+  // cleanup cycle. It is not rendered; the canonical 12-column table follows.
+  const renderLegacyRecipientTable = false;
+  if (renderLegacyRecipientTable) {
   const rekapRowsData = buildRekapPmRows(entries, dailyReport.sekolahList);
   const totals = rekapRowsData.reduce(
     (acc, r) => {
@@ -562,6 +579,138 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
   );
 
   docChildren.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: CELL_BORDER, rows: rekapTableRows }));
+
+  }
+
+  // A4 landscape printable width: 15,838 DXA after the document margins.
+  // Explicit grid widths prevent Word from equalizing the 12 output columns.
+  const recipientColumnWidths = [634, 3009, 1425, 950, 950, 950, 1109, 1109, 2376, 1584, 1109, 634];
+  const recipientCell = (
+    text: string,
+    width: number,
+    options: {
+      fill?: string;
+      color?: string;
+      bold?: boolean;
+      alignment?: (typeof AlignmentType)[keyof typeof AlignmentType];
+      columnSpan?: number;
+    } = {}
+  ) => {
+    const {
+      fill = 'FFFFFF',
+      color = '1E293B',
+      bold = false,
+      alignment = AlignmentType.LEFT,
+      columnSpan,
+    } = options;
+
+    return new TableCell({
+      ...(columnSpan ? { columnSpan } : {}),
+      width: { size: width, type: WidthType.DXA },
+      shading: { fill },
+      margins: COMPACT_CELL_MARGINS,
+      children: [
+        new Paragraph({
+          alignment,
+          spacing: { before: 0, after: 0 },
+          children: [new TextRun({ text, bold, color, size: 11, font: 'Arial' })],
+        }),
+      ],
+    });
+  };
+
+  const recipientTableRows: TableRow[] = [
+    new TableRow({
+      tableHeader: true,
+      children: MBG_PM_RECIPIENT_TABLE_COLUMNS.map((column, index) =>
+        recipientCell(column, recipientColumnWidths[index], {
+          fill: 'F1F5F9',
+          color: '334155',
+          bold: true,
+          alignment: AlignmentType.CENTER,
+        })
+      ),
+    }),
+  ];
+
+  recipientTable.rows.forEach((row, index) => {
+    const rowFill = row.isLibur ? 'FEF2F2' : index % 2 === 0 ? 'FFFFFF' : 'F8FAFC';
+    const textColor = row.isLibur ? '991B1B' : '1E293B';
+    const numericCell = (value: number, columnIndex: number) =>
+      recipientCell(formatMbgPmRecipientValue(value), recipientColumnWidths[columnIndex], {
+        fill: rowFill,
+        color: textColor,
+        bold: true,
+        alignment: AlignmentType.CENTER,
+      });
+
+    recipientTableRows.push(
+      new TableRow({
+        children: [
+          recipientCell(String(index + 1), recipientColumnWidths[0], { fill: rowFill, color: textColor, alignment: AlignmentType.CENTER }),
+          recipientCell(formatMbgPmRecipientName(row), recipientColumnWidths[1], { fill: rowFill, color: textColor, bold: true }),
+          recipientCell(row.categoryLabel, recipientColumnWidths[2], { fill: rowFill, color: textColor, alignment: AlignmentType.CENTER }),
+          numericCell(row.porsiKecil, 3),
+          numericCell(row.porsiBesar, 4),
+          numericCell(row.porsiBalita, 5),
+          numericCell(row.porsiBumilBusui, 6),
+          recipientCell(row.totalJumlah.toLocaleString('id-ID'), recipientColumnWidths[7], {
+            fill: row.isLibur ? 'FEE2E2' : 'FFFBEB',
+            color: row.isLibur ? '991B1B' : '92400E',
+            bold: true,
+            alignment: AlignmentType.CENTER,
+          }),
+          recipientCell(row.rincian || '-', recipientColumnWidths[8], { fill: rowFill, color: textColor }),
+          recipientCell(formatMbgPmRecipientPetugas(row), recipientColumnWidths[9], { fill: rowFill, color: textColor }),
+          recipientCell(row.jadwal, recipientColumnWidths[10], { fill: rowFill, color: textColor, bold: true, alignment: AlignmentType.CENTER }),
+          recipientCell(row.isLibur ? 'Libur' : 'Aktif', recipientColumnWidths[11], {
+            fill: row.isLibur ? 'FEE2E2' : 'D1FAE5',
+            color: row.isLibur ? 'B91C1C' : '065F46',
+            bold: true,
+            alignment: AlignmentType.CENTER,
+          }),
+        ],
+      })
+    );
+  });
+
+  const { totals } = recipientTable;
+  recipientTableRows.push(
+    new TableRow({
+      children: [
+        recipientCell(`TOTAL (${recipientTable.rows.length} LEMBAGA):`, 5068, {
+          fill: '0F172A', color: 'FFFFFF', bold: true, alignment: AlignmentType.RIGHT, columnSpan: 3,
+        }),
+        recipientCell(totals.porsiKecil.toLocaleString('id-ID'), recipientColumnWidths[3], {
+          fill: '1E293B', color: 'FCD34D', bold: true, alignment: AlignmentType.CENTER,
+        }),
+        recipientCell(totals.porsiBesar.toLocaleString('id-ID'), recipientColumnWidths[4], {
+          fill: '1E293B', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER,
+        }),
+        recipientCell(totals.porsiBalita.toLocaleString('id-ID'), recipientColumnWidths[5], {
+          fill: '1E293B', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER,
+        }),
+        recipientCell(totals.porsiBumilBusui.toLocaleString('id-ID'), recipientColumnWidths[6], {
+          fill: '1E293B', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER,
+        }),
+        recipientCell(totals.totalPorsi.toLocaleString('id-ID'), recipientColumnWidths[7], {
+          fill: '020617', color: 'FCD34D', bold: true, alignment: AlignmentType.CENTER,
+        }),
+        recipientCell('Data otomatis terhubung dengan inputan Administrasi PM MBG.', 5703, {
+          fill: '0F172A', color: '94A3B8', alignment: AlignmentType.LEFT, columnSpan: 4,
+        }),
+      ],
+    })
+  );
+
+  docChildren.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      columnWidths: recipientColumnWidths,
+      borders: CELL_BORDER,
+      rows: recipientTableRows,
+    })
+  );
 
   // ==========================================================================
   // HELPER: BUILD PORTION STACKED TABLES (FOTO 2, 3, 4)

@@ -11,7 +11,13 @@ import type {
   MbgPmEntry,
   MbgPortionDailyData,
 } from '@/types/mbg';
-import { getAllDetailedPmEntries } from '@/utils/mbgPmFilter';
+import {
+  buildMbgPmRecipientTable,
+  formatMbgPmRecipientName,
+  formatMbgPmRecipientPetugas,
+  formatMbgPmRecipientValue,
+  MBG_PM_RECIPIENT_TABLE_COLUMNS,
+} from '@/utils/mbgPmRecipientTable';
 
 const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
   try {
@@ -139,290 +145,11 @@ const drawLandscapeHeader = (
 
 // ─── HALAMAN 1: REKAPITULASI PENERIMA MANFAAT (FOTO 1) ────────────────────────
 
-interface RekapPmRowData {
-  nama: string;
-  kecilL: number;
-  kecilP: number;
-  besarL: number;
-  besarP: number;
-  balitaL: number;
-  balitaP: number;
-  bumilL: number;
-  bumilP: number;
-  siswaL: number;
-  siswaP: number;
-  siswaJumlah: number;
-  guruL: number;
-  guruP: number;
-  tendikL: number;
-  tendikP: number;
-  tendikJumlah: number;
-  totalAkhir: number;
-}
-
-/** Keep PDF row identity identical to the PM table in the production page. */
-const normalizePmInstitutionName = (name: string): string =>
-  (name || '')
-    .toLowerCase()
-    .replace(/kelas\s*[0-9-]+/gi, '')
-    .replace(/kls\s*[0-9-]+/gi, '')
-    .replace(/[^a-z0-9]/g, '')
-    .trim();
-
-const getUniquePmEntries = (entries: MbgPmEntry[]): MbgPmEntry[] => {
-  const seenNames = new Set<string>();
-  return entries.filter((entry) => {
-    const key = normalizePmInstitutionName(entry.institutionName);
-    if (!key || seenNames.has(key)) return false;
-    seenNames.add(key);
-    return true;
-  });
-};
-
-const splitForPdf = (total: number): [number, number] => [
-  Math.ceil(Math.max(0, total) / 2),
-  Math.floor(Math.max(0, total) / 2),
-];
-
-/**
- * The recipient table in the PDF must use the very same row and portion
- * calculation used by the website, otherwise aggregated PM data diverges.
- */
-const buildWebsiteAlignedRekapRows = (
-  entries: MbgPmEntry[],
-  sekolahList: { nama: string; murid: number; guru: number }[]
-): RekapPmRowData[] => {
-  const entriesById = new Map(entries.map((entry) => [entry.id, entry]));
-  return getAllDetailedPmEntries(entries, sekolahList).map((row) => {
-    const source = entriesById.get(row.id);
-    const [kecilL, kecilP] = splitForPdf(row.porsiKecil);
-    const [besarL, besarP] = splitForPdf(row.porsiBesar);
-    const [balitaL, balitaP] = splitForPdf(row.porsiBalita);
-    const [bumilL, bumilP] = splitForPdf(row.porsiBumilBusui);
-    const guruTotal = source?.qtGuruKader || 0;
-    const [guruL, guruP] = splitForPdf(guruTotal);
-    const siswaJumlah = Math.max(0, row.totalJumlah - guruTotal);
-    const [siswaL, siswaP] = splitForPdf(siswaJumlah);
-    const tendikL = source?.qtTendikL || 0;
-    const tendikP = source?.qtTendikP || 0;
-
-    return {
-      nama: row.institutionName + (row.isLibur ? ' (Libur)' : ''),
-      kecilL, kecilP, besarL, besarP, balitaL, balitaP, bumilL, bumilP,
-      siswaL, siswaP, siswaJumlah,
-      guruL, guruP,
-      tendikL, tendikP, tendikJumlah: tendikL + tendikP,
-      totalAkhir: row.isLibur ? 0 : row.totalJumlah,
-    };
-  });
-};
-
 export const buildRekapPmRows = (
   entries: MbgPmEntry[] = [],
   sekolahList: { nama: string; murid: number; guru: number }[] = []
-): RekapPmRowData[] => {
-  if (entries.length > 0) {
-    return buildWebsiteAlignedRekapRows(entries, sekolahList);
-  }
-
-  if (entries && entries.length > 0) {
-    const uniqueEntries = getUniquePmEntries(entries);
-    return uniqueEntries.map((e) => {
-      const isTk =
-        e.schoolLevel === 'tk_paud' ||
-        e.institutionName.toLowerCase().includes('tk') ||
-        e.institutionName.toLowerCase().includes('paud');
-      const isPosyandu = e.institutionType === 'posyandu' || e.institutionName.toLowerCase().includes('posyandu');
-      const isSd =
-        e.schoolLevel === 'sd' ||
-        e.institutionName.toLowerCase().includes('sd') ||
-        e.institutionName.toLowerCase().includes('mi');
-      const isSmaOrSmp =
-        e.schoolLevel === 'sma' ||
-        (e.schoolLevel as string) === 'smp' ||
-        e.institutionName.toLowerCase().includes('smp') ||
-        e.institutionName.toLowerCase().includes('sma') ||
-        e.institutionName.toLowerCase().includes('smk') ||
-        e.institutionName.toLowerCase().includes('mts') ||
-        e.institutionName.toLowerCase().includes('ma ');
-
-      // 1. Porsi Kecil
-      let kecilL = e.qtPorsiKecilL ?? 0;
-      let kecilP = e.qtPorsiKecilP ?? 0;
-      if (!kecilL && !kecilP) {
-        if (e.qtPorsiKecil && e.qtPorsiKecil > 0) {
-          kecilL = Math.ceil(e.qtPorsiKecil / 2);
-          kecilP = Math.floor(e.qtPorsiKecil / 2);
-        } else if (isTk) {
-          const tot = e.qtSiswaBalita || e.jumlah || 0;
-          kecilL = Math.ceil(tot / 2);
-          kecilP = Math.floor(tot / 2);
-        } else if (isSd) {
-          const sdKecil = Math.ceil((e.qtSiswaBalita || 0) / 2);
-          kecilL = Math.ceil(sdKecil / 2);
-          kecilP = Math.floor(sdKecil / 2);
-        }
-      }
-
-      // 2. Porsi Besar
-      let besarL = e.qtPorsiBesarL ?? 0;
-      let besarP = e.qtPorsiBesarP ?? 0;
-      if (!besarL && !besarP) {
-        if (e.qtPorsiBesar && e.qtPorsiBesar > 0) {
-          besarL = Math.ceil(e.qtPorsiBesar / 2);
-          besarP = Math.floor(e.qtPorsiBesar / 2);
-        } else if (isSmaOrSmp) {
-          const tot = e.qtSiswaBalita || (e.jumlah ? e.jumlah - (e.qtGuruKader || 0) : 0);
-          besarL = Math.ceil(tot / 2);
-          besarP = Math.floor(tot / 2);
-        } else if (isSd) {
-          const sdBesar = Math.floor((e.qtSiswaBalita || 0) / 2);
-          besarL = Math.ceil(sdBesar / 2);
-          besarP = Math.floor(sdBesar / 2);
-        }
-      }
-
-      // 3. Porsi Balita
-      let balitaL = 0;
-      let balitaP = 0;
-      if (isPosyandu) {
-        const balitaTot = e.qtPorsiBalita || e.qtSiswaBalita || 0;
-        balitaL = Math.ceil(balitaTot / 2);
-        balitaP = Math.floor(balitaTot / 2);
-      }
-
-      // 4. Porsi Bumil/Busui
-      const bumilL = 0;
-      let bumilP = 0;
-      if (isPosyandu) {
-        const bumilTot = (e.qtBumil || 0) + (e.qtBusui || 0) || (e.qtPorsiBumilBusui || e.qtBumilBusui || 0);
-        bumilP = bumilTot;
-      }
-
-      // 5. Total Siswa
-      const siswaL = kecilL + besarL + balitaL + bumilL;
-      const siswaP = kecilP + besarP + balitaP + bumilP;
-      const siswaJumlah = siswaL + siswaP;
-
-      // 6. Guru
-      let guruL = e.qtGuruL ?? 0;
-      let guruP = e.qtGuruP ?? 0;
-      if (!guruL && !guruP && e.qtGuruKader && e.qtGuruKader > 0) {
-        guruL = Math.ceil(e.qtGuruKader / 2);
-        guruP = Math.floor(e.qtGuruKader / 2);
-      }
-
-      // 7. Tendik
-      const tendikL = e.qtTendikL ?? 0;
-      const tendikP = e.qtTendikP ?? 0;
-      const tendikJumlah = tendikL + tendikP;
-
-      // 8. Total Akhir
-      // `jumlah` is the imported source total used by the website.  Do not
-      // recompute it from display-only gender/category splits, which can
-      // double-count recipients and make the PDF disagree with the app.
-      const totalAkhir = e.isSekolahLibur ? 0 : (e.jumlah || 0);
-
-      return {
-        nama: e.institutionName + (e.isSekolahLibur ? ' (Libur)' : ''),
-        kecilL,
-        kecilP,
-        besarL,
-        besarP,
-        balitaL,
-        balitaP,
-        bumilL,
-        bumilP,
-        siswaL,
-        siswaP,
-        siswaJumlah,
-        guruL,
-        guruP,
-        tendikL,
-        tendikP,
-        tendikJumlah,
-        totalAkhir,
-      };
-    });
-  }
-
-  // Fallback if entries not available but sekolahList is present
-  const seenSekolah = new Set<string>();
-  const uniqueSekolah: typeof sekolahList = [];
-  for (const s of sekolahList || []) {
-    const norm = (s.nama || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-    if (norm && seenSekolah.has(norm)) continue;
-    if (norm) seenSekolah.add(norm);
-    uniqueSekolah.push(s);
-  }
-  return uniqueSekolah.map((s) => {
-    const isTk = s.nama.toLowerCase().includes('tk') || s.nama.toLowerCase().includes('paud');
-    const isPosyandu = s.nama.toLowerCase().includes('posyandu');
-    const isSd = s.nama.toLowerCase().includes('sd') || s.nama.toLowerCase().includes('mi');
-    const isSmaOrSmp = s.nama.toLowerCase().includes('smp') || s.nama.toLowerCase().includes('sma') || s.nama.toLowerCase().includes('smk');
-
-    let kecilL = 0;
-    let kecilP = 0;
-    let besarL = 0;
-    let besarP = 0;
-    let balitaL = 0;
-    let balitaP = 0;
-    const bumilL = 0;
-    let bumilP = 0;
-
-    if (isTk) {
-      kecilL = Math.ceil(s.murid / 2);
-      kecilP = Math.floor(s.murid / 2);
-    } else if (isSd) {
-      const half = Math.round(s.murid / 2);
-      kecilL = Math.ceil(half / 2);
-      kecilP = Math.floor(half / 2);
-      besarL = Math.ceil((s.murid - half) / 2);
-      besarP = Math.floor((s.murid - half) / 2);
-    } else if (isSmaOrSmp) {
-      besarL = Math.ceil(s.murid / 2);
-      besarP = Math.floor(s.murid / 2);
-    } else if (isPosyandu) {
-      balitaL = Math.ceil(s.murid / 2);
-      balitaP = Math.floor(s.murid / 2);
-      bumilP = s.guru || 0;
-    }
-
-    const siswaL = kecilL + besarL + balitaL + bumilL;
-    const siswaP = kecilP + besarP + balitaP + bumilP;
-    const siswaJumlah = siswaL + siswaP;
-
-    const guruL = isPosyandu ? 0 : Math.ceil((s.guru || 0) / 2);
-    const guruP = isPosyandu ? 0 : Math.floor((s.guru || 0) / 2);
-
-    const tendikL = 0;
-    const tendikP = 0;
-    const tendikJumlah = 0;
-
-    const totalAkhir = siswaJumlah + (guruL + guruP) + tendikJumlah;
-
-    return {
-      nama: s.nama,
-      kecilL,
-      kecilP,
-      besarL,
-      besarP,
-      balitaL,
-      balitaP,
-      bumilL,
-      bumilP,
-      siswaL,
-      siswaP,
-      siswaJumlah,
-      guruL,
-      guruP,
-      tendikL,
-      tendikP,
-      tendikJumlah,
-      totalAkhir,
-    };
-  });
-};
+): ReturnType<typeof buildMbgPmRecipientTable>['rows'] =>
+  buildMbgPmRecipientTable(entries, sekolahList).rows;
 
 const renderRekapitulasiPmPage = (
   doc: jsPDF,
@@ -435,176 +162,87 @@ const renderRekapitulasiPmPage = (
 ) => {
   drawLandscapeHeader(doc, 'REKAPITULASI PENERIMA MANFAAT', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
 
-  const rowsData = buildRekapPmRows(entries, report.sekolahList);
-
-  // Calculate Column Totals
-  const totals = rowsData.reduce(
-    (acc, r) => {
-      acc.kecilL += r.kecilL;
-      acc.kecilP += r.kecilP;
-      acc.besarL += r.besarL;
-      acc.besarP += r.besarP;
-      acc.balitaL += r.balitaL;
-      acc.balitaP += r.balitaP;
-      acc.bumilL += r.bumilL;
-      acc.bumilP += r.bumilP;
-      acc.siswaL += r.siswaL;
-      acc.siswaP += r.siswaP;
-      acc.siswaJumlah += r.siswaJumlah;
-      acc.guruL += r.guruL;
-      acc.guruP += r.guruP;
-      acc.tendikL += r.tendikL;
-      acc.tendikP += r.tendikP;
-      acc.tendikJumlah += r.tendikJumlah;
-      acc.totalAkhir += r.totalAkhir;
-      return acc;
-    },
+  const recipientTable = buildMbgPmRecipientTable(entries, report.sekolahList);
+  const { rows: rowsData, totals } = recipientTable;
+  const bodyRows: RowInput[] = rowsData.map((row, index) => [
+    { content: String(index + 1), styles: { halign: 'center' } },
+    { content: formatMbgPmRecipientName(row), styles: { fontStyle: 'bold' } },
+    row.categoryLabel,
+    { content: formatMbgPmRecipientValue(row.porsiKecil), styles: { halign: 'center' } },
+    { content: formatMbgPmRecipientValue(row.porsiBesar), styles: { halign: 'center' } },
+    { content: formatMbgPmRecipientValue(row.porsiBalita), styles: { halign: 'center' } },
+    { content: formatMbgPmRecipientValue(row.porsiBumilBusui), styles: { halign: 'center' } },
+    { content: row.totalJumlah.toLocaleString('id-ID'), styles: { halign: 'center', fontStyle: 'bold', textColor: [146, 64, 14], fillColor: [255, 251, 235] } },
+    row.rincian || '-',
+    formatMbgPmRecipientPetugas(row),
+    { content: row.jadwal, styles: { halign: 'center' } },
     {
-      kecilL: 0,
-      kecilP: 0,
-      besarL: 0,
-      besarP: 0,
-      balitaL: 0,
-      balitaP: 0,
-      bumilL: 0,
-      bumilP: 0,
-      siswaL: 0,
-      siswaP: 0,
-      siswaJumlah: 0,
-      guruL: 0,
-      guruP: 0,
-      tendikL: 0,
-      tendikP: 0,
-      tendikJumlah: 0,
-      totalAkhir: 0,
-    }
-  );
-
-  const bodyRows: RowInput[] = rowsData.map((r) => [
-    r.nama,
-    r.kecilL > 0 ? r.kecilL : '-',
-    r.kecilP > 0 ? r.kecilP : '-',
-    r.besarL > 0 ? r.besarL : '-',
-    r.besarP > 0 ? r.besarP : '-',
-    r.balitaL > 0 ? r.balitaL : '-',
-    r.balitaP > 0 ? r.balitaP : '-',
-    r.bumilL > 0 ? r.bumilL : '-',
-    r.bumilP > 0 ? r.bumilP : '-',
-    r.siswaL > 0 ? r.siswaL : '-',
-    r.siswaP > 0 ? r.siswaP : '-',
-    r.siswaJumlah > 0 ? r.siswaJumlah : '-',
-    r.guruL > 0 ? r.guruL : '-',
-    r.guruP > 0 ? r.guruP : '-',
-    r.tendikL > 0 ? r.tendikL : '-',
-    r.tendikP > 0 ? r.tendikP : '-',
-    r.tendikJumlah > 0 ? r.tendikJumlah : '-',
-    r.totalAkhir > 0 ? r.totalAkhir : '-',
+      content: row.isLibur ? 'Libur' : 'Aktif',
+      styles: row.isLibur
+        ? { halign: 'center', fontStyle: 'bold', textColor: [185, 28, 28], fillColor: [254, 226, 226] }
+        : { halign: 'center', fontStyle: 'bold', textColor: [6, 95, 70], fillColor: [209, 250, 229] },
+    },
   ]);
 
-  const footRows: RowInput[] = [
-    [
-      { content: 'TOTAL', styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.kecilL.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.kecilP.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.besarL.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.besarP.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.balitaL.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.balitaP.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.bumilL.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.bumilP.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.siswaL.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.siswaP.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.siswaJumlah.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.guruL.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.guruP.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.tendikL.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.tendikP.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.tendikJumlah.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: totals.totalAkhir.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [180, 83, 9] } },
-    ],
-  ];
+  const footRows: RowInput[] = [[
+    {
+      content: `TOTAL (${rowsData.length} LEMBAGA):`,
+      colSpan: 3,
+      styles: { fontStyle: 'bold', halign: 'right', fillColor: [15, 23, 42], textColor: [255, 255, 255] },
+    },
+    { content: totals.porsiKecil.toLocaleString('id-ID'), styles: { fontStyle: 'bold', halign: 'center', fillColor: [30, 41, 59], textColor: [252, 211, 77] } },
+    { content: totals.porsiBesar.toLocaleString('id-ID'), styles: { fontStyle: 'bold', halign: 'center', fillColor: [30, 41, 59], textColor: [255, 255, 255] } },
+    { content: totals.porsiBalita.toLocaleString('id-ID'), styles: { fontStyle: 'bold', halign: 'center', fillColor: [30, 41, 59], textColor: [255, 255, 255] } },
+    { content: totals.porsiBumilBusui.toLocaleString('id-ID'), styles: { fontStyle: 'bold', halign: 'center', fillColor: [30, 41, 59], textColor: [255, 255, 255] } },
+    { content: totals.totalPorsi.toLocaleString('id-ID'), styles: { fontStyle: 'bold', halign: 'center', fillColor: [2, 6, 23], textColor: [252, 211, 77] } },
+    {
+      content: 'Data otomatis terhubung dengan inputan Administrasi PM MBG.',
+      colSpan: 4,
+      styles: { fontStyle: 'italic', fillColor: [15, 23, 42], textColor: [148, 163, 184] },
+    },
+  ]];
 
   autoTable(doc, {
     startY: 27,
-    head: [
-      // Row 1: Banner navy title
-      [
-        {
-          content: 'REKAPITULASI PENERIMA MANFAAT',
-          colSpan: 18,
-          styles: {
-            fillColor: [15, 45, 89], // Navy #0F2D59
-            textColor: [255, 255, 255],
-            fontStyle: 'bold',
-            halign: 'center',
-            fontSize: 8.5,
-          },
-        },
-      ],
-      // Row 2: Category level
-      [
-        { content: 'PENERIMA MANFAAT', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'Porsi Kecil', colSpan: 2, styles: { halign: 'center', fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'Porsi Besar', colSpan: 2, styles: { halign: 'center', fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'Porsi Balita', colSpan: 2, styles: { halign: 'center', fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'Porsi Bumil/Busui', colSpan: 2, styles: { halign: 'center', fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'Total Siswa', colSpan: 3, styles: { halign: 'center', fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'Guru', colSpan: 2, styles: { halign: 'center', fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'Tendik', colSpan: 3, styles: { halign: 'center', fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'Total', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' } },
-      ],
-      // Row 3: Sub-headers
-      [
-        { content: 'L', styles: { halign: 'center', fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'P', styles: { halign: 'center', fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'L', styles: { halign: 'center', fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'P', styles: { halign: 'center', fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'L', styles: { halign: 'center', fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'P', styles: { halign: 'center', fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'L', styles: { halign: 'center', fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'P', styles: { halign: 'center', fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'L', styles: { halign: 'center', fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'P', styles: { halign: 'center', fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'Jumlah', styles: { halign: 'center', fillColor: [29, 78, 216], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'L', styles: { halign: 'center', fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'P', styles: { halign: 'center', fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'L', styles: { halign: 'center', fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'P', styles: { halign: 'center', fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' } },
-        { content: 'Jumlah', styles: { halign: 'center', fillColor: [29, 78, 216], textColor: [255, 255, 255], fontStyle: 'bold' } },
-      ],
-    ],
+    head: [[...MBG_PM_RECIPIENT_TABLE_COLUMNS]],
     body: bodyRows,
     foot: footRows,
     theme: 'grid',
     styles: {
-      fontSize: 6.2,
-      cellPadding: 0.9,
+      fontSize: 5.4,
+      cellPadding: 0.8,
       lineWidth: 0.15,
       lineColor: [203, 213, 225],
       textColor: [30, 41, 59],
       overflow: 'linebreak',
     },
     columnStyles: {
-      0: { cellWidth: 55, fontStyle: 'bold' },
-      1: { cellWidth: 12, halign: 'center' },
-      2: { cellWidth: 12, halign: 'center' },
-      3: { cellWidth: 12, halign: 'center' },
-      4: { cellWidth: 12, halign: 'center' },
-      5: { cellWidth: 12, halign: 'center' },
-      6: { cellWidth: 12, halign: 'center' },
-      7: { cellWidth: 12, halign: 'center' },
-      8: { cellWidth: 12, halign: 'center' },
-      9: { cellWidth: 12, halign: 'center' },
-      10: { cellWidth: 12, halign: 'center' },
-      11: { cellWidth: 14, halign: 'center', fontStyle: 'bold', fillColor: [241, 245, 249] },
-      12: { cellWidth: 12, halign: 'center' },
-      13: { cellWidth: 12, halign: 'center' },
-      14: { cellWidth: 12, halign: 'center' },
-      15: { cellWidth: 12, halign: 'center' },
-      16: { cellWidth: 14, halign: 'center', fontStyle: 'bold', fillColor: [241, 245, 249] },
-      17: { cellWidth: 17, halign: 'center', fontStyle: 'bold', textColor: [180, 83, 9], fillColor: [254, 243, 199] },
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 50 },
+      2: { cellWidth: 24 },
+      3: { cellWidth: 15, halign: 'center' },
+      4: { cellWidth: 15, halign: 'center' },
+      5: { cellWidth: 15, halign: 'center' },
+      6: { cellWidth: 17, halign: 'center' },
+      7: { cellWidth: 16, halign: 'center' },
+      8: { cellWidth: 40 },
+      9: { cellWidth: 26 },
+      10: { cellWidth: 24, halign: 'center' },
+      11: { cellWidth: 15, halign: 'center' },
     },
     margin: { top: 28, bottom: 12, left: 10, right: 10 },
+    didParseCell: (data) => {
+      if (data.section === 'head') {
+        data.cell.styles.fillColor = [241, 245, 249];
+        data.cell.styles.textColor = [51, 65, 85];
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.halign = 'center';
+      }
+      if (data.section === 'body' && rowsData[data.row.index]?.isLibur) {
+        data.cell.styles.fillColor = [254, 242, 242];
+        if (data.column.index !== 11) data.cell.styles.textColor = [153, 27, 27];
+      }
+    },
     didDrawPage: () => {
       drawLandscapeHeader(doc, 'REKAPITULASI PENERIMA MANFAAT', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
     },
@@ -1084,7 +722,7 @@ const renderSupplierPage = (
 
 // ─── EXPORT MAIN FUNCTION ─────────────────────────────────────────────────────
 
-export async function export8PageDailyReportPdf(
+export async function generate8PageDailyReportPdf(
   report: MbgProductionDailyReport | null | undefined,
   batch: MbgPmBatch | undefined,
   entries: MbgPmEntry[] = []
@@ -1099,8 +737,7 @@ export async function export8PageDailyReportPdf(
   const logoBadanGizi = await getBase64ImageFromUrl('/logo_badan_gizi.png');
 
   const tanggalStr = report.tanggal || batch?.tanggal || new Date().toISOString().split('T')[0];
-  const totalDariEntries = buildRekapPmRows(entries, report.sekolahList)
-    .reduce((sum, row) => sum + row.totalAkhir, 0);
+  const totalDariEntries = buildMbgPmRecipientTable(entries, report.sekolahList).totals.totalPorsi;
   const totalPorsiBatch =
     totalDariEntries ||
     batch?.totalJumlah ||
@@ -1187,7 +824,15 @@ export async function export8PageDailyReportPdf(
     logoBadanGizi
   );
 
-  // Save PDF
-  const filename = `Laporan_Harian_MBG_Produksi_${tanggalStr}.pdf`;
-  doc.save(filename);
+  return doc;
+}
+
+export async function export8PageDailyReportPdf(
+  report: MbgProductionDailyReport | null | undefined,
+  batch: MbgPmBatch | undefined,
+  entries: MbgPmEntry[] = []
+) {
+  const doc = await generate8PageDailyReportPdf(report, batch, entries);
+  const tanggalStr = report?.tanggal || batch?.tanggal || new Date().toISOString().split('T')[0];
+  doc.save(`Laporan_Harian_MBG_Produksi_${tanggalStr}.pdf`);
 }

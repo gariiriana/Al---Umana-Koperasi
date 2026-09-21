@@ -69,10 +69,10 @@ function formatNum(val: number | undefined | null, decimals = 2): string {
 
 // ─── HELPER: Filter PM Entries Inputted by Admin MBG for each Portion ──────────
 import {
-  getAllDetailedPmEntries,
   type FilteredPmRow,
   type DetailedPmRow,
 } from '../../utils/mbgPmFilter';
+import { buildMbgPmRecipientTable } from '../../utils/mbgPmRecipientTable';
 export type { FilteredPmRow, DetailedPmRow };
 
 
@@ -534,7 +534,8 @@ export function DailyReportExcelSections({
     );
 
     // Filter PM data from Admin MBG input (semua kategori porsi lengkap)
-    const detailedPmRows = getAllDetailedPmEntries(entries, curReport.sekolahList);
+    const pmRecipientTable = buildMbgPmRecipientTable(entries, curReport.sekolahList);
+    const detailedPmRows = pmRecipientTable.rows;
     const filteredDetailedPmRows = detailedPmRows.filter((p) =>
       p.institutionName.toLowerCase().includes(pmSearchQuery.toLowerCase()) ||
       p.petugasName.toLowerCase().includes(pmSearchQuery.toLowerCase()) ||
@@ -552,11 +553,8 @@ export function DailyReportExcelSections({
       return s + p.totalJumlah;
     }, 0);
 
-    const sumPorsiKecil = detailedPmRows.reduce((s, p) => s + (p.isLibur ? 0 : p.porsiKecil), 0);
-    const sumPorsiBesar = detailedPmRows.reduce((s, p) => s + (p.isLibur ? 0 : p.porsiBesar), 0);
-    const sumPorsiBalita = detailedPmRows.reduce((s, p) => s + (p.isLibur ? 0 : p.porsiBalita), 0);
-    const sumPorsiBumil = detailedPmRows.reduce((s, p) => s + (p.isLibur ? 0 : p.porsiBumilBusui), 0);
-    const grandTotalAllPorsi = detailedPmRows.reduce((s, p) => s + (p.isLibur ? 0 : p.totalJumlah), 0);
+    const { porsiKecil: sumPorsiKecil, porsiBesar: sumPorsiBesar, porsiBalita: sumPorsiBalita,
+      porsiBumilBusui: sumPorsiBumil, totalPorsi: grandTotalAllPorsi } = pmRecipientTable.totals;
 
     return (
       <div className="space-y-6 animate-in fade-in duration-200">
