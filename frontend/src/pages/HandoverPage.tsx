@@ -100,6 +100,23 @@ const getOrderDeadline = (order: Order): number => {
   return isNaN(ts) ? Infinity : ts;
 };
 
+// Riwayat pengantaran harus menampilkan jadwal pesanan, bukan waktu saat
+// tombol "Selesai" ditekan. `deliveredAt` tetap disimpan untuk audit dan
+// perhitungan performa kurir.
+const formatScheduledDelivery = (order: Order): string => {
+  const datePart = order.eventDate?.slice(0, 10);
+  const timeMatch = order.deliveryTime?.match(/(\d{1,2})[:.](\d{2})/);
+
+  if (!datePart || !timeMatch) return order.deliveryTime || "—";
+
+  const scheduledAt = new Date(
+    `${datePart}T${timeMatch[1].padStart(2, "0")}:${timeMatch[2]}`
+  );
+  if (Number.isNaN(scheduledAt.getTime())) return order.deliveryTime;
+
+  return `${scheduledAt.toLocaleDateString("id-ID", { dateStyle: "short" })}, ${timeMatch[1].padStart(2, "0")}:${timeMatch[2]} WIB`;
+};
+
 export function HandoverPage() {
   const { showToast } = useToast();
   const { profile } = useAuth();
@@ -921,10 +938,10 @@ export function HandoverPage() {
                                 <User className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
                                 <span>Kurir: <strong>{courierName}</strong></span>
                               </div>
-                              {o.deliveredAt && (
+                              {o.deliveryTime && (
                                 <div className="flex items-center gap-1.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-2.5 py-1.5">
                                   <Clock className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
-                                  <span>Tiba: <strong>{new Date(o.deliveredAt).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })} WIB</strong></span>
+                                  <span>Jadwal tiba: <strong>{formatScheduledDelivery(o)}</strong></span>
                                 </div>
                               )}
                               <div className="flex items-start gap-1.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-2.5 py-1.5">
