@@ -463,7 +463,7 @@ const getCourierStatusMeta = (status: Order["status"]) => {
     ? "Sedang Dimasak"
     : status === "QC"
       ? "Menunggu QC"
-      : "Antre Masak";
+      : "Menunggu Dapur";
   return {
     label,
     barClass: "bg-gradient-to-r from-slate-300 to-slate-400",
@@ -691,11 +691,6 @@ export function DeliveryPage() {
     } else if (o.status === "OUT_FOR_DELIVERY") {
       setActiveId(o.id);
       setStep("proof");
-    } else {
-      showToast({
-        message: "Tugas sudah tercatat, tetapi belum siap diambil dari dapur.",
-        variant: "info",
-      });
     }
   };
 
@@ -823,7 +818,9 @@ export function DeliveryPage() {
             ) : (
               <div className="space-y-3">
                 <AnimatePresence>
-                  {filteredDeliveries.map((o, idx) => (
+                  {filteredDeliveries.map((o, idx) => {
+                    const canOpen = canStartCourierDelivery(o.status) || o.status === "OUT_FOR_DELIVERY";
+                    return (
                     <motion.div
                       key={o.id}
                       initial={{ opacity: 0, y: 10 }}
@@ -831,9 +828,13 @@ export function DeliveryPage() {
                       transition={{ delay: idx * 0.05, duration: 0.2 }}
                     >
                       <div
-                        onClick={() => open(o)}
-                        className={`w-full text-left bg-white rounded-lg border border-[#E5E7EB] shadow-xs overflow-hidden hover:border-[#FBBF24] hover:shadow-sm transition-all active:scale-[0.99] cursor-pointer ${
-                          canStartCourierDelivery(o.status) || o.status === "OUT_FOR_DELIVERY" ? "" : "opacity-80"
+                        onClick={canOpen ? () => open(o) : undefined}
+                        aria-disabled={!canOpen}
+                        title={canOpen ? undefined : "Pesanan belum siap diambil dari dapur"}
+                        className={`w-full text-left bg-white rounded-lg border border-[#E5E7EB] shadow-xs overflow-hidden transition-all ${
+                          canOpen
+                            ? "hover:border-[#FBBF24] hover:shadow-sm active:scale-[0.99] cursor-pointer"
+                            : "opacity-75 cursor-not-allowed"
                         }`}
                       >
                         <div className={`h-1.5 ${getCourierStatusMeta(o.status).barClass}`} />
@@ -897,13 +898,18 @@ export function DeliveryPage() {
                               </div>
                             </div>
 
-                            {/* Chevron */}
-                            <ChevronRight className="h-5 w-5 text-[#D1D5DB] shrink-0" />
+                            {/* Action state */}
+                            {canOpen ? (
+                              <ChevronRight className="h-5 w-5 text-[#D1D5DB] shrink-0" />
+                            ) : (
+                              <span className="text-[10px] font-bold text-slate-500 shrink-0 text-right">Belum bisa<br />diambil</span>
+                            )}
                           </div>
                         </div>
                       </div>
                     </motion.div>
-                  ))}
+                    );
+                  })}
                 </AnimatePresence>
               </div>
             )

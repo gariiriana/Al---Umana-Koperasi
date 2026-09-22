@@ -141,7 +141,6 @@ func main() {
 			stockSvc,
 			order.WithProofDeleter(paymentProofDeleter),
 		)
-		order.StartNotifier(ctx, fsConn)
 		catalogSvc = catalog.NewService(stockRepo)
 
 		// Multi-collection file handler so the unified per-collection

@@ -11,9 +11,6 @@ services:
       - ./backend/.env.production
     environment:
       - ENV=production
-      - WA_GATEWAY_URL=http://wa-gateway:8000/send-message
-    depends_on:
-      - wa-gateway
 
   frontend:
     build:
@@ -25,17 +22,3 @@ services:
       - ./frontend/.env.production
     depends_on:
       - backend
-
-  wa-gateway:
-    build:
-      context: ./wa-gateway
-    expose:
-      - "8000"
-    env_file:
-      - ./wa-gateway/.env.production
-    volumes:
-      - wa_session:/app/.wwebjs_auth
-    restart: unless-stopped
-
-volumes:
-  wa_session:

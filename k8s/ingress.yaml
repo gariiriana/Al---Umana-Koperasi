@@ -38,15 +38,6 @@ spec:
                 port:
                   number: 8080
 
-          # WA Gateway — internal webhook, accessible via /wa/*
-          - path: /wa(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: wa-gateway-service
-                port:
-                  number: 8000
-
           # Frontend SPA — catch-all, serves the React app
           - path: /()(.*)
             pathType: ImplementationSpecific
