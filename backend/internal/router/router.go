@@ -29,6 +29,7 @@ import (
 var publicPathPrefixes = []string{
 	"/healthz",
 	"/api/catalog/",
+	"/api/public/invoices/",
 }
 
 // Dependencies bundles every collaborator the router needs to register the
@@ -140,6 +141,10 @@ func registerPublic(mux *http.ServeMux, deps Dependencies) {
 	}
 	// Single-item lookups are not cached — they are cheap individual reads.
 	mux.HandleFunc("GET /api/catalog/items/{id}", ch.GetItem)
+	if deps.OrderHandler != nil {
+		mux.HandleFunc("GET /api/public/invoices/{token}", deps.OrderHandler.GetPublicInvoice)
+		mux.HandleFunc("POST /api/public/invoices/{token}/sign", deps.OrderHandler.SignPublicInvoice)
+	}
 }
 
 // registerProtected mounts every API endpoint that lives behind the auth

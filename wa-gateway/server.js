@@ -6,6 +6,30 @@ const fs = require('fs');
 const app = express();
 app.use(express.json());
 
+const gatewayApiKey = process.env.WA_GATEWAY_API_KEY;
+if (!gatewayApiKey) {
+    throw new Error('WA_GATEWAY_API_KEY wajib diatur sebelum menjalankan gateway.');
+}
+
+const requestTimestamps = new Map();
+const MAX_REQUESTS_PER_MINUTE = 30;
+
+function requireGatewayApiKey(req, res, next) {
+    if (req.get('x-api-key') !== gatewayApiKey) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const now = Date.now();
+    const requester = req.ip || 'unknown';
+    const recent = (requestTimestamps.get(requester) || []).filter((timestamp) => now - timestamp < 60_000);
+    if (recent.length >= MAX_REQUESTS_PER_MINUTE) {
+        return res.status(429).json({ success: false, error: 'Terlalu banyak permintaan' });
+    }
+    recent.push(now);
+    requestTimestamps.set(requester, recent);
+    next();
+}
+
 console.log('Menginisialisasi WhatsApp Client...');
 
 // Auto-detect browser lokal (Chrome / Edge) agar tidak perlu download chromium terpisah
@@ -69,10 +93,10 @@ client.on('disconnected', (reason) => {
 });
 
 // Endpoint API untuk mengirim pesan WhatsApp
-app.post('/send-message', async (req, res) => {
+app.post('/send-message', requireGatewayApiKey, async (req, res) => {
     const { number, message } = req.body;
 
-    if (!number || !message) {
+    if (!number || !message || typeof message !== 'string' || message.length > 4096) {
         return res.status(400).json({ success: false, error: 'Nomor HP dan pesan wajib diisi!' });
     }
 

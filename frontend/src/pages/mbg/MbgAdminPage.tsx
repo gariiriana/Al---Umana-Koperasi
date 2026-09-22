@@ -43,10 +43,10 @@ import {
   bulkAddEntriesFromMaster,
   deleteAllMbgData,
   cleanDuplicateBatchEntries,
-  clearBatchEntries,
-  addMultipleEntries,
+  replaceBatchEntries,
   type MbgPortionClassification,
 } from '@/services/mbgAdminService';
+import { getJakartaDate } from '@/utils/date';
 import { subscribeCustomRecipes } from '@/services/mbgProductionService';
 import resepStandardData from '@/constants/standarResep.json';
 import { MBG_BATCH_STATUS_CONFIG, MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
@@ -104,7 +104,7 @@ function NewBatchModal({
   onSubmit: (tanggal: string, copyFromId?: string, autoPopulateMaster?: boolean) => void;
   batches: MbgPmBatch[];
 }) {
-  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
+  const [tanggal, setTanggal] = useState(getJakartaDate());
   const [creationMode, setCreationMode] = useState<'copy' | 'master' | 'blank'>('copy');
   const [copyFrom, setCopyFrom] = useState('');
 
@@ -1147,7 +1147,7 @@ export function MbgAdminPage() {
           }
 
           if (!targetBatchId || !targetDate) {
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = getJakartaDate();
             const existing = allBatches.find((b) => b.tanggal === todayStr) || batches.find((b) => b.tanggal === todayStr);
             if (existing) {
               targetBatchId = existing.id;
@@ -1171,9 +1171,6 @@ export function MbgAdminPage() {
 
           try {
             setSaving(true);
-            // Bersihkan orphan entries jika ada
-            await clearBatchEntries('');
-
             const { menuItems, menuKeringanItems } = targetDate
               ? getMenuForDate(targetDate, weeklySchedule)
               : { menuItems: [], menuKeringanItems: [] };
@@ -1188,10 +1185,7 @@ export function MbgAdminPage() {
               menuKeringanItems: (e.menuKeringanItems && e.menuKeringanItems.length > 0) ? e.menuKeringanItems : menuKeringanItems,
             }));
 
-            await clearBatchEntries(targetBatchId);
-            await addMultipleEntries(entriesToSave);
-            await recalculateBatchTotals(targetBatchId);
-            await updateBatchStatus(targetBatchId, 'DRAFT');
+            await replaceBatchEntries(targetBatchId, entriesToSave);
 
             setSelectedBatchId(targetBatchId);
 
@@ -1238,7 +1232,7 @@ export function MbgAdminPage() {
     }
 
     if (!targetBatchId || !targetDate) {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getJakartaDate();
       const existing = allBatches.find((b) => b.tanggal === todayStr) || batches.find((b) => b.tanggal === todayStr);
       if (existing) {
         targetBatchId = existing.id;
@@ -1262,9 +1256,6 @@ export function MbgAdminPage() {
 
     try {
       setSaving(true);
-      // Bersihkan orphan entries jika ada
-      await clearBatchEntries('');
-
       // Pastikan SEMUA data yang disimpan memiliki batchId target yang aktif dan menu valid
       const { menuItems, menuKeringanItems } = targetDate
         ? getMenuForDate(targetDate, weeklySchedule)
@@ -1279,10 +1270,7 @@ export function MbgAdminPage() {
         menuKeringanItems: (e.menuKeringanItems && e.menuKeringanItems.length > 0) ? e.menuKeringanItems : menuKeringanItems,
       }));
 
-      await clearBatchEntries(targetBatchId);
-      await addMultipleEntries(entriesToSave);
-      await recalculateBatchTotals(targetBatchId);
-      await updateBatchStatus(targetBatchId, 'DRAFT');
+      await replaceBatchEntries(targetBatchId, entriesToSave);
 
       // Pastikan selectedBatchId aktif mengarah ke batch yang baru saja diisi
       setSelectedBatchId(targetBatchId);
@@ -1316,7 +1304,7 @@ export function MbgAdminPage() {
         setBatches(b);
         setLoadingBatches(false);
 
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getJakartaDate();
         const todayBatch = b.find((batch) => batch.tanggal === todayStr);
 
         setSelectedBatchId((current) => {
@@ -1942,7 +1930,7 @@ export function MbgAdminPage() {
                 <input
                   type="date"
                   title="Pilih Tanggal Pengiriman"
-                  value={selectedBatch ? selectedBatch.tanggal : new Date().toISOString().split('T')[0]}
+                  value={selectedBatch ? selectedBatch.tanggal : getJakartaDate()}
                   onChange={(e) => handleSelectOrPickDate(e.target.value)}
                   className="text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/30 rounded-lg border border-slate-300 px-2 py-1 bg-slate-50 cursor-pointer shrink-0"
                 />

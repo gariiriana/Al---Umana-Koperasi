@@ -169,8 +169,8 @@ export function MbgOrdersPage() {
     else if (stepKey === 'PM_SUBMITTED') stepIdx = 1;
     else if (stepKey === 'NUTRITION_DONE') stepIdx = 2;
     else if (stepKey === 'PURCHASING') stepIdx = 4; // covers purchasing & purchased
-    else if (stepKey === 'QC_PENDING') stepIdx = 8; // covers QC passed / failed / pending
-    else if (stepKey === 'COOKING') stepIdx = 10; // covers cooking & cooked
+    else if (stepKey === 'QC_PENDING') stepIdx = 6; // covers QC passed / failed / pending
+    else if (stepKey === 'COOKING') stepIdx = 9; // covers cooking & cooked
     else if (stepKey === 'DELIVERING') stepIdx = 11;
     else if (stepKey === 'DELIVERED') stepIdx = 12;
 

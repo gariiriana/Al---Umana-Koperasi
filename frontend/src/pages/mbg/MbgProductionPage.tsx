@@ -31,6 +31,7 @@ import { export8PageDailyReportPdf } from '@/utils/dailyReportPdfExporter';
 import { exportProductionDocx } from '@/utils/mbgProductionDocxGenerator';
 import { parseProductionSheetRows, parsePenerimaManfaatSheet } from '@/utils/productionSheetParser';
 import { updateBatchStatus, updateBatch } from '@/services/mbgAdminService';
+import { getJakartaDate } from '@/utils/date';
 import {
   MBG_BATCH_STATUS_CONFIG,
   NUTRIENTS_LIST,
@@ -319,14 +320,14 @@ export function MbgProductionPage() {
     const unsub = subscribeBatches(
       (data) => {
         clearTimeout(timer);
-        // Hanya batch yang sudah difinalisasi (status !== 'DRAFT') yang masuk ke Produksi MBG
-        const finalizedBatches = data.filter((b) => b.status !== 'DRAFT');
+        // Keep DRAFT batches visible so a same-date batch is never created twice.
+        const finalizedBatches = data;
         setBatches(finalizedBatches);
 
         if (finalizedBatches.length > 0) {
           setSelectedBatchId((curr) => {
             if (curr && finalizedBatches.some((b) => b.id === curr)) return curr;
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = getJakartaDate();
             const todayBatch = finalizedBatches.find((b) => b.tanggal === todayStr);
             return todayBatch ? todayBatch.id : finalizedBatches[0].id;
           });
@@ -439,7 +440,7 @@ export function MbgProductionPage() {
     }
 
     // Fallback: pick today's batch or latest batch
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getJakartaDate();
     const todayBatch = batches.find((b) => b.tanggal === todayStr);
     handleSelectBatch(todayBatch ? todayBatch.id : batches[0].id);
   }, [batches, selectedBatchId]);
@@ -1433,7 +1434,7 @@ export function MbgProductionPage() {
   const handleCreateTodayBatch = async () => {
     try {
       setCreatingBatch(true);
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getJakartaDate();
       const existing = batches.find((b) => b.tanggal === todayStr);
       if (existing) {
         setSelectedBatchId(existing.id);
@@ -1595,7 +1596,7 @@ export function MbgProductionPage() {
 
       // Determine target batch
       let targetBatchId = selectedBatchId;
-      const targetBatchTanggal = selectedBatch?.tanggal || new Date().toISOString().split('T')[0];
+      const targetBatchTanggal = selectedBatch?.tanggal || getJakartaDate();
 
       if (!targetBatchId) {
         const existingBatch = batches.find((b) => b.tanggal === targetBatchTanggal);
@@ -1652,7 +1653,7 @@ export function MbgProductionPage() {
       if (importTargetOption === 'current_batch' && selectedBatch?.tanggal) {
         targetBatchTanggal = selectedBatch.tanggal;
       } else {
-        targetBatchTanggal = parsedDateFromSheet || selectedBatch?.tanggal || new Date().toISOString().split('T')[0];
+        targetBatchTanggal = parsedDateFromSheet || selectedBatch?.tanggal || getJakartaDate();
       }
 
       let targetBatchId = '';
@@ -1767,7 +1768,7 @@ export function MbgProductionPage() {
     try {
       const reportId = updated.id || dailyReport?.id || null;
       const targetBatchId = updated.batchId || selectedBatchId || '';
-      const targetTanggal = updated.tanggal || selectedBatch?.tanggal || new Date().toISOString().split('T')[0];
+      const targetTanggal = updated.tanggal || selectedBatch?.tanggal || getJakartaDate();
 
       const savedId = await saveDailyReport(reportId, {
         ...updated,

@@ -59,6 +59,7 @@ import {
   formatIndonesianDate,
   compareCouriers,
 } from '@/utils/mbgDeliveryReportPdfExporter';
+import { getJakartaDate } from '@/utils/date';
 
 export function MbgDistributionPage() {
   const { showToast } = useToast();
@@ -242,17 +243,24 @@ export function MbgDistributionPage() {
     const kurirId = matched ? matched.uid : cleanKurir.toLowerCase().replace(/\s+/g, '-');
     const finalKurirName = matched ? matched.name : cleanKurir;
 
-    const matchedKenek = kurirUsers.find(
+    const matchedKenek = cleanKenek ? kurirUsers.find(
       (u) =>
         u.name.toLowerCase() === cleanKenek.toLowerCase() ||
         u.email.toLowerCase().includes(cleanKenek.toLowerCase()) ||
         u.name.toLowerCase().includes(cleanKenek.toLowerCase()) ||
         cleanKenek.toLowerCase().includes(u.name.toLowerCase())
-    );
+    ) : undefined;
     const kenekId = matchedKenek ? matchedKenek.uid : cleanKenek ? cleanKenek.toLowerCase().replace(/\s+/g, '-') : undefined;
     const finalKenekName = matchedKenek ? matchedKenek.name : cleanKenek;
 
     try {
+      const updatedEntries = entries.map((entry) => selectedEntryIds.includes(entry.id) ? {
+        ...entry,
+        assignedPetugasName: finalKurirName,
+        assignedPetugasId: kurirId,
+        assignedKenekName: finalKenekName || undefined,
+        assignedKenekId: kenekId || undefined,
+      } : entry);
       await Promise.all(
         selectedEntryIds.map((id) =>
           updateEntry(id, {
@@ -272,8 +280,8 @@ export function MbgDistributionPage() {
       setBulkKurirName('');
       setBulkKenekName('');
 
-      // Automatically sync delivery tasks for this courier
-      await handleSyncDeliveryTasks(finalKurirName);
+      setEntries(updatedEntries);
+      await handleSyncDeliveryTasks(updatedEntries);
     } catch (err) {
       console.error('Bulk assign error:', err);
       showToast({ message: 'Gagal memperbarui penugasan institusi', variant: 'error' });
@@ -455,7 +463,7 @@ export function MbgDistributionPage() {
       Object.entries(petugasGroups).forEach(([pName, pEntries]) => {
         const key = pName.toLowerCase().trim();
         const completedCount = pEntries.filter((e) =>
-          Boolean(e.photoMenuUrl || e.photoSerahTerimaUrl || e.photoSuratJalanUrl || e.photoPenerimaUrl)
+          Boolean(e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl && e.photoPenerimaUrl)
         ).length;
         const totalPorsi = pEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
         const matchedTask = deliveryTasks.find(
@@ -476,7 +484,7 @@ export function MbgDistributionPage() {
           docMap.set(key, {
             id: matchedTask ? matchedTask.id : `virt-${key}`,
             batchId: selectedBatchId || pEntries[0]?.batchId || '',
-            tanggalBatch: selectedBatch?.tanggal || new Date().toISOString().split('T')[0],
+            tanggalBatch: selectedBatch?.tanggal || getJakartaDate(),
             petugasName: pName,
             petugasId: pEntries[0]?.assignedPetugasId || matchedTask?.petugasId || key.replace(/\s+/g, '-'),
             documentType: 'delivery_report',
@@ -596,17 +604,24 @@ export function MbgDistributionPage() {
     const kurirId = matched ? matched.uid : cleanKurir.toLowerCase().replace(/\s+/g, '-');
     const finalKurirName = matched ? matched.name : cleanKurir;
 
-    const matchedKenek = kurirUsers.find(
+    const matchedKenek = cleanKenek ? kurirUsers.find(
       (u) =>
         u.name.toLowerCase() === cleanKenek.toLowerCase() ||
         u.email.toLowerCase().includes(cleanKenek.toLowerCase()) ||
         u.name.toLowerCase().includes(cleanKenek.toLowerCase()) ||
         cleanKenek.toLowerCase().includes(u.name.toLowerCase())
-    );
+    ) : undefined;
     const kenekId = matchedKenek ? matchedKenek.uid : cleanKenek ? cleanKenek.toLowerCase().replace(/\s+/g, '-') : undefined;
     const finalKenekName = matchedKenek ? matchedKenek.name : cleanKenek;
 
     try {
+      const updatedEntries = entries.map((entry) => entry.id === assignModalEntry.id ? {
+        ...entry,
+        assignedPetugasName: finalKurirName,
+        assignedPetugasId: kurirId,
+        assignedKenekName: finalKenekName || undefined,
+        assignedKenekId: kenekId || undefined,
+      } : entry);
       await updateEntry(assignModalEntry.id, {
         assignedPetugasName: finalKurirName,
         assignedPetugasId: kurirId,
@@ -619,21 +634,18 @@ export function MbgDistributionPage() {
       });
       setAssignModalEntry(null);
 
-      // Automatically sync delivery tasks for this courier
-      await handleSyncDeliveryTasks(finalKurirName);
+      setEntries(updatedEntries);
+      await handleSyncDeliveryTasks(updatedEntries);
     } catch {
       showToast({ message: 'Gagal menugaskan petugas', variant: 'error' });
     }
   };
 
   // Generate / Sync Delivery Tasks
-  const handleSyncDeliveryTasks = async (targetKurirName?: string) => {
+  const handleSyncDeliveryTasks = async (sourceEntries = entries) => {
     if (!selectedBatchId) return;
     try {
-      let kurirs = Array.from(new Set(entries.map((e) => e.assignedPetugasName).filter(Boolean)));
-      if (targetKurirName) {
-        kurirs = kurirs.filter((k) => k === targetKurirName);
-      }
+      const kurirs = Array.from(new Set(sourceEntries.map((e) => e.assignedPetugasName).filter(Boolean)));
 
       if (kurirs.length === 0) {
         showToast({ message: 'Belum ada institusi yang ditugaskan ke Kurir', variant: 'info' });
@@ -644,7 +656,7 @@ export function MbgDistributionPage() {
       let updated = 0;
 
       for (const kName of kurirs) {
-        const kEntries = entries.filter((e) => e.assignedPetugasName === kName && !e.isSekolahLibur);
+        const kEntries = sourceEntries.filter((e) => e.assignedPetugasName === kName && !e.isSekolahLibur);
         const totalPorsi = kEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
         const entryIds = kEntries.map((e) => e.id);
 
@@ -706,6 +718,16 @@ export function MbgDistributionPage() {
             updatedAt: new Date().toISOString(),
           });
           created++;
+        }
+      }
+
+      // A reassigned institution must disappear from the former courier's
+      // waiting task immediately; completed tasks remain as history.
+      for (const task of deliveryTasks) {
+        const stillAssigned = sourceEntries.some((entry) => !entry.isSekolahLibur &&
+          (entry.assignedPetugasId === task.petugasId || entry.assignedPetugasName === task.petugasName));
+        if (!stillAssigned && task.status === 'waiting') {
+          await updateDeliveryTask(task.id, { entryIds: [], totalPorsi: 0 });
         }
       }
 
@@ -816,7 +838,7 @@ export function MbgDistributionPage() {
   const handleExportDailyDistributionPdf = async (customBatchId?: string) => {
     const targetBatchId = customBatchId || selectedBatchId;
     const targetBatch = batches.find((b) => b.id === targetBatchId) || selectedBatch;
-    const batchDate = targetBatch?.tanggal || new Date().toISOString().split('T')[0];
+    const batchDate = targetBatch?.tanggal || getJakartaDate();
 
     setIsExportingDailyPdf(true);
     showToast({ message: `Menyiapkan PDF Laporan Distribusi Harian (${batchDate})...`, variant: 'info' });
@@ -1141,7 +1163,7 @@ export function MbgDistributionPage() {
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={() => handleSyncDeliveryTasks(petugasName)}
+                                  onClick={() => handleSyncDeliveryTasks()}
                                   className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg cursor-pointer shadow-xs active:scale-95 transition-all"
                                   title={`Kirim tugas pengiriman ke akun ${petugasName}`}
                                 >

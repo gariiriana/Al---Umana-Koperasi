@@ -41,26 +41,7 @@ import type {
 import { JOBDESK_ROLE_LABELS, ROLE_TO_PIC_NAME, compareJobDeskTime } from "@/types/cateringJobDesk";
 
 /** Map user profile role to job desk assignable role. */
-function mapToAssignableRole(profileRole?: string, email?: string): JobDeskAssignableRole | null {
-  if (email) {
-    const em = email.toLowerCase();
-    // 1. Joko: ProduksiMBG2@alumana.id / TimProduksi@Alumana.id
-    if (em === "timproduksi@alumana.id" || em.includes("timproduksi") || em.includes("produksimbg2") || em.includes("produksi_mbg2") || em.includes("joko")) {
-      return "produksi_1";
-    }
-    // 2. Hashifah Dzihniyah Zhafirah (Shifa): ProduksiMBG@alumana.id
-    if (em.includes("produksimbg") || em.includes("produksi_mbg") || em.includes("shifa") || em.includes("hashifah")) {
-      return "produksi_2";
-    }
-    // 3. Dwi: distribusimbg@alumana.id
-    if (em.includes("distribusimbg") || em.includes("distribusi_mbg") || em.includes("dwi")) {
-      return "distribusi_1";
-    }
-    // 4. Wandi: Dstribusi2@alumana.id
-    if (em === "dstribusi2@alumana.id" || em.includes("distribusi_2") || em.includes("distribusi2") || em.startsWith("wandi")) {
-      return "distribusi_2";
-    }
-  }
+function mapToAssignableRole(profileRole?: string): JobDeskAssignableRole | null {
   const mapping: Record<string, JobDeskAssignableRole> = {
     produksi_1: "produksi_1",
     distribusi_1: "distribusi_1",
@@ -94,33 +75,9 @@ export function OperationalJobDeskPage() {
   const [rowReason, setRowReason] = useState<Record<string, string>>({});
   const [submittingRowId, setSubmittingRowId] = useState<string | null>(null);
 
-  const emailLower = (profile?.email || user?.email || "").toLowerCase();
-  const isJokoAccount = emailLower.includes("produksimbg2") || emailLower.includes("produksi_mbg2") || emailLower.includes("joko");
-  const isShifaAccount = !isJokoAccount && (emailLower.includes("produksimbg") || emailLower.includes("produksi_mbg") || emailLower.includes("shifa") || emailLower.includes("hashifah"));
-  const isDwiAccount = emailLower.includes("distribusimbg") || emailLower.includes("distribusi_mbg") || emailLower.includes("dwi");
-  const isWandiAccount = emailLower === "dstribusi2@alumana.id" || emailLower.includes("distribusi2") || emailLower.startsWith("wandi");
-
-  const assignableRole = isJokoAccount
-    ? "produksi_1"
-    : isShifaAccount
-    ? "produksi_2"
-    : isDwiAccount
-    ? "distribusi_1"
-    : isWandiAccount
-    ? "distribusi_2"
-    : mapToAssignableRole(profile?.role, profile?.email || user?.email || undefined);
-
-  const picShortName: PicShortName = isJokoAccount
-    ? "Joko"
-    : isShifaAccount
-    ? "Shifa"
-    : isDwiAccount
-    ? "Dwi"
-    : isWandiAccount
-    ? "Wandi"
-    : (assignableRole ? ROLE_TO_PIC_NAME[assignableRole] : "Joko");
-
-  const isDualScopeUser = isWandiAccount || assignableRole === "distribusi_2";
+  const assignableRole = mapToAssignableRole(profile?.role);
+  const picShortName: PicShortName = assignableRole ? ROLE_TO_PIC_NAME[assignableRole] : "Joko";
+  const isDualScopeUser = assignableRole === "distribusi_2";
 
   useEffect(() => {
     if (!assignableRole) {
@@ -146,11 +103,10 @@ export function OperationalJobDeskPage() {
       (err) => {
         console.error("Failed to load operational job desks:", err);
         setLoading(false);
-      },
-      profile?.email || user?.email || undefined
+      }
     );
     return () => unsub();
-  }, [assignableRole, profile?.email, user?.email]);
+  }, [assignableRole]);
 
   // Handle submit single row to CO_MO
   const handleSubmitRow = useCallback(

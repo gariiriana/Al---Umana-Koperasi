@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { getFirestore, collection, getDocs, deleteDoc, doc } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -16,17 +16,14 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 async function cleanup() {
-  console.log("Authenticating...");
-  let userCred;
-  try {
-    userCred = await signInWithEmailAndPassword(auth, "cleanup_bot@alumana.id", "cleanup_pass123");
-  } catch {
-    try {
-      userCred = await createUserWithEmailAndPassword(auth, "cleanup_bot@alumana.id", "cleanup_pass123");
-    } catch (e2) {
-      console.log("Could not create/signin cleanup_bot:", e2.message);
-    }
+  const email = process.env.CLEANUP_BOT_EMAIL;
+  const password = process.env.CLEANUP_BOT_PASSWORD;
+  if (!email || !password) {
+    throw new Error("Set CLEANUP_BOT_EMAIL dan CLEANUP_BOT_PASSWORD di environment lokal sebelum menjalankan cleanup.");
   }
+
+  console.log("Authenticating...");
+  await signInWithEmailAndPassword(auth, email, password);
 
   console.log("Authenticated user:", auth.currentUser?.email || "anonymous/none");
 

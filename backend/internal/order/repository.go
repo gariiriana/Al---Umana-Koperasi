@@ -19,6 +19,10 @@ const ordersCollection = "orders"
 // document does not exist in Firestore.
 var ErrNotFound = errors.New("order not found")
 
+// ErrInvoiceSigned is returned when a public invoice has already captured a
+// recipient signature. The signature endpoint never overwrites it.
+var ErrInvoiceSigned = errors.New("invoice already signed")
+
 // ListFilter constrains a List query. Each pointer/string-zero field is
 // optional: a nil Status, empty CourierID, or nil StartDate/EndDate is
 // treated as "no filter on that dimension". Limit ≤ 0 disables the limit.
@@ -95,6 +99,82 @@ func (r *Repository) Get(ctx context.Context, id string) (*Order, error) {
 		return nil, fmt.Errorf("order repository: get: %w", err)
 	}
 	return snapshotToOrder(snap)
+}
+
+// GetInvoiceByToken returns the narrow invoice view needed by the public
+// link. It uses the Admin SDK, so Firestore rules need not expose order
+// queries to unauthenticated clients.
+func (r *Repository) GetInvoiceByToken(ctx context.Context, token string) (map[string]interface{}, error) {
+	iter := r.client.Collection(ordersCollection).Where("invoiceToken", "==", token).Limit(1).Documents(ctx)
+	defer iter.Stop()
+
+	snap, err := iter.Next()
+	if errors.Is(err, iterator.Done) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("order repository: get invoice by token: %w", err)
+	}
+
+	// Future fields are private by default. Do not return customer IDs,
+	// courier assignments, payment-proof references, or admin-only notes.
+	allowed := []string{
+		"orderType", "institutionName", "recipientName", "recipientPhone", "recipientNotes",
+		"eventDate", "foodDetails", "drinkDetails", "totalPrice", "additionalFee",
+		"additionalNotes", "paymentStatus", "paymentDueDate", "invoiceToken",
+		"invoiceSignedAt", "invoiceSignatureData", "status", "items", "deliveryAddress",
+		"deliveryTime", "promoCode", "discountAmount", "createdAt", "updatedAt",
+	}
+	data := snap.Data()
+	invoice := make(map[string]interface{}, len(allowed)+1)
+	invoice["id"] = snap.Ref.ID
+	for _, key := range allowed {
+		if value, ok := data[key]; ok {
+			invoice[key] = value
+		}
+	}
+	return invoice, nil
+}
+
+// SignInvoiceByToken captures one public recipient signature. The token and
+// unsigned state are rechecked inside a transaction to avoid racing signers.
+func (r *Repository) SignInvoiceByToken(ctx context.Context, token, signatureData string) error {
+	iter := r.client.Collection(ordersCollection).Where("invoiceToken", "==", token).Limit(1).Documents(ctx)
+	defer iter.Stop()
+
+	snap, err := iter.Next()
+	if errors.Is(err, iterator.Done) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("order repository: sign invoice lookup: %w", err)
+	}
+
+	err = r.client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		current, err := tx.Get(snap.Ref)
+		if err != nil {
+			return err
+		}
+		data := current.Data()
+		if storedToken, _ := data["invoiceToken"].(string); storedToken != token {
+			return ErrNotFound
+		}
+		if signedAt, ok := data["invoiceSignedAt"]; ok && signedAt != nil {
+			return ErrInvoiceSigned
+		}
+		return tx.Update(snap.Ref, []firestore.Update{
+			{Path: "invoiceSignedAt", Value: firestore.ServerTimestamp},
+			{Path: "invoiceSignatureData", Value: signatureData},
+			{Path: "updatedAt", Value: firestore.ServerTimestamp},
+		})
+	})
+	if errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvoiceSigned) {
+		return err
+	}
+	if err != nil {
+		return fmt.Errorf("order repository: sign invoice: %w", err)
+	}
+	return nil
 }
 
 // Update applies the given field updates to the order document and refreshes
@@ -249,7 +329,7 @@ func (r *Repository) CountByStatus(ctx context.Context) (map[OrderStatus]int, er
 				ch <- result{status: status, count: 0}
 				return
 			}
-			
+
 			// Safely extract the count value using a type switch.
 			// Production Firestore returns int64; emulator returns a protobuf Value.
 			var count int

@@ -126,6 +126,21 @@ export async function updateTaskStatus(
   await updateDoc(doc(db, DELIVERY_COLLECTION, taskId), updates);
 }
 
+/** Mark a task complete and promote the batch only after every task is complete. */
+export async function completeTaskAndBatch(task: MbgDeliveryTask): Promise<void> {
+  await updateTaskStatus(task.id, 'delivered');
+  const taskSnapshot = await getDocs(query(collection(db, DELIVERY_COLLECTION), where('batchId', '==', task.batchId)));
+  const allDelivered = taskSnapshot.docs.every((item) =>
+    item.id === task.id || item.data().status === 'delivered'
+  );
+  if (allDelivered) {
+    await updateDoc(doc(db, 'mbg_pm_batches', task.batchId), {
+      status: 'DELIVERED',
+      updatedAt: new Date().toISOString(),
+    });
+  }
+}
+
 export async function setHandoverPhoto(
   taskId: string,
   photoId: string
@@ -404,4 +419,3 @@ export function subscribeAllDeliveryDocuments(
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryDocument)));
   });
 }
-

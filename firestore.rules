@@ -37,33 +37,17 @@ service cloud.firestore {
     // in Firestore. Backend service-account writes bypass rules entirely.
     function isAdmin() {
       return request.auth != null
-        && (
-          (
-            exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-          )
-          || ('email' in request.auth.token && (
-            request.auth.token.email == 'admin@alumana.id' ||
-            request.auth.token.email == 'admin@ulumana.id'
-          ))
-        );
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     function isTimProduksi() {
       return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && (
-          (
-            exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && (
-              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tim_produksi'
-              || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_1'
-              || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_2'
-            )
-          )
-          || ('email' in request.auth.token && (
-            request.auth.token.email == 'timproduksi@alumana.id' ||
-            request.auth.token.email == 'TimProduksi@Alumana.id'
-          ))
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tim_produksi'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_1'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_2'
         );
     }
 
@@ -102,7 +86,10 @@ service cloud.firestore {
     function isDistribusiMbg() {
       return request.auth != null
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi_mbg';
+        && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi_mbg'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi_mbg_2'
+        );
     }
 
     function isKurirMbg() {
@@ -113,6 +100,7 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kurir'
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi'
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi_mbg'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi_mbg_2'
         );
     }
 
@@ -142,6 +130,10 @@ service cloud.firestore {
       return isAdminMbg() || isProduksiMbg() || isProduksiMbg2() || isDokumentasiProduksiMbg() || isPurchasingMbg() || isDistribusiMbg() || isKurirMbg() || isSubPurchasingMbg();
     }
 
+    function isMbgManager() { return isAdmin() || isAdminMbg() || isProduksiMbg() || isProduksiMbg2(); }
+    function isMbgDeliveryTeam() { return isMbgManager() || isDistribusiMbg() || isKurirMbg(); }
+    function isMbgStaff() { return isAnyMbg() || isMoKatering() || isCoMoKatering(); }
+
     // -------------------------------------------------------------------
     // Katering & Operational Role Helpers
     // -------------------------------------------------------------------
@@ -163,22 +155,22 @@ service cloud.firestore {
 
     function isKateringOperational() {
       return request.auth != null
-        && (
-          (
-            exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && getUserRole() in [
-              'produksi_1', 'distribusi_1', 'produksi_2', 'distribusi_2',
-              'tim_produksi', 'distribusi', 'MBG2', 'mbg2',
-              'produksi_mbg_2', 'distribusi_mbg_2'
-            ]
-          )
-          || ('email' in request.auth.token && (
-            request.auth.token.email == 'dstribusi2@alumana.id' ||
-            request.auth.token.email == 'Dstribusi2@alumana.id' ||
-            request.auth.token.email == 'timproduksi@alumana.id' ||
-            request.auth.token.email == 'TimProduksi@Alumana.id'
-          ))
-        );
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && getUserRole() in [
+          'produksi_1', 'distribusi_1', 'produksi_2', 'distribusi_2',
+          'tim_produksi', 'distribusi', 'MBG2', 'mbg2',
+          'produksi_mbg_2', 'distribusi_mbg_2'
+        ];
+    }
+
+    function isOrderStaff() {
+      return isAdmin() || isTimProduksi() || isDistribusi() || isKurirMbg() || isMoKatering() || isCoMoKatering() || isAnyMbg();
+    }
+    function isOwnDeliveryFile(fileId) {
+      return get(/databases/$(database)/documents/delivery_files/$(fileId)).data.uploadedBy == request.auth.uid;
+    }
+    function isOwnPaymentProof(fileId) {
+      return get(/databases/$(database)/documents/payment_proofs/$(fileId)).data.uploadedBy == request.auth.uid;
     }
 
     // -------------------------------------------------------------------
@@ -196,9 +188,13 @@ service cloud.firestore {
     // CO_MO can update review status (approve/reject).
     // All authenticated katering roles can read.
     match /catering_jobdesks/{jobDeskId} {
-      allow read: if request.auth != null;
+      allow read: if isAdmin() || isMoKatering() || isCoMoKatering() || isKateringOperational();
       allow create: if isAdmin() || isMoKatering();
-      allow update: if isAdmin() || isMoKatering() || isKateringOperational() || isCoMoKatering();
+      allow update: if isAdmin() || isMoKatering()
+        || (isKateringOperational() && resource.data.assignedRole == getUserRole()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completionNote', 'completionPhotoUrl', 'submittedAt', 'submittedBy', 'updatedAt']))
+        || (isCoMoKatering() && resource.data.reviewStatus == 'pending'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewStatus', 'reviewedBy', 'reviewedAt', 'rejectionRemark', 'status', 'submittedAt', 'submittedBy', 'updatedAt']));
       allow delete: if isAdmin() || isMoKatering();
     }
 
@@ -208,26 +204,26 @@ service cloud.firestore {
     // Authenticated users can read, create, and update orders.
     // Only admins can delete.
     match /orders/{orderId} {
-      allow get: if request.auth != null
-        || (resource != null && resource.data.invoiceToken != null);
+      allow get, list: if isOrderStaff()
+        || (request.auth != null && resource.data.customerId == request.auth.uid);
       // Allow list for authenticated users OR unauthenticated (public invoice page).
       // The invoiceToken acts as a secret URL — knowing it grants read access.
       // Note: request.query.filters is not a valid Firestore Rules API,
       // so we allow unauthenticated list on this collection safely because:
       // 1. The invoiceToken is a random UUID (unguessable)
       // 2. Listing without a filter still requires knowing document structure
-      allow list: if request.auth != null
-        || (resource != null && resource.data.invoiceToken != null);
-      allow create: if request.auth != null;
-      allow update: if request.auth != null
-        || (resource != null && resource.data.invoiceToken != null
-            && request.resource.data.invoiceToken == resource.data.invoiceToken);
+      allow create: if isOrderStaff()
+        || (request.auth != null && request.resource.data.customerId == request.auth.uid);
+      allow update: if isOrderStaff()
+        || (request.auth != null && resource.data.customerId == request.auth.uid
+          && request.resource.data.customerId == resource.data.customerId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['customerName', 'recipientName', 'recipientPhone', 'recipientNotes', 'deliveryAddress', 'paymentProofId', 'updatedAt']));
       allow delete: if isAdmin();
     }
 
     match /inventory/{itemId} {
       allow read: if true;
-      allow update: if request.auth != null;
+      allow update: if isAdmin() || isTimProduksi();
       allow create, delete: if isAdmin() || isTimProduksi();
     }
 
@@ -246,14 +242,16 @@ service cloud.firestore {
     // The `courierId` field on the document MUST equal request.auth.uid;
     // this prevents one courier from spoofing another's position.
     match /courier_locations/{docId} {
-      allow read: if request.auth != null;
+      allow read: if isOrderStaff();
       allow create, update: if request.auth != null
+        && isKurirMbg()
         && request.resource.data.courierId == request.auth.uid;
       allow delete: if false;
 
       match /location_history/{historyId} {
-        allow read: if request.auth != null;
+        allow read: if isOrderStaff();
         allow create: if request.auth != null
+          && isKurirMbg()
           && request.resource.data.courierId == request.auth.uid;
         allow update, delete: if false;
       }
@@ -269,7 +267,7 @@ service cloud.firestore {
     // The status field is constrained to the three protocol values to
     // prevent arbitrary writes.
     match /delivery_files/{fileId} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null && (isOrderStaff() || resource.data.uploadedBy == request.auth.uid);
       allow create: if request.auth != null
         && request.resource.data.uploadedBy == request.auth.uid
         && request.resource.data.status in ["uploading", "completed", "failed"];
@@ -279,8 +277,8 @@ service cloud.firestore {
       allow delete: if false;
 
       match /chunks/{chunkId} {
-        allow read: if request.auth != null;
-        allow create, update: if request.auth != null;
+        allow read: if request.auth != null && (isOrderStaff() || isOwnDeliveryFile(fileId));
+        allow create, update: if request.auth != null && isOwnDeliveryFile(fileId);
         allow delete: if false;
       }
     }
@@ -308,7 +306,7 @@ service cloud.firestore {
     // protocol set. Deletes are backend-only via the service account
     // (Requirement 7.7, 11.5).
     match /payment_proofs/{fileId} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null && (isAdmin() || resource.data.uploadedBy == request.auth.uid);
       allow create: if request.auth != null
         && request.resource.data.uploadedBy == request.auth.uid
         && request.resource.data.status in ["uploading", "completed", "failed"];
@@ -318,8 +316,8 @@ service cloud.firestore {
       allow delete: if false;
 
       match /chunks/{chunkId} {
-        allow read: if request.auth != null;
-        allow create, update: if request.auth != null;
+        allow read: if request.auth != null && (isAdmin() || isOwnPaymentProof(fileId));
+        allow create, update: if request.auth != null && isOwnPaymentProof(fileId);
         allow delete: if false;
       }
     }
@@ -346,17 +344,20 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     // Rules for profile syncing, registration, and role escalation prevention.
     match /users/{userId} {
-      // Allow any logged-in user to view user profiles (needed for order dispatcher, QC tracking, etc.)
-      allow read: if request.auth != null;
+      allow get: if request.auth != null && (request.auth.uid == userId || isOrderStaff());
+      allow list: if isOrderStaff();
 
       // Allow users to register/setup their own profile on first login/registration
       allow create: if request.auth != null
-        && request.auth.uid == userId;
+        && request.auth.uid == userId
+        && request.resource.data.role == 'pelanggan'
+        && request.resource.data.email == request.auth.token.email;
 
       // Allow users to edit their own profile, but do not allow them to escalate/modify their own role
       allow update: if request.auth != null
         && request.auth.uid == userId
-        && request.resource.data.role == resource.data.role;
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'phoneNumber', 'savedDeliveryAddress', 'updatedAt']);
 
       // Admins have full access to modify profiles (e.g., assigning internal roles)
       allow write: if isAdmin();
@@ -371,8 +372,10 @@ service cloud.firestore {
     // Recipients can update their own notifications (mark as read).
     // Only admins can delete.
     match /notifications/{notificationId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null;
+      allow read: if request.auth != null && (resource.data.recipientId == request.auth.uid || isOrderStaff());
+      allow create: if isOrderStaff();
+      allow update: if request.auth != null && resource.data.recipientId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
       allow delete: if isAdmin();
     }
 
@@ -408,98 +411,108 @@ service cloud.firestore {
     // MBG PM Batches (batch pengiriman per tanggal)
     // -------------------------------------------------------------------
     match /mbg_pm_batches/{batchId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null;
+      allow read: if isMbgStaff();
+      allow create, delete: if isMbgManager();
+      allow update: if isMbgManager()
+        || (isKurirMbg() && request.resource.data.status == 'DELIVERED'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']));
     }
 
     // -------------------------------------------------------------------
     // MBG PM Entries (data per institusi dalam batch)
     // -------------------------------------------------------------------
     match /mbg_pm_entries/{entryId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null;
+      allow read: if isMbgStaff();
+      allow create, delete: if isMbgManager();
+      allow update: if isMbgManager() || isDistribusiMbg()
+        || (isKurirMbg()
+          && (resource.data.assignedPetugasId == request.auth.uid || resource.data.assignedKenekId == request.auth.uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'photoMenuUrl', 'photoMenuDesc', 'photoPenerimaUrl', 'photoPenerimaDesc', 'photoPenerimaTimestamp', 'photoPenerimaLocation',
+            'photoSerahTerimaUrl', 'photoSerahTerimaDesc', 'photoSerahTerimaTimestamp', 'photoSerahTerimaLocation',
+            'photoSuratJalanUrl', 'photoSuratJalanDesc', 'updatedAt'
+          ]));
     }
 
     // -------------------------------------------------------------------
     // MBG Settings & Weekly Schedules (Master Jadwal Menu Mingguan, dll)
     // -------------------------------------------------------------------
     match /mbg_settings/{settingId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi() || isMoKatering() || isCoMoKatering());
-      allow delete: if request.auth != null && (isAdmin() || isAdminMbg() || isMoKatering());
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isMbgManager();
     }
 
     match /mbg_weekly_schedules/{scheduleId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi() || isMoKatering() || isCoMoKatering());
-      allow delete: if request.auth != null && (isAdmin() || isAdminMbg() || isMoKatering());
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isMbgManager();
     }
 
     // -------------------------------------------------------------------
     // MBG Nutrition (kadar gizi per menu item)
     // -------------------------------------------------------------------
     match /mbg_nutrition/{nutritionId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi() || isMoKatering() || isCoMoKatering());
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isMbgManager();
     }
 
     // -------------------------------------------------------------------
     // MBG Daily Reports (Laporan Harian Operasional PDF/Excel)
     // -------------------------------------------------------------------
     match /mbg_daily_reports/{reportId} {
-      allow read, write: if request.auth != null;
+      allow read: if isMbgStaff();
+      allow write: if isMbgManager();
     }
 
     // -------------------------------------------------------------------
     // MBG Custom TKPI (custom ingredients added by production)
     // -------------------------------------------------------------------
     match /mbg_custom_tkpi/{itemId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isMbgManager();
     }
 
     // -------------------------------------------------------------------
     // MBG Suppliers (master data supplier)
     // -------------------------------------------------------------------
     match /mbg_suppliers/{supplierId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isAdmin() || isAdminMbg() || isPurchasingMbg() || isSubPurchasingMbg();
     }
 
     // -------------------------------------------------------------------
     // MBG Purchase Orders (belanja per supplier)
     // -------------------------------------------------------------------
     match /mbg_purchase_orders/{orderId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isAdmin() || isAdminMbg() || isPurchasingMbg() || isSubPurchasingMbg();
     }
 
     // -------------------------------------------------------------------
     // MBG Sub Purchasing Tasks (tugas belanja pasar / sub-purchasing)
     // -------------------------------------------------------------------
     match /mbg_sub_purchasing_tasks/{taskId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isAdmin() || isAdminMbg() || isPurchasingMbg() || isSubPurchasingMbg();
     }
 
     // -------------------------------------------------------------------
     // MBG QC Checks (quality control barang masuk)
     // -------------------------------------------------------------------
     match /mbg_qc_checks/{checkId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isMbgManager() || isDistribusiMbg();
     }
 
     // -------------------------------------------------------------------
     // MBG Cooking Sessions (dokumentasi proses masak)
     // -------------------------------------------------------------------
     match /mbg_cooking_sessions/{sessionId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isMbgManager() || isDokumentasiProduksiMbg();
 
       match /photos/{photoId} {
-        allow read: if request.auth != null;
-        allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+        allow read: if isMbgStaff();
+        allow create, update, delete: if isMbgManager() || isDokumentasiProduksiMbg();
       }
     }
 
@@ -507,41 +520,46 @@ service cloud.firestore {
     // MBG Delivery Tasks (tugas kurir per petugas)
     // -------------------------------------------------------------------
     match /mbg_delivery_tasks/{taskId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null;
+      allow read: if isMbgDeliveryTeam();
+      allow create, delete: if isMbgManager() || isDistribusiMbg();
+      allow update: if isMbgManager() || isDistribusiMbg()
+        || (isKurirMbg() && (resource.data.petugasId == request.auth.uid || resource.data.kenekId == request.auth.uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'handoverPhotoId', 'handoverAt', 'deliveryPhotos', 'schoolProofs', 'completedAt', 'updatedAt'
+          ]));
     }
 
     // -------------------------------------------------------------------
     // MBG Custom Recipes (resep kustom buatan tim produksi)
     // -------------------------------------------------------------------
     match /mbg_custom_recipes/{recipeId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isMbgManager();
     }
 
     // -------------------------------------------------------------------
     // MBG Recipe Adjustments (koreksi takaran bahan baku per batch)
     // -------------------------------------------------------------------
     match /mbg_recipe_adjustments/{adjustmentId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isTimProduksi());
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isMbgManager();
     }
 
     // -------------------------------------------------------------------
     // MBG Delivery Documents (arsip dokumen PDF kurir)
     // -------------------------------------------------------------------
     match /mbg_delivery_documents/{docId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && (isAdmin() || isAnyMbg() || isDistribusi());
+      allow read: if isMbgStaff();
+      allow create: if isMbgDeliveryTeam() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isMbgManager() || isDistribusiMbg();
     }
 
     // -------------------------------------------------------------------
     // MBG Purchasing Documents (arsip dokumen PDF/Word purchasing)
     // -------------------------------------------------------------------
     match /mbg_purchasing_documents/{docId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null;
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isAdmin() || isAdminMbg() || isPurchasingMbg() || isSubPurchasingMbg();
     }
   }
 }

@@ -114,49 +114,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
           async (docSnap) => {
             if (docSnap.exists()) {
               const data = docSnap.data() as UserProfile;
-              const em = (nextUser.email || data.email || "").toLowerCase();
-              // If account is timproduksi@alumana.id but has legacy/fallback role 'pelanggan', auto-correct to tim_produksi
-              if ((em === "timproduksi@alumana.id" || em.includes("timproduksi")) && data.role === "pelanggan") {
-                data.role = "tim_produksi";
-                data.displayName = data.displayName && data.displayName !== "Pelanggan Baru" ? data.displayName : "Tim Produksi (Ust. Joko)";
-                setDoc(userDocRef, data, { merge: true }).catch(() => {});
-              }
               setProfile(data);
               setLoading(false);
             } else {
               console.warn(`No user profile found for UID: ${nextUser.uid}. Auto-provisioning default profile...`);
               const email = nextUser.email || "";
               
-              let defaultRole: UserProfile["role"] = "pelanggan";
-              let defaultDisplayName = nextUser.displayName || email.split("@")[0] || "Pelanggan Baru";
-
-              const em = email.toLowerCase();
-              if (em === "timproduksi@alumana.id" || em.includes("timproduksi") || em.includes("tim_produksi")) {
-                defaultRole = "tim_produksi";
-                defaultDisplayName = "Tim Produksi (Ust. Joko)";
-              } else if (em.includes("produksimbg2") || em.includes("produksi_mbg2") || em.includes("joko")) {
-                defaultRole = "produksi_1";
-                defaultDisplayName = "Ust. Joko";
-              } else if (em.includes("produksimbg") || em.includes("produksi_mbg") || em.includes("shifa") || em.includes("hashifah")) {
-                defaultRole = "produksi_2";
-                defaultDisplayName = "Hashifah Dzihniyah Zhafirah";
-              } else if (em.includes("distribusimbg") || em.includes("distribusi_mbg") || em.includes("dwi")) {
-                defaultRole = "distribusi_1";
-                defaultDisplayName = "Dwi";
-              } else if (em === "dstribusi2@alumana.id" || em.includes("distribusi2") || em.startsWith("wandi")) {
-                defaultRole = "distribusi_2";
-                defaultDisplayName = "Wandi";
-              } else if (email.startsWith("admin_mbg") || email.startsWith("adminmbg")) {
-                defaultRole = "admin_mbg";
-              } else if (email.startsWith("purchasing_mbg") || email.startsWith("purchasingmbg")) {
-                defaultRole = "purchasing_mbg";
-              } else if (email.startsWith("kurir_mbg") || email.startsWith("kurirmbg")) {
-                defaultRole = "kurir_mbg";
-              } else if (email.startsWith("mo_katering") || email.startsWith("mokatering") || email.startsWith("mo@")) {
-                defaultRole = "mo_katering";
-              } else if (email.startsWith("co_mo_katering") || email.startsWith("como_katering") || email.startsWith("como@")) {
-                defaultRole = "co_mo_katering";
-              }
+              // Never infer an internal role from an email address. Admins
+              // assign staff roles after provisioning the account.
+              const defaultRole: UserProfile["role"] = "pelanggan";
+              const defaultDisplayName = nextUser.displayName || email.split("@")[0] || "Pelanggan Baru";
 
               const defaultProfile: UserProfile = {
                 email,

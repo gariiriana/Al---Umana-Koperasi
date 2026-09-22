@@ -10,7 +10,6 @@ import {
   deleteDoc,
   query,
   where,
-  limit,
   onSnapshot,
   writeBatch,
   getDocs,
@@ -127,10 +126,7 @@ export function subscribeBatches(
   onError?: (error: Error) => void,
   includeBackup = false
 ): Unsubscribe {
-  const q = query(
-    collection(db, BATCHES_COLLECTION),
-    limit(60)
-  );
+  const q = query(collection(db, BATCHES_COLLECTION));
   return subscriptionManager.subscribe(
     q,
     (snapshot) => {
@@ -268,10 +264,7 @@ export function subscribeAllEntries(
   onError?: (error: Error) => void,
   includeBackup = false
 ): Unsubscribe {
-  const q = query(
-    collection(db, ENTRIES_COLLECTION),
-    limit(1000)
-  );
+  const q = query(collection(db, ENTRIES_COLLECTION));
   return subscriptionManager.subscribe(
     q,
     (snapshot) => {

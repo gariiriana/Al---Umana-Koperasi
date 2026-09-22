@@ -1,5 +1,4 @@
-import { collection, query, where, getDocs, runTransaction, Timestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { Timestamp } from "firebase/firestore";
 import type { Order, OrderLineItem, OrderStatus, OrderType, PaymentStatus } from "@/types/order";
 
 interface FirestoreOrderData {
@@ -27,6 +26,24 @@ interface FirestoreOrderData {
   discountAmount?: number;
   createdAt?: unknown;
   updatedAt?: unknown;
+}
+
+const INVOICE_API_BASE_URL =
+  (import.meta.env.VITE_INVOICE_API_BASE_URL as string | undefined) ??
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+  "";
+
+async function requestPublicInvoice<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${INVOICE_API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      Accept: "application/json",
+      ...(init?.headers || {}),
+    },
+  });
+  if (!response.ok) throw new Error(`Invoice request failed (${response.status})`);
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
 }
 
 function toIsoString(value: unknown): string {
@@ -76,16 +93,10 @@ function parseOrder(snapId: string, data: FirestoreOrderData): Order {
  * This runs without authentication.
  */
 export async function getOrderByInvoiceToken(token: string): Promise<Order> {
-  const colRef = collection(db, "orders");
-  const q = query(colRef, where("invoiceToken", "==", token));
-  const snap = await getDocs(q);
-  
-  if (snap.empty) {
-    throw new Error("Invoice tidak ditemukan");
-  }
-  
-  const docSnap = snap.docs[0];
-  return parseOrder(docSnap.id, docSnap.data());
+  const data = await requestPublicInvoice<FirestoreOrderData & { id: string }>(
+    `/api/public/invoices/${encodeURIComponent(token)}`,
+  );
+  return parseOrder(data.id, data);
 }
 
 /**
@@ -93,21 +104,9 @@ export async function getOrderByInvoiceToken(token: string): Promise<Order> {
  * This runs without authentication.
  */
 export async function signInvoice(token: string, signatureData: string): Promise<void> {
-  const colRef = collection(db, "orders");
-  const q = query(colRef, where("invoiceToken", "==", token));
-  const snap = await getDocs(q);
-  
-  if (snap.empty) {
-    throw new Error("Invoice tidak ditemukan");
-  }
-  
-  const docRef = snap.docs[0].ref;
-  
-  await runTransaction(db, async (tx) => {
-    tx.update(docRef, {
-      invoiceSignedAt: new Date().toISOString(),
-      invoiceSignatureData: signatureData,
-      updatedAt: new Date(),
-    });
+  await requestPublicInvoice<void>(`/api/public/invoices/${encodeURIComponent(token)}/sign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ signatureData }),
   });
 }

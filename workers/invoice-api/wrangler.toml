@@ -1,0 +1,15 @@
+name = "al-umana-invoice-api"
+account_id = "42957b053de047bdb5d17c57be5bda9b"
+main = "worker.js"
+compatibility_date = "2026-09-22"
+routes = [
+  { pattern = "koperasi-alumana.com/api/public/invoices/*", zone_name = "koperasi-alumana.com" }
+]
+
+[vars]
+FIREBASE_PROJECT_ID = "al-umana-koperasi"
+ALLOWED_ORIGIN = "https://al-umana.koperasi.id"
+
+# Set FIREBASE_PROJECT_ID and ALLOWED_ORIGIN in the Worker dashboard as plain
+# variables. Add FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY as encrypted
+# secrets; never add them to this file or the repository.

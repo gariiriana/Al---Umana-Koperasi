@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -245,7 +246,15 @@ func triggerNotification(ctx context.Context, client *firestore.Client, o Order,
 
 	// 5. Send POST request to local WA Gateway
 	go func() {
-		apiURL := "http://localhost:8000/send-message"
+		apiURL := os.Getenv("WA_GATEWAY_URL")
+		if apiURL == "" {
+			apiURL = "http://localhost:8000/send-message"
+		}
+		apiKey := os.Getenv("WA_GATEWAY_API_KEY")
+		if apiKey == "" {
+			log.Printf("notifier: skipped WhatsApp message for order %s because WA_GATEWAY_API_KEY is not configured", o.ID)
+			return
+		}
 		payload := WAPayload{
 			Number:  formattedPhone,
 			Message: message,
@@ -257,7 +266,14 @@ func triggerNotification(ctx context.Context, client *firestore.Client, o Order,
 			return
 		}
 
-		resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonPayload))
+		req, err := http.NewRequest(http.MethodPost, apiURL, bytes.NewBuffer(jsonPayload))
+		if err != nil {
+			log.Printf("notifier: failed to create WA Gateway request: %v", err)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", apiKey)
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			log.Printf("notifier: failed to call local WA Gateway API: %v (Is wa-gateway server running?)", err)
 			return

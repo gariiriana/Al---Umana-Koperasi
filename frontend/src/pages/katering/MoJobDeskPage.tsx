@@ -37,6 +37,7 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { getJakartaDate } from "@/utils/date";
 import { subscribeOrders } from "@/services/realtimeService";
 import {
   subscribeBatches,
@@ -193,7 +194,7 @@ export function MoJobDeskPage() {
   const [handoverDivision, setHandoverDivision] = useState<"katering" | "mbg">("katering");
 
   // Selected date context for form drafting
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = getJakartaDate();
   const [selectedOperationalDate, setSelectedOperationalDate] = useState<string>(todayStr);
 
   // Expanded dates state in Tab 1

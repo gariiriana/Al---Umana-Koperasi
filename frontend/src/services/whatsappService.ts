@@ -1,132 +1,31 @@
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-
-// Payload interface matching the local express server
-interface WAPayload {
-  number: string;
-  message: string;
-}
-
 /**
- * Normalizes phone number into WhatsApp-compatible 628xxx format.
- */
-function normalizePhoneNumber(phone: string): string {
-  let clean = phone.replace(/\D/g, "");
-  if (clean.startsWith("0")) {
-    clean = "62" + clean.slice(1);
-  }
-  return clean;
-}
-
-/**
- * Sends a WhatsApp notification to a specific user by their customer ID.
- * Automatically checks their notification preferences and retrieves their phone number.
+ * Browser code must never contact the WhatsApp gateway: the secret required
+ * by the gateway would be exposed to every visitor. Order notifications are
+ * sent by the backend Firestore listener instead.
  */
 export async function sendWhatsAppNotification(
-  customerId: string,
-  shortId: string,
-  message: string
+  _customerId: string,
+  _shortId: string,
+  _message: string
 ): Promise<boolean> {
-  try {
-    // 1. Fetch user profile from Firestore
-    const userRef = doc(db, "users", customerId);
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists()) {
-      console.log(`[whatsappService] User document ${customerId} not found.`);
-      return false;
-    }
-
-    const userData = userSnap.data();
-
-    // 2. Check if WhatsApp notifications are enabled (default to true if not set)
-    const waEnabled = userData.notifications?.whatsapp !== false;
-    if (!waEnabled) {
-      console.log(`[whatsappService] User ${customerId} has disabled WhatsApp notifications.`);
-      return false;
-    }
-
-    // 3. Get phone number
-    const phone = userData.phoneNumber || userData.phone;
-    if (!phone) {
-      console.log(`[whatsappService] User ${customerId} has no phone number in profile.`);
-      return false;
-    }
-
-    const targetPhone = normalizePhoneNumber(phone);
-    if (!targetPhone) {
-      console.log(`[whatsappService] Normalized phone number is empty.`);
-      return false;
-    }
-
-    // 4. Send POST request to local WA Gateway
-    const payload: WAPayload = {
-      number: targetPhone,
-      message: message,
-    };
-
-    console.log(`[whatsappService] Triggering WA message to ${targetPhone}...`);
-
-    const response = await fetch("http://localhost:8000/send-message", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Gateway returned HTTP ${response.status}`);
-    }
-
-    console.log(`[whatsappService] WhatsApp notification sent successfully for Order #${shortId}.`);
-    return true;
-  } catch (err) {
-    console.error(`[whatsappService] Failed to send WhatsApp notification:`, err);
-    return false;
-  }
+  void _customerId;
+  void _shortId;
+  void _message;
+  return false;
 }
 
 /**
  * Sends a WhatsApp notification to a specific phone number directly.
  */
 export async function sendWhatsAppNotificationDirect(
-  phone: string,
-  shortId: string,
-  message: string
+  _phone: string,
+  _shortId: string,
+  _message: string
 ): Promise<boolean> {
-  try {
-    const targetPhone = normalizePhoneNumber(phone);
-    if (!targetPhone) {
-      console.log(`[whatsappService] Normalized phone number is empty.`);
-      return false;
-    }
-
-    const payload: WAPayload = {
-      number: targetPhone,
-      message: message,
-    };
-
-    console.log(`[whatsappService] Triggering WA message to ${targetPhone}...`);
-
-    const response = await fetch("http://localhost:8000/send-message", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Gateway returned HTTP ${response.status}`);
-    }
-
-    console.log(`[whatsappService] WhatsApp notification sent successfully for Order #${shortId}.`);
-    return true;
-  } catch (err) {
-    console.error(`[whatsappService] Failed to send WhatsApp notification:`, err);
-    return false;
-  }
+  void _phone;
+  void _shortId;
+  void _message;
+  return false;
 }
 
 

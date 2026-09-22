@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"al-umana/order-fulfillment/internal/auth"
 	"al-umana/order-fulfillment/internal/common"
 )
+
+var invoiceTokenPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // Handler is the HTTP boundary for the order domain. It delegates business
 // logic to Service and Repository and is responsible only for request
@@ -25,6 +28,59 @@ type Handler struct {
 // case.
 func NewHandler(service *Service, repo *Repository) *Handler {
 	return &Handler{service: service, repo: repo}
+}
+
+// GetPublicInvoice handles a public invoice link. It returns a deliberately
+// narrow view fetched through the backend rather than opening Firestore reads.
+func (h *Handler) GetPublicInvoice(w http.ResponseWriter, r *http.Request) {
+	if h.repo == nil {
+		notImplemented(w, "GetPublicInvoice")
+		return
+	}
+	token := r.PathValue("token")
+	if !invoiceTokenPattern.MatchString(token) {
+		common.WriteJSONError(w, http.StatusNotFound, common.CodeNotFound, "invoice not found")
+		return
+	}
+	invoice, err := h.repo.GetInvoiceByToken(r.Context(), token)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, invoice)
+}
+
+// SignPublicInvoice captures one PNG signature for a valid public invoice.
+func (h *Handler) SignPublicInvoice(w http.ResponseWriter, r *http.Request) {
+	if h.repo == nil {
+		notImplemented(w, "SignPublicInvoice")
+		return
+	}
+	token := r.PathValue("token")
+	if !invoiceTokenPattern.MatchString(token) {
+		common.WriteJSONError(w, http.StatusNotFound, common.CodeNotFound, "invoice not found")
+		return
+	}
+	var body struct {
+		SignatureData string `json:"signatureData"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
+		common.WriteJSONError(w, http.StatusBadRequest, common.CodeValidationError, "invalid signature payload")
+		return
+	}
+	if !strings.HasPrefix(body.SignatureData, "data:image/png;base64,") || len(body.SignatureData) > 1<<20 {
+		common.WriteJSONError(w, http.StatusBadRequest, common.CodeValidationError, "signature must be a PNG data URL up to 1 MiB")
+		return
+	}
+	if err := h.repo.SignInvoiceByToken(r.Context(), token, body.SignatureData); err != nil {
+		if errors.Is(err, ErrInvoiceSigned) {
+			common.WriteJSONError(w, http.StatusConflict, common.CodeInvalidStateTransition, "invoice already signed")
+			return
+		}
+		writeServiceError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // CreateOrder handles POST /api/orders.

@@ -26,10 +26,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { MbgPmBatch, MbgDeliveryTask, MbgPmEntry } from '@/types/mbg';
 import { subscribeBatches, subscribeEntries } from '@/services/mbgAdminService';
+import { getJakartaDate } from '@/utils/date';
 import { startTracker } from '@/services/gpsService';
 import {
   subscribeKurirTasks,
   updateTaskStatus,
+  completeTaskAndBatch,
   setHandoverPhoto,
   addDeliveryPhoto,
   updateSchoolDeliveryProof,
@@ -83,7 +85,7 @@ export function MbgDeliveryPage() {
   useEffect(() => {
     const unsub = subscribeBatches((data) => {
       setBatches(data);
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getJakartaDate();
       const savedBatchId = sessionStorage.getItem('mbg_delivery_selected_batch');
       if (savedBatchId && data.some((b) => b.id === savedBatchId)) {
         setSelectedBatchId(savedBatchId);
@@ -216,37 +218,9 @@ export function MbgDeliveryPage() {
       if (match) return match;
     }
 
-    // 2. Fallback: Synthesize virtual task from assigned entries directly so courier never loses task!
-    if (entries.length > 0) {
-      const assignedEntries = entries.filter((e) =>
-        isMatchingPetugas(e.assignedPetugasName, e.assignedPetugasId, e.assignedKenekName, e.assignedKenekId)
-      );
-
-      if (assignedEntries.length > 0) {
-        const matchedName = assignedEntries[0].assignedPetugasName || targetPetugas || 'Kurir MBG';
-        const totalPorsi = assignedEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
-        const firstKenek = assignedEntries.find((e) => e.assignedKenekName)?.assignedKenekName;
-
-        return {
-          id: `virt-task-${selectedBatchId}-${matchedName.replace(/\s+/g, '-')}`,
-          batchId: selectedBatchId || '',
-          petugasId: assignedEntries[0].assignedPetugasId || user?.uid || matchedName.toLowerCase().replace(/\s+/g, '-'),
-          petugasName: matchedName,
-          kenekName: firstKenek,
-          entryIds: assignedEntries.map((e) => e.id),
-          totalPorsi,
-          handoverPhotoId: '',
-          handoverAt: '',
-          status: 'waiting',
-          deliveryPhotos: [],
-          completedAt: '',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-      }
-    }
-
-    // 3. Fallback: If user explicitly selected a petugas name, find best task
+    // Tasks must be real Firestore documents. A synthetic task cannot be
+    // updated and leaves the courier permanently stuck at "waiting".
+    // Fallback: If user explicitly selected a petugas name, find best task.
     if (selectedPetugasName && tasks.length > 0) {
       const direct = tasks.find((t) => t.petugasName.toLowerCase().includes(tLower) || tLower.includes(t.petugasName.toLowerCase()));
       if (direct) return direct;
@@ -374,13 +348,6 @@ export function MbgDeliveryPage() {
 
   const handleStartHandover = () => {
     if (!activeTask) return;
-    if (!isAllInstitutionsComplete) {
-      showToast({
-        message: `Belum dapat konfirmasi serah terima! Lengkapi foto bukti (3/3) pada seluruh institusi terlebih dahulu (${completedInstitutionsCount}/${activeNonLiburEntries.length} selesai).`,
-        variant: 'error',
-      });
-      return;
-    }
     setCameraMode('handover');
     setActiveTaskId(activeTask.id);
     setShowCamera(true);
@@ -405,15 +372,19 @@ export function MbgDeliveryPage() {
     setShowCamera(true);
   };
 
-  const handlePhotoCapture = async (_file: File) => {
+  const handlePhotoCapture = async (file: File) => {
     if (!activeTaskId) return;
     setShowCamera(false);
 
-    const fakeFileId = `photo_${Date.now()}`;
-
     try {
       if (cameraMode === 'handover') {
-        await setHandoverPhoto(activeTaskId, fakeFileId);
+        const handoverPhoto = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        await setHandoverPhoto(activeTaskId, handoverPhoto);
         showToast({ message: 'Foto serah terima berhasil diunggah', variant: 'success' });
       } else if (cameraMode === 'delivery' && selectedEntryForDeliveryPhoto) {
         const reader = new FileReader();
@@ -450,7 +421,7 @@ export function MbgDeliveryPage() {
             );
 
             await addDeliveryPhoto(activeTaskId, activeTask?.deliveryPhotos || [], {
-              fileId: fakeFileId,
+              fileId: compressedUrl,
               description: `Bukti ${targetProofType} untuk ${selectedEntryForDeliveryPhoto.institutionName}`,
               institutionName: selectedEntryForDeliveryPhoto.institutionName,
             });
@@ -467,7 +438,7 @@ export function MbgDeliveryPage() {
         reader.onerror = () => {
           showToast({ message: 'Gagal membaca file foto dari kamera', variant: 'error' });
         };
-        reader.readAsDataURL(_file);
+        reader.readAsDataURL(file);
       }
     } catch {
       showToast({ message: 'Gagal memproses foto', variant: 'error' });
@@ -659,7 +630,7 @@ export function MbgDeliveryPage() {
       // Automatically update task status to 'delivered' and mark completed
       if (activeTask && !activeTask.id.startsWith('virt-task-')) {
         try {
-          await updateTaskStatus(activeTask.id, 'delivered');
+            await completeTaskAndBatch(activeTask);
         } catch (taskErr) {
           console.warn('Failed to update task status to delivered:', taskErr);
         }
@@ -697,7 +668,7 @@ export function MbgDeliveryPage() {
       });
 
       const batch = batches.find((b) => b.id === selectedBatchId);
-      const batchTanggal = batch?.tanggal || new Date().toISOString().split('T')[0];
+      const batchTanggal = batch?.tanggal || getJakartaDate();
 
       Object.entries(petugasGroups).forEach(([pName, pEntries]) => {
         const pKey = pName.toLowerCase().trim();
@@ -1187,17 +1158,8 @@ export function MbgDeliveryPage() {
                     <div className="flex flex-col items-end gap-1">
                       <button
                         onClick={handleStartHandover}
-                        disabled={!isAllInstitutionsComplete}
-                        className={`flex-1 md:flex-initial flex items-center justify-center gap-2 font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-sm ${
-                          isAllInstitutionsComplete
-                            ? 'bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] cursor-pointer active:scale-95'
-                            : 'bg-gray-200 text-gray-400 border border-gray-300 cursor-not-allowed'
-                        }`}
-                        title={
-                          isAllInstitutionsComplete
-                            ? 'Klik untuk konfirmasi serah terima'
-                            : `Lengkapi foto bukti (3/3) pada seluruh institusi terlebih dahulu (${completedInstitutionsCount}/${activeNonLiburEntries.length} selesai)`
-                        }
+                        className="flex-1 md:flex-initial flex items-center justify-center gap-2 font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-sm bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] cursor-pointer active:scale-95"
+                        title="Klik untuk konfirmasi serah terima dari dapur sebelum berangkat"
                       >
                         🤝 Konfirmasi Serah Terima
                       </button>

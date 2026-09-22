@@ -11,7 +11,6 @@ import {
   query,
   where,
   orderBy,
-  limit,
   serverTimestamp,
   getDocs,
   Timestamp,
@@ -303,7 +302,7 @@ export function subscribeAllJobDesks(
   onError?: (error: Error) => void,
   division?: JobDeskDivision
 ): () => void {
-  const q = query(collection(db, COLLECTION), limit(120));
+  const q = query(collection(db, COLLECTION), orderBy("tanggal", "desc"));
 
   return subscriptionManager.subscribe(
     q,
@@ -361,45 +360,14 @@ export function subscribeJobDesksByOrder(
 export function subscribeJobDesksByRole(
   role: JobDeskAssignableRole,
   onData: (jobDesks: CateringJobDesk[]) => void,
-  onError?: (error: Error) => void,
-  userEmail?: string
+  onError?: (error: Error) => void
 ): () => void {
-  const emailLower = (userEmail || "").toLowerCase();
-  const isJoko =
-    emailLower === "timproduksi@alumana.id" ||
-    emailLower.includes("timproduksi") ||
-    emailLower.includes("tim_produksi") ||
-    emailLower.includes("produksimbg2") ||
-    emailLower.includes("produksi_mbg2") ||
-    emailLower.includes("joko") ||
-    role === "produksi_1" ||
-    role === "MBG2";
+  const isJoko = role === "produksi_1" || role === "MBG2";
+  const isShifa = role === "produksi_2";
+  const isDwi = role === "distribusi_1";
+  const isDualDistribusi = role === "distribusi_2" || role === "distribusi_mbg_2";
 
-  const isShifa =
-    !isJoko &&
-    (emailLower.includes("produksimbg") ||
-      emailLower.includes("produksi_mbg") ||
-      emailLower.includes("shifa") ||
-      emailLower.includes("hashifah") ||
-      role === "produksi_2");
-
-  const isDwi =
-    emailLower.includes("distribusimbg") ||
-    emailLower.includes("distribusi_mbg") ||
-    emailLower.includes("dwi") ||
-    role === "distribusi_1";
-
-  const isDualDistribusi =
-    !isJoko &&
-    !isShifa &&
-    !isDwi &&
-    (role === "distribusi_2" ||
-      role === "distribusi_mbg_2" ||
-      emailLower === "dstribusi2@alumana.id" ||
-      emailLower.includes("distribusi2") ||
-      emailLower.startsWith("wandi"));
-
-  const q = query(collection(db, COLLECTION), limit(100));
+  const q = query(collection(db, COLLECTION), orderBy("tanggal", "desc"));
 
   return subscriptionManager.subscribe(
     q,

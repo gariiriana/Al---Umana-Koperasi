@@ -161,22 +161,11 @@ function ShelledRoute({
     return <LoadingScreen message="Memuat profil..." />;
   }
 
-  const isWhitelistedEmail =
-    (user?.email && (
-      user.email.toLowerCase() === "dstribusi2@alumana.id" ||
-      user.email.toLowerCase() === "timproduksi@alumana.id"
-    )) ||
-    (profile?.email && (
-      profile.email.toLowerCase() === "dstribusi2@alumana.id" ||
-      profile.email.toLowerCase() === "timproduksi@alumana.id"
-    ));
-
   // Redirect to respective default landing page if role is not allowed
   if (
     profile &&
     profile.role !== "admin" &&
-    !allowedRoles.includes(profile.role) &&
-    !isWhitelistedEmail
+    !allowedRoles.includes(profile.role)
   ) {
     // Admin-only routes (those that allow ONLY the admin role) show the
     // "Akses Ditolak" screen for non-admins and redirect to the storefront
@@ -737,7 +726,7 @@ function RoutesTree() {
         path="/mbg/orders"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Pesanan MBG" allowedRoles={["admin_mbg", "produksi_mbg", "purchasing_mbg", "distribusi_mbg", "kurir_mbg", "sub_purchasing_mbg"]}>
+            <ShelledRoute pageTitle="Pesanan MBG" allowedRoles={["admin_mbg", "produksi_mbg", "dokumentasi_produksiMBG", "purchasing_mbg", "distribusi_mbg", "kurir_mbg", "sub_purchasing_mbg"]}>
               <MbgOrdersPage />
             </ShelledRoute>
           </Protected>
@@ -777,7 +766,7 @@ function RoutesTree() {
         path="/mbg/production"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Produksi MBG" allowedRoles={["produksi_mbg", "admin_mbg"]}>
+            <ShelledRoute pageTitle="Produksi MBG" allowedRoles={["produksi_mbg", "admin_mbg", "dokumentasi_produksiMBG", "purchasing_mbg", "sub_purchasing_mbg", "MBG2", "mbg2", "produksi_mbg_2"]}>
               <MbgProductionPage />
             </ShelledRoute>
           </Protected>
@@ -795,7 +784,7 @@ function RoutesTree() {
         path="/mbg/distribution"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Distribusi MBG" allowedRoles={["distribusi_mbg", "admin_mbg", "produksi_mbg"]}>
+            <ShelledRoute pageTitle="Distribusi MBG" allowedRoles={["distribusi_mbg", "distribusi_mbg_2", "admin_mbg", "produksi_mbg"]}>
               <MbgDistributionPage />
             </ShelledRoute>
           </Protected>
@@ -805,7 +794,7 @@ function RoutesTree() {
         path="/mbg/delivery"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Kurir MBG" allowedRoles={["kurir_mbg", "distribusi_mbg", "admin_mbg", "produksi_mbg"]}>
+            <ShelledRoute pageTitle="Kurir MBG" allowedRoles={["kurir_mbg", "distribusi_mbg", "distribusi_mbg_2", "admin_mbg", "produksi_mbg"]}>
               <MbgDeliveryPage />
             </ShelledRoute>
           </Protected>
