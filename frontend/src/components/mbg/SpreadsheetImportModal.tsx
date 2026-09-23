@@ -1,7 +1,7 @@
 // ============================================================================
 // MBG Spreadsheet Import Modal
-// Allows importing Beneficiary (Penerima Manfaat) data from a Google Sheets URL
-// or local Excel file directly into the active batch.
+// Lets Admin MBG inspect Beneficiary (Penerima Manfaat) data from a Google
+// Sheets URL or local Excel file before applying it as a draft to the batch.
 // ============================================================================
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -23,12 +23,12 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import type { MbgPmBatch, MbgPmEntry, MbgDayMenu } from '@/types/mbg';
-import { getMenuForDate } from '@/services/mbgAdminService';
 import {
   fetchGoogleSpreadsheetWorkbook,
   parseFileToWorkbook,
   getVisibleSheetNames,
   parsePmRowsToEntries,
+  detectPreferredSheet,
 } from '@/utils/mbgSpreadsheetParser';
 
 interface SpreadsheetImportModalProps {
@@ -48,9 +48,9 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
   userUid,
   onApplyEntries,
 }) => {
-  const [urlInput, setUrlInput] = useState(
-    'https://docs.google.com/spreadsheets/d/1uvsEHj7p11l0tZZqWB_t9khlzUpNZM5okGyVswH4_8U/edit?usp=sharing'
-  );
+  const [urlInput, setUrlInput] = useState(() => {
+    return localStorage.getItem('mbg_last_spreadsheet_url') || '';
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
@@ -89,26 +89,15 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
         throw new Error('Tidak ditemukan lembar kerja (sheet) yang aktif di dalam spreadsheet ini.');
       }
 
+      // Save valid URL to localStorage
+      try {
+        localStorage.setItem('mbg_last_spreadsheet_url', urlInput.trim());
+      } catch {
+        // ignore
+      }
+
       // Smart sheet auto-detection:
-      // 1. Prefer sheet with 'penerima manfaat', 'rekap', 'data pm'
-      // 2. Or matching batch day (e.g. 'Senin')
-      const batchDate = selectedBatch?.tanggal || new Date().toISOString().split('T')[0];
-      const dayName = getMenuForDate(batchDate, weeklySchedule).dayMenu.dayName.toLowerCase();
-
-      const preferredSheet =
-        sheets.find((name) => {
-          const l = name.toLowerCase();
-          return (
-            l.includes('penerima manfaat') ||
-            l.includes('rekapitulasi') ||
-            l.includes('rekap pm') ||
-            l.includes('data pm') ||
-            l.includes('sasaran')
-          );
-        }) ||
-        sheets.find((name) => dayName && name.toLowerCase().includes(dayName)) ||
-        sheets[0];
-
+      const preferredSheet = detectPreferredSheet(sheets, selectedBatch?.tanggal, weeklySchedule);
       setSelectedSheet(preferredSheet);
     } catch (err: unknown) {
       console.error('Fetch spreadsheet error:', err);
@@ -141,22 +130,7 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
         throw new Error('File Excel tidak memiliki lembar kerja (sheet) yang valid.');
       }
 
-      const batchDate = selectedBatch?.tanggal || new Date().toISOString().split('T')[0];
-      const dayName = getMenuForDate(batchDate, weeklySchedule).dayMenu.dayName.toLowerCase();
-
-      const preferredSheet =
-        sheets.find((name) => {
-          const l = name.toLowerCase();
-          return (
-            l.includes('penerima manfaat') ||
-            l.includes('rekapitulasi') ||
-            l.includes('rekap pm') ||
-            l.includes('data pm')
-          );
-        }) ||
-        sheets.find((name) => dayName && name.toLowerCase().includes(dayName)) ||
-        sheets[0];
-
+      const preferredSheet = detectPreferredSheet(sheets, selectedBatch?.tanggal, weeklySchedule);
       setSelectedSheet(preferredSheet);
     } catch (err: unknown) {
       console.error('File upload error:', err);
@@ -263,13 +237,13 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-extrabold text-white">Import Link Spreadsheet Google Sheets</h3>
+                <h3 className="text-base font-extrabold text-white">Import Link / File Excel PM</h3>
                 <span className="px-2 py-0.5 text-[10px] font-black uppercase tracking-wider bg-white/20 text-white rounded-full">
                   Admin MBG
                 </span>
               </div>
               <p className="text-xs text-emerald-100 mt-0.5">
-                Sinkronisasi data Penerima Manfaat langsung ke Batch{' '}
+                Pilih sheet, periksa preview, lalu terapkan sebagai draft ke Batch{' '}
                 <span className="font-extrabold text-white underline decoration-emerald-300">
                   {selectedBatch?.tanggal || 'Hari Ini'}
                 </span>
@@ -321,7 +295,7 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
               <span>💡 Format: Google Sheets public view URL atau export xlsx</span>
               <label className="text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 cursor-pointer">
                 <Upload className="h-3 w-3" />
-                <span>Atau upload file .xlsx dari perangkat</span>
+                <span>Atau upload file Excel / CSV dari perangkat</span>
                 <input
                   type="file"
                   accept=".xlsx,.xls,.csv"
@@ -610,10 +584,10 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
 
         {/* Footer */}
         <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
-          <div className="text-[11px] text-slate-500">
+          <div className="text-[11px] text-slate-500 max-w-sm">
             {stats.count > 0 ? (
               <span>
-                Siap mengimpor <strong className="text-emerald-700">{stats.count} lembaga</strong> ({stats.totalPorsi.toLocaleString('id-ID')} porsi)
+                Siap diterapkan ke preview: <strong className="text-emerald-700">{stats.count} lembaga</strong> ({stats.totalPorsi.toLocaleString('id-ID')} porsi). Data tetap DRAFT sampai tombol Submit Data PM ditekan.
               </span>
             ) : (
               <span>Pilih spreadsheet &amp; sheet kerja untuk melanjutkan</span>
@@ -638,12 +612,12 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
               {isApplying ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Memasukkan Data Baru...</span>
+                  <span>Menerapkan ke Preview...</span>
                 </>
               ) : (
                 <>
                   <CheckCircle2 className="h-4 w-4" />
-                  <span>Masukkan Data Baru ({stats.count} Lembaga)</span>
+                  <span>Terapkan ke Preview ({stats.count} Lembaga)</span>
                 </>
               )}
             </button>

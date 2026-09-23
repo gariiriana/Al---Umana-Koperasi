@@ -123,8 +123,36 @@ interface ConfirmModalState {
 const standarPorsi: StandarPorsi[] = [];
 const standarResep: StandarResep[] = [];
 
+function getAutoRekapTotals(entries: MbgPmEntry[]) {
+  return entries.filter((entry) => !entry.isSekolahLibur).reduce(
+    (total, entry) => {
+      const porsiKecilL = entry.qtPorsiKecilL || 0;
+      const porsiKecilP = entry.qtPorsiKecilP || 0;
+      const porsiBesarL = entry.qtPorsiBesarL || 0;
+      const porsiBesarP = entry.qtPorsiBesarP || 0;
+      const bumil = entry.qtBumil || 0;
+      const busui = entry.qtBusui || 0;
+      const guruL = entry.qtGuruL || 0;
+      const guruP = entry.qtGuruP || 0;
+      const tendikL = entry.qtTendikL || 0;
+      const tendikP = entry.qtTendikP || 0;
 
-
+      total.porsiKecilL += porsiKecilL;
+      total.porsiKecilP += porsiKecilP;
+      total.porsiBesarL += porsiBesarL;
+      total.porsiBesarP += porsiBesarP;
+      total.totalL += porsiKecilL + porsiBesarL;
+      total.totalP += porsiKecilP + porsiBesarP + bumil + busui;
+      total.guruL += guruL;
+      total.guruP += guruP;
+      total.tendikL += tendikL;
+      total.tendikP += tendikP;
+      total.jumlah += entry.jumlah || 0;
+      return total;
+    },
+    { porsiKecilL: 0, porsiKecilP: 0, porsiBesarL: 0, porsiBesarP: 0, totalL: 0, totalP: 0, guruL: 0, guruP: 0, tendikL: 0, tendikP: 0, jumlah: 0 }
+  );
+}
 
 export function MbgProductionPage() {
   const { user } = useAuth();
@@ -164,6 +192,7 @@ export function MbgProductionPage() {
   const [availableSheetNames, setAvailableSheetNames] = useState<string[]>([]);
   const [sheetWorkbook, setSheetWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [importTargetOption, setImportTargetOption] = useState<'current_batch' | 'sheet_date'>('current_batch');
+  const [importTargetBatch, setImportTargetBatch] = useState<{ id: string; tanggal: string } | null>(null);
   const [pmImportWeek, setPmImportWeek] = useState<1 | 2 | 3 | 4>(1);
   const [dailyReport, setDailyReport] = useState<MbgProductionDailyReport | null>(null);
   const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
@@ -172,6 +201,7 @@ export function MbgProductionPage() {
   const [showPmSummaryInGizi, setShowPmSummaryInGizi] = useState(true);
   const [isBatchDropdownOpen, setIsBatchDropdownOpen] = useState(false);
   const [batchSearchQuery, setBatchSearchQuery] = useState('');
+  const [pmTableSearch, setPmTableSearch] = useState('');
   const [showRecipeSummary, setShowRecipeSummary] = useState(true);
   const [showAkgMatrix, setShowAkgMatrix] = useState(true);
   const [recipeSearchQuery, setRecipeSearchQuery] = useState('');
@@ -320,8 +350,9 @@ export function MbgProductionPage() {
     const unsub = subscribeBatches(
       (data) => {
         clearTimeout(timer);
-        // Keep DRAFT batches visible so a same-date batch is never created twice.
-        const finalizedBatches = data;
+        // Admin imports are review-only until explicitly submitted. Production
+        // must never receive a draft batch merely because it has entries.
+        const finalizedBatches = data.filter((batch) => batch.status !== 'DRAFT');
         setBatches(finalizedBatches);
 
         if (finalizedBatches.length > 0) {
@@ -399,6 +430,17 @@ export function MbgProductionPage() {
   const selectedBatch = useMemo(() => {
     return batches.find((b) => b.id === selectedBatchId);
   }, [batches, selectedBatchId]);
+
+  // Freeze the active batch when the import dialog opens. This prevents a
+  // realtime batch refresh from redirecting an in-progress import to a
+  // different date.
+  const openSheetsImportModal = () => {
+    setImportTargetBatch(
+      selectedBatch ? { id: selectedBatch.id, tanggal: selectedBatch.tanggal } : null
+    );
+    setImportTargetOption('current_batch');
+    setShowSheetsImportModal(true);
+  };
 
   const archivedBatches = useMemo(() => {
     return batches.filter((b) => b.status !== 'PM_SUBMITTED');
@@ -516,6 +558,27 @@ export function MbgProductionPage() {
   }, [archivedBatches, allEntries, archiveSearchQuery, archiveSearchDate]);
 
 
+
+  // Perhitungan totals format AUTO REKAP (Sekolah, Posyandu, Gabungan)
+  const schoolAutoRekapTotals = useMemo(
+    () => getAutoRekapTotals(entries.filter((entry) => entry.institutionType !== 'posyandu')),
+    [entries]
+  );
+  const posyanduAutoRekapTotals = useMemo(
+    () => getAutoRekapTotals(entries.filter((entry) => entry.institutionType === 'posyandu')),
+    [entries]
+  );
+  const autoRekapTotals = useMemo(() => getAutoRekapTotals(entries), [entries]);
+
+  const filteredPmEntries = useMemo(() => {
+    if (!pmTableSearch.trim()) return entries;
+    const q = pmTableSearch.toLowerCase();
+    return entries.filter(
+      (e) =>
+        (e.institutionName || '').toLowerCase().includes(q) ||
+        (e.assignedPetugasName || '').toLowerCase().includes(q)
+    );
+  }, [entries, pmTableSearch]);
 
   // Group PM entries by petugas (with deduplication by institutionName)
   const groupedEntries = useMemo(() => {
@@ -1610,8 +1673,8 @@ export function MbgProductionPage() {
       }
 
       // Determine target batch
-      let targetBatchId = selectedBatchId;
-      const targetBatchTanggal = selectedBatch?.tanggal || getJakartaDate();
+      let targetBatchId = importTargetBatch?.id || selectedBatchId;
+      const targetBatchTanggal = importTargetBatch?.tanggal || selectedBatch?.tanggal || getJakartaDate();
 
       if (!targetBatchId) {
         const existingBatch = batches.find((b) => b.tanggal === targetBatchTanggal);
@@ -1628,7 +1691,7 @@ export function MbgProductionPage() {
         return;
       }
 
-      await replaceBatchEntries(targetBatchId, pmEntries);
+      await replaceBatchEntries(targetBatchId, pmEntries, { preserveBatchStatus: true });
 
       setSelectedBatchId(targetBatchId);
       setShowSheetsImportModal(false);
@@ -1665,14 +1728,14 @@ export function MbgProductionPage() {
 
       // Determine target batch based on user choice
       let targetBatchTanggal: string;
-      if (importTargetOption === 'current_batch' && selectedBatch?.tanggal) {
-        targetBatchTanggal = selectedBatch.tanggal;
+      if (importTargetOption === 'current_batch' && (importTargetBatch?.tanggal || selectedBatch?.tanggal)) {
+        targetBatchTanggal = importTargetBatch?.tanggal || selectedBatch?.tanggal || getJakartaDate();
       } else {
         targetBatchTanggal = parsedDateFromSheet || selectedBatch?.tanggal || getJakartaDate();
       }
 
-      let targetBatchId = '';
-      const existingBatch = batches.find((b) => b.tanggal === targetBatchTanggal);
+      let targetBatchId = importTargetOption === 'current_batch' ? (importTargetBatch?.id || '') : '';
+      const existingBatch = targetBatchId ? undefined : batches.find((b) => b.tanggal === targetBatchTanggal);
 
       if (existingBatch) {
         targetBatchId = existingBatch.id;
@@ -1762,7 +1825,7 @@ export function MbgProductionPage() {
       // The selected workbook is authoritative for an import. Replace the
       // target batch atomically so no rows from a prior workbook remain.
       if (importedPmEntries.length > 0) {
-        await replaceBatchEntries(targetBatchId, importedPmEntries);
+        await replaceBatchEntries(targetBatchId, importedPmEntries, { preserveBatchStatus: true });
       }
 
       setSelectedBatchId(targetBatchId);
@@ -1841,7 +1904,7 @@ export function MbgProductionPage() {
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => setShowSheetsImportModal(true)}
+            onClick={openSheetsImportModal}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#10B981] hover:bg-[#059669] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap"
             title="Import data Laporan Harian via Google Sheets Link / File Excel"
           >
@@ -2330,7 +2393,7 @@ export function MbgProductionPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowSheetsImportModal(true)}
+                    onClick={openSheetsImportModal}
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                   >
                     <FileUp className="h-4 w-4" />
@@ -2471,76 +2534,227 @@ export function MbgProductionPage() {
                     );
                   })() : (
                     <div className="space-y-4">
-                      <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-3 shadow-xs font-['Hanken_Grotesk']">
-                        <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-2xl w-fit mx-auto shadow-xs border border-emerald-100">
-                          <FileSpreadsheet className="h-8 w-8" />
-                        </div>
-                        <h3 className="text-sm font-black text-slate-900">
-                          Data Laporan Harian Belum Di-import
-                        </h3>
-                        <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                          Batch tanggal <strong>{selectedBatch?.tanggal}</strong> belum memiliki data import Excel / Google Sheets Laporan Harian. Anda dapat meng-import file Excel/Sheets untuk analisis gizi, atau memantau data penerima manfaat di bawah.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => setShowSheetsImportModal(true)}
-                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-sm cursor-pointer"
-                        >
-                          <FileUp className="h-4 w-4 text-white" />
-                          <span>Import Google Sheets / Excel Sekarang</span>
-                        </button>
-                      </div>
-
-                      {/* Display PM data table directly if entries exist */}
-                      {entries.length > 0 && (
-                        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden font-['Hanken_Grotesk']">
-                          <div className="px-4 py-3 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="text-xs font-black uppercase tracking-wider">
-                                Data Penerima Manfaat (Input Admin MBG)
-                              </h4>
-                              <span className="px-2.5 py-0.5 bg-amber-400/20 text-amber-300 border border-amber-400/40 rounded-full text-[11px] font-black">
-                                Batch: {selectedBatch?.tanggal}
-                              </span>
+                      {entries.length > 0 ? (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 shadow-xs font-['Hanken_Grotesk'] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-sm">
+                              <FileSpreadsheet className="h-5 w-5" />
                             </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="px-3 py-1 bg-amber-400 text-slate-950 rounded-xl text-xs font-black shadow-xs">
-                                Total Alokasi: {entries.reduce((s, e) => s + (e.jumlah || 0), 0).toLocaleString('id-ID')} Porsi
-                              </span>
-                              <span className="px-2.5 py-1 bg-slate-800 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold">
-                                {entries.length} Lembaga
-                              </span>
+                            <div>
+                              <h3 className="text-sm font-black text-emerald-950">Data PM dari Admin siap diproduksi</h3>
+                              <p className="text-xs text-emerald-800/80 mt-1 leading-relaxed">
+                                Batch {selectedBatch?.tanggal} sudah diterima dari Admin MBG: {entries.length} lembaga, {entries.reduce((sum, entry) => sum + (entry.jumlah || 0), 0).toLocaleString('id-ID')} porsi. Import Laporan Harian hanya opsional untuk analisis gizi dan bahan baku.
+                              </p>
                             </div>
                           </div>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-xs text-left">
-                              <thead>
-                                <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                                  <th className="px-3 py-2.5 w-10 text-center">No</th>
-                                  <th className="px-4 py-2.5 min-w-[190px]">Nama Institusi / Lembaga</th>
-                                  <th className="px-3 py-2.5 text-center">Siswa / Balita</th>
-                                  <th className="px-3 py-2.5 text-center">Bumil / Busui</th>
-                                  <th className="px-3 py-2.5 text-center">Guru / Kader</th>
-                                  <th className="px-3 py-2.5 text-center font-black">Total Porsi</th>
-                                  <th className="px-3 py-2.5">Petugas Kurir</th>
-                                  <th className="px-3 py-2.5">Jadwal</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {entries.map((e, idx) => (
-                                  <tr key={e.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-3 py-2.5 text-center text-slate-400 font-bold">{idx + 1}</td>
-                                    <td className="px-4 py-2.5 font-bold text-slate-900">{e.institutionName}</td>
-                                    <td className="px-3 py-2.5 text-center text-slate-700">{e.qtSiswaBalita || '-'}</td>
-                                    <td className="px-3 py-2.5 text-center text-slate-700">{e.qtBumilBusui || '-'}</td>
-                                    <td className="px-3 py-2.5 text-center text-slate-700">{e.qtGuruKader || '-'}</td>
-                                    <td className="px-3 py-2.5 text-center font-black text-amber-700">{e.jumlah || 0}</td>
-                                    <td className="px-3 py-2.5 text-slate-600">{e.assignedPetugasName || '-'}</td>
-                                    <td className="px-3 py-2.5 text-slate-500 text-[11px]">{e.jadwalPengantaran || '-'}</td>
+                          <button
+                            type="button"
+                            onClick={openSheetsImportModal}
+                            className="inline-flex shrink-0 items-center gap-2 px-3.5 py-2 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-extrabold transition-all shadow-xs cursor-pointer"
+                          >
+                            <FileUp className="h-4 w-4" />
+                            <span>Tambah Laporan Harian</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-3 shadow-xs font-['Hanken_Grotesk']">
+                          <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-2xl w-fit mx-auto shadow-xs border border-emerald-100">
+                            <FileSpreadsheet className="h-8 w-8" />
+                          </div>
+                          <h3 className="text-sm font-black text-slate-900">Belum ada data PM untuk batch ini</h3>
+                          <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                            Batch tanggal <strong>{selectedBatch?.tanggal}</strong> belum menerima data PM dari Admin MBG. Submit data di Admin MBG terlebih dahulu, lalu batch akan muncul otomatis di sini.
+                          </p>
+                        </div>
+                      )}
+
+                    </div>
+                  )}
+
+                  {/* Display PM data tables (Sekolah & Posyandu) directly if entries exist */}
+                  {entries.length > 0 && (
+                    <div className="space-y-6 pt-2 font-['Hanken_Grotesk']">
+                      {/* Search & Overview Header */}
+                      <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                        <div className="relative max-w-sm flex-1 min-w-[200px]">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                          <input
+                            type="search"
+                            value={pmTableSearch}
+                            onChange={(e) => setPmTableSearch(e.target.value)}
+                            placeholder="Cari sekolah, posyandu, atau kurir..."
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-9 pr-4 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap text-xs font-bold">
+                          <span className="text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl shadow-2xs">
+                            Total: {filteredPmEntries.length} Lembaga
+                          </span>
+                          <span className="text-emerald-900 bg-emerald-100/70 border border-emerald-300 px-3 py-1.5 rounded-xl shadow-2xs font-black">
+                            Total Alokasi: {autoRekapTotals.jumlah.toLocaleString('id-ID')} Porsi
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Split Tables: Sekolah and Posyandu in AUTO REKAP Format */}
+                      {[
+                        {
+                          title: 'DATA PM — FORMAT AUTO REKAP',
+                          list: filteredPmEntries.filter((entry) => entry.institutionType !== 'posyandu'),
+                          isPosyandu: false,
+                        },
+                        {
+                          title: 'DATA POSYANDU',
+                          list: filteredPmEntries.filter((entry) => entry.institutionType === 'posyandu'),
+                          isPosyandu: true,
+                        },
+                      ].map(({ title, list, isPosyandu }) => {
+                        const totals = getAutoRekapTotals(list);
+                        return (
+                          <div key={title} className="mb-6 last:mb-0">
+                            <div className="flex items-center justify-between gap-3 mb-2.5 px-1">
+                              <h3 className="font-extrabold text-slate-800 text-xs sm:text-sm uppercase tracking-wide flex items-center gap-2">
+                                <div className={`w-2.5 h-2.5 rounded-full ${isPosyandu ? 'bg-purple-500' : 'bg-emerald-500'}`}></div>
+                                {title}
+                              </h3>
+                              <span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-lg">
+                                {list.length} {isPosyandu ? 'Posyandu' : 'Sekolah'} • {totals.jumlah.toLocaleString('id-ID')} Porsi
+                              </span>
+                            </div>
+                            <div className="overflow-x-auto border border-slate-300 rounded-xl bg-white shadow-xs">
+                              <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] border-collapse border border-slate-300 text-xs">
+                                <thead>
+                                  <tr className="bg-slate-200 text-[9px] font-extrabold text-slate-800 uppercase tracking-tight text-center border-b border-slate-300">
+                                    <th rowSpan={2} className="px-2 py-1.5 border-r border-slate-300 text-left min-w-[170px]">
+                                      {isPosyandu ? 'POSYANDU' : 'SEKOLAH'}
+                                    </th>
+                                    <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI KECIL</th>
+                                    <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI BESAR</th>
+                                    <th colSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/60 font-black">TOTAL</th>
+                                    <th rowSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/60 font-black">JML</th>
+                                    <th colSpan={2} className="px-1 py-1 border-r border-slate-300">GURU</th>
+                                    <th colSpan={2} className="px-1 py-1 border-r border-slate-300">TENDIK</th>
+                                    <th rowSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/50 font-extrabold">JML</th>
+                                    <th rowSpan={2} className="px-1.5 py-1 border-r border-slate-300 bg-amber-100/80 text-amber-900 font-black text-[9px]">TOTAL KESELURUHAN</th>
+                                    <th rowSpan={2} className="px-2 py-1 border-r border-slate-300 min-w-[110px]">PETUGAS KURIR</th>
+                                    <th rowSpan={2} className="px-2 py-1 min-w-[90px]">JADWAL</th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                  <tr className="bg-slate-100 text-[8.5px] font-bold text-slate-700 uppercase tracking-tight text-center border-b border-slate-300">
+                                    <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                                    <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                                    <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                                    <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                                    <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">L</th>
+                                    <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">P</th>
+                                    <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                                    <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                                    <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                                    <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {list.length === 0 ? (
+                                    <tr>
+                                      <td colSpan={16} className="px-4 py-8 text-center text-xs font-medium text-slate-400 italic">
+                                        Belum ada data {isPosyandu ? 'Posyandu' : 'Sekolah'}.
+                                      </td>
+                                    </tr>
+                                  ) : (
+                                    list.map((entry) => {
+                                      if (entry.isSekolahLibur) {
+                                        return (
+                                          <tr key={entry.id} className="border-b border-red-200 bg-red-50/70 text-xs font-semibold text-red-900">
+                                            <td className="px-2 py-1.5 border-r border-red-200 font-bold">
+                                              {entry.institutionName} <span className="ml-1 text-[9px] text-red-600 font-black uppercase">(LIBUR)</span>
+                                            </td>
+                                            <td colSpan={12} className="px-2 py-1.5 text-center text-red-600 font-bold tracking-wider text-[11px] border-r border-red-200">
+                                              TIDAK ADA PENGIRIMAN (LIBUR)
+                                            </td>
+                                            <td className="px-2 py-1.5 text-center border-r border-red-200 text-slate-500 text-[11px]">{entry.assignedPetugasName || '—'}</td>
+                                            <td className="px-2 py-1.5 text-center text-slate-400 text-[11px]">{entry.jadwalPengantaran || '—'}</td>
+                                          </tr>
+                                        );
+                                      }
+
+                                      const totalL = (entry.qtPorsiKecilL || 0) + (entry.qtPorsiBesarL || 0);
+                                      const totalP = (entry.qtPorsiKecilP || 0) + (entry.qtPorsiBesarP || 0) + (entry.qtBumil || 0) + (entry.qtBusui || 0);
+                                      const totalSiswa = totalL + totalP;
+                                      const totalStaf = (entry.qtGuruL || 0) + (entry.qtGuruP || 0) + (entry.qtTendikL || 0) + (entry.qtTendikP || 0);
+
+                                      return (
+                                        <tr key={entry.id} className="border-b border-slate-200 text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors">
+                                          <td className="min-w-[170px] border-r border-slate-200 px-2 py-1.5">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              <span className="font-bold text-slate-900">{entry.institutionName}</span>
+                                              {entry.classesBreakdown && entry.classesBreakdown.length > 0 && (
+                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                                  {entry.classesBreakdown.length} Kelas
+                                                </span>
+                                              )}
+                                            </div>
+                                          </td>
+                                          <td className="border-r border-slate-200 p-1 text-center">{entry.qtPorsiKecilL || '—'}</td>
+                                          <td className="border-r border-slate-200 p-1 text-center">{entry.qtPorsiKecilP || '—'}</td>
+                                          <td className="border-r border-slate-200 p-1 text-center">{entry.qtPorsiBesarL || '—'}</td>
+                                          <td className="border-r border-slate-200 p-1 text-center">{entry.qtPorsiBesarP || '—'}</td>
+                                          <td className="border-r border-slate-200 bg-slate-50 px-2 py-1 text-center font-bold text-slate-700">{totalL || '—'}</td>
+                                          <td className="border-r border-slate-200 bg-slate-50 px-2 py-1 text-center font-bold text-slate-700">{totalP || '—'}</td>
+                                          <td className="border-r border-slate-300 bg-slate-100 px-2 py-1 text-center font-black text-slate-900">{totalSiswa || '—'}</td>
+                                          <td className="border-r border-slate-200 p-1 text-center">{entry.qtGuruL || '—'}</td>
+                                          <td className="border-r border-slate-200 p-1 text-center">{entry.qtGuruP || '—'}</td>
+                                          <td className="border-r border-slate-200 p-1 text-center">{entry.qtTendikL || '—'}</td>
+                                          <td className="border-r border-slate-200 p-1 text-center">{entry.qtTendikP || '—'}</td>
+                                          <td className="border-r border-slate-300 bg-slate-100 px-2 py-1 text-center font-black text-slate-900">{totalStaf || '—'}</td>
+                                          <td className="border-r border-amber-200 bg-amber-50 px-2 py-1 text-center font-black text-amber-900">{entry.jumlah}</td>
+                                          <td className="border-r border-slate-200 px-2 py-1 text-slate-600 font-medium text-[11px] truncate max-w-[130px]" title={entry.assignedPetugasName}>
+                                            {entry.assignedPetugasName || '—'}
+                                          </td>
+                                          <td className="px-2 py-1 text-slate-500 text-[11px] whitespace-nowrap text-center">
+                                            {entry.jadwalPengantaran || '—'}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })
+                                  )}
+                                  {list.length > 0 && (
+                                    <tr className="bg-slate-800 text-white text-xs font-bold border-t border-slate-700 text-center">
+                                      <td className="px-3 py-3 text-left font-black tracking-wide">TOTAL</td>
+                                      <td className="px-1 py-3">{totals.porsiKecilL || '—'}</td>
+                                      <td className="px-1 py-3">{totals.porsiKecilP || '—'}</td>
+                                      <td className="px-1 py-3">{totals.porsiBesarL || '—'}</td>
+                                      <td className="px-1 py-3">{totals.porsiBesarP || '—'}</td>
+                                      <td className="px-1 py-3 bg-slate-700 font-bold">{totals.totalL || '—'}</td>
+                                      <td className="px-1 py-3 bg-slate-700 font-bold">{totals.totalP || '—'}</td>
+                                      <td className="px-1 py-3 bg-slate-600 font-black">{(totals.totalL + totals.totalP) || '—'}</td>
+                                      <td className="px-1 py-3">{totals.guruL || '—'}</td>
+                                      <td className="px-1 py-3">{totals.guruP || '—'}</td>
+                                      <td className="px-1 py-3">{totals.tendikL || '—'}</td>
+                                      <td className="px-1 py-3">{totals.tendikP || '—'}</td>
+                                      <td className="px-1 py-3 bg-slate-700 font-black">{totals.guruL + totals.guruP + totals.tendikL + totals.tendikP || '—'}</td>
+                                      <td className="px-2 py-3 bg-amber-400 text-slate-950 font-black text-sm">{totals.jumlah}</td>
+                                      <td className="px-2 py-3 bg-slate-800" colSpan={2}></td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Grand Total Summary Box */}
+                      {entries.length > 0 && (
+                        <div className="mb-6 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-amber-50 px-5 py-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                          <div>
+                            <p className="text-xs font-black text-emerald-950 uppercase tracking-wide">RINGKASAN TOTAL PENERIMA MANFAAT</p>
+                            <p className="text-[11px] text-emerald-800/90 mt-0.5">
+                              Jumlah keseluruhan porsi Sekolah ({schoolAutoRekapTotals.jumlah.toLocaleString('id-ID')}) dan Posyandu ({posyanduAutoRekapTotals.jumlah.toLocaleString('id-ID')}) dari data Admin MBG.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs font-bold flex-wrap">
+                            <span className="rounded-xl bg-emerald-600 px-4 py-2 text-white font-black shadow-xs">
+                              Total Keseluruhan: {autoRekapTotals.jumlah.toLocaleString('id-ID')} Porsi
+                            </span>
                           </div>
                         </div>
                       )}
@@ -3557,7 +3771,7 @@ export function MbgProductionPage() {
                             onChange={() => setImportTargetOption('current_batch')}
                             className="text-emerald-600 focus:ring-emerald-500"
                           />
-                          <span>Batch Aktif ({selectedBatch?.tanggal || 'Hari Ini'})</span>
+                          <span>Batch Aktif ({importTargetBatch?.tanggal || selectedBatch?.tanggal || 'Hari Ini'})</span>
                         </label>
                         <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
                           <input

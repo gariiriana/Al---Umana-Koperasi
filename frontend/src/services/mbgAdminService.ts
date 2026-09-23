@@ -387,13 +387,15 @@ export async function clearBatchEntries(batchId: string): Promise<void> {
 }
 
 /**
- * Replaces all PM entries for a batch in one Firestore commit.  Importing is
+ * Replaces all PM entries for a batch in one Firestore commit. Importing is
  * therefore all-or-nothing: a failed write cannot leave the batch empty or
- * mixed with records from an older workbook.
+ * mixed with records from an older workbook. An import is always a draft;
+ * only the explicit Admin MBG submit action may advance it to PM_SUBMITTED.
  */
 export async function replaceBatchEntries(
   batchId: string,
-  entries: Omit<MbgPmEntry, 'id'>[]
+  entries: Omit<MbgPmEntry, 'id'>[],
+  options: { preserveBatchStatus?: boolean } = {}
 ): Promise<void> {
   const existingSnapshot = await getDocs(query(
     collection(db, ENTRIES_COLLECTION),
@@ -444,7 +446,9 @@ export async function replaceBatchEntries(
     totalJumlah,
     totalInstitusi: entries.length,
     petugasList: Array.from(petugasSet),
-    status: 'PM_SUBMITTED',
+    // Admin imports are review-only and reopen the batch as DRAFT. Production
+    // imports may enrich an already-submitted batch, so must retain its state.
+    ...(options.preserveBatchStatus ? {} : { status: 'DRAFT' as MbgBatchStatus }),
     updatedAt: now,
   });
   await writes.commit();

@@ -14,7 +14,6 @@ import {
   X,
   AlertTriangle,
   ChefHat,
-  Upload,
   FileSpreadsheet,
   Edit,
   Archive,
@@ -26,7 +25,7 @@ import * as XLSX from 'xlsx';
 import type { MbgPmBatch, MbgPmEntry, MbgInstitutionType, MbgClassBreakdown, MbgDayMenu } from '@/types/mbg';
 import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
 import { SpreadsheetImportModal } from '@/components/mbg/SpreadsheetImportModal';
-import { parsePmRowsToEntries } from '@/utils/mbgSpreadsheetParser';
+import { parsePmRowsToEntries, detectPreferredSheet } from '@/utils/mbgSpreadsheetParser';
 import {
   subscribeBatches,
   subscribeEntries,
@@ -89,6 +88,37 @@ function calcJumlah(entry: Partial<MbgPmEntry>): number {
     (entry.qtSiswaBalita || 0) +
     bumilBusuiSum +
     (entry.qtGuruKader || 0)
+  );
+}
+
+function getAutoRekapTotals(entries: MbgPmEntry[]) {
+  return entries.filter((entry) => !entry.isSekolahLibur).reduce(
+    (total, entry) => {
+      const porsiKecilL = entry.qtPorsiKecilL || 0;
+      const porsiKecilP = entry.qtPorsiKecilP || 0;
+      const porsiBesarL = entry.qtPorsiBesarL || 0;
+      const porsiBesarP = entry.qtPorsiBesarP || 0;
+      const bumil = entry.qtBumil || 0;
+      const busui = entry.qtBusui || 0;
+      const guruL = entry.qtGuruL || 0;
+      const guruP = entry.qtGuruP || 0;
+      const tendikL = entry.qtTendikL || 0;
+      const tendikP = entry.qtTendikP || 0;
+
+      total.porsiKecilL += porsiKecilL;
+      total.porsiKecilP += porsiKecilP;
+      total.porsiBesarL += porsiBesarL;
+      total.porsiBesarP += porsiBesarP;
+      total.totalL += porsiKecilL + porsiBesarL;
+      total.totalP += porsiKecilP + porsiBesarP + bumil + busui;
+      total.guruL += guruL;
+      total.guruP += guruP;
+      total.tendikL += tendikL;
+      total.tendikP += tendikP;
+      total.jumlah += entry.jumlah || 0;
+      return total;
+    },
+    { porsiKecilL: 0, porsiKecilP: 0, porsiBesarL: 0, porsiBesarP: 0, totalL: 0, totalP: 0, guruL: 0, guruP: 0, tendikL: 0, tendikP: 0, jumlah: 0 }
   );
 }
 
@@ -306,6 +336,119 @@ function NewBatchModal({
   );
 }
 
+// ---- Source-compatible Auto Rekap row ----
+// This keeps the website column order identical to the workbook's AUTO REKAP
+// sheet: Porsi Kecil, Porsi Besar, Total, Guru, Tendik, and grand total.
+function AutoRekapEntryRow({
+  entry,
+  onUpdate,
+  onDelete,
+  isLibur,
+  onConfirmAction,
+}: {
+  entry: MbgPmEntry;
+  onUpdate: (id: string, updates: Partial<MbgPmEntry>) => void;
+  onDelete: (id: string) => void;
+  isLibur: boolean;
+  onConfirmAction: (config: {
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    variant?: 'danger' | 'warning' | 'info';
+  }) => void;
+}) {
+  const isPosyandu = entry.institutionType === 'posyandu';
+  const nameLower = entry.institutionName.toLowerCase();
+  const isBumil = isPosyandu && nameLower.includes('bumil');
+  const isBusui = isPosyandu && nameLower.includes('busui');
+
+  const totalL = (entry.qtPorsiKecilL || 0) + (entry.qtPorsiBesarL || 0);
+  const totalP = (entry.qtPorsiKecilP || 0) + (entry.qtPorsiBesarP || 0) + (entry.qtBumil || 0) + (entry.qtBusui || 0);
+  const totalSiswa = totalL + totalP;
+  const totalStaf = (entry.qtGuruL || 0) + (entry.qtGuruP || 0) + (entry.qtTendikL || 0) + (entry.qtTendikP || 0);
+
+  const updateNumber = (field: keyof MbgPmEntry, value: number) => {
+    const next = { ...entry, [field]: value } as MbgPmEntry;
+    const nextName = next.institutionName.toLowerCase();
+    const nextIsPosyandu = next.institutionType === 'posyandu';
+    const nextIsBumil = nextIsPosyandu && nextName.includes('bumil');
+    const nextIsBusui = nextIsPosyandu && nextName.includes('busui');
+    const nextBalita = (next.qtPorsiKecilL || 0) + (next.qtPorsiKecilP || 0);
+    const nextBumil = next.qtBumil || 0;
+    const nextBusui = next.qtBusui || 0;
+    const nextSiswaL = (next.qtPorsiKecilL || 0) + (next.qtPorsiBesarL || 0);
+    const nextSiswaP = (next.qtPorsiKecilP || 0) + (next.qtPorsiBesarP || 0) + nextBumil + nextBusui;
+    const nextStaf = (next.qtGuruL || 0) + (next.qtGuruP || 0) + (next.qtTendikL || 0) + (next.qtTendikP || 0);
+
+    onUpdate(entry.id, {
+      [field]: value,
+      qtSiswaBalita: nextIsPosyandu ? (nextIsBumil || nextIsBusui ? 0 : nextBalita) : (next.qtPorsiKecilL || 0) + (next.qtPorsiKecilP || 0) + (next.qtPorsiBesarL || 0) + (next.qtPorsiBesarP || 0),
+      qtBumilBusui: nextBumil + nextBusui,
+      qtGuruKader: nextStaf,
+      qtPorsiBalita: nextIsPosyandu ? nextBalita : 0,
+      qtPorsiKecil: nextIsPosyandu ? 0 : (next.qtPorsiKecilL || 0) + (next.qtPorsiKecilP || 0),
+      qtPorsiBesar: nextIsPosyandu ? 0 : (next.qtPorsiBesarL || 0) + (next.qtPorsiBesarP || 0),
+      qtPorsiBumilBusui: nextBumil + nextBusui,
+      jumlah: nextSiswaL + nextSiswaP + nextStaf,
+    });
+  };
+
+  if (isLibur) {
+    return (
+      <tr className="bg-red-600 text-white text-xs font-bold text-center">
+        <td className="px-3 py-2 text-left">{entry.institutionName || 'Institusi'} (LIBUR)</td>
+        <td colSpan={13}>TIDAK ADA PENGIRIMAN</td>
+        <td className="px-2 py-2">
+          <button type="button" onClick={() => onUpdate(entry.id, { isSekolahLibur: false })} className="rounded bg-white px-2 py-1 text-[10px] text-red-700">Aktifkan</button>
+        </td>
+      </tr>
+    );
+  }
+
+  const inputClass = 'w-10 rounded border border-slate-300 bg-white px-1 py-1 text-center text-xs font-bold text-slate-900 focus:ring-1 focus:ring-emerald-500';
+  const numberInput = (field: keyof MbgPmEntry, value: number, disabled = false) => (
+    <input
+      type="number"
+      min={0}
+      disabled={disabled}
+      value={value || ''}
+      onChange={(event) => updateNumber(field, Number.parseInt(event.target.value, 10) || 0)}
+      className={`${inputClass} ${disabled ? 'cursor-not-allowed border-transparent bg-transparent text-slate-300' : ''}`}
+    />
+  );
+
+  return (
+    <tr className="border-b border-slate-200 text-xs font-semibold text-slate-800 hover:bg-slate-50">
+      <td className="min-w-[170px] border-r border-slate-200 px-2 py-1.5">
+        <input
+          type="text"
+          value={entry.institutionName}
+          onChange={(event) => onUpdate(entry.id, { institutionName: event.target.value })}
+          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs font-bold"
+        />
+      </td>
+      <td className="border-r border-slate-200 p-1 text-center">{numberInput('qtPorsiKecilL', entry.qtPorsiKecilL || 0, isBumil || isBusui)}</td>
+      <td className="border-r border-slate-200 p-1 text-center">{numberInput('qtPorsiKecilP', entry.qtPorsiKecilP || 0, isBumil || isBusui)}</td>
+      <td className="border-r border-slate-200 p-1 text-center">{numberInput('qtPorsiBesarL', entry.qtPorsiBesarL || 0, isPosyandu)}</td>
+      <td className="border-r border-slate-200 p-1 text-center">{numberInput('qtPorsiBesarP', entry.qtPorsiBesarP || 0, isPosyandu)}</td>
+      <td className="border-r border-slate-200 bg-slate-50 px-2 py-1 text-center">{totalL || '—'}</td>
+      <td className="border-r border-slate-200 bg-slate-50 px-2 py-1 text-center">{totalP || '—'}</td>
+      <td className="border-r border-slate-300 bg-slate-100 px-2 py-1 text-center font-extrabold">{totalSiswa}</td>
+      <td className="border-r border-slate-200 p-1 text-center">{numberInput('qtGuruL', entry.qtGuruL || 0)}</td>
+      <td className="border-r border-slate-200 p-1 text-center">{numberInput('qtGuruP', entry.qtGuruP || 0)}</td>
+      <td className="border-r border-slate-200 p-1 text-center">{numberInput('qtTendikL', entry.qtTendikL || 0)}</td>
+      <td className="border-r border-slate-200 p-1 text-center">{numberInput('qtTendikP', entry.qtTendikP || 0)}</td>
+      <td className="border-r border-slate-300 bg-slate-100 px-2 py-1 text-center font-extrabold">{totalStaf}</td>
+      <td className="border-r border-amber-200 bg-amber-50 px-2 py-1 text-center font-black text-amber-900">{entry.jumlah}</td>
+      <td className="px-1 py-1 text-center">
+        <button type="button" onClick={() => onConfirmAction({ title: 'Hapus Institusi', message: `Hapus ${entry.institutionName || 'institusi'} dari rekap?`, onConfirm: () => onDelete(entry.id), variant: 'danger' })} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Hapus institusi">
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
 // ---- PM Entry Row ----
 function PmEntryRow({
   entry,
@@ -314,6 +457,7 @@ function PmEntryRow({
   isLibur,
   onManageClasses,
   onConfirmAction,
+  sourceLayout = false,
 }: {
   entry: MbgPmEntry;
   onUpdate: (id: string, updates: Partial<MbgPmEntry>) => void;
@@ -326,7 +470,20 @@ function PmEntryRow({
     onConfirm: () => void;
     variant?: 'danger' | 'warning' | 'info';
   }) => void;
+  sourceLayout?: boolean;
 }) {
+  if (sourceLayout) {
+    return (
+      <AutoRekapEntryRow
+        entry={entry}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isLibur={isLibur}
+        onConfirmAction={onConfirmAction}
+      />
+    );
+  }
+
   const isPosyandu = entry.institutionType === 'posyandu';
   const hasClasses = entry.classesBreakdown && entry.classesBreakdown.length > 0;
 
@@ -1014,17 +1171,8 @@ export function MbgAdminPage() {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
           
-          // Smart sheet detection: prioritas sheet Penerima Manfaat / Rekapitulasi / Data PM
-          const pmSheetName = workbook.SheetNames.find((name) => {
-            const l = name.toLowerCase();
-            return (
-              l.includes('penerima manfaat') ||
-              l.includes('rekapitulasi') ||
-              l.includes('rekap pm') ||
-              l.includes('data pm') ||
-              l.includes('sasaran')
-            );
-          }) || workbook.SheetNames[0];
+          // Smart sheet detection: prioritas sheet sesuai tanggal batch / rekap / data pm
+          const pmSheetName = detectPreferredSheet(workbook.SheetNames, selectedBatch?.tanggal, weeklySchedule);
 
           const worksheet = workbook.Sheets[pmSheetName];
           rows = XLSX.utils.sheet_to_json<Array<string | number | undefined | null>>(worksheet, { header: 1 });
@@ -1454,6 +1602,25 @@ export function MbgAdminPage() {
     return { ...combined, sekolah, posyandu };
   }, [entries]);
 
+  const autoRekapTotals = useMemo(() => getAutoRekapTotals(entries), [entries]);
+  const schoolAutoRekapTotals = useMemo(
+    () => getAutoRekapTotals(entries.filter((entry) => entry.institutionType !== 'posyandu')),
+    [entries]
+  );
+  const posyanduAutoRekapTotals = useMemo(
+    () => getAutoRekapTotals(entries.filter((entry) => entry.institutionType === 'posyandu')),
+    [entries]
+  );
+  const autoRekapTableTotals = useMemo(() => ({
+    ...grandTotals,
+    ...autoRekapTotals,
+    totalSiswaL: autoRekapTotals.totalL,
+    totalSiswaP: autoRekapTotals.totalP,
+    totalSiswaJml: autoRekapTotals.totalL + autoRekapTotals.totalP,
+    totalStafKader: autoRekapTotals.guruL + autoRekapTotals.guruP + autoRekapTotals.tendikL + autoRekapTotals.tendikP,
+    totalKeseluruhan: autoRekapTotals.jumlah,
+  }), [grandTotals, autoRekapTotals]);
+
   const handleAutoFixPosyanduEntries = async () => {
     if (!selectedBatchId) return;
     try {
@@ -1671,14 +1838,14 @@ export function MbgAdminPage() {
 
     setConfirmState({
       title: 'Submit Data PM',
-      message: `Apakah Anda yakin ingin men-submit seluruh data PM untuk tanggal ${selectedBatch.tanggal}? Setelah disubmit, data akan diteruskan ke departemen Purchasing dan status batch menjadi PM_SUBMITTED.`,
+      message: `Apakah Anda yakin ingin men-submit seluruh data PM untuk tanggal ${selectedBatch.tanggal}? Setelah disubmit, data akan diteruskan ke Produksi/Purchasing dan muncul di Arsip PM.`,
       variant: 'warning',
       onConfirm: async () => {
         setSaving(true);
         try {
           await recalculateBatchTotals(selectedBatchId);
           await updateBatchStatus(selectedBatchId, 'PM_SUBMITTED');
-          showToast({ message: 'Data PM berhasil disubmit!', variant: 'success' });
+          showToast({ message: 'Data PM berhasil disubmit ke Produksi dan Arsip PM!', variant: 'success' });
         } catch (err) {
           console.error(err);
           showToast({ message: 'Gagal submit data', variant: 'error' });
@@ -1912,22 +2079,11 @@ export function MbgAdminPage() {
                 type="button"
                 onClick={() => setShowSpreadsheetModal(true)}
                 disabled={!selectedBatchId}
-                title="Import data PM langsung dari link Google Spreadsheet"
+                title="Pilih link Google Sheets atau file Excel/CSV, lalu periksa preview sebelum menerapkan data"
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold hover:bg-emerald-100 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs whitespace-nowrap"
               >
                 <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-                Import Spreadsheet
-              </button>
-
-              <button
-                type="button"
-                onClick={() => csvFileInputRef.current?.click()}
-                disabled={!selectedBatchId}
-                title="Import data PM langsung dari file Excel (.xlsx, .xls) atau CSV"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold hover:bg-blue-100 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs whitespace-nowrap"
-              >
-                <Upload className="h-3.5 w-3.5 text-blue-600" />
-                Import Excel / CSV
+                Import Link / Excel
               </button>
 
               {/* Submit / Reopen Button in Top Action Bar */}
@@ -2123,60 +2279,43 @@ export function MbgAdminPage() {
                 <>
                   {[
                     {
-                      title: 'DATA SEKOLAH',
-                      list: filteredEntries.filter((e) => e.institutionType !== 'posyandu'),
-                      totals: grandTotals.sekolah,
-                      isPosyandu: false,
+                      title: 'DATA PM — FORMAT AUTO REKAP',
+                      list: filteredEntries.filter((entry) => entry.institutionType !== 'posyandu'),
+                      totals: { ...autoRekapTableTotals, ...schoolAutoRekapTotals },
                     },
                     {
                       title: 'DATA POSYANDU',
-                      list: filteredEntries.filter((e) => e.institutionType === 'posyandu'),
-                      totals: grandTotals.posyandu,
-                      isPosyandu: true,
+                      list: filteredEntries.filter((entry) => entry.institutionType === 'posyandu'),
+                      totals: { ...autoRekapTableTotals, ...posyanduAutoRekapTotals },
                     },
-                  ].map(({ title, list, totals, isPosyandu }) => (
+                  ].map(({ title, list, totals }) => (
                     <div key={title} className="mb-8 last:mb-0">
                       <h3 className="font-bold text-slate-800 text-sm mb-3 uppercase tracking-wide px-1 flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${isPosyandu ? 'bg-purple-500' : 'bg-amber-400'}`}></div>
+                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
                         {title}
                       </h3>
                       <div className="overflow-x-auto border border-slate-300 rounded-xl bg-white shadow-xs">
                         <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] border-collapse border border-slate-300">
                           <thead>
                             <tr className="bg-slate-200 text-[9px] font-extrabold text-slate-800 uppercase tracking-tight text-center border-b border-slate-300">
-                              <th rowSpan={2} className="px-2 py-1.5 border-r border-slate-300 text-left min-w-[140px] max-w-[170px]">SEKOLAH / POSYANDU</th>
-                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI BESAR</th>
+                              <th rowSpan={2} className="px-2 py-1.5 border-r border-slate-300 text-left min-w-[170px]">SEKOLAH</th>
                               <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI KECIL</th>
-                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300 bg-amber-50 text-amber-950">PORSI BALITA</th>
-                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300 bg-purple-50 text-purple-950">PORSI BUMIL & BUSUI</th>
-                              <th colSpan={3} className="px-1 py-1 border-r border-slate-300 bg-slate-300/60 font-black">TOTAL SISWA</th>
+                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI BESAR</th>
+                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/60 font-black">TOTAL</th>
+                              <th rowSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/60 font-black">JML</th>
                               <th colSpan={2} className="px-1 py-1 border-r border-slate-300">GURU</th>
-                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">KADER</th>
                               <th colSpan={2} className="px-1 py-1 border-r border-slate-300">TENDIK</th>
-                              <th rowSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/50 font-extrabold text-[8.5px]">STAF / KADER</th>
+                              <th rowSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/50 font-extrabold">JML</th>
                               <th rowSpan={2} className="px-1.5 py-1 border-r border-slate-300 bg-amber-100/80 text-amber-900 font-black text-[9px]">TOTAL KESELURUHAN</th>
                               <th rowSpan={2} className="px-1 py-1">AKSI</th>
                             </tr>
                             <tr className="bg-slate-100 text-[8.5px] font-bold text-slate-700 uppercase tracking-tight text-center border-b border-slate-300">
-                              {/* Porsi Besar (1) */}
                               <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
                               <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
-                              {/* Porsi Kecil (2) */}
                               <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
                               <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
-                              {/* Porsi Balita (3) */}
-                              <th className="px-1 py-0.5 border-r border-slate-300 w-8 bg-amber-50/70">L</th>
-                              <th className="px-1 py-0.5 border-r border-slate-300 w-8 bg-amber-50/70">P</th>
-                              {/* Porsi Bumil & Busui (4) */}
-                              <th className="px-1 py-0.5 border-r border-slate-300 w-10 bg-purple-50/70 text-[7.5px] text-purple-900">BUMIL</th>
-                              <th className="px-1 py-0.5 border-r border-slate-300 w-10 bg-purple-50/70 text-[7.5px] text-purple-900">BUSUI</th>
-                              {/* Total Siswa */}
                               <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">L</th>
                               <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">P</th>
-                              <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-300/70 font-extrabold text-slate-900 w-9">JML</th>
-                              {/* Officers */}
-                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
-                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
                               <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
                               <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
                               <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
@@ -2186,8 +2325,8 @@ export function MbgAdminPage() {
                           <tbody>
                             {list.length === 0 ? (
                               <tr>
-                                <td colSpan={22} className="px-4 py-8 text-center text-xs font-medium text-slate-400 italic">
-                                  Belum ada data {isPosyandu ? 'Posyandu' : 'Sekolah'}.
+                                <td colSpan={15} className="px-4 py-8 text-center text-xs font-medium text-slate-400 italic">
+                                  Belum ada data PM.
                                 </td>
                               </tr>
                             ) : (
@@ -2200,12 +2339,33 @@ export function MbgAdminPage() {
                                   isLibur={entry.isSekolahLibur}
                                   onManageClasses={() => setSelectedEntryForMenu(entry)}
                                   onConfirmAction={setConfirmState}
+                                  sourceLayout
                                 />
                               ))
                             )}
-                            {/* Total Row */}
                             {list.length > 0 && (
                               <tr className="bg-slate-800 text-white text-xs font-bold border-t border-slate-700 text-center">
+                                <td className="px-3 py-3 text-left font-black tracking-wide">TOTAL</td>
+                                <td className="px-1 py-3">{totals.porsiKecilL || '—'}</td>
+                                <td className="px-1 py-3">{totals.porsiKecilP || '—'}</td>
+                                <td className="px-1 py-3">{totals.porsiBesarL || '—'}</td>
+                                <td className="px-1 py-3">{totals.porsiBesarP || '—'}</td>
+                                <td className="px-1 py-3 bg-slate-700">{totals.totalL || '—'}</td>
+                                <td className="px-1 py-3 bg-slate-700">{totals.totalP || '—'}</td>
+                                <td className="px-1 py-3 bg-slate-600 font-black">{(totals.totalL + totals.totalP) || '—'}</td>
+                                <td className="px-1 py-3">{totals.guruL || '—'}</td>
+                                <td className="px-1 py-3">{totals.guruP || '—'}</td>
+                                <td className="px-1 py-3">{totals.tendikL || '—'}</td>
+                                <td className="px-1 py-3">{totals.tendikP || '—'}</td>
+                                <td className="px-1 py-3 bg-slate-700 font-black">{totals.guruL + totals.guruP + totals.tendikL + totals.tendikP || '—'}</td>
+                                <td className="px-2 py-3 bg-amber-400 text-slate-950 font-black text-sm">{totals.jumlah}</td>
+                                <td className="px-1 py-3"></td>
+                              </tr>
+                            )}
+
+                            {/* Legacy total row retained only for source compatibility during hot reload. */}
+                            {list.length > 0 && (
+                              <tr className="hidden">
                                 {/* 1. SEKOLAH / POSYANDU */}
                                 <td className="px-3 py-3 text-left font-black tracking-wide">TOTAL (AKTIF)</td>
                                 {/* 2. PORSI BESAR L */}
@@ -2257,6 +2417,24 @@ export function MbgAdminPage() {
                       </div>
                     </div>
                   ))}
+
+                  {/* The same grand-total convention used by AUTO REKAP. */}
+                  {entries.length > 0 && (
+                    <div className="mb-8 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-extrabold text-emerald-950">RINGKASAN TOTAL HASIL IMPORT</p>
+                        <p className="text-[11px] text-emerald-800 mt-0.5">
+                          Jumlah ini adalah penjumlahan semua baris pada format AUTO REKAP.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs font-bold flex-wrap">
+                        <span className="rounded-lg bg-emerald-600 px-3 py-1.5 text-white font-black">
+                          Total Keseluruhan: {autoRekapTotals.jumlah.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="mt-4 border border-slate-300 rounded-xl overflow-hidden bg-white shadow-xs">
                     <button
                       onClick={handleAddRow}

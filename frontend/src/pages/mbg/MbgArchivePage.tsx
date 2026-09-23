@@ -484,7 +484,9 @@ export function MbgArchivePage() {
   }, [selectedBatchId]);
 
   const regularBatches = useMemo(() => {
-    return batches.filter((b) => !b.isBackup);
+    // Arsip PM is the post-submit record. Drafts remain in Admin MBG as a
+    // working preview and must not appear here yet.
+    return batches.filter((b) => !b.isBackup && b.status !== 'DRAFT');
   }, [batches]);
 
   const backupBatches = useMemo(() => {
@@ -520,8 +522,9 @@ export function MbgArchivePage() {
   // Filtered batches for folder list view
   const filteredBatches = useMemo(() => {
     return currentTabBatches.filter((b) => {
-      // 1. Date filter
-      if (searchDate && b.tanggal !== searchDate) {
+      // Filter by the day the archive data was entered, not its delivery date.
+      const inputDate = b.createdAt ? b.createdAt.slice(0, 10) : '';
+      if (searchDate && inputDate !== searchDate) {
         return false;
       }
       // 2. School/posyandu/petugas name filter
@@ -973,10 +976,11 @@ export function MbgArchivePage() {
               />
             </div>
             {/* Date Input Filter */}
-            <div className="relative max-w-xs">
+            <div className="relative max-w-xs flex items-center gap-2">
+              <span className="whitespace-nowrap text-[10px] font-bold text-slate-500">Tanggal input</span>
               <input
                 type="date"
-                title="Filter Tanggal"
+                title="Filter berdasarkan tanggal data diinput"
                 value={searchDate}
                 onChange={(e) => setSearchDate(e.target.value)}
                 className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
@@ -1265,10 +1269,13 @@ export function MbgArchivePage() {
                       
                       <div>
                         <h4 className="text-xs font-extrabold text-gray-800 break-all select-none">
-                          {b.tanggal}
+                          Pengiriman: {b.tanggal}
                         </h4>
                         <span className="text-[10px] text-gray-400 font-medium select-none">
                           Dibuat oleh: {b.createdBy === user?.uid ? 'Anda' : 'Admin'}
+                        </span>
+                        <span className="mt-1 block text-[10px] font-bold text-emerald-700 select-none">
+                          Diinput: {b.createdAt ? new Date(b.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'Tidak tercatat'}
                         </span>
                       </div>
 
@@ -1388,6 +1395,9 @@ export function MbgArchivePage() {
                     )
                   )}
                 </div>
+                <span className="mt-1 block text-[10px] font-bold text-emerald-700">
+                  Data diinput: {selectedBatch?.createdAt ? new Date(selectedBatch.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'Tidak tercatat'}
+                </span>
               </div>
             </div>
 

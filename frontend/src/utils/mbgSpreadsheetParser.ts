@@ -202,24 +202,100 @@ export function getVisibleSheetNames(wb: XLSX.WorkBook): string[] {
  * Determine if an institution name indicates a Posyandu / Balita / Bumil / Busui group
  */
 export function detectIsPosyandu(name: string): boolean {
-  const lowerName = name.toLowerCase();
+  const lowerName = name.toLowerCase().trim();
+  if (
+    lowerName.startsWith('sps') ||
+    lowerName.startsWith('tk') ||
+    lowerName.startsWith('paud') ||
+    lowerName.startsWith('sd') ||
+    lowerName.startsWith('min') ||
+    lowerName.startsWith('smp') ||
+    lowerName.startsWith('sma') ||
+    lowerName.startsWith('smk') ||
+    lowerName.startsWith('mts') ||
+    lowerName.startsWith('ma ')
+  ) {
+    return false;
+  }
   return (
     lowerName.includes('posyandu') ||
     lowerName.startsWith('balita') ||
     lowerName.startsWith('bumil') ||
     lowerName.startsWith('busui') ||
-    (lowerName.includes('cempaka') && (lowerName.includes('balita') || lowerName.includes('bumil') || lowerName.includes('busui'))) ||
+    (lowerName.includes('cempaka') && (lowerName.includes('balita') || lowerName.includes('bumil') || lowerName.includes('busui') || /^cempaka\s*\d+/i.test(lowerName) || /^posyandu\s*cempaka/i.test(lowerName))) ||
     lowerName.includes('paket 3b') ||
-    lowerName.includes('paket3b') ||
-    (lowerName.includes('balita') && !lowerName.includes('tk') && !lowerName.includes('sps') && !lowerName.includes('sd') && !lowerName.includes('smp')) ||
-    (lowerName.includes('bumil') && !lowerName.includes('sd') && !lowerName.includes('smp')) ||
-    (lowerName.includes('busui') && !lowerName.includes('sd') && !lowerName.includes('smp'))
+    lowerName.includes('paket3b')
   );
 }
 
 /**
+ * Intelligent sheet auto-detection:
+ * Matches target batch date (e.g. '14 Sep', '20 Juli'), or 'rekap', 'penerima manfaat', 'base data'.
+ */
+export function detectPreferredSheet(
+  sheetNames: string[],
+  targetDate?: string,
+  weeklySchedule?: MbgDayMenu[]
+): string {
+  if (!sheetNames || sheetNames.length === 0) return '';
+
+  const cleanSheets = sheetNames.filter((s) => !s.toLowerCase().includes('siklus') && !s.toLowerCase().includes('akg'));
+  if (cleanSheets.length === 0) return sheetNames[0];
+
+  // 1. Try matching target date (e.g., '2026-09-14' -> day '14', month 'Sep')
+  if (targetDate) {
+    const parts = targetDate.split('-');
+    if (parts.length === 3) {
+      const dayNum = parseInt(parts[2], 10);
+      const monthNum = parseInt(parts[1], 10);
+      const monthNamesIndo = ['jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'sep', 'okt', 'nov', 'des'];
+      const monthFullIndo = ['januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
+      const mShort = monthNamesIndo[monthNum - 1] || '';
+      const mFull = monthFullIndo[monthNum - 1] || '';
+
+      const matchedDateSheet = cleanSheets.find((name) => {
+        const l = name.toLowerCase().trim();
+        // Check "14 Sep" or "14 September" or "09-14" or "14-09"
+        const hasDay = new RegExp(`\\b0?${dayNum}\\b`).test(l);
+        const hasMonth = l.includes(mShort) || l.includes(mFull);
+        return hasDay && hasMonth;
+      });
+      if (matchedDateSheet) return matchedDateSheet;
+    }
+
+    if (weeklySchedule && weeklySchedule.length > 0) {
+      const dayName = getMenuForDate(targetDate, weeklySchedule).dayMenu.dayName.toLowerCase();
+      if (dayName) {
+        const matchedDay = cleanSheets.find((name) => name.toLowerCase().includes(dayName));
+        if (matchedDay) return matchedDay;
+      }
+    }
+  }
+
+  // 2. Prefer sheets named 'auto rekap' or 'rekapitulasi' or 'rekap pm' or 'penerima manfaat' or 'data pm'
+  const rekapSheet = cleanSheets.find((name) => {
+    const l = name.toLowerCase().trim();
+    return (
+      l.includes('auto rekap') ||
+      l.includes('penerima manfaat') ||
+      l.includes('rekapitulasi') ||
+      l.includes('rekap pm') ||
+      l.includes('data pm') ||
+      l.includes('sasaran')
+    );
+  });
+  if (rekapSheet) return rekapSheet;
+
+  // 3. Prefer 'BASE DATA'
+  const baseSheet = cleanSheets.find((name) => name.toLowerCase().includes('base data'));
+  if (baseSheet) return baseSheet;
+
+  return cleanSheets[0];
+}
+
+/**
  * Core dynamic parser: Converts raw rows (2D array) into MbgPmEntry objects
- * Handles header detection, dynamic column mapping, strict summary/total filtering,
+ * Handles multi-row header detection, dynamic column mapping, strict summary/total filtering,
  * and accurate mathematical calculation of portions.
  */
 export function parsePmRowsToEntries(
@@ -235,7 +311,69 @@ export function parsePmRowsToEntries(
     ? getMenuForDate(batchTanggal, weeklySchedule)
     : { menuItems: [], menuKeringanItems: [] };
 
-  // Deteksi posisi header secara dinamis (mencari baris judul kolom)
+  // Special handling for Posyandu sheet format (e.g., sheet '3B')
+  const isSheet3B = (
+    rows[0] &&
+    String(rows[0][0] || '').toLowerCase().includes('posyandu') &&
+    rows[1] &&
+    String(rows[1][1] || '').toLowerCase().includes('balita')
+  );
+
+  if (isSheet3B) {
+    const rawTitle = String(rows[0][0] || '').replace(/\s+/g, ' ').trim();
+    const titleFormatted = rawTitle.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+    const parsed3B: Omit<MbgPmEntry, 'id'>[] = [];
+    for (let r = 3; r < rows.length; r++) {
+      const row = rows[r] || [];
+      const col0 = String(row[0] || '').trim();
+      if (!col0) continue;
+      if (col0.toUpperCase().includes('TOTAL') || col0.toUpperCase().includes('JUMLAH')) break;
+
+      const instName = !isNaN(Number(col0)) ? `${titleFormatted} ${col0}` : col0;
+      const balitaTotal = parseCellToNumber(row[1]);
+      const balitaL = parseCellToNumber(row[2]);
+      const balitaP = parseCellToNumber(row[3]);
+      const pobiaBalita = parseCellToNumber(row[4]);
+      const pobiaBumil = parseCellToNumber(row[5]);
+      const bumil = parseCellToNumber(row[6]);
+      const busui = parseCellToNumber(row[7]);
+      const kader = parseCellToNumber(row[8]);
+      const jumlah = parseCellToNumber(row[9]) || (balitaTotal + bumil + busui + kader);
+
+      parsed3B.push({
+        batchId,
+        institutionName: instName,
+        institutionType: 'posyandu',
+        qtSiswaBalita: balitaTotal,
+        qtBumilBusui: bumil + busui,
+        qtBumil: bumil !== undefined ? bumil : 0,
+        qtBusui: busui !== undefined ? busui : 0,
+        qtGuruKader: kader,
+        qtPobiaNasi: pobiaBalita + pobiaBumil,
+        qtPorsiBalita: balitaTotal,
+        qtPorsiKecil: balitaTotal,
+        qtPorsiBesar: kader,
+        qtPorsiBumilBusui: bumil + busui,
+        qtPorsiKecilL: balitaL || undefined,
+        qtPorsiKecilP: balitaP || undefined,
+        jumlah,
+        jadwalPengantaran: '06.00-08.30',
+        assignedPetugasId: '',
+        assignedPetugasName: '',
+        isSekolahLibur: jumlah === 0,
+        sortOrder: parsed3B.length,
+        notes: '',
+        menuItems: [...menuItems],
+        menuKeringanItems: [...menuKeringanItems],
+        createdBy: userUid || 'system',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    return parsed3B;
+  }
+
+  // Deteksi posisi header secara dinamis (mencari baris judul kolom hingga baris 60)
   let nameColIdx = -1;
   let porsiBesarColIdx = -1;
   let porsiKecilColIdx = -1;
@@ -243,43 +381,68 @@ export function parsePmRowsToEntries(
   let tendikColIdx = -1;
   let muridColIdx = -1;
   let totalColIdx = -1;
-  let startRow = 0;
+  let headerEndRow = -1;
 
-  // A daily report frequently has titles, dates, and recap rows above its
-  // table. Limiting detection to 10 rows made those sheets use the wrong
-  // column as the institution name.
   for (let r = 0; r < Math.min(rows.length, 60); r++) {
     const row = rows[r] || [];
     for (let c = 0; c < row.length; c++) {
       const strVal = String(row[c] || '').toLowerCase().replace(/\s+/g, ' ').trim();
-      if ([
-        'sekolah', 'nama sekolah', 'lembaga', 'sasaran', 'institusi',
-        'nama lembaga', 'nama instansi', 'penerima manfaat', 'nama penerima manfaat',
-      ].includes(strVal)) {
+      if (
+        ['sekolah', 'nama sekolah', 'lembaga', 'sasaran', 'institusi', 'nama lembaga', 'nama instansi', 'penerima manfaat', 'nama penerima manfaat'].includes(strVal) &&
+        nameColIdx === -1
+      ) {
         nameColIdx = c;
-        startRow = r + 1;
+        if (r > headerEndRow) headerEndRow = r;
       }
-      if (strVal.includes('porsi besar')) {
-        porsiBesarColIdx = c;
-      }
-      if (strVal.includes('porsi kecil')) {
+      if (strVal.includes('porsi kecil') && porsiKecilColIdx === -1) {
         porsiKecilColIdx = c;
+        if (r > headerEndRow) headerEndRow = r;
       }
-      if (strVal.startsWith('guru') || strVal.includes('pic')) {
+      if (strVal.includes('porsi besar') && porsiBesarColIdx === -1) {
+        porsiBesarColIdx = c;
+        if (r > headerEndRow) headerEndRow = r;
+      }
+      if ((strVal.startsWith('guru') || strVal.includes('pic')) && guruColIdx === -1) {
         guruColIdx = c;
+        if (r > headerEndRow) headerEndRow = r;
       }
-      if (strVal.startsWith('tendik') || strVal.includes('tenaga pendidik')) {
+      if ((strVal.startsWith('tendik') || strVal.includes('tenaga pendidik')) && tendikColIdx === -1) {
         tendikColIdx = c;
+        if (r > headerEndRow) headerEndRow = r;
       }
       if ((strVal === 'murid' || strVal === 'siswa' || strVal === 'jumlah murid' || strVal === 'jumlah siswa') && muridColIdx === -1) {
         muridColIdx = c;
+        if (r > headerEndRow) headerEndRow = r;
       }
-      if ((strVal === 'total' || strVal === 'jumlah' || strVal === 'total porsi' || strVal === 'jumlah porsi') && totalColIdx === -1) {
+      if (
+        strVal.includes('total keseluruhan') ||
+        strVal.includes('total\nkeseluruhan') ||
+        strVal === 'total porsi' ||
+        strVal === 'grand total'
+      ) {
         totalColIdx = c;
+        if (r > headerEndRow) headerEndRow = r;
+      } else if ((strVal === 'total' || strVal === 'jumlah') && totalColIdx === -1 && c > 0) {
+        totalColIdx = c;
+        if (r > headerEndRow) headerEndRow = r;
       }
     }
-    if (nameColIdx !== -1) break;
   }
+
+  // Periksa baris sub-header berikutnya (misal berisi baris jenis kelamin L, P)
+  for (let r = 0; r <= headerEndRow + 1 && r < rows.length; r++) {
+    const row = rows[r] || [];
+    const hasGenderHeader = row.some((cell) => {
+      const v = String(cell || '').trim().toUpperCase();
+      return v === 'L' || v === 'P';
+    });
+    if (hasGenderHeader) {
+      if (r > headerEndRow) headerEndRow = r;
+    }
+  }
+
+  const startRow = headerEndRow !== -1 ? headerEndRow + 1 : 1;
+  const colOffset = nameColIdx !== -1 ? nameColIdx : 0;
 
   const parsedEntries: Omit<MbgPmEntry, 'id'>[] = [];
 
@@ -287,15 +450,13 @@ export function parsePmRowsToEntries(
     const cols = rows[i] || [];
     if (!cols || cols.length === 0) continue;
 
-    // Tentukan kolom nama dan offset kolom
-    let colOffset = 0;
+    // Tentukan kolom nama
     let rawInst: unknown = undefined;
+    let actualColOffset = colOffset;
 
     if (nameColIdx !== -1) {
       rawInst = cols[nameColIdx];
-      colOffset = nameColIdx;
     } else {
-      // Auto-detect jika kolom 0 adalah nomor urut (1, 2, 3...)
       const firstVal = cols[0];
       const secondVal = cols[1];
       if (
@@ -303,10 +464,10 @@ export function parsePmRowsToEntries(
         secondVal !== undefined && secondVal !== null && String(secondVal).trim() !== ''
       ) {
         rawInst = secondVal;
-        colOffset = 1;
+        actualColOffset = 1;
       } else {
         rawInst = firstVal;
-        colOffset = 0;
+        actualColOffset = 0;
       }
     }
 
@@ -318,7 +479,20 @@ export function parsePmRowsToEntries(
     if (!isNaN(Number(instName))) continue;
 
     const firstColUpper = instName.toUpperCase();
-    // Filter ketat seluruh baris header & baris total/rekapitulasi dari Excel agar tidak masuk sebagai sekolah
+
+    // STOP total saat menemukan baris TOTAL / JUMLAH utama untuk menghindari data duplikat breakdown di bawah tabel
+    if (
+      firstColUpper === 'TOTAL' ||
+      firstColUpper === 'JUMLAH' ||
+      firstColUpper.startsWith('TOTAL ') ||
+      firstColUpper.startsWith('JUMLAH ') ||
+      firstColUpper === 'SUBTOTAL' ||
+      firstColUpper === 'GRAND TOTAL'
+    ) {
+      break;
+    }
+
+    // Filter ketat baris header berulang
     if (
       firstColUpper === 'NO' ||
       firstColUpper === 'NO.' ||
@@ -332,26 +506,16 @@ export function parsePmRowsToEntries(
       firstColUpper === 'P' ||
       firstColUpper === 'L/P' ||
       firstColUpper.includes('REKAP') ||
-      firstColUpper.includes('PERIODE') ||
-      firstColUpper.includes('TOTAL') ||
-      firstColUpper.includes('JUMLAH') ||
-      firstColUpper.includes('SUBTOTAL') ||
-      firstColUpper.includes('SUB TOTAL') ||
-      firstColUpper.includes('GRAND')
+      firstColUpper.includes('PERIODE')
     ) {
       continue;
     }
-
-    // Do not collapse rows solely because their institution name matches.
-    // Recap workbooks may legitimately split one institution into several
-    // recipient groups/period rows. Importing only the first such row was
-    // the reason totals such as 40 could become 12 in Admin MBG.
 
     const isPosyandu = detectIsPosyandu(instName);
     const lowerName = instName.toLowerCase();
     const instType: MbgInstitutionType = isPosyandu ? 'posyandu' : 'sekolah';
 
-    // Ekstraksi data murni dari baris sheet:
+    // Ekstraksi data porsi & jumlah
     let qtPorsiKecilL = 0;
     let qtPorsiKecilP = 0;
     let qtPorsiBesarL = 0;
@@ -366,16 +530,13 @@ export function parsePmRowsToEntries(
     let qtBumilBusui = 0;
     let qtGuruKader = 0;
 
-    // Format A: Tabel sederhana (No, Nama, Siswa/Murid, Guru, Total).
-    // Prefer the detected headings: Excel often retains wide empty columns,
-    // so a correct simple table is not necessarily a short array.
     const hasExplicitPortionColumns = porsiKecilColIdx !== -1 || porsiBesarColIdx !== -1;
     const hasSimpleCountColumns = muridColIdx !== -1 && !hasExplicitPortionColumns;
-    const isSimpleFormat = hasSimpleCountColumns || (cols.length <= colOffset + 5 && cols.length >= colOffset + 3 && !hasExplicitPortionColumns);
+    const isSimpleFormat = hasSimpleCountColumns || (cols.length <= actualColOffset + 5 && cols.length >= actualColOffset + 3 && !hasExplicitPortionColumns);
 
     if (isSimpleFormat) {
-      const murid = parseCellToNumber(cols[muridColIdx !== -1 ? muridColIdx : colOffset + 1]);
-      const guru = parseCellToNumber(cols[guruColIdx !== -1 ? guruColIdx : colOffset + 2]);
+      const murid = parseCellToNumber(cols[muridColIdx !== -1 ? muridColIdx : actualColOffset + 1]);
+      const guru = parseCellToNumber(cols[guruColIdx !== -1 ? guruColIdx : actualColOffset + 2]);
       if (isPosyandu) {
         if (lowerName.includes('bumil')) {
           qtBumil = murid;
@@ -385,8 +546,10 @@ export function parsePmRowsToEntries(
           qtBumilBusui = murid;
         } else {
           qtSiswaBalita = murid;
-          qtPorsiKecilL = Math.floor(murid / 2);
-          qtPorsiKecilP = murid - qtPorsiKecilL;
+          // The source only provides one total, not a gender split. Preserve
+          // that total and leave L/P empty instead of fabricating a 50:50 split.
+          qtPorsiKecilL = 0;
+          qtPorsiKecilP = 0;
         }
         guruP = guru;
         qtGuruKader = guru;
@@ -397,9 +560,9 @@ export function parsePmRowsToEntries(
       }
     } else {
       // Format B: Tabel Rekapitulasi Lengkap
-      const pkL_idx = porsiKecilColIdx !== -1 ? porsiKecilColIdx : colOffset + 1;
+      const pkL_idx = porsiKecilColIdx !== -1 ? porsiKecilColIdx : actualColOffset + 1;
       const pkP_idx = pkL_idx + 1;
-      const pbL_idx = porsiBesarColIdx !== -1 ? porsiBesarColIdx : colOffset + 3;
+      const pbL_idx = porsiBesarColIdx !== -1 ? porsiBesarColIdx : actualColOffset + 3;
       const pbP_idx = pbL_idx + 1;
 
       qtPorsiKecilL = parseCellToNumber(cols[pkL_idx]);
@@ -407,9 +570,9 @@ export function parsePmRowsToEntries(
       qtPorsiBesarL = parseCellToNumber(cols[pbL_idx]);
       qtPorsiBesarP = parseCellToNumber(cols[pbP_idx]);
 
-      const gL_idx = guruColIdx !== -1 ? guruColIdx : colOffset + 8;
+      const gL_idx = guruColIdx !== -1 ? guruColIdx : actualColOffset + 8;
       const gP_idx = gL_idx + 1;
-      const tL_idx = tendikColIdx !== -1 ? tendikColIdx : colOffset + 10;
+      const tL_idx = tendikColIdx !== -1 ? tendikColIdx : actualColOffset + 10;
       const tP_idx = tL_idx + 1;
 
       guruL = parseCellToNumber(cols[gL_idx]);
@@ -418,18 +581,20 @@ export function parsePmRowsToEntries(
       tendikP = parseCellToNumber(cols[tP_idx]);
 
       // Fallback jika format kolom tanpa subtotal L/P
-      if (guruL === 0 && guruP === 0 && tendikL === 0 && tendikP === 0 && cols.length >= colOffset + 6 && cols.length < colOffset + 10) {
-        guruL = parseCellToNumber(cols[colOffset + 5]);
-        guruP = parseCellToNumber(cols[colOffset + 6]);
-        tendikL = parseCellToNumber(cols[colOffset + 7]);
+      if (guruL === 0 && guruP === 0 && tendikL === 0 && tendikP === 0 && cols.length >= actualColOffset + 6 && cols.length < actualColOffset + 10) {
+        guruL = parseCellToNumber(cols[actualColOffset + 5]);
+        guruP = parseCellToNumber(cols[actualColOffset + 6]);
+        tendikL = parseCellToNumber(cols[actualColOffset + 7]);
       }
 
-      qtGuruKader = guruL + guruP + tendikL + tendikP || parseCellToNumber(cols[colOffset + 12]);
-      qtSiswaBalita = qtPorsiKecilL + qtPorsiKecilP + qtPorsiBesarL + qtPorsiBesarP || parseCellToNumber(cols[colOffset + 7]);
+      qtGuruKader = guruL + guruP + tendikL + tendikP;
+      if (qtGuruKader === 0 && cols[actualColOffset + 12] !== undefined) {
+        qtGuruKader = parseCellToNumber(cols[actualColOffset + 12]);
+      }
 
       if (isPosyandu) {
         if (lowerName.includes('bumil')) {
-          const val = parseCellToNumber(cols[colOffset + 4]) || parseCellToNumber(cols[colOffset + 6]) || qtSiswaBalita || parseCellToNumber(cols[colOffset + 13]);
+          const val = parseCellToNumber(cols[actualColOffset + 4]) || parseCellToNumber(cols[actualColOffset + 7]) || parseCellToNumber(cols[actualColOffset + 13]);
           qtBumil = val;
           qtBumilBusui = val;
           qtSiswaBalita = 0;
@@ -438,7 +603,7 @@ export function parsePmRowsToEntries(
           qtPorsiKecilP = 0;
           qtPorsiKecilL = 0;
         } else if (lowerName.includes('busui')) {
-          const val = parseCellToNumber(cols[colOffset + 4]) || parseCellToNumber(cols[colOffset + 6]) || qtSiswaBalita || parseCellToNumber(cols[colOffset + 13]);
+          const val = parseCellToNumber(cols[actualColOffset + 4]) || parseCellToNumber(cols[actualColOffset + 7]) || parseCellToNumber(cols[actualColOffset + 13]);
           qtBusui = val;
           qtBumilBusui = val;
           qtSiswaBalita = 0;
@@ -447,18 +612,25 @@ export function parsePmRowsToEntries(
           qtPorsiKecilP = 0;
           qtPorsiKecilL = 0;
         } else {
+          // Balita
+          const val = (qtPorsiKecilL + qtPorsiKecilP) || parseCellToNumber(cols[actualColOffset + 7]) || parseCellToNumber(cols[actualColOffset + 13]);
+          qtSiswaBalita = val;
           qtPorsiKecilL = qtPorsiKecilL || qtPorsiBesarL;
           qtPorsiKecilP = qtPorsiKecilP || qtPorsiBesarP;
           qtPorsiBesarL = 0;
           qtPorsiBesarP = 0;
-          qtSiswaBalita = qtPorsiKecilL + qtPorsiKecilP || qtSiswaBalita;
+        }
+      } else {
+        qtSiswaBalita = qtPorsiKecilL + qtPorsiKecilP + qtPorsiBesarL + qtPorsiBesarP;
+        if (qtSiswaBalita === 0 && cols[actualColOffset + 7] !== undefined) {
+          qtSiswaBalita = parseCellToNumber(cols[actualColOffset + 7]);
         }
       }
     }
 
-    // An explicit total is authoritative, including zero for a school that
-    // is off on the selected day. Otherwise calculate from the components.
-    const rawTotal = totalColIdx !== -1 ? cols[totalColIdx] : undefined;
+    // Nilai total eksplisit dari sheet adalah sumber kebenaran (authoritative)
+    const totIdx = totalColIdx !== -1 ? totalColIdx : actualColOffset + 13;
+    const rawTotal = cols[totIdx];
     const hasSourceTotal = rawTotal !== undefined && rawTotal !== null && String(rawTotal).trim() !== '';
     const jumlah = hasSourceTotal
       ? parseCellToNumber(rawTotal)

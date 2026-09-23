@@ -4,7 +4,6 @@ import {
   Truck,
   Calendar,
   Loader2,
-  Building2,
   FileDown,
   FileText,
   Users,
@@ -18,6 +17,8 @@ import {
   Download,
   Save,
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import type {
@@ -61,6 +62,56 @@ import {
 } from '@/utils/mbgDeliveryReportPdfExporter';
 import { getJakartaDate } from '@/utils/date';
 
+function getAutoRekapTotals(entries: MbgPmEntry[]) {
+  return entries.filter((entry) => !entry.isSekolahLibur).reduce(
+    (total, entry) => {
+      const porsiKecilL = entry.qtPorsiKecilL || 0;
+      const porsiKecilP = entry.qtPorsiKecilP || 0;
+      const porsiBesarL = entry.qtPorsiBesarL || 0;
+      const porsiBesarP = entry.qtPorsiBesarP || 0;
+      const bumil = entry.qtBumil || 0;
+      const busui = entry.qtBusui || 0;
+      const guruL = entry.qtGuruL || 0;
+      const guruP = entry.qtGuruP || 0;
+      const tendikL = entry.qtTendikL || 0;
+      const tendikP = entry.qtTendikP || 0;
+
+      const subTotalL = porsiKecilL + porsiBesarL;
+      const subTotalP = porsiKecilP + porsiBesarP + bumil + busui;
+
+      total.porsiKecilL += porsiKecilL;
+      total.porsiKecilP += porsiKecilP;
+      total.porsiBesarL += porsiBesarL;
+      total.porsiBesarP += porsiBesarP;
+      total.totalL += subTotalL;
+      total.totalP += subTotalP;
+      total.totalSiswa += subTotalL + subTotalP;
+      total.guruL += guruL;
+      total.guruP += guruP;
+      total.tendikL += tendikL;
+      total.tendikP += tendikP;
+      total.totalStaf += guruL + guruP + tendikL + tendikP;
+      total.jumlah += entry.jumlah || 0;
+      return total;
+    },
+    {
+      porsiKecilL: 0,
+      porsiKecilP: 0,
+      porsiBesarL: 0,
+      porsiBesarP: 0,
+      totalL: 0,
+      totalP: 0,
+      totalSiswa: 0,
+      guruL: 0,
+      guruP: 0,
+      tendikL: 0,
+      tendikP: 0,
+      totalStaf: 0,
+      jumlah: 0,
+    }
+  );
+}
+
 export function MbgDistributionPage() {
   const { showToast } = useToast();
 
@@ -76,6 +127,9 @@ export function MbgDistributionPage() {
   const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
   const [batchFilterMode, setBatchFilterMode] = useState<'imported' | 'all'>('imported');
   const [isSyncingEntries, setIsSyncingEntries] = useState(false);
+  const [pmSearch, setPmSearch] = useState('');
+  const [selectedCourierFilter, setSelectedCourierFilter] = useState('all');
+  const [isCourierSummaryOpen, setIsCourierSummaryOpen] = useState(false);
 
   const selectedBatch = useMemo(
     () => batches.find((b) => b.id === selectedBatchId),
@@ -307,7 +361,8 @@ export function MbgDistributionPage() {
   // Subscribe batches
   useEffect(() => {
     const unsub = subscribeBatches((data) => {
-      const activeBatches = data.filter((b) => b.status !== 'DRAFT' || ((b.totalJumlah ?? 0) > 0));
+      // A populated import is still a draft until Admin MBG submits it.
+      const activeBatches = data.filter((b) => b.status !== 'DRAFT');
       setBatches(activeBatches);
       setLoading(false);
     });
@@ -556,25 +611,97 @@ export function MbgDistributionPage() {
     ).length;
   }, [entries]);
 
-  const filteredGroupedEntries = useMemo(() => {
-    const res: Record<string, MbgPmEntry[]> = {};
-    Object.entries(groupedEntries).forEach(([pName, pEntries]) => {
-      let filtered = pEntries;
-      if (distributionStatusFilter === 'pending') {
-        filtered = pEntries.filter(
-          (e) => !e.isSekolahLibur && !(e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl && e.photoPenerimaUrl)
-        );
-      } else if (distributionStatusFilter === 'completed') {
-        filtered = pEntries.filter(
-          (e) => !e.isSekolahLibur && Boolean(e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl && e.photoPenerimaUrl)
-        );
-      }
-      if (filtered.length > 0) {
-        res[pName] = filtered;
+  const courierFilterOptions = useMemo(() => {
+    const set = new Set<string>();
+    entries.forEach((e) => {
+      if (e.assignedPetugasName && e.assignedPetugasName.trim() && e.assignedPetugasName !== 'Belum Ditugaskan') {
+        set.add(e.assignedPetugasName.trim());
       }
     });
-    return res;
-  }, [groupedEntries, distributionStatusFilter]);
+    return Array.from(set).sort((a, b) => compareCouriers(a, undefined, b, undefined));
+  }, [entries]);
+
+  const assignedCouriersList = useMemo(() => {
+    const map = new Map<string, { count: number; porsi: number; kenekNames: Set<string> }>();
+    entries.forEach((e) => {
+      const name = (e.assignedPetugasName || '').trim();
+      if (!name || name === 'Belum Ditugaskan') return;
+      if (!map.has(name)) {
+        map.set(name, { count: 0, porsi: 0, kenekNames: new Set() });
+      }
+      const item = map.get(name)!;
+      item.count += 1;
+      item.porsi += e.jumlah || 0;
+      if (e.assignedKenekName && e.assignedKenekName.trim()) {
+        item.kenekNames.add(e.assignedKenekName.trim());
+      }
+    });
+    return Array.from(map.entries())
+      .map(([petugasName, info]) => ({
+        petugasName,
+        count: info.count,
+        porsi: info.porsi,
+        kenekText: Array.from(info.kenekNames).join(', '),
+      }))
+      .sort((a, b) => compareCouriers(a.petugasName, undefined, b.petugasName, undefined));
+  }, [entries]);
+
+  const filteredPmEntries = useMemo(() => {
+    return entries.filter((e) => {
+      // Status filter
+      if (distributionStatusFilter === 'pending') {
+        const isCompleted =
+          !e.isSekolahLibur &&
+          Boolean(e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl && e.photoPenerimaUrl);
+        if (isCompleted || e.isSekolahLibur) return false;
+      } else if (distributionStatusFilter === 'completed') {
+        const isCompleted =
+          !e.isSekolahLibur &&
+          Boolean(e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl && e.photoPenerimaUrl);
+        if (!isCompleted) return false;
+      }
+
+      // Courier filter
+      if (selectedCourierFilter !== 'all') {
+        if (selectedCourierFilter === 'unassigned') {
+          if (
+            e.assignedPetugasName &&
+            e.assignedPetugasName.trim() !== '' &&
+            e.assignedPetugasName !== 'Belum Ditugaskan'
+          ) {
+            return false;
+          }
+        } else {
+          if ((e.assignedPetugasName || '').toLowerCase().trim() !== selectedCourierFilter.toLowerCase().trim()) {
+            return false;
+          }
+        }
+      }
+
+      // Search query
+      if (pmSearch.trim()) {
+        const q = pmSearch.toLowerCase().trim();
+        const matchName = (e.institutionName || '').toLowerCase().includes(q);
+        const matchKurir = (e.assignedPetugasName || '').toLowerCase().includes(q);
+        const matchKenek = (e.assignedKenekName || '').toLowerCase().includes(q);
+        if (!matchName && !matchKurir && !matchKenek) return false;
+      }
+
+      return true;
+    });
+  }, [entries, distributionStatusFilter, selectedCourierFilter, pmSearch]);
+
+  const schoolPmEntries = useMemo(
+    () => filteredPmEntries.filter((e) => e.institutionType !== 'posyandu'),
+    [filteredPmEntries]
+  );
+
+  const posyanduPmEntries = useMemo(
+    () => filteredPmEntries.filter((e) => e.institutionType === 'posyandu'),
+    [filteredPmEntries]
+  );
+
+  const overallTotals = useMemo(() => getAutoRekapTotals(filteredPmEntries), [filteredPmEntries]);
 
   // Check if any entry has menu keringan
 
@@ -1050,263 +1177,402 @@ export function MbgDistributionPage() {
                     </div>
                   )}
 
-                  {/* Status Filter Bar for Penugasan Kurir */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-[#E5E7EB] shadow-xs">
-                    <div className="flex items-center gap-2">
-                      <Truck className="h-4 w-4 text-[#FBBF24]" />
-                      <span className="text-xs font-black text-gray-900 uppercase tracking-wide">
-                        Filter Status Institusi:
-                      </span>
+                  {/* Ringkasan Beban & Deadline Kurir */}
+                  {assignedCouriersList.length > 0 && (
+                    <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-sm border border-slate-800 space-y-3 font-['Hanken_Grotesk']">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl">
+                            <Truck className="h-4.5 w-4.5" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black uppercase tracking-wider text-slate-200">
+                              Ringkasan Rute & Deadline Kurir ({assignedCouriersList.length} Kurir)
+                            </h4>
+                            <p className="text-[11px] text-slate-400">
+                              Atur deadline pengantaran dan kirim notifikasi penugasan per kurir.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsCourierSummaryOpen((prev) => !prev)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                        >
+                          <span>{isCourierSummaryOpen ? 'Sembunyikan' : 'Buka Detail'}</span>
+                          {isCourierSummaryOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+
+                      {isCourierSummaryOpen && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 pt-2 border-t border-slate-800/80 animate-in fade-in duration-150">
+                          {assignedCouriersList.map(({ petugasName, count, porsi, kenekText }) => {
+                            const currentDeadline =
+                              deadlines[petugasName] ||
+                              deliveryTasks.find((t) => t.petugasName === petugasName)?.deadlineAt ||
+                              (selectedBatch ? `${selectedBatch.tanggal}T15:00` : '');
+
+                            return (
+                              <div
+                                key={petugasName}
+                                className="bg-slate-800/80 border border-slate-700/80 rounded-xl p-3 flex flex-col justify-between gap-3 shadow-2xs"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="text-xs font-black text-amber-400 uppercase tracking-wide">
+                                      {petugasName}
+                                    </div>
+                                    {kenekText && (
+                                      <div className="text-[10px] text-slate-300 font-semibold mt-0.5">
+                                        Kenek: <span className="text-slate-100 font-bold">{kenekText}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] font-black bg-slate-700 text-slate-200 px-2 py-0.5 rounded-lg shrink-0">
+                                    {count} Inst • {porsi.toLocaleString('id-ID')} Porsi
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2 pt-1 border-t border-slate-700/60">
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Deadline:</span>
+                                    <input
+                                      type="datetime-local"
+                                      value={currentDeadline}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setDeadlines((prev) => ({ ...prev, [petugasName]: val }));
+                                        const task = deliveryTasks.find((t) => t.petugasName === petugasName);
+                                        if (task) {
+                                          updateDeliveryTask(task.id, { deadlineAt: val });
+                                        }
+                                      }}
+                                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 focus:outline-none focus:border-amber-400 cursor-pointer"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSyncDeliveryTasks()}
+                                    className="self-end shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                                    title={`Kirim tugas pengiriman ke akun ${petugasName}`}
+                                  >
+                                    <Send className="h-3 w-3" />
+                                    <span>Kirim</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Filter & Search Bar */}
+                  <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs space-y-3 font-['Hanken_Grotesk']">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      {/* Search Input */}
+                      <div className="relative max-w-sm flex-1 min-w-[200px]">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                        <input
+                          type="search"
+                          value={pmSearch}
+                          onChange={(e) => setPmSearch(e.target.value)}
+                          placeholder="Cari sekolah, posyandu, kurir, atau kenek..."
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-9 pr-4 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all shadow-2xs"
+                        />
+                      </div>
+
+                      {/* Filter Status Buttons */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setDistributionStatusFilter('all')}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                            distributionStatusFilter === 'all'
+                              ? 'bg-[#111827] text-white shadow-xs'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          Semua Institusi ({entries.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDistributionStatusFilter('pending')}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                            distributionStatusFilter === 'pending'
+                              ? 'bg-amber-600 text-white shadow-xs'
+                              : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                          }`}
+                        >
+                          ⏳ Belum Selesai ({totalPendingEntries})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDistributionStatusFilter('completed')}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                            distributionStatusFilter === 'completed'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                          }`}
+                        >
+                          ✓ Selesai / Diarsipkan ({totalCompletedEntries})
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => setDistributionStatusFilter('all')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                          distributionStatusFilter === 'all'
-                            ? 'bg-[#111827] text-white shadow-xs'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        Semua Institusi ({entries.length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDistributionStatusFilter('pending')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                          distributionStatusFilter === 'pending'
-                            ? 'bg-amber-600 text-white shadow-xs'
-                            : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
-                        }`}
-                      >
-                        ⏳ Belum Selesai ({totalPendingEntries})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDistributionStatusFilter('completed')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                          distributionStatusFilter === 'completed'
-                            ? 'bg-emerald-600 text-white shadow-xs'
-                            : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
-                        }`}
-                      >
-                        ✓ Selesai / Diarsipkan ({totalCompletedEntries})
-                      </button>
+                    {/* Filter Courier Select & Overall Stats */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-600">Filter Kurir:</span>
+                        <select
+                          value={selectedCourierFilter}
+                          onChange={(e) => setSelectedCourierFilter(e.target.value)}
+                          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
+                        >
+                          <option value="all">Semua Kurir ({entries.length})</option>
+                          <option value="unassigned">
+                            Belum Ditugaskan ({entries.filter((e) => !e.assignedPetugasName || e.assignedPetugasName === 'Belum Ditugaskan').length})
+                          </option>
+                          {courierFilterOptions.map((name) => (
+                            <option key={name} value={name}>
+                              {name} ({entries.filter((e) => (e.assignedPetugasName || '').toLowerCase().trim() === name.toLowerCase().trim()).length})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap font-bold">
+                        <span className="text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl shadow-2xs">
+                          Total: {filteredPmEntries.length} Lembaga
+                        </span>
+                        <span className="text-amber-950 bg-amber-100/80 border border-amber-300 px-3 py-1.5 rounded-xl shadow-2xs font-black">
+                          Total Alokasi: {overallTotals.jumlah.toLocaleString('id-ID')} Porsi
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {Object.keys(filteredGroupedEntries).length === 0 ? (
+                  {filteredPmEntries.length === 0 ? (
                     <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center space-y-2">
                       <Truck className="h-10 w-10 mx-auto text-gray-300" />
                       <p className="text-sm font-bold text-gray-700">Tidak ada institusi pada filter ini</p>
-                      <p className="text-xs text-gray-400">Silakan ubah filter status institusi di atas.</p>
+                      <p className="text-xs text-gray-400">Silakan ubah filter status atau kata kunci pencarian di atas.</p>
                     </div>
                   ) : (
-                    Object.entries(filteredGroupedEntries).map(([petugasName, entriesList]) => {
-                      const activeEntries = entriesList.filter((e) => !e.isSekolahLibur);
-                      const totalSiswa = activeEntries.reduce((sum, e) => sum + (e.qtSiswaBalita || 0), 0);
-                      const totalBumil = activeEntries.reduce((sum, e) => sum + (e.qtBumilBusui || 0), 0);
-                      const totalGuru = activeEntries.reduce((sum, e) => sum + (e.qtGuruKader || 0), 0);
-                      const totalPobia = activeEntries.reduce((sum, e) => sum + (e.qtPobiaNasi || 0), 0);
-                      const totalPorsi = activeEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
-                      const allGroupCompleted = activeEntries.length > 0 && activeEntries.every(
-                        (e) => e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl && e.photoPenerimaUrl
-                      );
-
-                    return (
-                      <div
-                        key={petugasName}
-                        className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm"
-                      >
-                        {/* Header */}
-                        <div className="px-6 py-4 bg-[#111827] text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <Truck className="h-5 w-5 text-[#FBBF24]" />
-                            <span className="text-sm font-extrabold uppercase tracking-wider">
-                              PETUGAS: {petugasName}
-                            </span>
-                            {allGroupCompleted && (
-                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500 text-white shadow-xs">
-                                ✓ Selesai & Diarsipkan
+                    /* Split Tables: Sekolah and Posyandu in AUTO REKAP Format */
+                    [
+                      {
+                        title: 'DATA SEKOLAH — FORMAT AUTO REKAP',
+                        list: schoolPmEntries,
+                        isPosyandu: false,
+                      },
+                      {
+                        title: 'DATA POSYANDU',
+                        list: posyanduPmEntries,
+                        isPosyandu: true,
+                      },
+                    ].map(({ title, list, isPosyandu }) => {
+                      const totals = getAutoRekapTotals(list);
+                      const isAllListSelected = list.length > 0 && list.every((e) => selectedEntryIds.includes(e.id));
+                      return (
+                        <div key={title} className="mb-6 last:mb-0">
+                          <div className="flex items-center justify-between gap-3 mb-2.5 px-1">
+                            <h3 className="font-extrabold text-slate-800 text-xs sm:text-sm uppercase tracking-wide flex items-center gap-2">
+                              <div className={`w-2.5 h-2.5 rounded-full ${isPosyandu ? 'bg-purple-500' : 'bg-emerald-500'}`}></div>
+                              {title}
+                            </h3>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-lg">
+                                {list.length} {isPosyandu ? 'Posyandu' : 'Sekolah'} • {totals.jumlah.toLocaleString('id-ID')} Porsi
                               </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="flex gap-3 text-xs font-bold text-white bg-white/10 px-3.5 py-1.5 rounded-full items-center">
-                              <span>{entriesList.length} Institusi</span>
-                              <span>•</span>
-                              <span>{totalPorsi} Porsi</span>
                             </div>
-
-                            {petugasName !== 'Belum Ditugaskan' && (
-                              <>
-                                <div className="flex items-center gap-1 bg-white/10 px-2.5 py-1 rounded-lg">
-                                  <span className="text-[10px] font-bold text-amber-400 uppercase">Deadline:</span>
-                                  <input
-                                    type="datetime-local"
-                                    value={
-                                      deadlines[petugasName] ||
-                                      deliveryTasks.find((t) => t.petugasName === petugasName)?.deadlineAt ||
-                                      (selectedBatch ? `${selectedBatch.tanggal}T15:00` : '')
-                                    }
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setDeadlines((prev) => ({ ...prev, [petugasName]: val }));
-                                      const task = deliveryTasks.find((t) => t.petugasName === petugasName);
-                                      if (task) {
-                                        updateDeliveryTask(task.id, { deadlineAt: val });
-                                      }
-                                    }}
-                                    className="bg-transparent text-white text-[11px] font-bold focus:outline-none cursor-pointer"
-                                  />
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSyncDeliveryTasks()}
-                                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg cursor-pointer shadow-xs active:scale-95 transition-all"
-                                  title={`Kirim tugas pengiriman ke akun ${petugasName}`}
-                                >
-                                  <Send className="h-3.5 w-3.5" />
-                                  <span>Kirim Tugas {petugasName}</span>
-                                </button>
-                              </>
-                            )}
                           </div>
-                        </div>
-
-                        {/* Libur note */}
-                        {entriesList.some((e) => e.isSekolahLibur) && (
-                          <div className="px-6 py-2 bg-red-50 text-red-700 text-[10px] font-extrabold border-b border-red-100 uppercase tracking-wide">
-                            🔴 SEKOLAH LIBUR (ditandai merah)
-                          </div>
-                        )}
-
-                        {/* Table of deliveries for this petugas */}
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-xs text-left min-w-[800px]">
-                            <thead>
-                              <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-bold uppercase text-[9px] tracking-wider">
-                                <th className="py-3 px-3 text-center w-10">
-                                  <input
-                                    type="checkbox"
-                                    title="Pilih Semua Institusi di Grup Ini"
-                                    checked={
-                                      entriesList.length > 0 &&
-                                      entriesList.every((e) => selectedEntryIds.includes(e.id))
-                                    }
-                                    onChange={() => toggleSelectAllGroup(entriesList)}
-                                    className="h-4 w-4 rounded border-gray-300 text-[#FBBF24] focus:ring-[#FBBF24] cursor-pointer"
-                                  />
-                                </th>
-                                <th className="py-3 px-6">Institusi</th>
-                                <th className="py-3 px-4 text-center">QT Siswa/Balita</th>
-                                <th className="py-3 px-4 text-center">QT Bumil/Busui</th>
-                                <th className="py-3 px-4 text-center">QT Guru/Kader</th>
-                                <th className="py-3 px-4 text-center">Pobia Nasi</th>
-                                <th className="py-3 px-4 text-center">Jumlah</th>
-                                <th className="py-3 px-4">Jadwal</th>
-                                <th className="py-3 px-4">Kurir</th>
-                                <th className="py-3 px-4">Kenek</th>
-                                <th className="py-3 px-4 text-center">Aksi</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {entriesList.map((entry) => (
-                                <tr
-                                  key={entry.id}
-                                  className={`hover:bg-gray-50/50 ${selectedEntryIds.includes(entry.id) ? 'bg-amber-50/60' : ''
-                                    } ${entry.isSekolahLibur ? 'bg-red-50/40 text-red-500 line-through' : ''
-                                    }`}
-                                >
-                                  <td className="py-3 px-3 text-center w-10">
+                          <div className="overflow-x-auto border border-slate-300 rounded-xl bg-white shadow-xs">
+                            <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] border-collapse border border-slate-300 text-xs">
+                              <thead>
+                                <tr className="bg-slate-200 text-[9px] font-extrabold text-slate-800 uppercase tracking-tight text-center border-b border-slate-300">
+                                  <th rowSpan={2} className="px-2 py-1.5 border-r border-slate-300 text-center w-8">
                                     <input
                                       type="checkbox"
-                                      title={`Pilih ${entry.institutionName}`}
-                                      checked={selectedEntryIds.includes(entry.id)}
-                                      onChange={() => toggleSelectEntry(entry.id)}
-                                      className="h-4 w-4 rounded border-gray-300 text-[#FBBF24] focus:ring-[#FBBF24] cursor-pointer"
+                                      title={`Pilih Semua ${isPosyandu ? 'Posyandu' : 'Sekolah'}`}
+                                      checked={isAllListSelected}
+                                      onChange={() => toggleSelectAllGroup(list)}
+                                      className="h-3.5 w-3.5 rounded border-slate-300 text-[#FBBF24] focus:ring-[#FBBF24] cursor-pointer"
                                     />
-                                  </td>
-                                  <td className="py-3 px-6 font-bold flex items-center gap-2">
-                                    <Building2 className="h-4 w-4 text-gray-400" />
-                                    <div>
-                                      <div className="no-underline">{entry.institutionName}</div>
-                                      {entry.isSekolahLibur && (
-                                        <span className="text-[9px] text-red-600 bg-red-100 px-1.5 py-0.5 rounded font-extrabold uppercase no-underline">
-                                          Libur
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="py-3 px-4 text-center font-bold">
-                                    {entry.qtSiswaBalita}
-                                  </td>
-                                  <td className="py-3 px-4 text-center font-bold">
-                                    {entry.qtBumilBusui}
-                                  </td>
-                                  <td className="py-3 px-4 text-center font-bold">
-                                    {entry.qtGuruKader}
-                                  </td>
-                                  <td className="py-3 px-4 text-center font-bold text-amber-600">
-                                    {entry.qtPobiaNasi}
-                                  </td>
-                                  <td className="py-3 px-4 text-center">
-                                    <span className="px-2 py-0.5 bg-[#FBBF24]/20 text-[#92400E] rounded-full font-extrabold text-[10px]">
-                                      {entry.jumlah}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-4 font-bold text-gray-700">
-                                    {entry.jadwalPengantaran || '-'}
-                                  </td>
-                                  <td className="py-3 px-4">
-                                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${entry.assignedPetugasName
-                                        ? 'bg-emerald-50 text-emerald-700'
-                                        : 'bg-gray-100 text-gray-500'
-                                      }`}>
-                                      {entry.assignedPetugasName || '-'}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-4">
-                                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${entry.assignedKenekName
-                                        ? 'bg-blue-50 text-blue-700'
-                                        : 'bg-gray-100 text-gray-400'
-                                      }`}>
-                                      {entry.assignedKenekName || '-'}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-4 text-center">
-                                    <button
-                                      onClick={() => handleOpenAssign(entry)}
-                                      disabled={entry.isSekolahLibur}
-                                      className="px-3 py-1.5 bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] font-extrabold text-[10px] rounded-lg cursor-pointer transition-all shadow-xs active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1"
-                                    >
-                                      <Users className="h-3 w-3" />
-                                      Tugaskan
-                                    </button>
-                                  </td>
+                                  </th>
+                                  <th rowSpan={2} className="px-2 py-1.5 border-r border-slate-300 text-left min-w-[170px]">
+                                    {isPosyandu ? 'POSYANDU' : 'SEKOLAH'}
+                                  </th>
+                                  <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI KECIL</th>
+                                  <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI BESAR</th>
+                                  <th colSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/60 font-black">TOTAL</th>
+                                  <th rowSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/60 font-black">JML</th>
+                                  <th colSpan={2} className="px-1 py-1 border-r border-slate-300">GURU</th>
+                                  <th colSpan={2} className="px-1 py-1 border-r border-slate-300">TENDIK</th>
+                                  <th rowSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/50 font-extrabold">JML</th>
+                                  <th rowSpan={2} className="px-1.5 py-1 border-r border-slate-300 bg-amber-100/80 text-amber-900 font-black text-[9px]">TOTAL KESELURUHAN</th>
+                                  <th rowSpan={2} className="px-2 py-1 border-r border-slate-300 min-w-[110px]">PETUGAS KURIR</th>
+                                  <th rowSpan={2} className="px-2 py-1 border-r border-slate-300 min-w-[100px]">KENEK</th>
+                                  <th rowSpan={2} className="px-2 py-1 border-r border-slate-300 min-w-[90px]">JADWAL</th>
+                                  <th rowSpan={2} className="px-2 py-1 min-w-[80px]">AKSI</th>
                                 </tr>
-                              ))}
-                              {/* Total Row */}
-                              <tr className="bg-[#111827] text-white font-extrabold text-xs">
-                                <td className="py-3 px-6" colSpan={1}>TOTAL</td>
-                                <td className="py-3 px-4 text-center">{totalSiswa}</td>
-                                <td className="py-3 px-4 text-center">{totalBumil}</td>
-                                <td className="py-3 px-4 text-center">{totalGuru}</td>
-                                <td className="py-3 px-4 text-center">{totalPobia}</td>
-                                <td className="py-3 px-4 text-center">
-                                  <span className="px-2.5 py-0.5 bg-[#FBBF24] text-[#111827] rounded-full font-extrabold">
-                                    {totalPorsi}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-4" colSpan={4}></td>
-                              </tr>
-                            </tbody>
-                          </table>
+                                <tr className="bg-slate-100 text-[8.5px] font-bold text-slate-700 uppercase tracking-tight text-center border-b border-slate-300">
+                                  <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                                  <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                                  <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                                  <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                                  <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">L</th>
+                                  <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">P</th>
+                                  <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                                  <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                                  <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                                  <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {list.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={19} className="px-4 py-8 text-center text-xs font-medium text-slate-400 italic">
+                                      Belum ada data {isPosyandu ? 'Posyandu' : 'Sekolah'} untuk filter ini.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  list.map((entry) => {
+                                    const isSelected = selectedEntryIds.includes(entry.id);
+                                    if (entry.isSekolahLibur) {
+                                      return (
+                                        <tr key={entry.id} className="border-b border-red-200 bg-red-50/70 text-xs font-semibold text-red-900">
+                                          <td className="px-2 py-1.5 border-r border-red-200 text-center">
+                                            <input
+                                              type="checkbox"
+                                              disabled
+                                              className="h-3.5 w-3.5 rounded border-red-300 opacity-40"
+                                            />
+                                          </td>
+                                          <td className="px-2 py-1.5 border-r border-red-200 font-bold">
+                                            {entry.institutionName} <span className="ml-1 text-[9px] text-red-600 font-black uppercase">(LIBUR)</span>
+                                          </td>
+                                          <td colSpan={13} className="px-2 py-1.5 text-center text-red-600 font-bold tracking-wider text-[11px] border-r border-red-200">
+                                            TIDAK ADA PENGIRIMAN (LIBUR)
+                                          </td>
+                                          <td className="px-2 py-1.5 text-center border-r border-red-200 text-slate-500 text-[11px]">{entry.assignedPetugasName || '—'}</td>
+                                          <td className="px-2 py-1.5 text-center border-r border-red-200 text-slate-500 text-[11px]">{entry.assignedKenekName || '—'}</td>
+                                          <td className="px-2 py-1.5 text-center border-r border-red-200 text-slate-400 text-[11px]">{entry.jadwalPengantaran || '—'}</td>
+                                          <td className="px-2 py-1.5 text-center text-slate-400 text-[11px]">—</td>
+                                        </tr>
+                                      );
+                                    }
+
+                                    const totalL = (entry.qtPorsiKecilL || 0) + (entry.qtPorsiBesarL || 0);
+                                    const totalP = (entry.qtPorsiKecilP || 0) + (entry.qtPorsiBesarP || 0) + (entry.qtBumil || 0) + (entry.qtBusui || 0);
+                                    const totalSiswa = totalL + totalP;
+                                    const totalStaf = (entry.qtGuruL || 0) + (entry.qtGuruP || 0) + (entry.qtTendikL || 0) + (entry.qtTendikP || 0);
+
+                                    return (
+                                      <tr
+                                        key={entry.id}
+                                        className={`border-b border-slate-200 text-xs font-semibold text-slate-800 transition-colors ${
+                                          isSelected ? 'bg-amber-50/70 hover:bg-amber-100/60' : 'hover:bg-slate-50'
+                                        }`}
+                                      >
+                                        <td className="border-r border-slate-200 px-2 py-1.5 text-center w-8">
+                                          <input
+                                            type="checkbox"
+                                            title={`Pilih ${entry.institutionName}`}
+                                            checked={isSelected}
+                                            onChange={() => toggleSelectEntry(entry.id)}
+                                            className="h-3.5 w-3.5 rounded border-slate-300 text-[#FBBF24] focus:ring-[#FBBF24] cursor-pointer"
+                                          />
+                                        </td>
+                                        <td className="min-w-[170px] border-r border-slate-200 px-2 py-1.5">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="font-bold text-slate-900">{entry.institutionName}</span>
+                                            {entry.classesBreakdown && entry.classesBreakdown.length > 0 && (
+                                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                                {entry.classesBreakdown.length} Kelas
+                                              </span>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className="border-r border-slate-200 p-1 text-center">{entry.qtPorsiKecilL || '—'}</td>
+                                        <td className="border-r border-slate-200 p-1 text-center">{entry.qtPorsiKecilP || '—'}</td>
+                                        <td className="border-r border-slate-200 p-1 text-center">{entry.qtPorsiBesarL || '—'}</td>
+                                        <td className="border-r border-slate-200 p-1 text-center">{entry.qtPorsiBesarP || '—'}</td>
+                                        <td className="border-r border-slate-200 bg-slate-50 px-2 py-1 text-center font-bold text-slate-700">{totalL || '—'}</td>
+                                        <td className="border-r border-slate-200 bg-slate-50 px-2 py-1 text-center font-bold text-slate-700">{totalP || '—'}</td>
+                                        <td className="border-r border-slate-300 bg-slate-100 px-2 py-1 text-center font-black text-slate-900">{totalSiswa || '—'}</td>
+                                        <td className="border-r border-slate-200 p-1 text-center">{entry.qtGuruL || '—'}</td>
+                                        <td className="border-r border-slate-200 p-1 text-center">{entry.qtGuruP || '—'}</td>
+                                        <td className="border-r border-slate-200 p-1 text-center">{entry.qtTendikL || '—'}</td>
+                                        <td className="border-r border-slate-200 p-1 text-center">{entry.qtTendikP || '—'}</td>
+                                        <td className="border-r border-slate-300 bg-slate-100 px-2 py-1 text-center font-black text-slate-900">{totalStaf || '—'}</td>
+                                        <td className="border-r border-amber-200 bg-amber-50 px-2 py-1 text-center font-black text-amber-900">{entry.jumlah}</td>
+                                        <td className="border-r border-slate-200 px-2 py-1 text-slate-600 font-medium text-[11px] truncate max-w-[120px]">
+                                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                            entry.assignedPetugasName
+                                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                              : 'bg-gray-100 text-gray-500'
+                                          }`}>
+                                            {entry.assignedPetugasName || 'Belum Ditugaskan'}
+                                          </span>
+                                        </td>
+                                        <td className="border-r border-slate-200 px-2 py-1 text-slate-600 font-medium text-[11px] truncate max-w-[110px]">
+                                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                            entry.assignedKenekName
+                                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                              : 'bg-gray-100 text-gray-400'
+                                          }`}>
+                                            {entry.assignedKenekName || '—'}
+                                          </span>
+                                        </td>
+                                        <td className="border-r border-slate-200 px-2 py-1 text-slate-500 text-[11px] whitespace-nowrap text-center">
+                                          {entry.jadwalPengantaran || '—'}
+                                        </td>
+                                        <td className="px-2 py-1 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenAssign(entry)}
+                                            className="px-2.5 py-1 bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] font-extrabold text-[10px] rounded-lg cursor-pointer transition-all shadow-2xs active:scale-95 flex items-center gap-1 mx-auto"
+                                          >
+                                            <Users className="h-3 w-3" />
+                                            Tugaskan
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                                {list.length > 0 && (
+                                  <tr className="bg-slate-800 text-white text-xs font-bold border-t border-slate-700 text-center">
+                                    <td colSpan={2} className="px-2 py-2 text-left font-black text-slate-200">TOTAL</td>
+                                    <td className="px-1 py-2">{totals.porsiKecilL}</td>
+                                    <td className="px-1 py-2">{totals.porsiKecilP}</td>
+                                    <td className="px-1 py-2">{totals.porsiBesarL}</td>
+                                    <td className="px-1 py-2">{totals.porsiBesarP}</td>
+                                    <td className="px-1 py-2 bg-slate-900/60 font-black">{totals.totalL}</td>
+                                    <td className="px-1 py-2 bg-slate-900/60 font-black">{totals.totalP}</td>
+                                    <td className="px-1 py-2 bg-slate-900 font-black text-amber-400">{totals.totalSiswa}</td>
+                                    <td className="px-1 py-2">{totals.guruL}</td>
+                                    <td className="px-1 py-2">{totals.guruP}</td>
+                                    <td className="px-1 py-2">{totals.tendikL}</td>
+                                    <td className="px-1 py-2">{totals.tendikP}</td>
+                                    <td className="px-1 py-2 bg-slate-900 font-black">{totals.totalStaf}</td>
+                                    <td className="px-2 py-2 bg-amber-500 text-slate-950 font-black text-xs">
+                                      {totals.jumlah.toLocaleString('id-ID')}
+                                    </td>
+                                    <td colSpan={4} className="px-2 py-2 text-slate-400 text-[10px] italic">
+                                      {list.filter((e) => !e.isSekolahLibur).length} Lembaga Aktif
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  }))}
+                      );
+                    })
+                  )}
                 </div>
               ) : (
 
