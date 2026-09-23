@@ -339,7 +339,7 @@ export function parsePmRowsToEntries(
       const busui = parseCellToNumber(row[7]);
       const kader = parseCellToNumber(row[8]);
       const jumlah = parseCellToNumber(row[9]) || (balitaTotal + bumil + busui + kader);
-
+ 
       parsed3B.push({
         batchId,
         institutionName: instName,
