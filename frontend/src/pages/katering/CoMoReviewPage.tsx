@@ -41,6 +41,7 @@ import {
   PIC_NAME_TO_ROLE,
   compareJobDeskTime,
 } from "@/types/cateringJobDesk";
+import { recordApprovedJobDesk } from "@/services/performanceService";
 
 type ReviewFilter = "all" | "pending_review" | "approved" | "rejected" | "not_submitted";
 
@@ -184,13 +185,25 @@ export function CoMoReviewPage() {
       setProcessingId(id);
       try {
         await approveJobDesk(id, user?.uid || "");
+        const jobDesk = allJobDesks.find((item) => item.id === id);
+        if (jobDesk?.submittedBy) {
+          await recordApprovedJobDesk({
+            userId: jobDesk.submittedBy,
+            userNameSnapshot: jobDesk.pic || "Petugas",
+            roleSnapshot: jobDesk.assignedRole,
+            divisionSnapshot: jobDesk.division || "katering",
+            sourceType: "catering_jobdesk",
+            sourceId: jobDesk.id,
+            title: jobDesk.title || jobDesk.kegiatan,
+          });
+        }
       } catch (err) {
         console.error("Failed to approve job desk:", err);
       } finally {
         setProcessingId(null);
       }
     },
-    [user?.uid]
+    [allJobDesks, user?.uid]
   );
 
   // Handle reject with remark

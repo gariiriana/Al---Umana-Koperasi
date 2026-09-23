@@ -241,13 +241,21 @@ export function parsePmRowsToEntries(
   let porsiKecilColIdx = -1;
   let guruColIdx = -1;
   let tendikColIdx = -1;
+  let muridColIdx = -1;
+  let totalColIdx = -1;
   let startRow = 0;
 
-  for (let r = 0; r < Math.min(rows.length, 10); r++) {
+  // A daily report frequently has titles, dates, and recap rows above its
+  // table. Limiting detection to 10 rows made those sheets use the wrong
+  // column as the institution name.
+  for (let r = 0; r < Math.min(rows.length, 60); r++) {
     const row = rows[r] || [];
     for (let c = 0; c < row.length; c++) {
-      const strVal = String(row[c] || '').toLowerCase().trim();
-      if (['sekolah', 'nama sekolah', 'lembaga', 'sasaran', 'institusi', 'nama lembaga'].includes(strVal)) {
+      const strVal = String(row[c] || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if ([
+        'sekolah', 'nama sekolah', 'lembaga', 'sasaran', 'institusi',
+        'nama lembaga', 'nama instansi', 'penerima manfaat', 'nama penerima manfaat',
+      ].includes(strVal)) {
         nameColIdx = c;
         startRow = r + 1;
       }
@@ -263,12 +271,17 @@ export function parsePmRowsToEntries(
       if (strVal.startsWith('tendik') || strVal.includes('tenaga pendidik')) {
         tendikColIdx = c;
       }
+      if ((strVal === 'murid' || strVal === 'siswa' || strVal === 'jumlah murid' || strVal === 'jumlah siswa') && muridColIdx === -1) {
+        muridColIdx = c;
+      }
+      if ((strVal === 'total' || strVal === 'jumlah' || strVal === 'total porsi' || strVal === 'jumlah porsi') && totalColIdx === -1) {
+        totalColIdx = c;
+      }
     }
     if (nameColIdx !== -1) break;
   }
 
   const parsedEntries: Omit<MbgPmEntry, 'id'>[] = [];
-  const seenNames = new Set<string>();
 
   for (let i = startRow; i < rows.length; i++) {
     const cols = rows[i] || [];
@@ -329,10 +342,10 @@ export function parsePmRowsToEntries(
       continue;
     }
 
-    // Hindari duplikasi nama institusi di dalam file/sheet yang sama
-    const nameKey = instName.toLowerCase();
-    if (seenNames.has(nameKey)) continue;
-    seenNames.add(nameKey);
+    // Do not collapse rows solely because their institution name matches.
+    // Recap workbooks may legitimately split one institution into several
+    // recipient groups/period rows. Importing only the first such row was
+    // the reason totals such as 40 could become 12 in Admin MBG.
 
     const isPosyandu = detectIsPosyandu(instName);
     const lowerName = instName.toLowerCase();
@@ -353,12 +366,16 @@ export function parsePmRowsToEntries(
     let qtBumilBusui = 0;
     let qtGuruKader = 0;
 
-    // Format A: Tabel sederhana (No, Nama, Siswa/Murid, Guru, Total) <= 6 kolom
-    const isSimpleFormat = cols.length <= colOffset + 5 && cols.length >= colOffset + 3;
+    // Format A: Tabel sederhana (No, Nama, Siswa/Murid, Guru, Total).
+    // Prefer the detected headings: Excel often retains wide empty columns,
+    // so a correct simple table is not necessarily a short array.
+    const hasExplicitPortionColumns = porsiKecilColIdx !== -1 || porsiBesarColIdx !== -1;
+    const hasSimpleCountColumns = muridColIdx !== -1 && !hasExplicitPortionColumns;
+    const isSimpleFormat = hasSimpleCountColumns || (cols.length <= colOffset + 5 && cols.length >= colOffset + 3 && !hasExplicitPortionColumns);
 
     if (isSimpleFormat) {
-      const murid = parseCellToNumber(cols[colOffset + 1]);
-      const guru = parseCellToNumber(cols[colOffset + 2]);
+      const murid = parseCellToNumber(cols[muridColIdx !== -1 ? muridColIdx : colOffset + 1]);
+      const guru = parseCellToNumber(cols[guruColIdx !== -1 ? guruColIdx : colOffset + 2]);
       if (isPosyandu) {
         if (lowerName.includes('bumil')) {
           qtBumil = murid;
@@ -375,8 +392,6 @@ export function parsePmRowsToEntries(
         qtGuruKader = guru;
       } else {
         qtSiswaBalita = murid;
-        qtPorsiBesarL = Math.floor(murid / 2);
-        qtPorsiBesarP = murid - qtPorsiBesarL;
         guruP = guru;
         qtGuruKader = guru;
       }
@@ -441,8 +456,13 @@ export function parsePmRowsToEntries(
       }
     }
 
-    // Jumlah dihitung murni dari hasil penjumlahan komponen
-    const jumlah = qtSiswaBalita + qtBumilBusui + qtGuruKader;
+    // An explicit total is authoritative, including zero for a school that
+    // is off on the selected day. Otherwise calculate from the components.
+    const rawTotal = totalColIdx !== -1 ? cols[totalColIdx] : undefined;
+    const hasSourceTotal = rawTotal !== undefined && rawTotal !== null && String(rawTotal).trim() !== '';
+    const jumlah = hasSourceTotal
+      ? parseCellToNumber(rawTotal)
+      : qtSiswaBalita + qtBumilBusui + qtGuruKader;
 
     parsedEntries.push({
       batchId,
@@ -456,7 +476,9 @@ export function parsePmRowsToEntries(
       qtPobiaNasi: 0,
       qtPorsiBalita: isPosyandu && !lowerName.includes('bumil') && !lowerName.includes('busui') ? qtSiswaBalita : 0,
       qtPorsiKecil: !isPosyandu ? (qtPorsiKecilL + qtPorsiKecilP) : 0,
-      qtPorsiBesar: !isPosyandu ? (qtPorsiBesarL + qtPorsiBesarP + qtGuruKader) : qtGuruKader,
+      qtPorsiBesar: !isPosyandu
+        ? (hasExplicitPortionColumns ? qtPorsiBesarL + qtPorsiBesarP + qtGuruKader : 0)
+        : qtGuruKader,
       qtPorsiBumilBusui: isPosyandu && (qtBumil > 0 || qtBusui > 0) ? qtBumilBusui : 0,
       qtPorsiKecilL: qtPorsiKecilL || undefined,
       qtPorsiKecilP: qtPorsiKecilP || undefined,
@@ -470,7 +492,7 @@ export function parsePmRowsToEntries(
       jadwalPengantaran: '06.00-08.30',
       assignedPetugasId: '',
       assignedPetugasName: '',
-      isSekolahLibur: false,
+      isSekolahLibur: hasSourceTotal && jumlah === 0,
       sortOrder: parsedEntries.length,
       notes: '',
       menuItems: [...menuItems],

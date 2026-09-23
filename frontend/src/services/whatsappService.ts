@@ -3,18 +3,25 @@
  * order workflow independent from the old local gateway; they never send a
  * network request or expose customer data.
  */
-export const WA_MESSAGES = {
-  placedCOD: (..._args: unknown[]) => "",
-  placedNonCOD: (..._args: unknown[]) => "",
-  paymentUploaded: (..._args: unknown[]) => "",
-  paymentApproved: (..._args: unknown[]) => "",
-  paymentRejected: (..._args: unknown[]) => "",
+const emptyMessage = (...args: unknown[]): string => {
+  void args;
+  return "";
 };
 
-export async function sendWhatsAppNotification(..._args: unknown[]): Promise<boolean> {
+export const WA_MESSAGES = {
+  placedCOD: emptyMessage,
+  placedNonCOD: emptyMessage,
+  paymentUploaded: emptyMessage,
+  paymentApproved: emptyMessage,
+  paymentRejected: emptyMessage,
+};
+
+export async function sendWhatsAppNotification(...args: unknown[]): Promise<boolean> {
+  void args;
   return false;
 }
 
-export async function sendWhatsAppNotificationDirect(..._args: unknown[]): Promise<boolean> {
+export async function sendWhatsAppNotificationDirect(...args: unknown[]): Promise<boolean> {
+  void args;
   return false;
 }

@@ -6,6 +6,7 @@
  * `/category/:name`).
  */
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
+  super_admin: ["/super-admin/control-center", "/performance"],
   /**
    * Admin: mengelola pesanan, invoice, dan melihat dashboard.
    */
@@ -159,8 +160,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
    * Purchasing MBG: Dialihkan ke Produksi MBG (Laporan Pembelian Harian Excel).
    */
   purchasing_mbg: [
-    "/mbg/production",
-    "/mbg/orders",
   ],
 
   /**
@@ -184,8 +183,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
    * Sub Purchasing MBG: Dialihkan ke Produksi MBG.
    */
   sub_purchasing_mbg: [
-    "/mbg/production",
-    "/mbg/orders",
   ],
 
   /**
@@ -214,8 +211,17 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
 };
 
+// Performa Saya tersedia bagi semua role internal. Menambahkannya di satu
+// tempat mencegah navigasi desktop dan mobile tidak sinkron.
+for (const role of Object.keys(ROLE_PERMISSIONS)) {
+  if (role !== "super_admin" && !ROLE_PERMISSIONS[role].includes("/performance")) {
+    ROLE_PERMISSIONS[role] = [...ROLE_PERMISSIONS[role], "/performance"];
+  }
+}
+
 /** Roles that land on the admin AppShell when authenticated. */
 export const ADMIN_SHELL_ROLES = [
+  "super_admin",
   "tim_produksi",
   "distribusi",
   "kurir",
@@ -239,6 +245,7 @@ export const ADMIN_SHELL_ROLES = [
 ] as const;
 
 export const ALL_ROLES = [
+  "super_admin",
   "admin",
   "customer",
   "monitoring",
@@ -269,6 +276,7 @@ export const ALL_ROLES = [
  * a user navigates to a path their role is not allowed to view.
  */
 export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
+  super_admin: "/super-admin/control-center",
   admin: "/",
   monitoring: "/admin/dashboard",
   tim_produksi: "/admin/production",
@@ -285,10 +293,10 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   admin_mbg: "/mbg/admin",
   produksi_mbg: "/mbg/production",
   dokumentasi_produksiMBG: "/mbg/orders",
-  purchasing_mbg: "/mbg/orders",
+  purchasing_mbg: "/performance",
   distribusi_mbg: "/mbg/distribution",
   kurir_mbg: "/mbg/delivery",
-  sub_purchasing_mbg: "/mbg/orders",
+  sub_purchasing_mbg: "/performance",
   MBG2: "/katering/jobdesk",
   mbg2: "/katering/jobdesk",
   produksi_mbg_2: "/katering/jobdesk",

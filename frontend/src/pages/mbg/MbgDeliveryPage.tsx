@@ -227,7 +227,12 @@ export function MbgDeliveryPage() {
     }
 
     return tasks[0] || null;
-  }, [tasks, selectedPetugasName, profile?.displayName, user, entries, selectedBatchId]);
+  }, [tasks, selectedPetugasName, profile?.displayName, user]);
+
+  const productionReady = useMemo(() => {
+    const batch = batches.find((item) => item.id === selectedBatchId);
+    return batch?.productionCookingStatus === 'cooked';
+  }, [batches, selectedBatchId]);
 
   // Get full entries detail for the current task
   const taskEntries = useMemo(() => {
@@ -1158,11 +1163,13 @@ export function MbgDeliveryPage() {
                     <div className="flex flex-col items-end gap-1">
                       <button
                         onClick={handleStartHandover}
-                        className="flex-1 md:flex-initial flex items-center justify-center gap-2 font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-sm bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] cursor-pointer active:scale-95"
+                        disabled={!productionReady}
+                        className="flex-1 md:flex-initial flex items-center justify-center gap-2 font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-sm bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                         title="Klik untuk konfirmasi serah terima dari dapur sebelum berangkat"
                       >
                         🤝 Konfirmasi Serah Terima
                       </button>
+                      {!productionReady && <span className="text-[10px] font-bold text-red-700">Terkunci: Produksi belum berstatus Selesai dimasak.</span>}
                       {!isAllInstitutionsComplete && (
                         <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
                           ⚠️ Kelola bukti {completedInstitutionsCount}/{activeNonLiburEntries.length} institusi selesai

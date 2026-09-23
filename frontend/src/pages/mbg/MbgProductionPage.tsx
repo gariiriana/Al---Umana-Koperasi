@@ -30,7 +30,7 @@ import {
 import { export8PageDailyReportPdf } from '@/utils/dailyReportPdfExporter';
 import { exportProductionDocx } from '@/utils/mbgProductionDocxGenerator';
 import { parseProductionSheetRows, parsePenerimaManfaatSheet } from '@/utils/productionSheetParser';
-import { updateBatchStatus, updateBatch } from '@/services/mbgAdminService';
+import { updateBatchStatus, updateBatch, updateBatchCookingStatus } from '@/services/mbgAdminService';
 import { getJakartaDate } from '@/utils/date';
 import {
   MBG_BATCH_STATUS_CONFIG,
@@ -1409,6 +1409,10 @@ export function MbgProductionPage() {
 
   const handleSubmitToDistribution = () => {
     if (!selectedBatchId) return;
+    if (selectedBatch?.productionCookingStatus !== 'cooked') {
+      showToast({ message: 'Tandai makanan “Selesai dimasak” dulu sebelum mengirim ke Distribusi.', variant: 'error' });
+      return;
+    }
     setConfirmModal({
       isOpen: true,
       title: 'Kirim Data ke Distribusi MBG',
@@ -1427,6 +1431,17 @@ export function MbgProductionPage() {
         }
       },
     });
+  };
+
+  const handleCookingStatus = async (status: 'cooking' | 'cooked') => {
+    if (!selectedBatchId) return;
+    try {
+      await updateBatchCookingStatus(selectedBatchId, status);
+      showToast({ message: status === 'cooked' ? 'Makanan ditandai selesai dimasak. Distribusi dan kurir kini dapat melanjutkan.' : 'Status produksi: sedang dimasak.', variant: 'success' });
+    } catch (err) {
+      console.error(err);
+      showToast({ message: err instanceof Error ? err.message : 'Gagal memperbarui status masak.', variant: 'error' });
+    }
   };
 
   const [creatingBatch, setCreatingBatch] = useState(false);
@@ -1835,9 +1850,20 @@ export function MbgProductionPage() {
           </button>
           {activeTab === 'nutrition' && selectedBatchId && (
             <>
+              {selectedBatch?.productionCookingStatus !== 'cooked' && (
+                <button
+                  onClick={() => handleCookingStatus(selectedBatch?.productionCookingStatus === 'cooking' ? 'cooked' : 'cooking')}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+                  title="Perbarui kesiapan makanan sebelum distribusi"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>{selectedBatch?.productionCookingStatus === 'cooking' ? 'Tandai Selesai Dimasak' : 'Mulai Memasak'}</span>
+                </button>
+              )}
               <button
                 onClick={handleSubmitToDistribution}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+                disabled={selectedBatch?.productionCookingStatus !== 'cooked'}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#0284C7] hover:bg-[#0369A1] disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
                 title="Kirim data batch dan alokasi penerima manfaat ke Distribusi MBG"
               >
                 <Truck className="h-4 w-4 text-white" />

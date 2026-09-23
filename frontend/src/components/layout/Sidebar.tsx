@@ -23,6 +23,8 @@ import {
   UtensilsCrossed,
   X,
   AlertCircle,
+  Trophy,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -57,6 +59,8 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/mbg/production", label: "Produksi MBG", icon: UtensilsCrossed },
   { to: "/mbg/distribution", label: "Distribusi MBG", icon: ClipboardCheck },
   { to: "/mbg/delivery", label: "Kurir MBG", icon: Truck },
+  { to: "/performance", label: "Performa Saya", icon: Trophy },
+  { to: "/super-admin/control-center", label: "Control Center SDM", icon: ShieldCheck },
 ] as const;
 
 const LABELS_DICT = {
@@ -83,6 +87,8 @@ const LABELS_DICT = {
     "/mbg/production": "Produksi MBG",
     "/mbg/distribution": "Distribusi MBG",
     "/mbg/delivery": "Kurir MBG",
+    "/performance": "Performa Saya",
+    "/super-admin/control-center": "Control Center SDM",
   },
   en: {
     "/admin/dashboard": "Dashboard",
@@ -107,6 +113,8 @@ const LABELS_DICT = {
     "/mbg/production": "MBG Production",
     "/mbg/distribution": "MBG Distribution",
     "/mbg/delivery": "MBG Delivery",
+    "/performance": "My Performance",
+    "/super-admin/control-center": "SDM Control Center",
   }
 } as const;
 
@@ -134,6 +142,7 @@ const ITEM_ACTIVE = "bg-[#FBBF24] text-[#111827]";
 const ITEM_INACTIVE = "text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]";
 
 const roleBadge: Record<string, string> = {
+  super_admin: "Super Admin",
   admin: "Admin",
   tim_produksi: "Ust. Joko (Produksi 1)",
   distribusi: "Dwi (Distribusi 1)",
@@ -196,6 +205,8 @@ export function Sidebar({
 
   const allowedItems = SIDEBAR_NAV_ITEMS.filter((item) => {
     if (!userRole) return false;
+    if (item.to === "/performance") return userRole !== "pelanggan" && userRole !== "customer";
+    if (item.to === "/super-admin/control-center") return userRole === "super_admin";
     if (userRole === "admin") return true;
     const allowedPaths = ROLE_PERMISSIONS[userRole] || [];
     return allowedPaths.includes(item.to);

@@ -86,6 +86,8 @@ const MbgDeliveryPage = safeLazy(() => import("@/pages/mbg/MbgDeliveryPage").the
 const MbgArchivePage = safeLazy(() => import("@/pages/mbg/MbgArchivePage").then(module => ({ default: module.MbgArchivePage })));
 const MbgReportPage = safeLazy(() => import("@/pages/mbg/MbgReportPage").then(module => ({ default: module.MbgReportPage })));
 const MbgOrdersPage = safeLazy(() => import("@/pages/mbg/MbgOrdersPage").then(module => ({ default: module.MbgOrdersPage })));
+const PerformancePage = safeLazy(() => import("@/pages/PerformancePage").then(module => ({ default: module.PerformancePage })));
+const SuperAdminControlCenterPage = safeLazy(() => import("@/pages/SuperAdminControlCenterPage").then(module => ({ default: module.SuperAdminControlCenterPage })));
 
 import {
   CategoryIndexStub,
@@ -162,11 +164,7 @@ function ShelledRoute({
   }
 
   // Redirect to respective default landing page if role is not allowed
-  if (
-    profile &&
-    profile.role !== "admin" &&
-    !allowedRoles.includes(profile.role)
-  ) {
+  if (!allowedRoles.includes(profile.role)) {
     // Admin-only routes (those that allow ONLY the admin role) show the
     // "Akses Ditolak" screen for non-admins and redirect to the storefront
     // homepage within 3 seconds (Requirements 16.3, 16.5).
@@ -241,7 +239,7 @@ export function StorefrontProtectedRoute({
     return <LoadingScreen message="Memuat profil..." />;
   }
 
-  if (profile.role !== "admin" && !allowedRoles.includes(profile.role)) {
+  if (!allowedRoles.includes(profile.role)) {
     const isAdminOnlyRoute =
       allowedRoles.length === 1 && allowedRoles[0] === "admin";
     if (isAdminOnlyRoute) {
@@ -726,7 +724,7 @@ function RoutesTree() {
         path="/mbg/orders"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Pesanan MBG" allowedRoles={["admin_mbg", "produksi_mbg", "dokumentasi_produksiMBG", "purchasing_mbg", "distribusi_mbg", "kurir_mbg", "sub_purchasing_mbg"]}>
+            <ShelledRoute pageTitle="Pesanan MBG" allowedRoles={["admin_mbg", "produksi_mbg", "dokumentasi_produksiMBG", "distribusi_mbg", "kurir_mbg"]}>
               <MbgOrdersPage />
             </ShelledRoute>
           </Protected>
@@ -766,7 +764,7 @@ function RoutesTree() {
         path="/mbg/production"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Produksi MBG" allowedRoles={["produksi_mbg", "admin_mbg", "dokumentasi_produksiMBG", "purchasing_mbg", "sub_purchasing_mbg", "MBG2", "mbg2", "produksi_mbg_2"]}>
+            <ShelledRoute pageTitle="Produksi MBG" allowedRoles={["produksi_mbg", "admin_mbg", "dokumentasi_produksiMBG", "MBG2", "mbg2", "produksi_mbg_2"]}>
               <MbgProductionPage />
             </ShelledRoute>
           </Protected>
@@ -800,6 +798,8 @@ function RoutesTree() {
           </Protected>
         }
       />
+      <Route path="/performance" element={<Protected><ShelledRoute pageTitle="Performa Saya" allowedRoles={["admin", "monitoring", "tim_produksi", "distribusi", "kurir", "produksi_1", "distribusi_1", "produksi_2", "distribusi_2", "mo_katering", "co_mo_katering", "admin_mbg", "produksi_mbg", "dokumentasi_produksiMBG", "distribusi_mbg", "kurir_mbg", "MBG2", "mbg2", "produksi_mbg_2", "distribusi_mbg_2", "super_admin"]}><PerformancePage /></ShelledRoute></Protected>} />
+      <Route path="/super-admin/control-center" element={<Protected><ShelledRoute pageTitle="SDM Performance Control Center" allowedRoles={["super_admin"]}><SuperAdminControlCenterPage /></ShelledRoute></Protected>} />
 
       {/* Legacy redirects */}
       <Route

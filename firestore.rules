@@ -130,9 +130,15 @@ service cloud.firestore {
       return isAdminMbg() || isProduksiMbg() || isProduksiMbg2() || isDokumentasiProduksiMbg() || isPurchasingMbg() || isDistribusiMbg() || isKurirMbg() || isSubPurchasingMbg();
     }
 
-    function isMbgManager() { return isAdmin() || isAdminMbg() || isProduksiMbg() || isProduksiMbg2(); }
+    function isSuperAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
+    }
+
+    function isMbgManager() { return isAdmin() || isSuperAdmin() || isAdminMbg() || isProduksiMbg() || isProduksiMbg2(); }
     function isMbgDeliveryTeam() { return isMbgManager() || isDistribusiMbg() || isKurirMbg(); }
-    function isMbgStaff() { return isAnyMbg() || isMoKatering() || isCoMoKatering(); }
+    function isMbgStaff() { return isSuperAdmin() || isAnyMbg() || isMoKatering() || isCoMoKatering(); }
 
     // -------------------------------------------------------------------
     // Katering & Operational Role Helpers
@@ -164,7 +170,7 @@ service cloud.firestore {
     }
 
     function isOrderStaff() {
-      return isAdmin() || isTimProduksi() || isDistribusi() || isKurirMbg() || isMoKatering() || isCoMoKatering() || isAnyMbg();
+      return isAdmin() || isSuperAdmin() || isTimProduksi() || isDistribusi() || isKurirMbg() || isMoKatering() || isCoMoKatering() || isAnyMbg();
     }
     function isOwnDeliveryFile(fileId) {
       return get(/databases/$(database)/documents/delivery_files/$(fileId)).data.uploadedBy == request.auth.uid;
@@ -188,14 +194,16 @@ service cloud.firestore {
     // CO_MO can update review status (approve/reject).
     // All authenticated katering roles can read.
     match /catering_jobdesks/{jobDeskId} {
-      allow read: if isAdmin() || isMoKatering() || isCoMoKatering() || isKateringOperational();
-      allow create: if isAdmin() || isMoKatering();
-      allow update: if isAdmin() || isMoKatering()
+      allow read: if isAdmin() || isSuperAdmin() || isMoKatering() || isCoMoKatering() || isKateringOperational();
+      allow create: if isAdmin() || isSuperAdmin() || isMoKatering();
+      allow update: if isAdmin() || isSuperAdmin() || isMoKatering()
         || (isKateringOperational() && resource.data.assignedRole == getUserRole()
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completionNote', 'completionPhotoUrl', 'submittedAt', 'submittedBy', 'updatedAt']))
-        || (isCoMoKatering() && resource.data.reviewStatus == 'pending'
+          && request.resource.data.submittedBy == request.auth.uid
+          && request.resource.data.reviewStatus == 'pending_review'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'incompleteReason', 'completionNote', 'completionPhotoUrl', 'reviewStatus', 'submittedAt', 'submittedBy', 'updatedAt']))
+        || (isCoMoKatering() && resource.data.reviewStatus == 'pending_review'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewStatus', 'reviewedBy', 'reviewedAt', 'rejectionRemark', 'status', 'submittedAt', 'submittedBy', 'updatedAt']));
-      allow delete: if isAdmin() || isMoKatering();
+      allow delete: if isAdmin() || isSuperAdmin() || isMoKatering();
     }
 
     // -------------------------------------------------------------------
@@ -344,8 +352,8 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     // Rules for profile syncing, registration, and role escalation prevention.
     match /users/{userId} {
-      allow get: if request.auth != null && (request.auth.uid == userId || isOrderStaff());
-      allow list: if isOrderStaff();
+      allow get: if request.auth != null && (request.auth.uid == userId || isOrderStaff() || isSuperAdmin());
+      allow list: if isOrderStaff() || isSuperAdmin();
 
       // Allow users to register/setup their own profile on first login/registration
       allow create: if request.auth != null
@@ -359,8 +367,43 @@ service cloud.firestore {
         && request.resource.data.role == resource.data.role
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'phoneNumber', 'savedDeliveryAddress', 'updatedAt']);
 
-      // Admins have full access to modify profiles (e.g., assigning internal roles)
-      allow write: if isAdmin();
+      // Role is an authority boundary. Only Super Admin may change it.
+      allow update: if isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /role_assignments/{assignmentId} {
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isSuperAdmin());
+      allow create, update: if isSuperAdmin();
+      allow delete: if false;
+    }
+
+    match /performance_activities/{activityId} {
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isSuperAdmin());
+      // KPI records are append-only and must be tied to an approved Job Desk
+      // or an approved additional task. This prevents browser-side XP forging.
+      allow create: if request.resource.data.status == 'approved'
+        && ((isCoMoKatering() || isSuperAdmin())
+          && request.resource.data.sourceType == 'catering_jobdesk'
+          && get(/databases/$(database)/documents/catering_jobdesks/$(request.resource.data.sourceId)).data.reviewStatus == 'approved'
+          && get(/databases/$(database)/documents/catering_jobdesks/$(request.resource.data.sourceId)).data.submittedBy == request.resource.data.userId
+          || (isSuperAdmin()
+            && request.resource.data.sourceType == 'ad_hoc_task'
+            && getAfter(/databases/$(database)/documents/ad_hoc_tasks/$(request.resource.data.sourceId)).data.status == 'approved'
+            && getAfter(/databases/$(database)/documents/ad_hoc_tasks/$(request.resource.data.sourceId)).data.assigneeId == request.resource.data.userId));
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /ad_hoc_tasks/{taskId} {
+      allow read: if request.auth != null && (resource.data.assigneeId == request.auth.uid || isSuperAdmin());
+      allow create: if isSuperAdmin();
+      allow update: if isSuperAdmin()
+        || (request.auth != null && resource.data.assigneeId == request.auth.uid
+          && resource.data.status in ['pending', 'in_progress', 'revision_required']
+          && request.resource.data.status == 'pending_review'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'evidenceNote', 'submittedAt', 'updatedAt']));
+      allow delete: if false;
     }
 
     // -------------------------------------------------------------------
@@ -414,6 +457,11 @@ service cloud.firestore {
       allow read: if isMbgStaff();
       allow create, delete: if isMbgManager();
       allow update: if isMbgManager()
+        || ((isProduksiMbg() || isProduksiMbg2() || isDokumentasiProduksiMbg())
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['productionCookingStatus', 'productionCookingUpdatedBy', 'productionCookingUpdatedAt', 'updatedAt'])
+          && request.resource.data.productionCookingUpdatedBy == request.auth.uid
+          && request.resource.data.productionCookingStatus in ['cooking', 'cooked']
+          && (request.resource.data.productionCookingStatus == 'cooking' || resource.data.productionCookingStatus == 'cooking'))
         || (isKurirMbg() && request.resource.data.status == 'DELIVERED'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']));
     }
@@ -524,6 +572,7 @@ service cloud.firestore {
       allow create, delete: if isMbgManager() || isDistribusiMbg();
       allow update: if isMbgManager() || isDistribusiMbg()
         || (isKurirMbg() && (resource.data.petugasId == request.auth.uid || resource.data.kenekId == request.auth.uid)
+          && get(/databases/$(database)/documents/mbg_pm_batches/$(resource.data.batchId)).data.productionCookingStatus == 'cooked'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'status', 'handoverPhotoId', 'handoverAt', 'deliveryPhotos', 'schoolProofs', 'completedAt', 'updatedAt'
           ]));

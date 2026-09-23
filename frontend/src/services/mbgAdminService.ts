@@ -13,13 +13,15 @@ import {
   onSnapshot,
   writeBatch,
   getDocs,
+  runTransaction,
   deleteField,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { subscriptionManager } from './subscriptionManager';
-import type { MbgPmBatch, MbgPmEntry, MbgBatchStatus, MbgDayMenu } from '@/types/mbg';
+import type { MbgPmBatch, MbgPmEntry, MbgBatchStatus, MbgDayMenu, MbgProductionCookingStatus } from '@/types/mbg';
+import { canAdvanceMbgCooking } from '@/utils/mbgReadiness';
 import { MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
 
 const BATCHES_COLLECTION = 'mbg_pm_batches';
@@ -191,6 +193,27 @@ export async function updateBatchStatus(
   status: MbgBatchStatus
 ): Promise<void> {
   await updateBatch(batchId, { status });
+}
+
+/** Confirm cooking in a transaction so stale tabs cannot move a batch backwards. */
+export async function updateBatchCookingStatus(batchId: string, status: MbgProductionCookingStatus): Promise<void> {
+  const actorId = auth.currentUser?.uid;
+  if (!actorId) throw new Error('Silakan masuk kembali sebelum memperbarui status masak.');
+  await runTransaction(db, async (transaction) => {
+    const ref = doc(db, BATCHES_COLLECTION, batchId);
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists()) throw new Error('Batch MBG tidak ditemukan.');
+    const batch = snapshot.data() as MbgPmBatch;
+    if (!canAdvanceMbgCooking(batch.productionCookingStatus, status)) {
+      throw new Error('Status masak telah berubah. Muat ulang dan periksa status terbaru.');
+    }
+    transaction.update(ref, {
+      productionCookingStatus: status,
+      productionCookingUpdatedBy: actorId,
+      productionCookingUpdatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  });
 }
 
 export async function deleteBatch(batchId: string): Promise<void> {

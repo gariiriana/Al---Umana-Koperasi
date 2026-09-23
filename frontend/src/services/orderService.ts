@@ -498,7 +498,10 @@ export async function transitionOrder(
 
     switch (payload.action) {
       case "start-production":
-        if (currentStatus !== "PENDING") {
+        // PENDING is created by the admin order form. CONFIRMED is created
+        // after a customer payment has been approved. Both states mean the
+        // order is ready to be cooked.
+        if (currentStatus !== "PENDING" && currentStatus !== "CONFIRMED") {
           throw new Error(`Invalid transition ${currentStatus} -> IN_PRODUCTION`);
         }
         updates.status = "IN_PRODUCTION";

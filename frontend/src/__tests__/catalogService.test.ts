@@ -21,6 +21,7 @@ vi.mock("firebase/firestore", () => ({
   query: vi.fn((col, ...filters) => ({ col, filters })),
   where: vi.fn((field, op, val) => ({ type: "where", field, op, val })),
   orderBy: vi.fn((field, dir) => ({ type: "orderBy", field, dir })),
+  limit: vi.fn((count) => ({ type: "limit", count })),
 }));
 
 vi.mock("@/lib/firebase", () => ({

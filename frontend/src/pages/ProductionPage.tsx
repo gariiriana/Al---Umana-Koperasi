@@ -90,6 +90,9 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
 }) {
   const isBusy = busyId === order.id;
   const isInProduction = order.status === "IN_PRODUCTION";
+  // Orders made directly by Admin use PENDING, while paid customer orders
+  // become CONFIRMED. Both are ready to enter the kitchen queue.
+  const isQueuedForProduction = order.status === "PENDING" || order.status === "CONFIRMED";
   const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
   const isPast = isOrderPastDeadline(order);
 
@@ -467,7 +470,7 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
           </AnimatePresence>
 
           {/* Action button */}
-          {order.status === "PENDING" && !showStartForm && (
+          {isQueuedForProduction && !showStartForm && (
             <button
               onClick={() => setShowStartForm(true)}
               disabled={isBusy}
@@ -525,7 +528,7 @@ export function ProductionPage() {
     });
   }, []);
 
-  const confirmed = orders.filter((o) => o.status === "PENDING").sort((a, b) => {
+  const queued = orders.filter((o) => o.status === "PENDING" || o.status === "CONFIRMED").sort((a, b) => {
     const deadlineA = getOrderDeadline(a);
     const deadlineB = getOrderDeadline(b);
     if (deadlineA !== deadlineB) {
@@ -544,7 +547,7 @@ export function ProductionPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredQueue = useMemo(() => {
-    let rawQueue = [...inProduction, ...confirmed];
+    let rawQueue = [...inProduction, ...queued];
 
     if (startDate) {
       rawQueue = rawQueue.filter((o) => {
@@ -569,7 +572,7 @@ export function ProductionPage() {
         o.id.toLowerCase().includes(q) ||
         o.items.some((item) => item.itemName.toLowerCase().includes(q))
     );
-  }, [inProduction, confirmed, searchQuery, startDate, endDate]);
+  }, [inProduction, queued, searchQuery, startDate, endDate]);
 
   const start = async (
     o: Order,
@@ -704,6 +707,7 @@ export function ProductionPage() {
 
       const statusLabels: Record<string, string> = {
         PENDING: "Antre Masak",
+        CONFIRMED: "Antre Masak",
         IN_PRODUCTION: "Sedang Dimasak",
       };
 
@@ -840,7 +844,7 @@ export function ProductionPage() {
               <span className="text-[9px] font-bold text-amber-600 uppercase tracking-wide">{lang === "id" ? "Masak" : "Cooking"}</span>
             </div>
             <div className="flex flex-col items-center bg-[#F3F4F6] border border-[#E5E7EB] rounded-xl px-3 py-1.5">
-              <span className="text-base font-extrabold text-[#374151] font-['Manrope',system-ui,sans-serif]">{confirmed.length}</span>
+              <span className="text-base font-extrabold text-[#374151] font-['Manrope',system-ui,sans-serif]">{queued.length}</span>
               <span className="text-[9px] font-bold text-[#6B7280] uppercase tracking-wide">{lang === "id" ? "Antri" : "Queue"}</span>
             </div>
           </div>

@@ -246,7 +246,12 @@ export function subscribeOrdersByStatus(
 }
 
 /**
- * Subscribe specifically to active kitchen production orders (PENDING and IN_PRODUCTION).
+ * Subscribe specifically to active kitchen production orders.
+ *
+ * `CONFIRMED` is the status used by the customer-payment flow after an admin
+ * approves a payment.  It is still an order waiting to be cooked, so omitting
+ * it here made otherwise valid catering orders disappear from the production
+ * queue.  Admin-entered orders use `PENDING`; both statuses are supported.
  * Deduplicated via subscriptionManager and avoids downloading thousands of past orders.
  */
 export function subscribeProductionOrders(
@@ -255,7 +260,7 @@ export function subscribeProductionOrders(
 ): Unsubscribe {
   const q = query(
     collection(db, "orders"),
-    where("status", "in", ["PENDING", "IN_PRODUCTION"])
+    where("status", "in", ["PENDING", "CONFIRMED", "IN_PRODUCTION"])
   );
   return subscriptionManager.subscribe(
     q,

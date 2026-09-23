@@ -38,6 +38,9 @@ export type MbgQcStatus = 'pending' | 'passed' | 'failed';
 /** Status cooking session */
 export type MbgCookingStatus = 'preparation' | 'cooking' | 'plating' | 'packaging' | 'done';
 
+/** Explicit food readiness, independent of planning and report/export status. */
+export type MbgProductionCookingStatus = 'not_started' | 'cooking' | 'cooked';
+
 /** Status delivery task kurir */
 export type MbgDeliveryStatus = 'waiting' | 'handover_done' | 'delivering' | 'delivered';
 
@@ -189,6 +192,9 @@ export interface MbgPmBatch {
   tanggal: string;
   /** Status keseluruhan batch */
   status: MbgBatchStatus;
+  productionCookingStatus?: MbgProductionCookingStatus;
+  productionCookingUpdatedBy?: string;
+  productionCookingUpdatedAt?: string;
   /** Summary totals (auto-calculated from entries) */
   totalSiswaBalita: number;
   totalBumilBusui: number;

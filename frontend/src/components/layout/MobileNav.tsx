@@ -10,6 +10,8 @@ import {
   ShoppingCart,
   Truck,
   History,
+  Trophy,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -32,6 +34,8 @@ export const MOBILE_NAV_ITEMS: readonly MobileNavItem[] = [
   { to: "/admin/production/history", label: "Riwayat",       icon: History },
   { to: "/distribusi/handover",     label: "Handover",      icon: Send },
   { to: "/distribusi/delivery",     label: "Antar",         icon: Truck },
+  { to: "/performance",             label: "Performa",      icon: Trophy },
+  { to: "/super-admin/control-center", label: "Kontrol",    icon: ShieldCheck },
 ] as const;
 
 export interface MobileNavProps {
@@ -41,6 +45,7 @@ export interface MobileNavProps {
 export function MobileNav({ userRole }: MobileNavProps) {
   let allowedItems = MOBILE_NAV_ITEMS.filter((item) => {
     if (!userRole) return false;
+    if (item.to === "/super-admin/control-center") return userRole === "super_admin";
     if (userRole === "admin") return true;
     const allowedPaths = ROLE_PERMISSIONS[userRole] || [];
     return allowedPaths.includes(item.to);
