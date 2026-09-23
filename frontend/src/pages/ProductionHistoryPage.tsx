@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { History, ClipboardCheck, Clock, ChefHat, CheckCircle2, XCircle, ImageOff, FileDown, Loader2, Search, X } from "lucide-react";
+import { History, ClipboardCheck, Clock, ChefHat, CheckCircle2, XCircle, ImageOff, FileDown, Loader2, Search, X, CalendarDays } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { subscribeOrders } from "@/services/realtimeService";
 import { getProduct } from "@/services/catalogService";
@@ -81,6 +81,22 @@ const fetchDeliveryFileBase64 = async (photoId: string): Promise<string | null> 
     console.error("Failed to load delivery file base64:", err);
     return null;
   }
+};
+
+type HistoryType = "production" | "qc";
+
+const getHistoryDateKey = (order: Order, historyType: HistoryType) => {
+  const dateValue = historyType === "qc"
+    ? order.qcReviewedAt || order.eventDate || order.deliveryTime || order.updatedAt || order.createdAt
+    : order.eventDate || order.deliveryTime || order.productionStartedAt || order.updatedAt || order.createdAt;
+
+  return dateValue?.slice(0, 10) ?? "";
+};
+
+const matchesHistoryPeriod = (order: Order, historyType: HistoryType, selectedDate: string, selectedMonth: string) => {
+  const dateKey = getHistoryDateKey(order, historyType);
+  return (!selectedDate || dateKey === selectedDate)
+    && (!selectedMonth || dateKey.startsWith(selectedMonth));
 };
 
 // Helper component to load and render photo previews asynchronously
@@ -166,9 +182,11 @@ export function ProductionHistoryPage() {
   const [activeTab, setActiveTab] = useState<"production" | "qc">("production");
   const [exporting, setExporting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState("");
 
   const exportHistoryToPDF = async () => {
-    if (productionHistory.length === 0) {
+    if (filteredProductionHistory.length === 0) {
       showToast({
         message: lang === "id" ? "Tidak ada riwayat produksi untuk diekspor." : "No production history to export.",
         variant: "info",
@@ -185,7 +203,7 @@ export function ProductionHistoryPage() {
 
       // 1. Fetch product data and convert images to Base64 in parallel
       const itemsWithImagesMap: Record<string, { itemId: string; itemName: string; quantity: number; imageBase64: string | null }[]> = {};
-      const allItemPromises = productionHistory.flatMap((o) =>
+      const allItemPromises = filteredProductionHistory.flatMap((o) =>
         o.items.map(async (it) => {
           let base64: string | null = null;
           try {
@@ -220,7 +238,7 @@ export function ProductionHistoryPage() {
 
       // 2. Fetch cooking proof images in parallel
       const proofImagesMap: Record<string, string | null> = {};
-      const proofPromises = productionHistory.map(async (o) => {
+      const proofPromises = filteredProductionHistory.map(async (o) => {
         if (o.productionStartPhotoId) {
           const base64 = await fetchDeliveryFileBase64(o.productionStartPhotoId);
           proofImagesMap[o.id] = base64;
@@ -263,13 +281,13 @@ export function ProductionHistoryPage() {
       doc.setFontSize(9);
       doc.setTextColor(...slateDark);
       doc.text(`Dicetak pada: ${new Date().toLocaleString("id-ID")}`, pageW - 14, 17, { align: "right" });
-      doc.text(`Total Catatan: ${productionHistory.length}`, pageW - 14, 22, { align: "right" });
+      doc.text(`Total Catatan: ${filteredProductionHistory.length}`, pageW - 14, 22, { align: "right" });
 
       doc.setDrawColor(...brandGold);
       doc.setLineWidth(0.5);
       doc.line(14, 31, pageW - 14, 31);
 
-      const tableBody = productionHistory.map((o, index) => {
+      const tableBody = filteredProductionHistory.map((o, index) => {
         const items = itemsWithImagesMap[o.id] || [];
         const itemsText = items.map((it) => `${it.itemName}${o.isPreOrder ? " (Pra-pesanan)" : ` (x${it.quantity})`}`).join("\n") + "\n\n\n";
         
@@ -301,7 +319,7 @@ export function ProductionHistoryPage() {
         margin: { left: 14, right: 14 },
         didDrawCell: (data) => {
           if (data.section === "body" && data.column.index === 3) {
-            const order = productionHistory[data.row.index];
+            const order = filteredProductionHistory[data.row.index];
             const items = itemsWithImagesMap[order.id] || [];
             const cell = data.cell;
             
@@ -322,7 +340,7 @@ export function ProductionHistoryPage() {
           }
 
           if (data.section === "body" && data.column.index === 4) {
-            const order = productionHistory[data.row.index];
+            const order = filteredProductionHistory[data.row.index];
             const cell = data.cell;
             
             // 1. Draw Duration Text manually at the top of the cell
@@ -391,28 +409,32 @@ export function ProductionHistoryPage() {
   }, [orders]);
 
   const filteredProductionHistory = useMemo(() => {
-    if (!searchQuery.trim()) return productionHistory;
     const q = searchQuery.toLowerCase().trim();
     return productionHistory.filter(
       (o) =>
-        o.customerName?.toLowerCase().includes(q) ||
-        o.id.toLowerCase().includes(q) ||
-        o.items.some((it) => it.itemName.toLowerCase().includes(q))
+        matchesHistoryPeriod(o, "production", selectedDate, selectedMonth) &&
+        (!q ||
+          o.customerName?.toLowerCase().includes(q) ||
+          o.id.toLowerCase().includes(q) ||
+          o.items.some((it) => it.itemName.toLowerCase().includes(q)))
     );
-  }, [productionHistory, searchQuery]);
+  }, [productionHistory, searchQuery, selectedDate, selectedMonth]);
 
   const filteredQcHistory = useMemo(() => {
-    if (!searchQuery.trim()) return qcHistory;
     const q = searchQuery.toLowerCase().trim();
     return qcHistory.filter(
       (o) =>
-        o.customerName?.toLowerCase().includes(q) ||
-        o.id.toLowerCase().includes(q) ||
-        o.qcReviewedBy?.toLowerCase().includes(q) ||
-        o.qcFailReason?.toLowerCase().includes(q) ||
-        o.items.some((it) => it.itemName.toLowerCase().includes(q))
+        matchesHistoryPeriod(o, "qc", selectedDate, selectedMonth) &&
+        (!q ||
+          o.customerName?.toLowerCase().includes(q) ||
+          o.id.toLowerCase().includes(q) ||
+          o.qcReviewedBy?.toLowerCase().includes(q) ||
+          o.qcFailReason?.toLowerCase().includes(q) ||
+          o.items.some((it) => it.itemName.toLowerCase().includes(q)))
     );
-  }, [qcHistory, searchQuery]);
+  }, [qcHistory, searchQuery, selectedDate, selectedMonth]);
+
+  const hasActiveFilter = Boolean(searchQuery || selectedDate || selectedMonth);
 
   const renderStatusBadge = (status: string) => {
     switch (status) {
@@ -481,7 +503,7 @@ export function ProductionHistoryPage() {
               : "border-transparent text-[#6B7280] hover:text-[#111827]"
           }`}
         >
-          {lang === "id" ? "Riwayat Produksi" : "Production History"} ({productionHistory.length})
+          {lang === "id" ? "Riwayat Produksi" : "Production History"} ({filteredProductionHistory.length})
         </button>
         <button
           onClick={() => setActiveTab("qc")}
@@ -491,37 +513,76 @@ export function ProductionHistoryPage() {
               : "border-transparent text-[#6B7280] hover:text-[#111827]"
           }`}
         >
-          {lang === "id" ? "Riwayat QC" : "QC History"} ({qcHistory.length})
+          {lang === "id" ? "Riwayat QC" : "QC History"} ({filteredQcHistory.length})
         </button>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative">
-        <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Search className="h-4 w-4 text-[#9CA3AF]" />
-        </span>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={
-            activeTab === "production"
-              ? "Cari riwayat produksi berdasarkan nama pelanggan, produk, atau ID pesanan..."
-              : "Cari riwayat QC berdasarkan nama pelanggan, produk, pemeriksa, atau alasan..."
-          }
-          className="w-full rounded-full border border-[#E5E7EB] bg-white pl-9 pr-10 py-2 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition font-['Hanken_Grotesk']"
-        />
-        {searchQuery && (
-          <button
-            type="button"
-            onClick={() => setSearchQuery("")}
-            title="Bersihkan pencarian"
-            aria-label="Bersihkan pencarian"
-            className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#9CA3AF] hover:text-[#4B5563] cursor-pointer"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
+      {/* Search and date filters */}
+      <div className="rounded-xl border border-[#E5E7EB] bg-white p-3 space-y-3">
+        <div className="relative">
+          <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-4 w-4 text-[#9CA3AF]" />
+          </span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={
+              activeTab === "production"
+                ? "Cari riwayat produksi berdasarkan nama pelanggan, produk, atau ID pesanan..."
+                : "Cari riwayat QC berdasarkan nama pelanggan, produk, pemeriksa, atau alasan..."
+            }
+            className="w-full rounded-full border border-[#E5E7EB] bg-white pl-9 pr-10 py-2 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition font-['Hanken_Grotesk']"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              title="Bersihkan pencarian"
+              aria-label="Bersihkan pencarian"
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#9CA3AF] hover:text-[#4B5563] cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-end gap-2">
+          <label className="flex-1 sm:flex-none">
+            <span className="mb-1 flex items-center gap-1 text-[11px] font-bold text-[#6B7280]">
+              <CalendarDays className="h-3.5 w-3.5" /> Filter bulan
+            </span>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="w-full sm:w-44 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent"
+            />
+          </label>
+          <label className="flex-1 sm:flex-none">
+            <span className="mb-1 flex items-center gap-1 text-[11px] font-bold text-[#6B7280]">
+              <CalendarDays className="h-3.5 w-3.5" /> Filter tanggal
+            </span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="w-full sm:w-44 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent"
+            />
+          </label>
+          {(selectedDate || selectedMonth) && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDate("");
+                setSelectedMonth("");
+              }}
+              className="rounded-lg px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50 cursor-pointer"
+            >
+              Reset filter
+            </button>
+          )}
+        </div>
       </div>
 
       {/* History Lists */}
@@ -531,11 +592,11 @@ export function ProductionHistoryPage() {
             <div className="bg-white rounded-lg border border-[#E5E7EB] p-12 text-center space-y-3">
               <ChefHat className="h-14 w-14 mx-auto text-amber-300 bg-amber-50 rounded-full p-3" />
               <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">
-                {searchQuery ? "Hasil Pencarian Kosong" : (lang === "id" ? "Belum Ada Riwayat" : "No Production History")}
+                {hasActiveFilter ? "Tidak Ada Riwayat yang Cocok" : (lang === "id" ? "Belum Ada Riwayat" : "No Production History")}
               </p>
               <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                {searchQuery
-                  ? "Tidak ada riwayat produksi yang cocok dengan kata kunci."
+                {hasActiveFilter
+                  ? "Tidak ada riwayat produksi yang cocok dengan pencarian atau periode yang dipilih."
                   : (lang === "id" ? "Pesanan yang selesai diproduksi akan tercatat di sini." : "Completed cooking orders will be logged here.")}
               </p>
             </div>
@@ -614,11 +675,11 @@ export function ProductionHistoryPage() {
             <div className="bg-white rounded-lg border border-[#E5E7EB] p-12 text-center space-y-3">
               <ClipboardCheck className="h-14 w-14 mx-auto text-purple-300 bg-purple-50 rounded-full p-3" />
               <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">
-                {searchQuery ? "Hasil Pencarian Kosong" : (lang === "id" ? "Belum Ada Riwayat QC" : "No QC History")}
+                {hasActiveFilter ? "Tidak Ada Riwayat yang Cocok" : (lang === "id" ? "Belum Ada Riwayat QC" : "No QC History")}
               </p>
               <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif]">
-                {searchQuery
-                  ? "Tidak ada riwayat pemeriksaan QC yang cocok dengan kata kunci."
+                {hasActiveFilter
+                  ? "Tidak ada riwayat pemeriksaan QC yang cocok dengan pencarian atau periode yang dipilih."
                   : (lang === "id" ? "Hasil pemeriksaan kualitas produk akan tercatat di sini." : "Quality Control review outcomes will be shown here.")}
               </p>
             </div>
