@@ -12,7 +12,7 @@ import { ProductImage } from "@/components/ProductImage";
 import { parseIngredients } from "@/lib/ingredientsParser";
 import { getProduct } from "@/services/catalogService";
 import { useToast } from "@/contexts/ToastContext";
-import { isOrderPastDeadline } from "@/lib/orderHelpers";
+import { isOrderPastDeadline, isQueuedForProduction } from "@/lib/orderHelpers";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -92,7 +92,7 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
   const isInProduction = order.status === "IN_PRODUCTION";
   // Orders made directly by Admin use PENDING, while paid customer orders
   // become CONFIRMED. Both are ready to enter the kitchen queue.
-  const isQueuedForProduction = order.status === "PENDING" || order.status === "CONFIRMED";
+  const isQueued = isQueuedForProduction(order.status);
   const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
   const isPast = isOrderPastDeadline(order);
 
@@ -470,7 +470,7 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
           </AnimatePresence>
 
           {/* Action button */}
-          {isQueuedForProduction && !showStartForm && (
+          {isQueued && !showStartForm && (
             <button
               onClick={() => setShowStartForm(true)}
               disabled={isBusy}
@@ -528,7 +528,7 @@ export function ProductionPage() {
     });
   }, []);
 
-  const queued = orders.filter((o) => o.status === "PENDING" || o.status === "CONFIRMED").sort((a, b) => {
+  const queued = orders.filter((o) => isQueuedForProduction(o.status)).sort((a, b) => {
     const deadlineA = getOrderDeadline(a);
     const deadlineB = getOrderDeadline(b);
     if (deadlineA !== deadlineB) {

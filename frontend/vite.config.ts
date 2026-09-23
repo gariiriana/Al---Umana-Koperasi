@@ -65,13 +65,14 @@ export default defineConfig({
             },
           },
           {
-            // Firebase Firestore API - network first (data selalu fresh)
+            // Firestore listeners must never fall back to a cached response:
+            // an installed PWA otherwise can show an older order snapshot
+            // than the browser version of the same account.
             urlPattern: /^https:\/\/firestore\.googleapis\.com\/.*/i,
-            handler: "NetworkFirst",
+            handler: "NetworkOnly",
             options: {
               cacheName: "firestore-cache",
               expiration: { maxEntries: 50, maxAgeSeconds: 60 * 5 },
-              networkTimeoutSeconds: 10,
             },
           },
           {

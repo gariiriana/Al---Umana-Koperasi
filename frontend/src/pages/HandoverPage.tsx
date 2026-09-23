@@ -17,6 +17,7 @@ import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import { ProofModal } from "@/components/delivery/ProofModal";
 import { ProductImage } from "@/components/ProductImage";
+import { isQueuedForProduction } from "@/lib/orderHelpers";
 
 const renderFormattedAddress = (address: string) => {
   if (!address) return null;
@@ -184,7 +185,7 @@ export function HandoverPage() {
 
   // Group by tab status
   const preparation = useMemo(() => {
-    return assignedOrders.filter((o) => o.status === "PENDING" || o.status === "IN_PRODUCTION")
+    return assignedOrders.filter((o) => isQueuedForProduction(o.status) || o.status === "IN_PRODUCTION")
       .sort((a, b) => {
         const deadlineA = getOrderDeadline(a);
         const deadlineB = getOrderDeadline(b);

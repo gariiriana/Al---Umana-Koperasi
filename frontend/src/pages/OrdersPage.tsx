@@ -1471,6 +1471,7 @@ export function OrdersPage() {
                 >
                   <option value="ALL">Semua Status</option>
                   <option value="PENDING">Pending</option>
+                  <option value="CONFIRMED">Dikonfirmasi / Antre Produksi</option>
                   <option value="IN_PRODUCTION">Dalam Produksi</option>
                   <option value="QC">QC</option>
                   <option value="READY_TO_DELIVER">Siap Dikirim</option>

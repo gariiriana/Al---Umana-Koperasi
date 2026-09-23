@@ -5,6 +5,7 @@ import { Loader2, Calendar, Clock, CheckSquare, Square, Truck, Check, MapPin, Al
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { subscribeOrders } from "@/services/realtimeService";
+import { isAssignableForDelivery } from "@/lib/orderHelpers";
 import { assignMultipleOrders } from "@/services/orderService";
 import type { Order, KitchenSignature } from "@/types/order";
 import { useToast } from "@/contexts/ToastContext";
@@ -158,9 +159,7 @@ export function DeliverySchedulerPage() {
 
   const readyOrders = useMemo(() => {
     return orders.filter(o => {
-      const isUnassignedActive = 
-        (o.status === "PENDING" || o.status === "IN_PRODUCTION" || o.status === "READY_TO_DELIVER") &&
-        !o.assignedCourierId;
+      const isUnassignedActive = isAssignableForDelivery(o.status) && !o.assignedCourierId;
       if (!isUnassignedActive) return false;
       
       if (filterDate) {
@@ -268,7 +267,7 @@ export function DeliverySchedulerPage() {
   const getCourierActiveCount = (courierId: string) => {
     return orders.filter(o => 
       o.assignedCourierId === courierId && 
-      (o.status === "PENDING" || o.status === "IN_PRODUCTION" || o.status === "READY_TO_DELIVER" || o.status === "OUT_FOR_DELIVERY")
+      (isAssignableForDelivery(o.status) || o.status === "OUT_FOR_DELIVERY")
     ).length;
   };
 
@@ -376,7 +375,7 @@ export function DeliverySchedulerPage() {
         
         // Status Translation
         let statusLabel: string = o.status;
-        if (o.status === "PENDING") statusLabel = "Antre Masak";
+        if (o.status === "PENDING" || o.status === "CONFIRMED") statusLabel = "Antre Masak";
         else if (o.status === "IN_PRODUCTION") statusLabel = "Sedang Dimasak";
         else if (o.status === "READY_TO_DELIVER") statusLabel = "Siap Kirim";
         else if (o.status === "OUT_FOR_DELIVERY") statusLabel = "Sedang Jalan";
@@ -897,7 +896,7 @@ export function DeliverySchedulerPage() {
                     {couriers.map((c) => {
                       const activeTasks = orders.filter(o => 
                         o.assignedCourierId === c.uid && 
-                        (o.status === "PENDING" || o.status === "IN_PRODUCTION" || o.status === "READY_TO_DELIVER" || o.status === "OUT_FOR_DELIVERY")
+                        (isAssignableForDelivery(o.status) || o.status === "OUT_FOR_DELIVERY")
                       );
                       
                       return (
@@ -1301,7 +1300,7 @@ export function DeliverySchedulerPage() {
                 const courierText = courier ? courier.displayName : "Belum Ditugaskan";
                 
                 let statusLabel: string = o.status;
-                if (o.status === "PENDING") statusLabel = "Antre Masak";
+                if (o.status === "PENDING" || o.status === "CONFIRMED") statusLabel = "Antre Masak";
                 else if (o.status === "IN_PRODUCTION") statusLabel = "Sedang Dimasak";
                 else if (o.status === "READY_TO_DELIVER") statusLabel = "Siap Kirim";
                 else if (o.status === "OUT_FOR_DELIVERY") statusLabel = "Sedang Jalan";

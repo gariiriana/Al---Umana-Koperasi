@@ -55,6 +55,18 @@ export function getStatusBadgeClass(status: OrderStatus): string {
   }
 }
 
+/**
+ * Orders created by an admin use PENDING, whereas customer orders whose
+ * payment was approved use CONFIRMED. Operationally both are waiting for
+ * the kitchen and must move through the same production/distribution flow.
+ */
+export const isQueuedForProduction = (status: OrderStatus): boolean =>
+  status === "PENDING" || status === "CONFIRMED";
+
+/** Statuses that can be assigned to a courier before dispatch. */
+export const isAssignableForDelivery = (status: OrderStatus): boolean =>
+  isQueuedForProduction(status) || status === "IN_PRODUCTION" || status === "READY_TO_DELIVER" || status === "READY";
+
 export const isOrderPastDeadline = (order: { eventDate?: string; createdAt?: string; deliveryTime?: string; status: OrderStatus }): boolean => {
   const dateStr = order.eventDate || order.createdAt;
   if (!dateStr) return false;
@@ -75,4 +87,3 @@ export const isOrderPastDeadline = (order: { eventDate?: string; createdAt?: str
 
   return Date.now() > ts;
 };
-
