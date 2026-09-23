@@ -146,6 +146,7 @@ export function HandoverPage() {
 
 
   const [activeTab, setActiveTab] = useState<"ready" | "preparation" | "enroute" | "completed">("preparation");
+  const [filterDate, setFilterDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [isProofModalOpen, setIsProofModalOpen] = useState(false);
   const [selectedProofFiles, setSelectedProofFiles] = useState<string[]>([]);
@@ -178,15 +179,30 @@ export function HandoverPage() {
     fetchCouriers();
   }, []);
 
-  // Filter only orders that have been assigned to a courier
+  // Orders that have been assigned to a courier (used by ready/enroute/completed tabs)
   const assignedOrders = useMemo(() => {
     return orders.filter((o) => !!o.assignedCourierId);
   }, [orders]);
 
   // Group by tab status
+  // BUG FIX: Preparation tab now shows ALL active orders (including those
+  // without a courier assigned). Previously only courier-assigned orders were
+  // visible, causing newly-created admin orders to silently disappear from
+  // the distribusi view until a courier was manually assigned elsewhere.
   const preparation = useMemo(() => {
-    return assignedOrders.filter((o) => isQueuedForProduction(o.status) || o.status === "IN_PRODUCTION")
+    return orders.filter((o) => {
+        if (!(isQueuedForProduction(o.status) || o.status === "IN_PRODUCTION")) return false;
+        if (filterDate) {
+          const oDate = o.eventDate ? o.eventDate.slice(0, 10) : (o.createdAt ? o.createdAt.slice(0, 10) : "");
+          if (oDate !== filterDate) return false;
+        }
+        return true;
+      })
       .sort((a, b) => {
+        // Unassigned orders float to the top so distribusi notices them immediately
+        const aHasCourier = !!a.assignedCourierId;
+        const bHasCourier = !!b.assignedCourierId;
+        if (aHasCourier !== bHasCourier) return aHasCourier ? 1 : -1;
         const deadlineA = getOrderDeadline(a);
         const deadlineB = getOrderDeadline(b);
         if (deadlineA !== deadlineB) {
@@ -194,11 +210,25 @@ export function HandoverPage() {
         }
         return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       });
-  }, [assignedOrders]);
+  }, [orders, filterDate]);
 
+  // BUG FIX: Ready tab now shows ALL orders with status READY_TO_DELIVER or READY,
+  // even if unassigned. Previously, unassigned orders finishing production vanished
+  // into limbo (not in preparation anymore, and not in ready because no courier).
   const ready = useMemo(() => {
-    return assignedOrders.filter((o) => o.status === "READY_TO_DELIVER" || o.status === "READY")
+    return orders.filter((o) => {
+        if (!(o.status === "READY_TO_DELIVER" || o.status === "READY")) return false;
+        if (filterDate) {
+          const oDate = o.eventDate ? o.eventDate.slice(0, 10) : (o.createdAt ? o.createdAt.slice(0, 10) : "");
+          if (oDate !== filterDate) return false;
+        }
+        return true;
+      })
       .sort((a, b) => {
+        // Unassigned orders float to top so staff notices to assign courier immediately
+        const aHasCourier = !!a.assignedCourierId;
+        const bHasCourier = !!b.assignedCourierId;
+        if (aHasCourier !== bHasCourier) return aHasCourier ? 1 : -1;
         const deadlineA = getOrderDeadline(a);
         const deadlineB = getOrderDeadline(b);
         if (deadlineA !== deadlineB) {
@@ -206,10 +236,17 @@ export function HandoverPage() {
         }
         return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       });
-  }, [assignedOrders]);
+  }, [orders, filterDate]);
 
   const enRoute = useMemo(() => {
-    return assignedOrders.filter((o) => o.status === "OUT_FOR_DELIVERY")
+    return assignedOrders.filter((o) => {
+        if (o.status !== "OUT_FOR_DELIVERY") return false;
+        if (filterDate) {
+          const oDate = o.eventDate ? o.eventDate.slice(0, 10) : (o.createdAt ? o.createdAt.slice(0, 10) : "");
+          if (oDate !== filterDate) return false;
+        }
+        return true;
+      })
       .sort((a, b) => {
         const deadlineA = getOrderDeadline(a);
         const deadlineB = getOrderDeadline(b);
@@ -218,17 +255,24 @@ export function HandoverPage() {
         }
         return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       });
-  }, [assignedOrders]);
+  }, [assignedOrders, filterDate]);
 
   const completed = useMemo(() => {
-    return assignedOrders
-      .filter((o) => o.status === "COMPLETED" || o.status === "DELIVERED" || o.status === "DELIVERY_FAILED" || o.status === "FAILED")
+    return orders
+      .filter((o) => {
+        if (!(o.status === "COMPLETED" || o.status === "DELIVERED" || o.status === "DELIVERY_FAILED" || o.status === "FAILED")) return false;
+        if (filterDate) {
+          const oDate = o.eventDate ? o.eventDate.slice(0, 10) : (o.createdAt ? o.createdAt.slice(0, 10) : "");
+          if (oDate !== filterDate) return false;
+        }
+        return true;
+      })
       .sort((a, b) => {
         const timeA = a.deliveredAt ? new Date(a.deliveredAt).getTime() : 0;
         const timeB = b.deliveredAt ? new Date(b.deliveredAt).getTime() : 0;
         return timeB - timeA;
       });
-  }, [assignedOrders]);
+  }, [orders, filterDate]);
 
   // Real-time GPS tracking broadcast
   useEffect(() => {
@@ -367,6 +411,39 @@ export function HandoverPage() {
         </div>
       )}
 
+      {/* Date Filter Toolbar */}
+      <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-xs flex items-center gap-3">
+        <label htmlFor="handover-date" className="text-xs font-bold text-[#4B5563] shrink-0">
+          Tanggal:
+        </label>
+        <input
+          id="handover-date"
+          type="date"
+          className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent font-semibold"
+          value={filterDate}
+          onChange={(e) => setFilterDate(e.target.value)}
+        />
+        {filterDate ? (
+          <button
+            type="button"
+            onClick={() => setFilterDate("")}
+            className="text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-2 rounded-xl transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+            title="Tampilkan semua pesanan dari semua tanggal"
+          >
+            Semua Tanggal
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setFilterDate(new Date().toISOString().split("T")[0])}
+            className="text-[11px] font-bold text-neutral-600 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 px-2.5 py-2 rounded-xl transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+            title="Kembali ke tanggal hari ini"
+          >
+            Hari Ini
+          </button>
+        )}
+      </div>
+
       {/* Tab selectors */}
       <div className="flex border-b border-[#E5E7EB] bg-white rounded-t-2xl px-2 overflow-x-auto scrollbar-none whitespace-nowrap">
         <button
@@ -417,7 +494,10 @@ export function HandoverPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <AnimatePresence>
               {ready.map((o) => {
-                const courierName = availableCouriers.find((c) => c.uid === o.assignedCourierId)?.displayName || o.assignedCourierId || "Kurir";
+                const courierName = o.assignedCourierId
+                  ? (availableCouriers.find((c) => c.uid === o.assignedCourierId)?.displayName || o.assignedCourierId || "Kurir")
+                  : null;
+                const isUnassigned = !o.assignedCourierId;
 
                 return (
                   <motion.div
@@ -426,11 +506,36 @@ export function HandoverPage() {
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    className="bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden"
+                    className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${isUnassigned ? "border-orange-300 ring-1 ring-orange-200" : "border-[#E5E7EB]"}`}
                   >
-                    <div className="h-1.5 bg-gradient-to-r from-blue-500 to-cyan-400" />
+                    <div className={`h-1.5 ${isUnassigned ? "bg-gradient-to-r from-orange-400 to-amber-400" : "bg-gradient-to-r from-blue-500 to-cyan-400"}`} />
                     <div className="p-5 space-y-4">
-                      {o.courierSickReported && (
+                      {/* Unassigned courier alert + assign dropdown */}
+                      {isUnassigned && (
+                        <div className="space-y-2">
+                          <div className="bg-orange-50 border border-orange-200 text-orange-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5">
+                            <AlertCircle className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                            <span>⚠️ Selesai Masak tapi Belum Ada Kurir — Segera Tugaskan!</span>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wide mb-1">Tugaskan Kurir</label>
+                            <select
+                              title="Pilih Kurir"
+                              value=""
+                              onChange={(e) => handleReassignCourier(o.id, e.target.value)}
+                              className="w-full text-xs rounded-xl border border-orange-200 bg-orange-50/50 p-2 focus:outline-none focus:ring-1 focus:ring-[#FBBF24] cursor-pointer font-bold text-neutral-700"
+                            >
+                              <option value="">-- Pilih Kurir --</option>
+                              {availableCouriers.map((c) => (
+                                <option key={c.uid} value={c.uid}>
+                                  {c.displayName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                      {!isUnassigned && o.courierSickReported && (
                         <div className="space-y-2">
                           <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 animate-pulse">
                             <span>⚠️ Kurir Sakit / Batal Tugas</span>
@@ -485,10 +590,17 @@ export function HandoverPage() {
                       </div>
 
                       <div className="space-y-2 text-xs text-[#4B5563]">
-                        <div className="flex items-center gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-2.5">
-                          <User className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                          <span>Kurir ditugaskan: <strong>{courierName}</strong></span>
-                        </div>
+                        {courierName ? (
+                          <div className="flex items-center gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-2.5">
+                            <User className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                            <span>Kurir ditugaskan: <strong>{courierName}</strong></span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl p-2.5">
+                            <User className="h-3.5 w-3.5 text-orange-400 shrink-0" />
+                            <span className="text-orange-600 font-bold">Belum ada kurir ditugaskan</span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-2.5">
                           <Clock className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
                           <span>Jadwal Pengantaran: <strong>{o.deliveryTime}</strong></span>
@@ -559,7 +671,10 @@ export function HandoverPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <AnimatePresence>
               {preparation.map((o) => {
-                const courierName = availableCouriers.find((c) => c.uid === o.assignedCourierId)?.displayName || o.assignedCourierId || "Kurir";
+                const courierName = o.assignedCourierId
+                  ? (availableCouriers.find((c) => c.uid === o.assignedCourierId)?.displayName || o.assignedCourierId || "Kurir")
+                  : null;
+                const isUnassigned = !o.assignedCourierId;
 
                 return (
                   <motion.div
@@ -567,11 +682,37 @@ export function HandoverPage() {
                     layout
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden"
+                    className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${isUnassigned ? "border-orange-300 ring-1 ring-orange-200" : "border-[#E5E7EB]"}`}
                   >
-                    <div className="h-1.5 bg-[#FCD34D]" />
+                    <div className={`h-1.5 ${isUnassigned ? "bg-gradient-to-r from-orange-400 to-amber-400" : "bg-[#FCD34D]"}`} />
                     <div className="p-5 space-y-4">
-                      {o.courierSickReported && (
+                      {/* Unassigned courier alert + assign dropdown */}
+                      {isUnassigned && (
+                        <div className="space-y-2">
+                          <div className="bg-orange-50 border border-orange-200 text-orange-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5">
+                            <AlertCircle className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                            <span>⚠️ Belum Ada Kurir — Segera Tugaskan!</span>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wide mb-1">Tugaskan Kurir</label>
+                            <select
+                              title="Pilih Kurir"
+                              value=""
+                              onChange={(e) => handleReassignCourier(o.id, e.target.value)}
+                              className="w-full text-xs rounded-xl border border-orange-200 bg-orange-50/50 p-2 focus:outline-none focus:ring-1 focus:ring-[#FBBF24] cursor-pointer font-bold text-neutral-700"
+                            >
+                              <option value="">-- Pilih Kurir --</option>
+                              {availableCouriers.map((c) => (
+                                <option key={c.uid} value={c.uid}>
+                                  {c.displayName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                      {/* Courier sick / reassign (only for already-assigned orders) */}
+                      {!isUnassigned && o.courierSickReported && (
                         <div className="space-y-2">
                           <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 animate-pulse">
                             <span>⚠️ Kurir Sakit / Batal Tugas</span>
@@ -630,10 +771,17 @@ export function HandoverPage() {
                       </div>
 
                       <div className="space-y-2 text-xs text-[#4B5563]">
-                        <div className="flex items-center gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-2.5">
-                          <User className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                          <span>Kurir ditugaskan: <strong>{courierName}</strong></span>
-                        </div>
+                        {courierName ? (
+                          <div className="flex items-center gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-2.5">
+                            <User className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                            <span>Kurir ditugaskan: <strong>{courierName}</strong></span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl p-2.5">
+                            <User className="h-3.5 w-3.5 text-orange-400 shrink-0" />
+                            <span className="text-orange-600 font-bold">Belum ada kurir ditugaskan</span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-2.5">
                           <Clock className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
                           <span>Jadwal Pengantaran: <strong>{o.deliveryTime}</strong></span>

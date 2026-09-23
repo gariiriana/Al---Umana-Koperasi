@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Calendar, Clock, CheckSquare, Square, Truck, Check, MapPin, AlertCircle, FileDown, Image, Search, X, Eye, FolderOpen, CheckCircle2, User } from "lucide-react";
+import { Loader2, Calendar, Clock, CheckSquare, Square, Truck, Check, MapPin, AlertCircle, FileDown, Image, Search, X, Eye, FolderOpen, CheckCircle2, User, ArrowRight } from "lucide-react";
 
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
@@ -186,6 +186,34 @@ export function DeliverySchedulerPage() {
         return deadlineA - deadlineB;
       }
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+  }, [orders, filterDate, searchQuery]);
+
+  // Orders that are currently active (cooking, ready, or delivering) and ALREADY have a courier assigned
+  const assignedActiveOrders = useMemo(() => {
+    return orders.filter((o) => {
+      const isAssignedActive =
+        (isAssignableForDelivery(o.status) || o.status === "OUT_FOR_DELIVERY") &&
+        !!o.assignedCourierId;
+      if (!isAssignedActive) return false;
+
+      if (filterDate) {
+        const oDate = o.eventDate ? o.eventDate.slice(0, 10) : (o.createdAt ? o.createdAt.slice(0, 10) : "");
+        if (oDate !== filterDate) return false;
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const match =
+          (o.institutionName || "").toLowerCase().includes(q) ||
+          (o.customerName || "").toLowerCase().includes(q) ||
+          (o.recipientName || "").toLowerCase().includes(q) ||
+          (o.id || "").toLowerCase().includes(q) ||
+          (o.items || []).some((it) => (it.itemName || "").toLowerCase().includes(q));
+        if (!match) return false;
+      }
+
+      return true;
     });
   }, [orders, filterDate, searchQuery]);
 
@@ -525,41 +553,56 @@ export function DeliverySchedulerPage() {
       ) : (
         <>
           {/* Top Tab Bar: Active Assignments vs Archive Documents */}
-          <div className="flex gap-2 bg-[#F3F4F6] p-1.5 rounded-2xl max-w-xl font-['Hanken_Grotesk'] mb-4 shadow-3xs">
-            <button
-              type="button"
-              onClick={() => setActiveTab("assignment")}
-              className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
-                activeTab === "assignment"
-                  ? "bg-white text-[#111827] shadow-xs"
-                  : "text-[#6B7280] hover:text-[#111827]"
-              }`}
-            >
-              <Truck className="h-4 w-4 text-[#D97706]" />
-              <span>Penugasan Kurir (Aktif)</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
-                activeTab === "assignment" ? "bg-amber-100 text-amber-800" : "bg-gray-200 text-gray-700"
-              }`}>
-                {readyOrders.length}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("archive")}
-              className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
-                activeTab === "archive"
-                  ? "bg-white text-[#111827] shadow-xs"
-                  : "text-[#6B7280] hover:text-[#111827]"
-              }`}
-            >
-              <FolderOpen className="h-4 w-4 text-emerald-600" />
-              <span>Arsip Pengantaran Selesai</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
-                activeTab === "archive" ? "bg-emerald-100 text-emerald-800" : "bg-gray-200 text-gray-700"
-              }`}>
-                {completedOrders.length}
-              </span>
-            </button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div className="flex gap-2 bg-[#F3F4F6] p-1.5 rounded-2xl max-w-xl font-['Hanken_Grotesk'] shadow-3xs flex-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab("assignment")}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                  activeTab === "assignment"
+                    ? "bg-white text-[#111827] shadow-xs"
+                    : "text-[#6B7280] hover:text-[#111827]"
+                }`}
+              >
+                <Truck className="h-4 w-4 text-[#D97706]" />
+                <span>Belum Ditugaskan</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                  activeTab === "assignment" ? "bg-amber-100 text-amber-800" : "bg-gray-200 text-gray-700"
+                }`}>
+                  {readyOrders.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("archive")}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                  activeTab === "archive"
+                    ? "bg-white text-[#111827] shadow-xs"
+                    : "text-[#6B7280] hover:text-[#111827]"
+                }`}
+              >
+                <FolderOpen className="h-4 w-4 text-emerald-600" />
+                <span>Arsip Selesai</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                  activeTab === "archive" ? "bg-emerald-100 text-emerald-800" : "bg-gray-200 text-gray-700"
+                }`}>
+                  {completedOrders.length}
+                </span>
+              </button>
+            </div>
+
+            {assignedActiveOrders.length > 0 && (
+              <button
+                type="button"
+                onClick={() => navigate("/distribusi/handover")}
+                className="inline-flex items-center gap-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold px-3.5 py-2.5 rounded-xl transition cursor-pointer self-start sm:self-auto"
+                title="Buka menu Handover untuk melihat pesanan yang sedang diproses kurir"
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping shrink-0" />
+                <span>{assignedActiveOrders.length} Pesanan Aktif Berjalan di Handover</span>
+                <ArrowRight className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+              </button>
+            )}
           </div>
 
           {/* Filter and Export Toolbar */}
@@ -807,12 +850,34 @@ export function DeliverySchedulerPage() {
                   })}
 
                   {readyOrders.length === 0 && (
-                    <div className="col-span-full bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center space-y-3">
-                      <Truck className="h-12 w-12 mx-auto text-emerald-400 bg-emerald-50 rounded-full p-3" />
-                      <p className="font-['Manrope'] font-bold text-[#111827]">Tidak Ada Pesanan Aktif</p>
-                      <p className="text-xs text-[#6B7280] max-w-sm mx-auto">
-                        Belum ada pesanan aktif yang terkonfirmasi untuk dikirim pada tanggal ini.
+                    <div className="col-span-full bg-white rounded-2xl border border-[#E5E7EB] p-10 text-center space-y-3">
+                      <Truck className="h-12 w-12 mx-auto text-emerald-500 bg-emerald-50 rounded-full p-3" />
+                      <p className="font-['Manrope'] font-bold text-base text-[#111827]">
+                        {assignedActiveOrders.length > 0
+                          ? "Semua Pesanan Aktif Sudah Ditugaskan Kurir"
+                          : "Tidak Ada Antrean Penugasan Kurir"}
                       </p>
+                      <p className="text-xs text-[#6B7280] max-w-md mx-auto leading-relaxed">
+                        {assignedActiveOrders.length > 0 ? (
+                          <>
+                            Semua <strong>{assignedActiveOrders.length} pesanan aktif</strong> untuk tanggal ini sudah memiliki kurir yang ditugaskan dan dapat dipantau di menu <strong>Handover Distribusi</strong>.
+                          </>
+                        ) : (
+                          "Belum ada pesanan aktif yang membutuhkan penugasan kurir untuk tanggal ini."
+                        )}
+                      </p>
+                      {assignedActiveOrders.length > 0 && (
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={() => navigate("/distribusi/handover")}
+                            className="inline-flex items-center gap-2 bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+                          >
+                            <span>Buka Menu Handover ({assignedActiveOrders.length} Pesanan Aktif)</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
