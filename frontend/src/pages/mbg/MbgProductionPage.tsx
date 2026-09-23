@@ -2700,89 +2700,111 @@ export function MbgProductionPage() {
                                   {petugasEntries.reduce((s, e) => s + (e.jumlah || 0), 0)} porsi
                                 </span>
                               </div>
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-[11px] min-w-[750px]">
-                                <thead>
-                                  <tr className="bg-[#FEF3C7] text-[9px] font-extrabold text-[#92400E] uppercase border-b border-[#E5E7EB]">
-                                    <th className="px-2 py-1.5 text-left">Institusi</th>
-                                    <th className="px-1 py-1.5 text-center">Siswa/Balita</th>
-                                    <th className="px-1 py-1.5 text-center">Bumil/Busui</th>
-                                    <th className="px-1 py-1.5 text-center">Guru/Kader</th>
-                                    <th className="px-1 py-1.5 text-center">Pobia Nasi</th>
-                                    <th className="px-1 py-1.5 text-center">Jumlah</th>
-                                    <th className="px-2 py-1.5 text-center">Jadwal</th>
-                                    <th className="px-2 py-1.5 text-left">Menu Utama</th>
-                                    <th className="px-2 py-1.5 text-left">Menu Keringan</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {petugasEntries.map((e) => (
-                                    <Fragment key={e.id}>
-                                      <tr className="border-t border-[#E5E7EB] hover:bg-gray-50/50">
-                                        <td className="px-2 py-1.5 font-bold text-gray-800">
-                                          {e.institutionName}
-                                          {e.isSekolahLibur && <span className="ml-1 text-[8px] text-red-500 font-extrabold">LIBUR</span>}
-                                          {e.classesBreakdown && e.classesBreakdown.length > 0 && (
-                                            <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                                              {e.classesBreakdown.length} Kelas
-                                            </span>
-                                          )}
-                                        </td>
-                                        <td className="px-1 py-1.5 text-center font-bold text-gray-700">{e.qtSiswaBalita || '-'}</td>
-                                        <td className="px-1 py-1.5 text-center font-bold text-gray-700">{e.qtBumilBusui || '-'}</td>
-                                        <td className="px-1 py-1.5 text-center font-bold text-gray-700">{e.qtGuruKader || '-'}</td>
-                                        <td className="px-1 py-1.5 text-center font-bold text-red-600">{e.qtPobiaNasi || '-'}</td>
-                                        <td className="px-1 py-1.5 text-center">
-                                          <span className="font-extrabold text-[#92400E] bg-[#FBBF24]/20 rounded-full px-1.5 py-0.5">{e.jumlah}</span>
-                                        </td>
-                                        <td className="px-2 py-1.5 text-center font-semibold text-[#6B7280]">{e.jadwalPengantaran || '-'}</td>
-                                        <td className="px-2 py-1.5 text-gray-500 font-medium">{e.menuItems?.join(', ') || '-'}</td>
-                                        <td className="px-2 py-1.5 text-gray-500 font-medium">{e.menuKeringanItems?.join(', ') || '-'}</td>
-                                      </tr>
-                                      {/* Sub-table for class breakdown if it exists */}
-                                      {e.classesBreakdown && e.classesBreakdown.length > 0 && (
-                                        <tr>
-                                          <td colSpan={9} className="px-3 pb-3 pt-1 bg-gray-50/70">
-                                            <div className="border border-[#E5E7EB] rounded-lg overflow-hidden bg-white shadow-sm">
-                                              <table className="w-full text-[10px] text-left">
-                                                <thead>
-                                                  <tr className="bg-gray-100/80 text-[8px] font-bold text-gray-500 uppercase border-b border-gray-200">
-                                                    <th className="px-3 py-1.5">Nama Kelas</th>
-                                                    <th className="px-2 py-1.5 text-center">Porsi Balita</th>
-                                                    <th className="px-2 py-1.5 text-center">Porsi Kecil</th>
-                                                    <th className="px-2 py-1.5 text-center">Porsi Besar</th>
-                                                    <th className="px-2 py-1.5 text-center">Bumil/Busui</th>
-                                                    <th className="px-2 py-1.5 text-center">Pobia Nasi</th>
-                                                    <th className="px-2 py-1.5 text-center">Jumlah</th>
-                                                    <th className="px-3 py-1.5">Menu / Makanan</th>
-                                                    <th className="px-3 py-1.5">Menu Keringan</th>
-                                                  </tr>
-                                                </thead>
-                                                <tbody>
-                                                  {e.classesBreakdown.map((c) => (
-                                                    <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50/30">
-                                                      <td className="px-3 py-1 font-bold text-gray-700">{c.className}</td>
-                                                      <td className="px-2 py-1 text-center text-gray-600 font-semibold">{c.qtPorsiBalita || '-'}</td>
-                                                      <td className="px-2 py-1 text-center text-gray-600 font-semibold">{c.qtPorsiKecil || '-'}</td>
-                                                      <td className="px-2 py-1 text-center text-gray-600 font-semibold">{c.qtPorsiBesar || '-'}</td>
-                                                      <td className="px-2 py-1 text-center text-gray-600 font-semibold">{c.qtPorsiBumilBusui || '-'}</td>
-                                                      <td className="px-2 py-1 text-center text-red-500 font-bold">{c.qtPobiaNasi || '-'}</td>
-                                                      <td className="px-2 py-1 text-center font-bold text-amber-700">{c.jumlah}</td>
-                                                      <td className="px-3 py-1 text-gray-500 font-medium">{c.menuItems?.join(', ') || '-'}</td>
-                                                      <td className="px-3 py-1 text-gray-500 font-medium">{c.menuKeringanItems?.join(', ') || '-'}</td>
-                                                    </tr>
-                                                  ))}
-                                                </tbody>
-                                              </table>
-                                            </div>
-                                          </td>
+                            {[
+                              {
+                                title: 'DATA SEKOLAH',
+                                list: petugasEntries.filter(e => e.institutionType !== 'posyandu'),
+                                isPosyandu: false,
+                              },
+                              {
+                                title: 'DATA POSYANDU',
+                                list: petugasEntries.filter(e => e.institutionType === 'posyandu'),
+                                isPosyandu: true,
+                              }
+                            ].map(({ title, list, isPosyandu }) => {
+                              if (list.length === 0) return null;
+                              return (
+                                <div key={title} className="mb-4">
+                                  <h3 className="font-bold text-slate-800 text-[10px] mb-2 uppercase tracking-wide px-2 flex items-center gap-1.5">
+                                    <div className={`w-1.5 h-1.5 rounded-full ${isPosyandu ? 'bg-purple-500' : 'bg-amber-400'}`}></div>
+                                    {title}
+                                  </h3>
+                                  <div className="overflow-x-auto border border-slate-300 rounded-lg">
+                                    <table className="w-full text-[11px] min-w-[750px]">
+                                      <thead>
+                                        <tr className={`${isPosyandu ? 'bg-purple-50' : 'bg-[#FEF3C7]'} text-[9px] font-extrabold text-[#92400E] uppercase border-b border-[#E5E7EB]`}>
+                                          <th className="px-2 py-1.5 text-left">Institusi</th>
+                                          <th className="px-1 py-1.5 text-center">Siswa/Balita</th>
+                                          <th className="px-1 py-1.5 text-center">Bumil/Busui</th>
+                                          <th className="px-1 py-1.5 text-center">Guru/Kader</th>
+                                          <th className="px-1 py-1.5 text-center">Pobia Nasi</th>
+                                          <th className="px-1 py-1.5 text-center">Jumlah</th>
+                                          <th className="px-2 py-1.5 text-center">Jadwal</th>
+                                          <th className="px-2 py-1.5 text-left">Menu Utama</th>
+                                          <th className="px-2 py-1.5 text-left">Menu Keringan</th>
                                         </tr>
-                                      )}
-                                    </Fragment>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
+                                      </thead>
+                                      <tbody>
+                                        {list.map((e) => (
+                                          <Fragment key={e.id}>
+                                            <tr className="border-t border-[#E5E7EB] hover:bg-gray-50/50">
+                                              <td className="px-2 py-1.5 font-bold text-gray-800">
+                                                {e.institutionName}
+                                                {e.isSekolahLibur && <span className="ml-1 text-[8px] text-red-500 font-extrabold">LIBUR</span>}
+                                                {e.classesBreakdown && e.classesBreakdown.length > 0 && (
+                                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                                    {e.classesBreakdown.length} Kelas
+                                                  </span>
+                                                )}
+                                              </td>
+                                              <td className="px-1 py-1.5 text-center font-bold text-gray-700">{e.qtSiswaBalita || '-'}</td>
+                                              <td className="px-1 py-1.5 text-center font-bold text-gray-700">{e.qtBumilBusui || '-'}</td>
+                                              <td className="px-1 py-1.5 text-center font-bold text-gray-700">{e.qtGuruKader || '-'}</td>
+                                              <td className="px-1 py-1.5 text-center font-bold text-red-600">{e.qtPobiaNasi || '-'}</td>
+                                              <td className="px-1 py-1.5 text-center">
+                                                <span className="font-extrabold text-[#92400E] bg-[#FBBF24]/20 rounded-full px-1.5 py-0.5">{e.jumlah}</span>
+                                              </td>
+                                              <td className="px-2 py-1.5 text-center font-semibold text-[#6B7280]">{e.jadwalPengantaran || '-'}</td>
+                                              <td className="px-2 py-1.5 text-gray-500 font-medium">{e.menuItems?.join(', ') || '-'}</td>
+                                              <td className="px-2 py-1.5 text-gray-500 font-medium">{e.menuKeringanItems?.join(', ') || '-'}</td>
+                                            </tr>
+                                            {/* Sub-table for class breakdown if it exists */}
+                                            {e.classesBreakdown && e.classesBreakdown.length > 0 && (
+                                              <tr>
+                                                <td colSpan={9} className="px-3 pb-3 pt-1 bg-gray-50/70">
+                                                  <div className="border border-[#E5E7EB] rounded-lg overflow-hidden bg-white shadow-sm">
+                                                    <table className="w-full text-[10px] text-left">
+                                                      <thead>
+                                                        <tr className="bg-gray-100/80 text-[8px] font-bold text-gray-500 uppercase border-b border-gray-200">
+                                                          <th className="px-3 py-1.5">Nama Kelas</th>
+                                                          <th className="px-2 py-1.5 text-center">Porsi Balita</th>
+                                                          <th className="px-2 py-1.5 text-center">Porsi Kecil</th>
+                                                          <th className="px-2 py-1.5 text-center">Porsi Besar</th>
+                                                          <th className="px-2 py-1.5 text-center">Bumil/Busui</th>
+                                                          <th className="px-2 py-1.5 text-center">Pobia Nasi</th>
+                                                          <th className="px-2 py-1.5 text-center">Jumlah</th>
+                                                          <th className="px-3 py-1.5">Menu / Makanan</th>
+                                                          <th className="px-3 py-1.5">Menu Keringan</th>
+                                                        </tr>
+                                                      </thead>
+                                                      <tbody>
+                                                        {e.classesBreakdown.map((c) => (
+                                                          <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50/30">
+                                                            <td className="px-3 py-1 font-bold text-gray-700">{c.className}</td>
+                                                            <td className="px-2 py-1 text-center text-gray-600 font-semibold">{c.qtPorsiBalita || '-'}</td>
+                                                            <td className="px-2 py-1 text-center text-gray-600 font-semibold">{c.qtPorsiKecil || '-'}</td>
+                                                            <td className="px-2 py-1 text-center text-gray-600 font-semibold">{c.qtPorsiBesar || '-'}</td>
+                                                            <td className="px-2 py-1 text-center text-gray-600 font-semibold">{c.qtPorsiBumilBusui || '-'}</td>
+                                                            <td className="px-2 py-1 text-center text-red-500 font-bold">{c.qtPobiaNasi || '-'}</td>
+                                                            <td className="px-2 py-1 text-center font-bold text-amber-700">{c.jumlah}</td>
+                                                            <td className="px-3 py-1 text-gray-500 font-medium">{c.menuItems?.join(', ') || '-'}</td>
+                                                            <td className="px-3 py-1 text-gray-500 font-medium">{c.menuKeringanItems?.join(', ') || '-'}</td>
+                                                          </tr>
+                                                        ))}
+                                                      </tbody>
+                                                    </table>
+                                                  </div>
+                                                </td>
+                                              </tr>
+                                            )}
+                                          </Fragment>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              );
+                            })}
                             </div>
                           );
                         })}

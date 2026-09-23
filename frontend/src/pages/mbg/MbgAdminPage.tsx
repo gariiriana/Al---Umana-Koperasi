@@ -1433,82 +1433,95 @@ export function MbgAdminPage() {
   // Grand totals perhitungan akurat murni dari entri aktif
   const grandTotals = useMemo(() => {
     const active = entries.filter((e) => !e.isSekolahLibur);
+    const posyanduActive = active.filter((e) => e.institutionType === 'posyandu');
+    const sekolahActive = active.filter((e) => e.institutionType !== 'posyandu');
+
     const petugasSet = new Set<string>();
     active.forEach((e) => {
       if (e.assignedPetugasName) petugasSet.add(e.assignedPetugasName.trim());
     });
 
-    const posyanduActive = active.filter((e) => e.institutionType === 'posyandu');
-    const sekolahActive = active.filter((e) => e.institutionType !== 'posyandu');
+    const calc = (list: typeof active, isPos: boolean) => {
+      const porsiBesarL = list.reduce((s, e) => s + (e.qtPorsiBesarL || 0), 0);
+      const porsiBesarP = list.reduce((s, e) => s + (e.qtPorsiBesarP || 0), 0);
+      
+      const porsiKecilL_raw = list.reduce((s, e) => s + (e.qtPorsiKecilL || 0), 0);
+      const porsiKecilP_raw = list.reduce((s, e) => s + (e.qtPorsiKecilP || 0), 0);
 
-    // Porsi Besar (Sekolah & Umum)
-    const porsiBesarL = active.reduce((s, e) => s + (e.qtPorsiBesarL || 0), 0);
-    const porsiBesarP = active.reduce((s, e) => s + (e.qtPorsiBesarP || 0), 0);
+      const porsiBalitaL = isPos ? porsiKecilL_raw : 0;
+      const porsiBalitaP = isPos ? porsiKecilP_raw : 0;
+      const porsiKecilL = isPos ? 0 : porsiKecilL_raw;
+      const porsiKecilP = isPos ? 0 : porsiKecilP_raw;
 
-    // Porsi Kecil (Sekolah)
-    const porsiKecilL = sekolahActive.reduce((s, e) => s + (e.qtPorsiKecilL || 0), 0);
-    const porsiKecilP = sekolahActive.reduce((s, e) => s + (e.qtPorsiKecilP || 0), 0);
+      const porsiBumil = list.reduce((s, e) => s + (e.qtBumil ?? (e.institutionName.toLowerCase().includes('bumil') ? e.qtBumilBusui || 0 : 0)), 0);
+      const porsiBusui = list.reduce((s, e) => s + (e.qtBusui ?? (e.institutionName.toLowerCase().includes('busui') ? e.qtBumilBusui || 0 : 0)), 0);
 
-    // Porsi Balita (Posyandu)
-    const porsiBalitaL = posyanduActive.reduce((s, e) => s + (e.qtPorsiKecilL || 0), 0);
-    const porsiBalitaP = posyanduActive.reduce((s, e) => s + (e.qtPorsiKecilP || 0), 0);
+      const guruL_raw = list.reduce((s, e) => s + (e.qtGuruL || 0), 0);
+      const guruP_raw = list.reduce((s, e) => s + (e.qtGuruP || 0), 0);
 
-    // Porsi Bumil & Busui (Posyandu & Institusi dengan Bumil/Busui)
-    const porsiBumil = active.reduce((s, e) => s + (e.qtBumil ?? (e.institutionName.toLowerCase().includes('bumil') ? e.qtBumilBusui || 0 : 0)), 0);
-    const porsiBusui = active.reduce((s, e) => s + (e.qtBusui ?? (e.institutionName.toLowerCase().includes('busui') ? e.qtBumilBusui || 0 : 0)), 0);
+      const guruL = isPos ? 0 : guruL_raw;
+      const guruP = isPos ? 0 : guruP_raw;
+      const kaderL = isPos ? guruL_raw : 0;
+      const kaderP = isPos ? guruP_raw : 0;
 
-    // Total Siswa
-    const totalSiswaL = porsiBesarL + porsiKecilL + porsiBalitaL;
-    const totalSiswaP = porsiBesarP + porsiKecilP + porsiBalitaP + porsiBumil + porsiBusui;
-    const totalSiswaJml = totalSiswaL + totalSiswaP;
+      const tendikL = list.reduce((s, e) => s + (e.qtTendikL || 0), 0);
+      const tendikP = list.reduce((s, e) => s + (e.qtTendikP || 0), 0);
 
-    // Guru (HANYA SEKOLAH)
-    const guruL = sekolahActive.reduce((s, e) => s + (e.qtGuruL || 0), 0);
-    const guruP = sekolahActive.reduce((s, e) => s + (e.qtGuruP || 0), 0);
+      const totalSiswaL = porsiBesarL + porsiKecilL + porsiBalitaL;
+      const totalSiswaP = porsiBesarP + porsiKecilP + porsiBalitaP + porsiBumil + porsiBusui;
+      const totalSiswaJml = totalSiswaL + totalSiswaP;
+      const totalStafKader = guruL + guruP + kaderL + kaderP + tendikL + tendikP;
+      const totalKeseluruhan = totalSiswaJml + totalStafKader;
 
-    // Kader (HANYA POSYANDU)
-    const kaderL = posyanduActive.reduce((s, e) => s + (e.qtGuruL || 0), 0);
-    const kaderP = posyanduActive.reduce((s, e) => s + (e.qtGuruP || 0), 0);
+      return {
+        porsiBesarL, porsiBesarP,
+        porsiKecilL, porsiKecilP,
+        porsiBalitaL, porsiBalitaP,
+        porsiBumil, porsiBusui,
+        totalSiswaL, totalSiswaP, totalSiswaJml,
+        guruL, guruP, kaderL, kaderP, tendikL, tendikP,
+        totalStafKader, totalKeseluruhan
+      };
+    };
 
-    // Tendik (Semua Institusi)
-    const tendikL = active.reduce((s, e) => s + (e.qtTendikL || 0), 0);
-    const tendikP = active.reduce((s, e) => s + (e.qtTendikP || 0), 0);
-
-    const totalStafKader = guruL + guruP + kaderL + kaderP + tendikL + tendikP;
-    const totalKeseluruhan = totalSiswaJml + totalStafKader;
-
-    return {
-      porsiBesarL,
-      porsiBesarP,
-      porsiKecilL,
-      porsiKecilP,
-      porsiBalitaL,
-      porsiBalitaP,
-      porsiBumil,
-      porsiBusui,
-      totalSiswaL,
-      totalSiswaP,
-      totalSiswaJml,
-      guruL,
-      guruP,
-      kaderL,
-      kaderP,
-      tendikL,
-      tendikP,
-      totalStafKader,
-      totalKeseluruhan,
-
-      // Summary
-      siswa: totalSiswaJml,
-      bumil: porsiBumil + porsiBusui,
-      guru: totalStafKader,
+    const sekolah = calc(sekolahActive, false);
+    const posyandu = calc(posyanduActive, true);
+    
+    // For root (combined)
+    const combined = {
+      porsiBesarL: sekolah.porsiBesarL + posyandu.porsiBesarL,
+      porsiBesarP: sekolah.porsiBesarP + posyandu.porsiBesarP,
+      porsiKecilL: sekolah.porsiKecilL + posyandu.porsiKecilL,
+      porsiKecilP: sekolah.porsiKecilP + posyandu.porsiKecilP,
+      porsiBalitaL: sekolah.porsiBalitaL + posyandu.porsiBalitaL,
+      porsiBalitaP: sekolah.porsiBalitaP + posyandu.porsiBalitaP,
+      porsiBumil: sekolah.porsiBumil + posyandu.porsiBumil,
+      porsiBusui: sekolah.porsiBusui + posyandu.porsiBusui,
+      totalSiswaL: sekolah.totalSiswaL + posyandu.totalSiswaL,
+      totalSiswaP: sekolah.totalSiswaP + posyandu.totalSiswaP,
+      totalSiswaJml: sekolah.totalSiswaJml + posyandu.totalSiswaJml,
+      guruL: sekolah.guruL + posyandu.guruL,
+      guruP: sekolah.guruP + posyandu.guruP,
+      kaderL: sekolah.kaderL + posyandu.kaderL,
+      kaderP: sekolah.kaderP + posyandu.kaderP,
+      tendikL: sekolah.tendikL + posyandu.tendikL,
+      tendikP: sekolah.tendikP + posyandu.tendikP,
+      totalStafKader: sekolah.totalStafKader + posyandu.totalStafKader,
+      totalKeseluruhan: sekolah.totalKeseluruhan + posyandu.totalKeseluruhan,
+      
+      // additional fields
+      siswa: sekolah.totalSiswaJml + posyandu.totalSiswaJml,
+      bumil: sekolah.porsiBumil + posyandu.porsiBumil + sekolah.porsiBusui + posyandu.porsiBusui,
+      guru: sekolah.totalStafKader + posyandu.totalStafKader,
       pobia: active.reduce((s, e) => s + (e.qtPobiaNasi || 0), 0),
       alergi: active.reduce((s, e) => s + (e.qtAlergi || 0), 0),
       tidakAlergi: active.reduce((s, e) => s + (e.qtTidakAlergi ?? Math.max(0, (e.jumlah || 0) - (e.qtAlergi || 0))), 0),
-      jumlah: totalKeseluruhan,
+      jumlah: sekolah.totalKeseluruhan + posyandu.totalKeseluruhan,
       totalInstitusi: entries.length,
       totalPetugas: petugasSet.size,
     };
+
+    return { ...combined, sekolah, posyandu };
   }, [entries]);
 
   const handleAutoFixPosyanduEntries = async () => {
@@ -2178,123 +2191,146 @@ export function MbgAdminPage() {
                 </div>
               ) : (
                 <>
-                  <div className="overflow-x-auto border border-slate-300 rounded-xl bg-white shadow-xs">
-                    <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] border-collapse border border-slate-300">
-                      <thead>
-                        <tr className="bg-slate-200 text-[9px] font-extrabold text-slate-800 uppercase tracking-tight text-center border-b border-slate-300">
-                          <th rowSpan={2} className="px-2 py-1.5 border-r border-slate-300 text-left min-w-[140px] max-w-[170px]">SEKOLAH / POSYANDU</th>
-                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI BESAR</th>
-                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI KECIL</th>
-                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300 bg-amber-50 text-amber-950">PORSI BALITA</th>
-                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300 bg-purple-50 text-purple-950">PORSI BUMIL & BUSUI</th>
-                          <th colSpan={3} className="px-1 py-1 border-r border-slate-300 bg-slate-300/60 font-black">TOTAL SISWA</th>
-                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">GURU</th>
-                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">KADER</th>
-                          <th colSpan={2} className="px-1 py-1 border-r border-slate-300">TENDIK</th>
-                          <th rowSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/50 font-extrabold text-[8.5px]">STAF / KADER</th>
-                          <th rowSpan={2} className="px-1.5 py-1 border-r border-slate-300 bg-amber-100/80 text-amber-900 font-black text-[9px]">TOTAL KESELURUHAN</th>
-                          <th rowSpan={2} className="px-1 py-1">AKSI</th>
-                        </tr>
-                        <tr className="bg-slate-100 text-[8.5px] font-bold text-slate-700 uppercase tracking-tight text-center border-b border-slate-300">
-                          {/* Porsi Besar (1) */}
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
-                          {/* Porsi Kecil (2) */}
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
-                          {/* Porsi Balita (3) */}
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8 bg-amber-50/70">L</th>
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8 bg-amber-50/70">P</th>
-                          {/* Porsi Bumil & Busui (4) */}
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-10 bg-purple-50/70 text-[7.5px] text-purple-900">BUMIL</th>
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-10 bg-purple-50/70 text-[7.5px] text-purple-900">BUSUI</th>
-                          {/* Total Siswa */}
-                          <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">L</th>
-                          <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">P</th>
-                          <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-300/70 font-extrabold text-slate-900 w-9">JML</th>
-                          {/* Officers */}
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
-                          <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredEntries.length === 0 ? (
-                          <tr>
-                            <td colSpan={22} className="px-4 py-8 text-center text-xs font-medium text-slate-400 italic">
-                              Belum ada data institusi. Klik "Tambah Institusi Baru" di bawah untuk menambah data.
-                            </td>
-                          </tr>
-                        ) : (
-                          filteredEntries.map((entry) => (
-                            <PmEntryRow
-                              key={entry.id}
-                              entry={entry}
-                              onUpdate={handleUpdateEntry}
-                              onDelete={handleDeleteEntry}
-                              isLibur={entry.isSekolahLibur}
-                              onManageClasses={() => setSelectedEntryForMenu(entry)}
-                              onConfirmAction={setConfirmState}
-                            />
-                          ))
-                        )}
-                        {/* Total Row */}
-                        {filteredEntries.length > 0 && (
-                          <tr className="bg-slate-800 text-white text-xs font-bold border-t border-slate-700 text-center">
-                            {/* 1. SEKOLAH / POSYANDU */}
-                            <td className="px-3 py-3 text-left font-black tracking-wide">TOTAL (AKTIF)</td>
-                            {/* 2. PORSI BESAR L */}
-                            <td className="px-1 py-3 text-center">{grandTotals.porsiBesarL || '—'}</td>
-                            {/* 3. PORSI BESAR P */}
-                            <td className="px-1 py-3 text-center">{grandTotals.porsiBesarP || '—'}</td>
-                            {/* 4. PORSI KECIL L */}
-                            <td className="px-1 py-3 text-center">{grandTotals.porsiKecilL || '—'}</td>
-                            {/* 5. PORSI KECIL P */}
-                            <td className="px-1 py-3 text-center">{grandTotals.porsiKecilP || '—'}</td>
-                            {/* 6. PORSI BALITA L */}
-                            <td className="px-1 py-3 text-center font-bold text-amber-300">{grandTotals.porsiBalitaL || '—'}</td>
-                            {/* 7. PORSI BALITA P */}
-                            <td className="px-1 py-3 text-center font-bold text-amber-300">{grandTotals.porsiBalitaP || '—'}</td>
-                            {/* 8. PORSI BUMIL */}
-                            <td className="px-1 py-3 text-center font-bold text-purple-300">{grandTotals.porsiBumil || '—'}</td>
-                            {/* 9. PORSI BUSUI */}
-                            <td className="px-1 py-3 text-center font-bold text-purple-300">{grandTotals.porsiBusui || '—'}</td>
-                            {/* 10. TOTAL SISWA L */}
-                            <td className="px-1 py-3 text-center bg-slate-700">{grandTotals.totalSiswaL || '—'}</td>
-                            {/* 11. TOTAL SISWA P */}
-                            <td className="px-1 py-3 text-center bg-slate-700">{grandTotals.totalSiswaP || '—'}</td>
-                            {/* 12. TOTAL SISWA JML */}
-                            <td className="px-1 py-3 text-center bg-slate-600 font-black">{grandTotals.totalSiswaJml || '—'}</td>
-                            {/* 13. GURU L */}
-                            <td className="px-1 py-3 text-center">{grandTotals.guruL || '—'}</td>
-                            {/* 14. GURU P */}
-                            <td className="px-1 py-3 text-center">{grandTotals.guruP || '—'}</td>
-                            {/* 15. KADER L */}
-                            <td className="px-1 py-3 text-center">{grandTotals.kaderL || '—'}</td>
-                            {/* 16. KADER P */}
-                            <td className="px-1 py-3 text-center">{grandTotals.kaderP || '—'}</td>
-                            {/* 17. TENDIK L */}
-                            <td className="px-1 py-3 text-center">{grandTotals.tendikL || '—'}</td>
-                            {/* 18. TENDIK P */}
-                            <td className="px-1 py-3 text-center">{grandTotals.tendikP || '—'}</td>
-                            {/* 19. STAF/KADER JML */}
-                            <td className="px-1 py-3 text-center bg-slate-700 font-black">{grandTotals.totalStafKader || '—'}</td>
-                            {/* 20. TOTAL KESELURUHAN */}
-                            <td className="px-2 py-3 text-center bg-amber-400 text-slate-950 font-black text-sm">
-                              {grandTotals.totalKeseluruhan}
-                            </td>
-                            {/* 21. AKSI */}
-                            <td className="px-1 py-3"></td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  {[
+                    {
+                      title: 'DATA SEKOLAH',
+                      list: filteredEntries.filter((e) => e.institutionType !== 'posyandu'),
+                      totals: grandTotals.sekolah,
+                      isPosyandu: false,
+                    },
+                    {
+                      title: 'DATA POSYANDU',
+                      list: filteredEntries.filter((e) => e.institutionType === 'posyandu'),
+                      totals: grandTotals.posyandu,
+                      isPosyandu: true,
+                    },
+                  ].map(({ title, list, totals, isPosyandu }) => (
+                    <div key={title} className="mb-8 last:mb-0">
+                      <h3 className="font-bold text-slate-800 text-sm mb-3 uppercase tracking-wide px-1 flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${isPosyandu ? 'bg-purple-500' : 'bg-amber-400'}`}></div>
+                        {title}
+                      </h3>
+                      <div className="overflow-x-auto border border-slate-300 rounded-xl bg-white shadow-xs">
+                        <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] border-collapse border border-slate-300">
+                          <thead>
+                            <tr className="bg-slate-200 text-[9px] font-extrabold text-slate-800 uppercase tracking-tight text-center border-b border-slate-300">
+                              <th rowSpan={2} className="px-2 py-1.5 border-r border-slate-300 text-left min-w-[140px] max-w-[170px]">SEKOLAH / POSYANDU</th>
+                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI BESAR</th>
+                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI KECIL</th>
+                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300 bg-amber-50 text-amber-950">PORSI BALITA</th>
+                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300 bg-purple-50 text-purple-950">PORSI BUMIL & BUSUI</th>
+                              <th colSpan={3} className="px-1 py-1 border-r border-slate-300 bg-slate-300/60 font-black">TOTAL SISWA</th>
+                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">GURU</th>
+                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">KADER</th>
+                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">TENDIK</th>
+                              <th rowSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/50 font-extrabold text-[8.5px]">STAF / KADER</th>
+                              <th rowSpan={2} className="px-1.5 py-1 border-r border-slate-300 bg-amber-100/80 text-amber-900 font-black text-[9px]">TOTAL KESELURUHAN</th>
+                              <th rowSpan={2} className="px-1 py-1">AKSI</th>
+                            </tr>
+                            <tr className="bg-slate-100 text-[8.5px] font-bold text-slate-700 uppercase tracking-tight text-center border-b border-slate-300">
+                              {/* Porsi Besar (1) */}
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                              {/* Porsi Kecil (2) */}
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                              {/* Porsi Balita (3) */}
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8 bg-amber-50/70">L</th>
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8 bg-amber-50/70">P</th>
+                              {/* Porsi Bumil & Busui (4) */}
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-10 bg-purple-50/70 text-[7.5px] text-purple-900">BUMIL</th>
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-10 bg-purple-50/70 text-[7.5px] text-purple-900">BUSUI</th>
+                              {/* Total Siswa */}
+                              <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">L</th>
+                              <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">P</th>
+                              <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-300/70 font-extrabold text-slate-900 w-9">JML</th>
+                              {/* Officers */}
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {list.length === 0 ? (
+                              <tr>
+                                <td colSpan={22} className="px-4 py-8 text-center text-xs font-medium text-slate-400 italic">
+                                  Belum ada data {isPosyandu ? 'Posyandu' : 'Sekolah'}.
+                                </td>
+                              </tr>
+                            ) : (
+                              list.map((entry) => (
+                                <PmEntryRow
+                                  key={entry.id}
+                                  entry={entry}
+                                  onUpdate={handleUpdateEntry}
+                                  onDelete={handleDeleteEntry}
+                                  isLibur={entry.isSekolahLibur}
+                                  onManageClasses={() => setSelectedEntryForMenu(entry)}
+                                  onConfirmAction={setConfirmState}
+                                />
+                              ))
+                            )}
+                            {/* Total Row */}
+                            {list.length > 0 && (
+                              <tr className="bg-slate-800 text-white text-xs font-bold border-t border-slate-700 text-center">
+                                {/* 1. SEKOLAH / POSYANDU */}
+                                <td className="px-3 py-3 text-left font-black tracking-wide">TOTAL (AKTIF)</td>
+                                {/* 2. PORSI BESAR L */}
+                                <td className="px-1 py-3 text-center">{totals.porsiBesarL || '—'}</td>
+                                {/* 3. PORSI BESAR P */}
+                                <td className="px-1 py-3 text-center">{totals.porsiBesarP || '—'}</td>
+                                {/* 4. PORSI KECIL L */}
+                                <td className="px-1 py-3 text-center">{totals.porsiKecilL || '—'}</td>
+                                {/* 5. PORSI KECIL P */}
+                                <td className="px-1 py-3 text-center">{totals.porsiKecilP || '—'}</td>
+                                {/* 6. PORSI BALITA L */}
+                                <td className="px-1 py-3 text-center font-bold text-amber-300">{totals.porsiBalitaL || '—'}</td>
+                                {/* 7. PORSI BALITA P */}
+                                <td className="px-1 py-3 text-center font-bold text-amber-300">{totals.porsiBalitaP || '—'}</td>
+                                {/* 8. PORSI BUMIL */}
+                                <td className="px-1 py-3 text-center font-bold text-purple-300">{totals.porsiBumil || '—'}</td>
+                                {/* 9. PORSI BUSUI */}
+                                <td className="px-1 py-3 text-center font-bold text-purple-300">{totals.porsiBusui || '—'}</td>
+                                {/* 10. TOTAL SISWA L */}
+                                <td className="px-1 py-3 text-center bg-slate-700">{totals.totalSiswaL || '—'}</td>
+                                {/* 11. TOTAL SISWA P */}
+                                <td className="px-1 py-3 text-center bg-slate-700">{totals.totalSiswaP || '—'}</td>
+                                {/* 12. TOTAL SISWA JML */}
+                                <td className="px-1 py-3 text-center bg-slate-600 font-black">{totals.totalSiswaJml || '—'}</td>
+                                {/* 13. GURU L */}
+                                <td className="px-1 py-3 text-center">{totals.guruL || '—'}</td>
+                                {/* 14. GURU P */}
+                                <td className="px-1 py-3 text-center">{totals.guruP || '—'}</td>
+                                {/* 15. KADER L */}
+                                <td className="px-1 py-3 text-center">{totals.kaderL || '—'}</td>
+                                {/* 16. KADER P */}
+                                <td className="px-1 py-3 text-center">{totals.kaderP || '—'}</td>
+                                {/* 17. TENDIK L */}
+                                <td className="px-1 py-3 text-center">{totals.tendikL || '—'}</td>
+                                {/* 18. TENDIK P */}
+                                <td className="px-1 py-3 text-center">{totals.tendikP || '—'}</td>
+                                {/* 19. STAF/KADER JML */}
+                                <td className="px-1 py-3 text-center bg-slate-700 font-black">{totals.totalStafKader || '—'}</td>
+                                {/* 20. TOTAL KESELURUHAN */}
+                                <td className="px-2 py-3 text-center bg-amber-400 text-slate-950 font-black text-sm">
+                                  {totals.totalKeseluruhan}
+                                </td>
+                                {/* 21. AKSI */}
+                                <td className="px-1 py-3"></td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="mt-4 border border-slate-300 rounded-xl overflow-hidden bg-white shadow-xs">
                     <button
                       onClick={handleAddRow}
-                      className="w-full py-3 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 border-t border-slate-200 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      className="w-full py-4 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                     >
                       <Plus className="h-4 w-4" />
                       Tambah Institusi Baru

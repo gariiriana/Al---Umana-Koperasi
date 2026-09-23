@@ -190,7 +190,8 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
 
   // Statistics from parsed entries
   const stats = useMemo(() => {
-    let totalPorsi = 0;
+    let totalPorsiSekolah = 0;
+    let totalPorsiPosyandu = 0;
     let totalPorsiKecil = 0;
     let totalPorsiBesar = 0;
     let totalMurid = 0;
@@ -199,20 +200,23 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
     let posyanduCount = 0;
 
     parsedPreview.forEach((e) => {
-      totalPorsi += e.jumlah || 0;
       totalPorsiKecil += (e.qtPorsiKecil || 0) + (e.qtPorsiBalita || 0);
       totalPorsiBesar += e.qtPorsiBesar || 0;
       totalMurid += (e.qtSiswaBalita || 0) + (e.qtBumilBusui || 0);
       totalGuruKader += e.qtGuruKader || 0;
       if (e.institutionType === 'posyandu') {
         posyanduCount++;
+        totalPorsiPosyandu += e.jumlah || 0;
       } else {
         sekolahCount++;
+        totalPorsiSekolah += e.jumlah || 0;
       }
     });
 
     return {
-      totalPorsi,
+      totalPorsi: totalPorsiSekolah + totalPorsiPosyandu,
+      totalPorsiSekolah,
+      totalPorsiPosyandu,
       totalPorsiKecil,
       totalPorsiBesar,
       totalMurid,
@@ -222,6 +226,10 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
       count: parsedPreview.length,
     };
   }, [parsedPreview]);
+
+  // Derived filtered arrays for display
+  const sekolahEntries = useMemo(() => parsedPreview.filter(e => e.institutionType !== 'posyandu'), [parsedPreview]);
+  const posyanduEntries = useMemo(() => parsedPreview.filter(e => e.institutionType === 'posyandu'), [parsedPreview]);
 
   // Handle Apply
   const handleApply = async () => {
@@ -411,13 +419,31 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">
-                        Total Estimasi Porsi
-                      </span>
-                      <span className="text-lg font-black text-emerald-900">
-                        {stats.totalPorsi.toLocaleString('id-ID')}
-                      </span>
+                    <div className="flex gap-4 text-right flex-wrap justify-end">
+                      <div>
+                        <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">
+                          Total Porsi Sekolah
+                        </span>
+                        <span className="text-lg font-black text-blue-900">
+                          {stats.totalPorsiSekolah.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-pink-600 uppercase tracking-wider block">
+                          Total Porsi Posyandu
+                        </span>
+                        <span className="text-lg font-black text-pink-900">
+                          {stats.totalPorsiPosyandu.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                      <div className="pl-4 border-l border-emerald-200">
+                        <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">
+                          Grand Total Porsi
+                        </span>
+                        <span className="text-lg font-black text-emerald-900">
+                          {stats.totalPorsi.toLocaleString('id-ID')}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -464,63 +490,108 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Preview Table of Detected Institutions */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
-                      <span>Daftar Institusi Terdeteksi:</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowAllRows(!showAllRows)}
-                        className="text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5 cursor-pointer font-extrabold"
-                      >
-                        <span>{showAllRows ? 'Sembunyikan' : `Tampilkan Semua (${stats.count})`}</span>
-                        {showAllRows ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                      </button>
-                    </div>
-
-                    <div className="max-h-48 overflow-y-auto rounded-xl border border-emerald-200/80 bg-white">
-                      <table className="w-full text-[11px] text-left border-collapse">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 sticky top-0 font-bold">
-                          <tr>
-                            <th className="px-2.5 py-1.5 w-8 text-center">No</th>
-                            <th className="px-2.5 py-1.5">Nama Lembaga</th>
-                            <th className="px-2.5 py-1.5 text-center">Tipe</th>
-                            <th className="px-2.5 py-1.5 text-right">Porsi Kecil</th>
-                            <th className="px-2.5 py-1.5 text-right">Porsi Besar</th>
-                            <th className="px-2.5 py-1.5 text-right">Guru/Kader</th>
-                            <th className="px-2.5 py-1.5 text-right font-black text-emerald-900">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {(showAllRows ? parsedPreview : parsedPreview.slice(0, 5)).map((entry, idx) => (
-                            <tr key={`${entry.institutionName}-${idx}`} className="hover:bg-slate-50">
-                              <td className="px-2.5 py-1.5 text-center text-slate-400">{idx + 1}</td>
-                              <td className="px-2.5 py-1.5 font-bold text-slate-800">{entry.institutionName}</td>
-                              <td className="px-2.5 py-1.5 text-center">
-                                <span
-                                  className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${
-                                    entry.institutionType === 'posyandu'
-                                      ? 'bg-pink-100 text-pink-700'
-                                      : 'bg-blue-100 text-blue-700'
-                                  }`}
-                                >
-                                  {entry.institutionType}
-                                </span>
-                              </td>
-                              <td className="px-2.5 py-1.5 text-right text-slate-600">
-                                {(entry.qtPorsiKecil || 0) + (entry.qtPorsiBalita || 0) || '-'}
-                              </td>
-                              <td className="px-2.5 py-1.5 text-right text-slate-600">{entry.qtPorsiBesar || '-'}</td>
-                              <td className="px-2.5 py-1.5 text-right text-slate-600">{entry.qtGuruKader || '-'}</td>
-                              <td className="px-2.5 py-1.5 text-right font-black text-emerald-800">
-                                {entry.jumlah || 0}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                  <div className="flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowAllRows(!showAllRows)}
+                      className="text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5 cursor-pointer font-extrabold text-[11px]"
+                    >
+                      <span>{showAllRows ? 'Sembunyikan' : `Tampilkan Semua (${stats.count})`}</span>
+                      {showAllRows ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    </button>
                   </div>
+
+                  {/* Preview Table of Detected Institutions - Sekolah */}
+                  {sekolahEntries.length > 0 && (
+                    <div className="space-y-1.5 pt-1 mt-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-blue-700">
+                        <span>Daftar Institusi Terdeteksi (Sekolah): {sekolahEntries.length}</span>
+                      </div>
+
+                      <div className="max-h-48 overflow-y-auto rounded-xl border border-blue-200/80 bg-white">
+                        <table className="w-full text-[11px] text-left border-collapse">
+                          <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 sticky top-0 font-bold">
+                            <tr>
+                              <th className="px-2.5 py-1.5 w-8 text-center">No</th>
+                              <th className="px-2.5 py-1.5">Nama Lembaga</th>
+                              <th className="px-2.5 py-1.5 text-center">Tipe</th>
+                              <th className="px-2.5 py-1.5 text-right">Porsi Kecil</th>
+                              <th className="px-2.5 py-1.5 text-right">Porsi Besar</th>
+                              <th className="px-2.5 py-1.5 text-right">Guru/Kader</th>
+                              <th className="px-2.5 py-1.5 text-right font-black text-blue-900">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {(showAllRows ? sekolahEntries : sekolahEntries.slice(0, 5)).map((entry, idx) => (
+                              <tr key={`sekolah-${entry.institutionName}-${idx}`} className="hover:bg-slate-50">
+                                <td className="px-2.5 py-1.5 text-center text-slate-400">{idx + 1}</td>
+                                <td className="px-2.5 py-1.5 font-bold text-slate-800">{entry.institutionName}</td>
+                                <td className="px-2.5 py-1.5 text-center">
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-blue-100 text-blue-700">
+                                    {entry.institutionType}
+                                  </span>
+                                </td>
+                                <td className="px-2.5 py-1.5 text-right text-slate-600">
+                                  {(entry.qtPorsiKecil || 0) + (entry.qtPorsiBalita || 0) || '-'}
+                                </td>
+                                <td className="px-2.5 py-1.5 text-right text-slate-600">{entry.qtPorsiBesar || '-'}</td>
+                                <td className="px-2.5 py-1.5 text-right text-slate-600">{entry.qtGuruKader || '-'}</td>
+                                <td className="px-2.5 py-1.5 text-right font-black text-blue-800">
+                                  {entry.jumlah || 0}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Preview Table of Detected Institutions - Posyandu */}
+                  {posyanduEntries.length > 0 && (
+                    <div className="space-y-1.5 pt-1 mt-4">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-pink-700">
+                        <span>Daftar Institusi Terdeteksi (Posyandu): {posyanduEntries.length}</span>
+                      </div>
+
+                      <div className="max-h-48 overflow-y-auto rounded-xl border border-pink-200/80 bg-white">
+                        <table className="w-full text-[11px] text-left border-collapse">
+                          <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 sticky top-0 font-bold">
+                            <tr>
+                              <th className="px-2.5 py-1.5 w-8 text-center">No</th>
+                              <th className="px-2.5 py-1.5">Nama Lembaga</th>
+                              <th className="px-2.5 py-1.5 text-center">Tipe</th>
+                              <th className="px-2.5 py-1.5 text-right">Porsi Kecil</th>
+                              <th className="px-2.5 py-1.5 text-right">Porsi Besar</th>
+                              <th className="px-2.5 py-1.5 text-right">Guru/Kader</th>
+                              <th className="px-2.5 py-1.5 text-right font-black text-pink-900">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {(showAllRows ? posyanduEntries : posyanduEntries.slice(0, 5)).map((entry, idx) => (
+                              <tr key={`posyandu-${entry.institutionName}-${idx}`} className="hover:bg-slate-50">
+                                <td className="px-2.5 py-1.5 text-center text-slate-400">{idx + 1}</td>
+                                <td className="px-2.5 py-1.5 font-bold text-slate-800">{entry.institutionName}</td>
+                                <td className="px-2.5 py-1.5 text-center">
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-pink-100 text-pink-700">
+                                    {entry.institutionType}
+                                  </span>
+                                </td>
+                                <td className="px-2.5 py-1.5 text-right text-slate-600">
+                                  {(entry.qtPorsiKecil || 0) + (entry.qtPorsiBalita || 0) || '-'}
+                                </td>
+                                <td className="px-2.5 py-1.5 text-right text-slate-600">{entry.qtPorsiBesar || '-'}</td>
+                                <td className="px-2.5 py-1.5 text-right text-slate-600">{entry.qtGuruKader || '-'}</td>
+                                <td className="px-2.5 py-1.5 text-right font-black text-pink-800">
+                                  {entry.jumlah || 0}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 space-y-1">
