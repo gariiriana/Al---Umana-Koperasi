@@ -18,6 +18,7 @@ import {
   FileSpreadsheet,
   Edit,
   Archive,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -301,85 +302,6 @@ function NewBatchModal({
           </button>
         </div>
       </motion.div>
-    </div>
-  );
-}
-
-// ---- Master Institutions Side Panel ----
-function MasterInstitutionsSidePanel({
-  entries,
-  onApplyScheduleMenu,
-  onOpenScheduleModal,
-}: {
-  entries: MbgPmEntry[];
-  onApplyScheduleMenu: () => void;
-  onOpenScheduleModal: () => void;
-}) {
-  const existingNames = new Set(entries.map((e) => e.institutionName.toLowerCase().trim()));
-
-  return (
-    <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-sm space-y-3 font-['Hanken_Grotesk',system-ui,sans-serif]">
-      <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-        <div>
-          <h3 className="font-extrabold text-xs text-[#111827] flex items-center gap-1.5">
-            <span>🏫 Institusi Master</span>
-            <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full">
-              {MBG_MASTER_INSTITUTIONS.length} Target
-            </span>
-          </h3>
-          <p className="text-[10px] text-gray-400 mt-0.5">Daftar Sekolah & Posyandu</p>
-        </div>
-        <button
-          onClick={onOpenScheduleModal}
-          className="text-[11px] font-extrabold text-[#059669] hover:text-[#047857] flex items-center gap-1 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200 cursor-pointer"
-        >
-          <Calendar className="h-3.5 w-3.5" />
-          <span>Jadwal Menu</span>
-        </button>
-      </div>
-
-      <button
-        onClick={onApplyScheduleMenu}
-        className="w-full bg-[#111827] hover:bg-black text-white font-extrabold text-xs py-2.5 px-3 rounded-xl cursor-pointer shadow-xs active:scale-95 transition-all flex items-center justify-center gap-2"
-      >
-        <span>✨ Sync Menu Jadwal Hari Ini</span>
-      </button>
-
-      <div className="space-y-1.5 max-h-[520px] overflow-y-auto pr-1">
-        {MBG_MASTER_INSTITUTIONS.map((inst, idx) => {
-          const isAdded = existingNames.has(inst.institutionName.toLowerCase().trim());
-          const isSekolah = inst.institutionType === 'sekolah';
-          const totalPorsi = inst.qtSiswaBalita + inst.qtBumilBusui + inst.qtGuruKader;
-
-          return (
-            <div
-              key={idx}
-              className={`p-2 rounded-xl border text-xs flex items-center justify-between transition-all ${isAdded
-                  ? 'bg-emerald-50/40 border-emerald-200/80 text-emerald-950'
-                  : 'bg-gray-50/80 border-gray-200 text-gray-500'
-                }`}
-            >
-              <div className="space-y-0.5">
-                <div className="font-bold flex items-center gap-1 text-[11px] text-[#111827]">
-                  <span>{isSekolah ? '🏫' : '👶'}</span>
-                  <span className="truncate max-w-[170px]">{inst.institutionName}</span>
-                </div>
-                <div className="text-[9px] text-gray-400 font-semibold">
-                  {inst.schoolLevel ? inst.schoolLevel.toUpperCase() : inst.institutionType} • {totalPorsi} Porsi
-                </div>
-              </div>
-              {isAdded ? (
-                <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
-                  <CheckCircle2 className="h-3 w-3" />
-                  <span>Aktif</span>
-                </span>
-              ) : (
-                <span className="text-[9px] font-semibold text-gray-400">Belum Ada</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -1187,6 +1109,10 @@ export function MbgAdminPage() {
 
             await replaceBatchEntries(targetBatchId, entriesToSave);
 
+            if (currentBatch && currentBatch.status !== 'DRAFT') {
+              await updateBatchStatus(targetBatchId, 'DRAFT');
+            }
+
             setSelectedBatchId(targetBatchId);
 
             const dayInfo = targetDate ? getMenuForDate(targetDate, weeklySchedule).dayMenu.dayName : '';
@@ -1271,6 +1197,10 @@ export function MbgAdminPage() {
       }));
 
       await replaceBatchEntries(targetBatchId, entriesToSave);
+
+      if (currentBatch && currentBatch.status !== 'DRAFT') {
+        await updateBatchStatus(targetBatchId, 'DRAFT');
+      }
 
       // Pastikan selectedBatchId aktif mengarah ke batch yang baru saja diisi
       setSelectedBatchId(targetBatchId);
@@ -2047,6 +1977,17 @@ export function MbgAdminPage() {
               </button>
 
               <button
+                type="button"
+                onClick={handleApplyScheduleMenuToBatch}
+                disabled={!selectedBatchId || saving}
+                title="Terapkan / sinkronisasi menu dari jadwal hari ini ke semua institusi"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap shadow-2xs"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+                Sync Menu
+              </button>
+
+              <button
                 onClick={() => setShowNewBatchModal(true)}
                 title="Buat batch pengiriman baru"
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#FBBF24] hover:bg-[#F59E0B] text-slate-900 text-xs font-extrabold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
@@ -2077,19 +2018,8 @@ export function MbgAdminPage() {
             </div>
           </div>
 
-          {/* Main Content Layout with Side Panel */}
-          <div className="flex flex-col lg:flex-row gap-6 items-start">
-            {/* Left Side Panel: Master Institutions */}
-            <div className="w-full lg:w-80 shrink-0">
-              <MasterInstitutionsSidePanel
-                entries={entries}
-                onApplyScheduleMenu={handleApplyScheduleMenuToBatch}
-                onOpenScheduleModal={() => setShowScheduleModal(true)}
-              />
-            </div>
-
-            {/* Right Panel: Batch Entries Table */}
-            <div className="flex-1 w-full min-w-0">
+          {/* Main Content Layout: Full Width Table */}
+          <div className="w-full min-w-0">
               {/* Search Bar & Actions */}
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="relative max-w-sm flex-1 min-w-[200px]">
@@ -2367,7 +2297,6 @@ export function MbgAdminPage() {
                   )}
                 </>
               )}
-            </div>
           </div>
         </>
       )}
