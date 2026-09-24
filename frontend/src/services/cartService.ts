@@ -23,7 +23,6 @@
 
 import {
   collection,
-  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
@@ -31,13 +30,13 @@ import {
   runTransaction,
   serverTimestamp,
   updateDoc,
-  writeBatch,
   type DocumentData,
   type QueryDocumentSnapshot,
   type Unsubscribe,
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
+import { archiveAndDelete, archiveSnapshotsAndDelete } from "@/services/developerRecycleBinService";
 import { formatIDR } from "@/lib/format";
 
 /* ------------------------------------------------------------------ */
@@ -292,7 +291,7 @@ export async function setLineQuantity(
   const clamped = clampQuantity(qty);
 
   if (clamped === 0) {
-    await deleteDoc(ref);
+    await archiveAndDelete(ref, "Item keranjang dihapus");
     return;
   }
 
@@ -326,7 +325,7 @@ export async function removeLineItem(
   uid: string,
   itemId: string
 ): Promise<void> {
-  await deleteDoc(lineDoc(uid, itemId));
+  await archiveAndDelete(lineDoc(uid, itemId), "Item keranjang dihapus");
 }
 
 /**
@@ -340,25 +339,7 @@ export async function clearCart(uid: string): Promise<void> {
   const snap = await getDocs(itemsRef);
   if (snap.empty) return;
 
-  const BATCH_LIMIT = 400;
-  let batch = writeBatch(db);
-  let opsInBatch = 0;
-  const commits: Promise<void>[] = [];
-
-  for (const docSnap of snap.docs) {
-    batch.delete(docSnap.ref);
-    opsInBatch++;
-    if (opsInBatch >= BATCH_LIMIT) {
-      commits.push(batch.commit());
-      batch = writeBatch(db);
-      opsInBatch = 0;
-    }
-  }
-  if (opsInBatch > 0) {
-    commits.push(batch.commit());
-  }
-
-  await Promise.all(commits);
+  await archiveSnapshotsAndDelete(snap.docs, "Keranjang dikosongkan setelah checkout");
 }
 
 /**

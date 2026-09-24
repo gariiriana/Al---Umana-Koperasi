@@ -136,6 +136,15 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
     }
 
+    // Developer is a deliberately separate break-glass role. Its account is
+    // provisioned manually in `users/{uid}` and may inspect/repair every
+    // document, including data normally hidden from operational roles.
+    function isDeveloper() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'developer';
+    }
+
     function isMbgManager() { return isAdmin() || isSuperAdmin() || isAdminMbg() || isProduksiMbg() || isProduksiMbg2(); }
     function isMbgDeliveryTeam() { return isMbgManager() || isDistribusiMbg() || isKurirMbg(); }
     function isMbgStaff() { return isSuperAdmin() || isAnyMbg() || isMoKatering() || isCoMoKatering(); }
@@ -183,7 +192,16 @@ service cloud.firestore {
     // Default deny. Any path not matched explicitly is forbidden.
     // -------------------------------------------------------------------
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isDeveloper();
+    }
+
+    // A delete in the client app first writes an immutable source snapshot
+    // here, then deletes the source in the same batch.  Only Developer can
+    // see, restore, or permanently destroy archived records.
+    match /developer_recycle_bin/{archiveId} {
+      allow create: if request.auth != null
+        && request.resource.data.deletedBy == request.auth.uid;
+      allow read, update, delete: if isDeveloper();
     }
 
     // -------------------------------------------------------------------

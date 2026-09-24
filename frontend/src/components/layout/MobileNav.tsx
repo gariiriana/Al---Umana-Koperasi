@@ -36,6 +36,7 @@ export const MOBILE_NAV_ITEMS: readonly MobileNavItem[] = [
   { to: "/distribusi/delivery",     label: "Antar",         icon: Truck },
   { to: "/performance",             label: "Performa",      icon: Trophy },
   { to: "/super-admin/control-center", label: "Kontrol",    icon: ShieldCheck },
+  { to: "/developer/control-center", label: "Developer", icon: ShieldCheck },
 ] as const;
 
 export interface MobileNavProps {
@@ -46,6 +47,7 @@ export function MobileNav({ userRole }: MobileNavProps) {
   let allowedItems = MOBILE_NAV_ITEMS.filter((item) => {
     if (!userRole) return false;
     if (item.to === "/super-admin/control-center") return userRole === "super_admin";
+    if (item.to === "/developer/control-center") return userRole === "developer";
     if (userRole === "admin") return true;
     const allowedPaths = ROLE_PERMISSIONS[userRole] || [];
     return allowedPaths.includes(item.to);

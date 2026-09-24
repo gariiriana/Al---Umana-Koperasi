@@ -1,5 +1,6 @@
 import { db } from "@/lib/firebase";
-import { collection, doc, getDocs, getDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, doc, getDocs, getDoc, setDoc } from "firebase/firestore";
+import { archiveAndDelete } from "@/services/developerRecycleBinService";
 
 export interface Promo {
   code: string; // doc ID
@@ -92,7 +93,7 @@ export async function savePromo(promo: Promo): Promise<void> {
 
 export async function deletePromo(code: string): Promise<void> {
   const docRef = doc(db, "promos", code.toUpperCase().trim());
-  await deleteDoc(docRef);
+  await archiveAndDelete(docRef, "Promo dihapus");
 }
 
 export async function getPromo(code: string): Promise<Promo | null> {

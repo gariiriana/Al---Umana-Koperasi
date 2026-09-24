@@ -5,7 +5,8 @@ import { useToast } from "@/contexts/ToastContext";
 import { translateCategory } from "@/constants/categories";
 
 import { db } from "@/lib/firebase";
-import { doc, getDoc, deleteDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
+import { archiveAndDelete } from "@/services/developerRecycleBinService";
 
 import { listAllItems, deleteItem, patchStock, listCategories, updateItem, createItem, getItem, deleteImageFileAndChunks } from "@/services/stockAdminService";
 import { uploadFileInChunks, ChunkUploadError } from "@/services/chunkUploadService";
@@ -569,15 +570,15 @@ export function ProductsPage() {
         const totalChunks = data.totalChunks || 0;
 
         // Cascade delete chunks
-        const deletePromises: Promise<void>[] = [];
+        const deletePromises: Promise<unknown>[] = [];
         for (let i = 0; i < totalChunks; i++) {
           const chunkRef = doc(db, "product_images", fileId, "chunks", String(i));
-          deletePromises.push(deleteDoc(chunkRef));
+          deletePromises.push(archiveAndDelete(chunkRef, "Chunk gambar produk diganti"));
         }
         await Promise.all(deletePromises);
 
         // Delete parent doc
-        await deleteDoc(docRef);
+        await archiveAndDelete(docRef, "Gambar produk diganti");
       }
     } catch (err) {
       console.warn("Gagal menghapus gambar produk lama di Firestore.", err);

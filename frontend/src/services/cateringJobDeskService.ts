@@ -7,7 +7,6 @@ import {
   doc,
   addDoc,
   updateDoc,
-  deleteDoc,
   query,
   where,
   orderBy,
@@ -17,6 +16,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { archiveAndDelete } from "@/services/developerRecycleBinService";
 import { subscriptionManager } from "./subscriptionManager";
 import type {
   CateringJobDesk,
@@ -207,7 +207,7 @@ export async function batchCreateJobDesks(
 
 /** Delete a job desk (MO only). */
 export async function deleteJobDesk(jobDeskId: string): Promise<void> {
-  await deleteDoc(doc(db, COLLECTION, jobDeskId));
+  await archiveAndDelete(doc(db, COLLECTION, jobDeskId), "Job desk dihapus");
 }
 
 /** Update an existing job desk's details (MO only). */

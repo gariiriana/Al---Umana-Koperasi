@@ -3,10 +3,11 @@
 // ============================================================================
 
 import {
-  collection, doc, addDoc, updateDoc, deleteDoc,
+  collection, doc, addDoc, updateDoc,
   query, where, orderBy, limit, onSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { archiveAndDelete } from '@/services/developerRecycleBinService';
 import type { MbgPurchaseOrder, MbgSupplier } from '@/types/mbg';
 
 const PO_COLLECTION = 'mbg_purchase_orders';
@@ -40,7 +41,7 @@ export async function updatePurchaseOrder(id: string, updates: Partial<MbgPurcha
 }
 
 export async function deletePurchaseOrder(id: string): Promise<void> {
-  await deleteDoc(doc(db, PO_COLLECTION, id));
+  await archiveAndDelete(doc(db, PO_COLLECTION, id), "Purchase order MBG dihapus");
 }
 
 // ---- Suppliers ----
@@ -65,7 +66,7 @@ export async function updateSupplier(id: string, updates: Partial<MbgSupplier>):
 }
 
 export async function deleteSupplier(id: string): Promise<void> {
-  await deleteDoc(doc(db, SUPPLIER_COLLECTION, id));
+  await archiveAndDelete(doc(db, SUPPLIER_COLLECTION, id), "Supplier MBG dihapus");
 }
 
 // ---- Archived Purchasing Documents ----
@@ -109,5 +110,5 @@ export async function updateArchivedPurchasingDoc(id: string, updates: Partial<M
 }
 
 export async function deleteArchivedPurchasingDoc(id: string): Promise<void> {
-  await deleteDoc(doc(db, DOC_ARCHIVE_COLLECTION, id));
+  await archiveAndDelete(doc(db, DOC_ARCHIVE_COLLECTION, id), "Dokumen pembelian MBG dihapus");
 }

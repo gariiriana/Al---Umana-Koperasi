@@ -22,7 +22,6 @@ import {
   limit,
   onSnapshot,
   runTransaction,
-  deleteDoc,
   Timestamp,
   type DocumentData,
   type DocumentSnapshot,
@@ -32,6 +31,7 @@ import {
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
+import { archiveAndDelete } from "@/services/developerRecycleBinService";
 import { currentUser } from "@/services/authService";
 import type { KitchenSignature, Order, OrderLineItem, OrderStatus, OrderType, PaymentStatus } from "@/types/order";
 import { sendWhatsAppNotification, sendWhatsAppNotificationDirect, WA_MESSAGES } from "./whatsappService";
@@ -1029,9 +1029,9 @@ export async function attachPaymentProof(
     const prevFileId = currentProof.replace("payment_proofs/", "");
     if (prevFileId) {
       try {
-        await deleteDoc(doc(db, "payment_proofs", prevFileId));
+        await archiveAndDelete(doc(db, "payment_proofs", prevFileId), "Bukti pembayaran lama diganti");
         for (let i = 0; i < 30; i++) {
-          await deleteDoc(doc(db, "payment_proofs", prevFileId, "chunks", String(i)));
+          await archiveAndDelete(doc(db, "payment_proofs", prevFileId, "chunks", String(i)), "Chunk bukti pembayaran lama diganti");
         }
       } catch (err) {
         console.warn(`Failed to clean up old proof ${prevFileId}:`, err);
@@ -1843,7 +1843,7 @@ export async function updateAdminOrder(orderId: string, payload: CreateAdminOrde
 
 export async function deleteOrder(orderId: string): Promise<void> {
   const docRef = doc(db, "orders", orderId);
-  await deleteDoc(docRef);
+  await archiveAndDelete(docRef, "Pesanan dihapus");
 }
 
 function cleanUndefined<T>(obj: T): T {

@@ -3,10 +3,11 @@
 // ============================================================================
 
 import {
-  collection, doc, addDoc, updateDoc, deleteDoc,
+  collection, doc, addDoc, updateDoc,
   query, where, onSnapshot, getDocs, writeBatch, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { archiveAndDelete, archiveSnapshotsAndDelete } from '@/services/developerRecycleBinService';
 import type { MbgNutritionEntry, MbgCookingSession, MbgCookingPhoto, MbgProductionDailyReport } from '@/types/mbg';
 
 const NUTRITION_COLLECTION = 'mbg_nutrition';
@@ -40,7 +41,7 @@ export async function updateNutritionEntry(id: string, updates: Partial<MbgNutri
 }
 
 export async function deleteNutritionEntry(id: string): Promise<void> {
-  await deleteDoc(doc(db, NUTRITION_COLLECTION, id));
+  await archiveAndDelete(doc(db, NUTRITION_COLLECTION, id), 'Data nutrisi MBG dihapus');
 }
 
 // ---- Cooking Sessions ----
@@ -139,7 +140,7 @@ export async function updateCustomTkpiEntry(id: string, updates: Record<string, 
 }
 
 export async function deleteCustomTkpiEntry(id: string): Promise<void> {
-  await deleteDoc(doc(db, CUSTOM_TKPI_COLLECTION, id));
+  await archiveAndDelete(doc(db, CUSTOM_TKPI_COLLECTION, id), 'TKPI kustom dihapus');
 }
 
 export function subscribeCustomTkpiEntries(
@@ -166,7 +167,7 @@ export async function updateCustomRecipe(id: string, updates: Record<string, unk
 }
 
 export async function deleteCustomRecipe(id: string): Promise<void> {
-  await deleteDoc(doc(db, CUSTOM_RECIPES_COLLECTION, id));
+  await archiveAndDelete(doc(db, CUSTOM_RECIPES_COLLECTION, id), 'Resep kustom dihapus');
 }
 
 export function subscribeCustomRecipes(
@@ -219,7 +220,7 @@ export async function saveRecipeAdjustment(
 }
 
 export async function deleteRecipeAdjustment(id: string): Promise<void> {
-  await deleteDoc(doc(db, RECIPE_ADJUSTMENTS_COLLECTION, id));
+  await archiveAndDelete(doc(db, RECIPE_ADJUSTMENTS_COLLECTION, id), 'Penyesuaian resep dihapus');
 }
 
 // ---- Production Daily Reports ----
@@ -310,15 +311,16 @@ export async function saveDailyReport(
     return bTime.localeCompare(aTime);
   });
   const primary = reportId ? docs.find((item) => item.id === reportId) || docs[0] : docs[0];
+  const duplicates = docs.filter((item) => item.id !== primary.id);
+  await archiveSnapshotsAndDelete(duplicates, 'Laporan harian duplikat digantikan');
   const writes = writeBatch(db);
   writes.update(primary.ref, { ...cleaned, updatedAt: new Date().toISOString() });
   // Clean up legacy duplicates at the same time; all readers then resolve
   // one deterministic report for the batch.
-  docs.filter((item) => item.id !== primary.id).forEach((duplicate) => writes.delete(duplicate.ref));
   await writes.commit();
   return primary.id;
 }
 
 export async function deleteDailyReport(id: string): Promise<void> {
-  await deleteDoc(doc(db, DAILY_REPORTS_COLLECTION, id));
+  await archiveAndDelete(doc(db, DAILY_REPORTS_COLLECTION, id), 'Laporan produksi harian dihapus');
 }

@@ -6,6 +6,7 @@
  * `/category/:name`).
  */
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
+  developer: ["/developer/control-center", "/super-admin/control-center", "/performance"],
   super_admin: ["/super-admin/control-center", "/performance"],
   /**
    * Admin: mengelola pesanan, invoice, dan melihat dashboard.
@@ -221,6 +222,7 @@ for (const role of Object.keys(ROLE_PERMISSIONS)) {
 
 /** Roles that land on the admin AppShell when authenticated. */
 export const ADMIN_SHELL_ROLES = [
+  "developer",
   "super_admin",
   "tim_produksi",
   "distribusi",
@@ -245,6 +247,7 @@ export const ADMIN_SHELL_ROLES = [
 ] as const;
 
 export const ALL_ROLES = [
+  "developer",
   "super_admin",
   "admin",
   "customer",
@@ -276,6 +279,7 @@ export const ALL_ROLES = [
  * a user navigates to a path their role is not allowed to view.
  */
 export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
+  developer: "/developer/control-center",
   super_admin: "/super-admin/control-center",
   admin: "/",
   monitoring: "/admin/dashboard",

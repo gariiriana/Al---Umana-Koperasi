@@ -63,6 +63,7 @@ export function AppShell({
 
   const initial = (userName ?? userEmail ?? "?").charAt(0).toUpperCase();
   const roleBadge: Record<string, string> = {
+    developer: "Developer",
     admin: "Admin",
     tim_produksi: "Produksi",
     distribusi: "Distribusi",

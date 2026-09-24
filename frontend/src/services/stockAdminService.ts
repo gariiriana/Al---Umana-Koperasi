@@ -13,12 +13,12 @@ import {
   addDoc,
   setDoc,
   updateDoc,
-  deleteDoc,
   query,
   where,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { archiveAndDelete } from "@/services/developerRecycleBinService";
 import type { InventoryItem, InventoryItemInput } from "@/types/inventory";
 
 function formatUpdatedAt(val: unknown): string {
@@ -210,13 +210,13 @@ export async function deleteImageFileAndChunks(imageUrl: string): Promise<void> 
   if (imageUrl && imageUrl.startsWith("product_images/")) {
     const fileId = imageUrl.split("/")[1];
     if (fileId) {
-      // Cascade delete parent document
-      await deleteDoc(doc(db, "product_images", fileId));
+      // Keep image metadata and chunks recoverable as well.
+      await archiveAndDelete(doc(db, "product_images", fileId), "Gambar produk dihapus");
       // Cascade delete chunk documents (0..30 max limits)
       const chunkPromises = [];
       for (let i = 0; i < 30; i++) {
         chunkPromises.push(
-          deleteDoc(doc(db, "product_images", fileId, "chunks", String(i)))
+          archiveAndDelete(doc(db, "product_images", fileId, "chunks", String(i)), "Chunk gambar produk dihapus")
         );
       }
       await Promise.all(chunkPromises);
@@ -239,7 +239,7 @@ export async function deleteItem(id: string): Promise<void> {
       await Promise.all(detailImageUrls.map((url) => deleteImageFileAndChunks(url)));
     }
   }
-  await deleteDoc(docRef);
+  await archiveAndDelete(docRef, "Produk inventaris dihapus");
   syncDemoStorage('delete', { id } as InventoryItem);
 }
 

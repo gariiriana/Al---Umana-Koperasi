@@ -7,7 +7,6 @@ import {
   doc,
   addDoc,
   updateDoc,
-  deleteDoc,
   query,
   where,
   onSnapshot,
@@ -23,6 +22,7 @@ import { subscriptionManager } from './subscriptionManager';
 import type { MbgPmBatch, MbgPmEntry, MbgBatchStatus, MbgDayMenu, MbgProductionCookingStatus } from '@/types/mbg';
 import { canAdvanceMbgCooking } from '@/utils/mbgReadiness';
 import { MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
+import { archiveAndDelete, archiveSnapshotsAndDelete } from '@/services/developerRecycleBinService';
 
 const BATCHES_COLLECTION = 'mbg_pm_batches';
 const ENTRIES_COLLECTION = 'mbg_pm_entries';
@@ -217,8 +217,8 @@ export async function updateBatchCookingStatus(batchId: string, status: MbgProdu
 }
 
 export async function deleteBatch(batchId: string): Promise<void> {
-  // 1. Delete the batch document immediately so real-time listeners and database reflect removal without delay
-  await deleteDoc(doc(db, BATCHES_COLLECTION, batchId));
+  // Archive first. The archive write and source removal are one atomic commit.
+  await archiveAndDelete(doc(db, BATCHES_COLLECTION, batchId), 'Batch MBG dihapus beserta data terkait');
 
   // 2. Clean up all associated collections (entries, reports, cooking sessions, delivery tasks, etc.) concurrently
   const collectionsWithBatchId = [
@@ -241,14 +241,7 @@ export async function deleteBatch(batchId: string): Promise<void> {
         );
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
-          // Process in chunks of 450 to strictly respect Firestore 500 batch limit
-          const chunkSize = 450;
-          for (let i = 0; i < snapshot.docs.length; i += chunkSize) {
-            const chunk = snapshot.docs.slice(i, i + chunkSize);
-            const batch = writeBatch(db);
-            chunk.forEach((d) => batch.delete(d.ref));
-            await batch.commit();
-          }
+          await archiveSnapshotsAndDelete(snapshot.docs, `Data terkait batch ${batchId} dihapus`);
         }
       } catch (e) {
         console.warn(`Could not clear related batch items in ${col}:`, e);
@@ -353,7 +346,7 @@ export async function updateEntry(
 }
 
 export async function deleteEntry(entryId: string): Promise<void> {
-  await deleteDoc(doc(db, ENTRIES_COLLECTION, entryId));
+  await archiveAndDelete(doc(db, ENTRIES_COLLECTION, entryId), 'Entri PM MBG dihapus');
 }
 
 // ---- Bulk Operations ----
@@ -381,9 +374,7 @@ export async function clearBatchEntries(batchId: string): Promise<void> {
   );
   const snapshot = await getDocs(q);
   if (snapshot.empty) return;
-  const batch = writeBatch(db);
-  snapshot.docs.forEach((d) => batch.delete(d.ref));
-  await batch.commit();
+  await archiveSnapshotsAndDelete(snapshot.docs, `Entri batch ${batchId} dikosongkan`);
 }
 
 /**
@@ -409,9 +400,12 @@ export async function replaceBatchEntries(
     throw new Error(`Import terlalu besar (${entries.length} baris). Maksimal 500 perubahan per batch.`);
   }
 
+  // Archive the old rows before writing replacements. If archiving fails, the
+  // old data stays intact; a later failed import can never destroy it.
+  await archiveSnapshotsAndDelete(existingSnapshot.docs, `Entri batch ${batchId} diganti dari impor`);
+
   const now = new Date().toISOString();
   const writes = writeBatch(db);
-  existingSnapshot.docs.forEach((entry) => writes.delete(entry.ref));
 
   let totalSiswaBalita = 0;
   let totalBumilBusui = 0;
@@ -476,9 +470,7 @@ export async function cleanDuplicateBatchEntries(batchId: string): Promise<numbe
   });
 
   if (toDelete.length > 0) {
-    const batch = writeBatch(db);
-    toDelete.forEach((id) => batch.delete(doc(db, ENTRIES_COLLECTION, id)));
-    await batch.commit();
+    await archiveSnapshotsAndDelete(snapshot.docs.filter((item) => toDelete.includes(item.id)), 'Entri duplikat MBG dibersihkan');
     await recalculateBatchTotals(batchId);
   }
 
@@ -752,14 +744,7 @@ export async function deleteAllMbgData(): Promise<void> {
   for (const colName of collectionsToClear) {
     const snap = await getDocs(collection(db, colName));
     if (!snap.empty) {
-      const docs = snap.docs;
-      const CHUNK_SIZE = 400;
-      for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
-        const chunk = docs.slice(i, i + CHUNK_SIZE);
-        const b = writeBatch(db);
-        chunk.forEach((d) => b.delete(d.ref));
-        await b.commit();
-      }
+      await archiveSnapshotsAndDelete(snap.docs, `Pembersihan seluruh data MBG (${colName})`);
     }
   }
 }

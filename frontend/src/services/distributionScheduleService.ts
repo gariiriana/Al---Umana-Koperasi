@@ -1,5 +1,6 @@
 import { db } from "@/lib/firebase";
-import { collection, doc, getDocs, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, doc, getDocs, setDoc } from "firebase/firestore";
+import { archiveAndDelete } from "@/services/developerRecycleBinService";
 
 export interface DistributionSchedule {
   id: string;
@@ -66,5 +67,5 @@ export async function saveSchedule(schedule: Omit<DistributionSchedule, "id" | "
 
 export async function deleteSchedule(id: string): Promise<void> {
   const docRef = doc(db, "distribution_schedules", id);
-  await deleteDoc(docRef);
+  await archiveAndDelete(docRef, "Jadwal distribusi dihapus");
 }

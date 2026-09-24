@@ -7,10 +7,10 @@
 import {
   doc,
   setDoc,
-  deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { archiveAndDelete } from "@/services/developerRecycleBinService";
 import { MBG_MASTER_INSTITUTIONS } from "@/constants/mbgConstants";
 import type { Order, OrderLineItem } from "@/types/order";
 import type { MbgPmBatch, MbgPmEntry } from "@/types/mbg";
@@ -297,7 +297,7 @@ export async function clearSampleOperationalData(): Promise<number> {
   for (const pfx of orderPrefixes) {
     for (const d of dates) {
       try {
-        await deleteDoc(doc(db, "orders", `${pfx}-${d}`));
+        await archiveAndDelete(doc(db, "orders", `${pfx}-${d}`), "Data seed operasional dihapus");
         deletedCount++;
       } catch {
         // ignore if not exists
@@ -307,9 +307,9 @@ export async function clearSampleOperationalData(): Promise<number> {
 
   for (const d of dates) {
     try {
-      await deleteDoc(doc(db, "mbg_pm_batches", `batch-mbg-${d}`));
+      await archiveAndDelete(doc(db, "mbg_pm_batches", `batch-mbg-${d}`), "Data seed MBG dihapus");
       for (let i = 1; i <= 30; i++) {
-        await deleteDoc(doc(db, "mbg_pm_entries", `entry-batch-mbg-${d}-${i}`));
+        await archiveAndDelete(doc(db, "mbg_pm_entries", `entry-batch-mbg-${d}-${i}`), "Data seed MBG dihapus");
       }
     } catch {
       // ignore
