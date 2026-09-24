@@ -408,6 +408,7 @@ export function MbgArchivePage() {
   const [selectedBatchEntries, setSelectedBatchEntries] = useState<MbgPmEntry[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
   const [loadingEntries, setLoadingEntries] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [loadingBatchDetail, setLoadingBatchDetail] = useState(false);
   const [selectedEntryForMenu, setSelectedEntryForMenu] = useState<MbgPmEntry | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -430,14 +431,38 @@ export function MbgArchivePage() {
 
   // Subscribe to all batches (termasuk DRAFT dan backup agar tidak ada data PM yang tersembunyi dari arsip)
   useEffect(() => {
+    let batchesSettled = false;
+    let entriesSettled = false;
+    let hasLoadError = false;
+    // Firestore normally returns an empty cached/server snapshot immediately.
+    // On a stalled network/listener it may not invoke either callback, which
+    // previously left this page loading forever.
+    const loadingTimeout = window.setTimeout(() => {
+      setLoadingBatches(false);
+      setLoadingEntries(false);
+      setLoadError('Data arsip belum merespons. Periksa koneksi lalu muat ulang halaman.');
+    }, 10_000);
+    const finishLoading = (source: 'batches' | 'entries') => {
+      if (source === 'batches') batchesSettled = true;
+      else entriesSettled = true;
+      if (batchesSettled && entriesSettled) {
+        window.clearTimeout(loadingTimeout);
+        if (!hasLoadError) setLoadError('');
+      }
+    };
+
     const unsubBatches = subscribeBatches(
       (b) => {
         setBatches(b);
         setLoadingBatches(false);
+        finishLoading('batches');
       },
       (err) => {
+        hasLoadError = true;
         console.error('Error loading batches:', err);
         setLoadingBatches(false);
+        setLoadError(`Gagal memuat batch arsip: ${err.message}`);
+        finishLoading('batches');
       },
       true // includeBackup = true for MbgArchivePage
     );
@@ -447,15 +472,20 @@ export function MbgArchivePage() {
       (e) => {
         setEntries(e);
         setLoadingEntries(false);
+        finishLoading('entries');
       },
       (err) => {
+        hasLoadError = true;
         console.error('Error loading entries:', err);
         setLoadingEntries(false);
+        setLoadError(`Gagal memuat entri arsip: ${err.message}`);
+        finishLoading('entries');
       },
       true // includeBackup = true for MbgArchivePage
     );
 
     return () => {
+      window.clearTimeout(loadingTimeout);
       unsubBatches();
       unsubEntries();
     };
@@ -1001,6 +1031,14 @@ export function MbgArchivePage() {
           </div>
         )}
       </div>
+
+      {loadError && (
+        <div role="alert" className="mb-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{loadError}</span>
+          <button onClick={() => window.location.reload()} className="ml-auto shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-amber-700">Muat ulang</button>
+        </div>
+      )}
 
       {/* Main Body Grid */}
       {loadingBatches || loadingEntries ? (
