@@ -209,7 +209,7 @@ export function Sidebar({
 
   const allowedItems = SIDEBAR_NAV_ITEMS.filter((item) => {
     if (!userRole) return false;
-    if (item.to === "/performance") return userRole !== "pelanggan" && userRole !== "customer";
+    if (item.to === "/performance") return userRole !== "pelanggan" && userRole !== "customer" && userRole !== "super_admin";
     if (item.to === "/super-admin/control-center") return userRole === "super_admin";
     if (item.to === "/developer/control-center") return userRole === "developer";
     if (userRole === "admin") return true;

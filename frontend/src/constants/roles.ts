@@ -7,7 +7,7 @@
  */
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   developer: ["/developer/control-center", "/super-admin/control-center", "/performance"],
-  super_admin: ["/super-admin/control-center", "/performance"],
+  super_admin: ["/super-admin/control-center"],
   /**
    * Admin: mengelola pesanan, invoice, dan melihat dashboard.
    */
