@@ -446,7 +446,13 @@ export function MbgDistributionPage() {
       if (newEntries.length > 0) {
         await addMultipleEntries(newEntries);
         await recalculateBatchTotals(targetBatchId);
-        await updateBatchStatus(targetBatchId, 'PM_SUBMITTED');
+        // An Excel report can be attached to a batch already moving through
+        // the workflow. Distribusi may only advance a fresh draft; it must
+        // preserve every later status (QC, cooking, delivery, etc.).
+        const targetBatch = batches.find((batch) => batch.id === targetBatchId);
+        if (targetBatch?.status === 'DRAFT') {
+          await updateBatchStatus(targetBatchId, 'PM_SUBMITTED');
+        }
         showToast({
           message: `Berhasil memuat ${newEntries.length} institusi sekolah dari Excel Produksi ke Distribusi MBG!`,
           variant: 'success',

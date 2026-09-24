@@ -475,6 +475,19 @@ service cloud.firestore {
       allow read: if isMbgStaff();
       allow create, delete: if isMbgManager();
       allow update: if isMbgManager()
+        // Distribusi may materialize PM rows from an existing Excel daily
+        // report. It may only recalculate the aggregate fields and advance a
+        // new draft to PM_SUBMITTED; all other batch fields stay manager-only.
+        || (isDistribusiMbg()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'totalSiswaBalita', 'totalBumilBusui', 'totalGuruKader',
+            'totalPobiaNasi', 'totalJumlah', 'totalInstitusi', 'petugasList',
+            'status', 'updatedAt'
+          ])
+          && (
+            request.resource.data.status == resource.data.status
+            || (resource.data.status == 'DRAFT' && request.resource.data.status == 'PM_SUBMITTED')
+          ))
         || ((isProduksiMbg() || isProduksiMbg2() || isDokumentasiProduksiMbg())
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['productionCookingStatus', 'productionCookingUpdatedBy', 'productionCookingUpdatedAt', 'updatedAt'])
           && request.resource.data.productionCookingUpdatedBy == request.auth.uid
@@ -489,7 +502,10 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /mbg_pm_entries/{entryId} {
       allow read: if isMbgStaff();
-      allow create, delete: if isMbgManager();
+      // Distribusi creates entries only through the Excel-to-distribution
+      // synchronization flow; it still cannot delete PM entries.
+      allow create: if isMbgManager() || isDistribusiMbg();
+      allow delete: if isMbgManager();
       allow update: if isMbgManager() || isDistribusiMbg()
         || (isKurirMbg()
           && (resource.data.assignedPetugasId == request.auth.uid || resource.data.assignedKenekId == request.auth.uid)
