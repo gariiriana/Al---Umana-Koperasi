@@ -33,7 +33,7 @@ import {
 import { db } from "@/lib/firebase";
 import { archiveAndDelete } from "@/services/developerRecycleBinService";
 import { currentUser } from "@/services/authService";
-import type { KitchenSignature, Order, OrderLineItem, OrderStatus, OrderType, PaymentStatus } from "@/types/order";
+import type { CourierReassignment, KitchenSignature, Order, OrderLineItem, OrderStatus, OrderType, PaymentStatus } from "@/types/order";
 import { sendWhatsAppNotification, sendWhatsAppNotificationDirect, WA_MESSAGES } from "./whatsappService";
 import { pushNotification, shortOrderId } from "./notificationWriter";
 
@@ -113,6 +113,7 @@ function localDataToOrder(id: string, data: DocumentData): Order {
     rejectionReason: data.rejectionReason as string | undefined,
     outOfStockItems: data.outOfStockItems as string[] | undefined,
     assignedCourierId: data.assignedCourierId as string | undefined,
+    courierReassignments: data.courierReassignments as CourierReassignment[] | undefined,
     productionStartedBy: data.productionStartedBy as string | undefined,
     productionStartedAt: toIsoStringOrUndefined(data.productionStartedAt),
     qcReviewedBy: data.qcReviewedBy as string | undefined,
@@ -752,6 +753,92 @@ export async function assignCourier(id: string, courierId: string): Promise<Orde
 export interface DispatchOrderOptions {
   kitchenSignatures?: KitchenSignature[];
   deliveryStartedAt?: Date;
+}
+
+export interface ReassignCourierOptions {
+  reason: string;
+  reassignedBy: string;
+  reassignedByName: string;
+}
+
+/**
+ * Transfer an active catering delivery to another courier while preserving the
+ * former assignment as an audit record. Completed deliveries are immutable.
+ */
+export async function reassignCourier(
+  id: string,
+  newCourierId: string,
+  options: ReassignCourierOptions,
+): Promise<Order> {
+  const reason = options.reason.trim();
+  if (!newCourierId || !reason) throw new Error("Kurir pengganti dan alasan wajib diisi");
+
+  const docRef = doc(db, "orders", id);
+  let previousCourierId = "";
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(docRef);
+    if (!snap.exists()) throw new Error("Pesanan tidak ditemukan");
+
+    const current = snap.data();
+    const status = current.status as OrderStatus;
+    previousCourierId = current.assignedCourierId as string | undefined || "";
+    if (!previousCourierId) throw new Error("Pesanan belum memiliki kurir untuk diganti");
+    if (previousCourierId === newCourierId) throw new Error("Pilih kurir yang berbeda");
+    if (["COMPLETED", "DELIVERED", "DELIVERY_FAILED", "FAILED"].includes(status)) {
+      throw new Error("Kurir tidak dapat diganti karena pengiriman sudah selesai");
+    }
+
+    const reassignment: CourierReassignment = {
+      previousCourierId,
+      newCourierId,
+      reason,
+      reassignedBy: options.reassignedBy,
+      reassignedByName: options.reassignedByName,
+      reassignedAt: new Date().toISOString(),
+    };
+    const history = Array.isArray(current.courierReassignments)
+      ? current.courierReassignments
+      : [];
+    tx.update(docRef, {
+      assignedCourierId: newCourierId,
+      courierReassignments: [...history, reassignment],
+      courierSickReported: false,
+      updatedAt: new Date(),
+    });
+  });
+
+  const updatedOrder = await getOrder(id);
+  const sid = shortOrderId(id);
+  const destination = updatedOrder.deliveryAddress.split(" | ")[0];
+  pushNotification({
+    recipientId: previousCourierId,
+    type: "delivery",
+    title: `Tugas Pengantaran Dialihkan #${sid}`,
+    titleEn: `Delivery Assignment Reassigned #${sid}`,
+    message: `Tugas pengantaran #${sid} dialihkan ke kurir lain. Alasan: ${reason}.`,
+    messageEn: `Delivery assignment #${sid} was transferred to another courier. Reason: ${reason}.`,
+    orderId: id, orderShortId: sid, actorRole: "distribusi",
+  }).catch((e) => console.error("[reassignCourier Previous Courier Push Error]", e));
+  pushNotification({
+    recipientId: newCourierId,
+    type: "delivery",
+    title: `Tugas Pengantar Baru #${sid}`,
+    titleEn: `New Delivery Assignment #${sid}`,
+    message: `Anda menggantikan kurir sebelumnya untuk mengirim pesanan #${sid} ke ${destination}.`,
+    messageEn: `You are replacing the previous courier for order #${sid} to ${destination}.`,
+    orderId: id, orderShortId: sid, actorRole: "distribusi",
+  }).catch((e) => console.error("[reassignCourier New Courier Push Error]", e));
+  pushNotification({
+    recipientId: "admin",
+    type: "delivery",
+    title: `Kurir Diganti #${sid}`,
+    titleEn: `Courier Reassigned #${sid}`,
+    message: `Kurir pengantar pesanan #${sid} telah diganti. Alasan: ${reason}.`,
+    messageEn: `The courier for order #${sid} has been changed. Reason: ${reason}.`,
+    orderId: id, orderShortId: sid, actorRole: "distribusi",
+  }).catch((e) => console.error("[reassignCourier Admin Push Error]", e));
+
+  return updatedOrder;
 }
 
 /**

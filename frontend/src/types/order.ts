@@ -44,6 +44,16 @@ export interface ManualValidation {
   notes: string;
 }
 
+/** Immutable record of a courier transfer, retained for operational audit. */
+export interface CourierReassignment {
+  previousCourierId: string;
+  newCourierId: string;
+  reason: string;
+  reassignedBy: string;
+  reassignedByName: string;
+  reassignedAt: string;
+}
+
 export interface Order {
   id: string;
   orderType: OrderType;
@@ -80,6 +90,7 @@ export interface Order {
   courierSickReported?: boolean;
   courierSickRemark?: string;
   assignedCourierId?: string;
+  courierReassignments?: CourierReassignment[];
   productionStartedBy?: string;
   productionStartedAt?: string;
   qcReviewedBy?: string;

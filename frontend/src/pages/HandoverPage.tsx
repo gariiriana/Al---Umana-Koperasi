@@ -6,7 +6,7 @@ import {
   History, Eye, ChevronUp, FileDown
 } from "lucide-react";
 import { ApiError } from "@/services/apiClient";
-import { transitionOrder, assignCourier } from "@/services/orderService";
+import { transitionOrder, assignCourier, reassignCourier } from "@/services/orderService";
 import { subscribeOrders } from "@/services/realtimeService";
 import type { Order, KitchenSignature } from "@/types/order";
 import { exportCateringDeliveryProofPdf } from "@/utils/cateringDeliveryReceiptPdfExporter";
@@ -120,7 +120,7 @@ const formatScheduledDelivery = (order: Order): string => {
 
 export function HandoverPage() {
   const { showToast } = useToast();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const userRole = profile?.role || "";
   const isReadOnly = ["tim_produksi", "produksi_1", "produksi_2", "monitoring"].includes(userRole);
 
@@ -152,6 +152,9 @@ export function HandoverPage() {
   const [selectedProofFiles, setSelectedProofFiles] = useState<string[]>([]);
   const [selectedStartPhotoId, setSelectedStartPhotoId] = useState<string | undefined>(undefined);
   const [selectedKitchenSignatures, setSelectedKitchenSignatures] = useState<KitchenSignature[] | undefined>(undefined);
+  const [reassignmentOrder, setReassignmentOrder] = useState<Order | null>(null);
+  const [replacementCourierId, setReplacementCourierId] = useState("");
+  const [reassignmentReason, setReassignmentReason] = useState("");
 
   const [availableCouriers, setAvailableCouriers] = useState<{ uid: string; displayName: string; email: string }[]>([]);
 
@@ -369,6 +372,37 @@ export function HandoverPage() {
     }
   };
 
+  const openReassignment = (order: Order) => {
+    setReassignmentOrder(order);
+    setReplacementCourierId("");
+    setReassignmentReason("");
+  };
+
+  const submitReassignment = async () => {
+    if (!reassignmentOrder) return;
+    if (!replacementCourierId || !reassignmentReason.trim()) {
+      setError("Pilih kurir pengganti dan isi alasan pergantian.");
+      return;
+    }
+
+    setBusyId(reassignmentOrder.id);
+    setError(null);
+    try {
+      await reassignCourier(reassignmentOrder.id, replacementCourierId, {
+        reason: reassignmentReason,
+        reassignedBy: user?.uid || profile?.uid || "distribusi",
+        reassignedByName: profile?.displayName || profile?.email || "Tim Distribusi",
+      });
+      showToast({ message: "Kurir berhasil diganti dan riwayat perubahan tersimpan.", variant: "success" });
+      setReassignmentOrder(null);
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Gagal mengganti kurir");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4">
       {/* Header */}
@@ -445,46 +479,54 @@ export function HandoverPage() {
       </div>
 
       {/* Tab selectors */}
-      <div className="flex border-b border-[#E5E7EB] bg-white rounded-t-2xl px-2 overflow-x-auto scrollbar-none whitespace-nowrap">
+      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-2 sm:flex">
         <button
           onClick={() => setActiveTab("preparation")}
-          className={`flex-1 min-w-[120px] py-3 text-center text-[11px] sm:text-xs font-bold font-['Hanken_Grotesk'] transition-all border-b-2 ${
+          title="Dalam Persiapan"
+          className={`min-w-0 rounded-xl border px-1 py-2.5 text-center text-[10px] font-bold font-['Hanken_Grotesk'] transition-all active:scale-[0.98] sm:flex-1 sm:min-w-[120px] sm:px-2 sm:py-3 sm:text-xs ${
             activeTab === "preparation"
-              ? "border-[#FBBF24] text-[#111827] font-black"
-              : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
+              ? "border-[#FBBF24] bg-amber-50 text-[#92400E] font-black shadow-sm"
+              : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-amber-200 hover:bg-amber-50/40 hover:text-[#4B5563]"
           }`}
         >
-          Dalam Persiapan ({preparation.length})
+          <span className="sm:hidden">Persiapan ({preparation.length})</span>
+          <span className="hidden sm:inline">Dalam Persiapan ({preparation.length})</span>
         </button>
         <button
           onClick={() => setActiveTab("ready")}
-          className={`flex-1 min-w-[120px] py-3 text-center text-[11px] sm:text-xs font-bold font-['Hanken_Grotesk'] transition-all border-b-2 ${
+          title="Siap Diambil"
+          className={`min-w-0 rounded-xl border px-1 py-2.5 text-center text-[10px] font-bold font-['Hanken_Grotesk'] transition-all active:scale-[0.98] sm:flex-1 sm:min-w-[120px] sm:px-2 sm:py-3 sm:text-xs ${
             activeTab === "ready"
-              ? "border-[#FBBF24] text-[#111827] font-black"
-              : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
+              ? "border-[#FBBF24] bg-amber-50 text-[#92400E] font-black shadow-sm"
+              : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-amber-200 hover:bg-amber-50/40 hover:text-[#4B5563]"
           }`}
         >
-          Siap Diambil ({ready.length})
+          <span className="sm:hidden">Siap ({ready.length})</span>
+          <span className="hidden sm:inline">Siap Diambil ({ready.length})</span>
         </button>
         <button
           onClick={() => setActiveTab("enroute")}
-          className={`flex-1 min-w-[120px] py-3 text-center text-[11px] sm:text-xs font-bold font-['Hanken_Grotesk'] transition-all border-b-2 ${
+          title="Sedang Dikirim"
+          className={`min-w-0 rounded-xl border px-1 py-2.5 text-center text-[10px] font-bold font-['Hanken_Grotesk'] transition-all active:scale-[0.98] sm:flex-1 sm:min-w-[120px] sm:px-2 sm:py-3 sm:text-xs ${
             activeTab === "enroute"
-              ? "border-[#FBBF24] text-[#111827] font-black"
-              : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
+              ? "border-[#FBBF24] bg-amber-50 text-[#92400E] font-black shadow-sm"
+              : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-amber-200 hover:bg-amber-50/40 hover:text-[#4B5563]"
           }`}
         >
-          Sedang Dikirim ({enRoute.length})
+          <span className="sm:hidden">Dikirim ({enRoute.length})</span>
+          <span className="hidden sm:inline">Sedang Dikirim ({enRoute.length})</span>
         </button>
         <button
           onClick={() => setActiveTab("completed")}
-          className={`flex-1 min-w-[120px] py-3 text-center text-[11px] sm:text-xs font-bold font-['Hanken_Grotesk'] transition-all border-b-2 ${
+          title="Riwayat Selesai"
+          className={`min-w-0 rounded-xl border px-1 py-2.5 text-center text-[10px] font-bold font-['Hanken_Grotesk'] transition-all active:scale-[0.98] sm:flex-1 sm:min-w-[120px] sm:px-2 sm:py-3 sm:text-xs ${
             activeTab === "completed"
-              ? "border-[#FBBF24] text-[#111827] font-black"
-              : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
+              ? "border-[#FBBF24] bg-amber-50 text-[#92400E] font-black shadow-sm"
+              : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-amber-200 hover:bg-amber-50/40 hover:text-[#4B5563]"
           }`}
         >
-          Riwayat Selesai ({completed.length})
+          <span className="sm:hidden">Riwayat ({completed.length})</span>
+          <span className="hidden sm:inline">Riwayat Selesai ({completed.length})</span>
         </button>
       </div>
 
@@ -600,6 +642,11 @@ export function HandoverPage() {
                             <User className="h-3.5 w-3.5 text-orange-400 shrink-0" />
                             <span className="text-orange-600 font-bold">Belum ada kurir ditugaskan</span>
                           </div>
+                        )}
+                        {courierName && !isReadOnly && (
+                          <button onClick={() => openReassignment(o)} className="w-full rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-left text-[11px] font-bold text-amber-800 hover:bg-amber-100">
+                            Ganti Kurir
+                          </button>
                         )}
                         <div className="flex items-center gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-2.5">
                           <Clock className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
@@ -781,6 +828,11 @@ export function HandoverPage() {
                             <User className="h-3.5 w-3.5 text-orange-400 shrink-0" />
                             <span className="text-orange-600 font-bold">Belum ada kurir ditugaskan</span>
                           </div>
+                        )}
+                        {courierName && !isReadOnly && (
+                          <button onClick={() => openReassignment(o)} className="w-full rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-left text-[11px] font-bold text-amber-800 hover:bg-amber-100">
+                            Ganti Kurir
+                          </button>
                         )}
                         <div className="flex items-center gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-2.5">
                           <Clock className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
@@ -1006,14 +1058,25 @@ export function HandoverPage() {
                             <span className="text-[10px] text-neutral-400 font-semibold">Broadcasting offline...</span>
                           )}
 
-                          <button
-                            onClick={() => onReschedule(o)}
-                            disabled={isBusy}
-                            className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] bg-white hover:bg-[#F3F4F6] text-xs font-bold text-[#374151] rounded-lg cursor-pointer transition disabled:opacity-50"
-                          >
-                            {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                            Jadwal Ulang
-                          </button>
+                          <div className="flex gap-2">
+                            {!isReadOnly && (
+                              <button
+                                onClick={() => openReassignment(o)}
+                                disabled={isBusy}
+                                className="flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-xs font-bold text-amber-800 rounded-lg cursor-pointer transition disabled:opacity-50"
+                              >
+                                <User className="h-3.5 w-3.5" /> Ganti Kurir
+                              </button>
+                            )}
+                            <button
+                              onClick={() => onReschedule(o)}
+                              disabled={isBusy}
+                              className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] bg-white hover:bg-[#F3F4F6] text-xs font-bold text-[#374151] rounded-lg cursor-pointer transition disabled:opacity-50"
+                            >
+                              {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                              Jadwal Ulang
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </motion.div>
@@ -1194,6 +1257,54 @@ export function HandoverPage() {
         deliveryStartPhotoId={selectedStartPhotoId}
         kitchenSignatures={selectedKitchenSignatures}
       />
+
+      <AnimatePresence>
+        {reassignmentOrder && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            role="dialog" aria-modal="true" aria-labelledby="reassign-courier-title"
+          >
+            <motion.div
+              className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}
+            >
+              <h2 id="reassign-courier-title" className="font-['Manrope'] text-lg font-extrabold text-[#111827]">Ganti Kurir Pengantar</h2>
+              <p className="mt-1 text-xs leading-relaxed text-[#6B7280]">
+                Tugas #{reassignmentOrder.id.slice(-6).toUpperCase()} sudah dalam proses pengantaran. Pastikan paket fisik dialihkan ke kurir pengganti.
+              </p>
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                Kurir saat ini: <strong>{availableCouriers.find((c) => c.uid === reassignmentOrder.assignedCourierId)?.displayName || reassignmentOrder.assignedCourierId}</strong>
+              </div>
+              <label className="mt-4 block text-xs font-bold text-[#374151]">Kurir pengganti</label>
+              <select
+                value={replacementCourierId}
+                onChange={(e) => setReplacementCourierId(e.target.value)}
+                className="mt-1.5 w-full rounded-xl border border-[#D1D5DB] bg-white p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              >
+                <option value="">-- Pilih kurir --</option>
+                {availableCouriers.filter((c) => c.uid !== reassignmentOrder.assignedCourierId).map((c) => (
+                  <option key={c.uid} value={c.uid}>{c.displayName}</option>
+                ))}
+              </select>
+              <label className="mt-4 block text-xs font-bold text-[#374151]">Alasan pergantian</label>
+              <textarea
+                value={reassignmentReason}
+                onChange={(e) => setReassignmentReason(e.target.value)}
+                placeholder="Contoh: kurir berhalangan / kendaraan bermasalah"
+                rows={3}
+                className="mt-1.5 w-full resize-none rounded-xl border border-[#D1D5DB] p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+              <div className="mt-5 flex justify-end gap-2">
+                <button onClick={() => setReassignmentOrder(null)} disabled={busyId === reassignmentOrder.id} className="rounded-xl px-4 py-2 text-xs font-bold text-[#4B5563] hover:bg-neutral-100">Batal</button>
+                <button onClick={submitReassignment} disabled={busyId === reassignmentOrder.id} className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-50">
+                  {busyId === reassignmentOrder.id && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Konfirmasi Ganti Kurir
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
