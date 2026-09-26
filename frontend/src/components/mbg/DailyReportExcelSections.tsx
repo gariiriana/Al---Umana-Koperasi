@@ -1195,7 +1195,8 @@ export function DailyReportExcelSections({
           </div>
         </div>
 
-        {/* ─── DATA INPUT ADMIN MBG (TABEL PENERIMA MANFAAT LENGKAP: PORSI KECIL, BESAR, BALITA, BUMIL/BUSUI) ─── */}
+        {/* ─── DATA INPUT ADMIN MBG SUPPRESSED (tidak ditampilkan agar tidak membingungkan hasil export) ─── */}
+        {false && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden font-['Hanken_Grotesk']">
           <div className="px-4 py-3 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -1419,6 +1420,7 @@ export function DailyReportExcelSections({
             </div>
           )}
         </div>
+        )}
       </div>
     );
   };

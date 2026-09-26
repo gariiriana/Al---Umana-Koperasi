@@ -62,6 +62,7 @@ import {
   compareCouriers,
 } from '@/utils/mbgDeliveryReportPdfExporter';
 import { getJakartaDate } from '@/utils/date';
+import { createDefaultOfficialPmEntries } from '@/constants/mbgConstants';
 
 function getAutoRekapTotals(entries: MbgPmEntry[]) {
   return entries.filter((entry) => !entry.isSekolahLibur).reduce(
@@ -413,42 +414,13 @@ export function MbgDistributionPage() {
     }
   }, [displayBatches, selectedBatchId]);
 
-  // Helper to sync PM entries from Excel daily report if batch entries are empty in Firestore
+  // Helper to sync PM entries from official master if batch entries are empty in Firestore
   const syncEntriesFromDailyReport = async (report: MbgProductionDailyReport, targetBatchId: string) => {
-    if (!report.sekolahList || report.sekolahList.length === 0) return;
     try {
-      const newEntries: Omit<MbgPmEntry, 'id'>[] = report.sekolahList.map((s, idx) => {
-        const nameLower = s.nama.toLowerCase();
-        const isPosyandu = nameLower.includes('balita') || nameLower.includes('bumil') || nameLower.includes('busui') || nameLower.includes('posyandu') || nameLower.includes('3b');
-        const schoolLevel = nameLower.includes('tk') || nameLower.includes('paud') ? 'tk_paud' : (nameLower.includes('smp') || nameLower.includes('sma') ? 'sma' : 'sd');
-        const total = (s.murid || 0) + (s.guru || 0);
-        return {
-          batchId: targetBatchId,
-          institutionName: s.nama,
-          institutionType: isPosyandu ? 'posyandu' : 'sekolah',
-          schoolLevel: isPosyandu ? undefined : schoolLevel,
-          qtSiswaBalita: s.murid || 0,
-          qtBumil: 0,
-          qtBusui: 0,
-          qtBumilBusui: 0,
-          qtGuruKader: s.guru || 0,
-          qtPobiaNasi: 0,
-          qtPorsiBalita: isPosyandu && nameLower.includes('balita') ? s.murid : 0,
-          qtPorsiBumilBusui: isPosyandu && (nameLower.includes('bumil') || nameLower.includes('busui')) ? s.murid : 0,
-          jumlah: total,
-          jadwalPengantaran: '06.30-08.30',
-          assignedPetugasId: '',
-          assignedPetugasName: '',
-          menuItems: [],
-          menuKeringanItems: [],
-          isSekolahLibur: total === 0,
-          notes: '',
-          sortOrder: idx + 1,
-          createdBy: report.createdBy || 'excel-import-sync',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-      });
+      const newEntries: Omit<MbgPmEntry, 'id'>[] = createDefaultOfficialPmEntries(
+        targetBatchId,
+        report.createdBy || 'distribusi-sync'
+      );
 
       if (newEntries.length > 0) {
         await addMultipleEntries(newEntries);
@@ -461,14 +433,14 @@ export function MbgDistributionPage() {
           await updateBatchStatus(targetBatchId, 'PM_SUBMITTED');
         }
         showToast({
-          message: `Berhasil memuat ${newEntries.length} institusi sekolah dari Excel Produksi ke Distribusi MBG!`,
+          message: `Berhasil memuat ${newEntries.length} institusi resmi (Arsip PM) ke Distribusi MBG!`,
           variant: 'success',
         });
       }
     } catch (err) {
-      console.error('Failed to sync entries from daily report:', err);
+      console.error('Failed to sync entries from official master:', err);
       showToast({
-        message: 'Gagal memuat data sekolah dari Excel ke Distribusi MBG',
+        message: 'Gagal memuat data PM ke Distribusi MBG',
         variant: 'error',
       });
     }
@@ -1398,7 +1370,7 @@ export function MbgDistributionPage() {
                     /* Split Tables: Sekolah and Posyandu in AUTO REKAP Format */
                     [
                       {
-                        title: 'DATA SEKOLAH — FORMAT AUTO REKAP',
+                        title: 'DATA PENERIMA MANFAAT (SEKOLAH)',
                         list: schoolPmEntries,
                         isPosyandu: false,
                       },

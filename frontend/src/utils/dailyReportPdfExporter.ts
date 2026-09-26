@@ -13,6 +13,7 @@ import type {
 } from '@/types/mbg';
 import { buildMbgPmRecipientTable } from '@/utils/mbgPmRecipientTable';
 import { getAutoRekapTotals, isSummaryOrCategoryRow } from '@/utils/mbgPmFilter';
+import { enrichPmEntryWithMaster, createDefaultOfficialPmEntries } from '@/constants/mbgConstants';
 
 
 const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
@@ -159,51 +160,17 @@ const renderRekapitulasiPmPage = (
   drawLandscapeHeader(doc, 'REKAPITULASI PENERIMA MANFAAT', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
 
   // Filter out summary/category rows
-  const validEntries = (entries || []).filter((e) => !isSummaryOrCategoryRow(e.institutionName));
+  const rawValidEntries = (entries || []).filter((e) => !isSummaryOrCategoryRow(e.institutionName));
 
-  const effectiveEntries: MbgPmEntry[] = validEntries.length > 0 ? validEntries : (report.sekolahList || [])
-    .filter((s) => !isSummaryOrCategoryRow(s.nama))
-    .map((s, idx) => {
-      const isPos = s.nama.toLowerCase().includes('posyandu');
-      const isTk = s.nama.toLowerCase().includes('tk') || s.nama.toLowerCase().includes('paud');
-      const pKecilL = isPos ? Math.ceil(s.murid / 2) : (isTk ? Math.ceil(s.murid / 2) : 0);
-      const pKecilP = isPos ? Math.floor(s.murid / 2) : (isTk ? Math.floor(s.murid / 2) : 0);
-      const pBesarL = !isPos && !isTk ? Math.ceil(s.murid / 2) : 0;
-      const pBesarP = !isPos && !isTk ? Math.floor(s.murid / 2) : 0;
-      const bumil = isPos ? s.guru : 0;
-      return {
-        id: `fallback-${idx}`,
-        batchId: '',
-        institutionName: s.nama,
-        institutionType: isPos ? ('posyandu' as const) : ('sekolah' as const),
-        qtPorsiKecilL: pKecilL,
-        qtPorsiKecilP: pKecilP,
-        qtPorsiBesarL: pBesarL,
-        qtPorsiBesarP: pBesarP,
-        qtSiswaBalita: s.murid,
-        qtBumil: bumil,
-        qtBusui: 0,
-        qtBumilBusui: bumil,
-        qtGuruL: isPos ? 0 : Math.ceil(s.guru / 2),
-        qtGuruP: isPos ? 0 : Math.floor(s.guru / 2),
-        qtGuruKader: s.guru,
-        qtTendikL: 0,
-        qtTendikP: 0,
-        qtPobiaNasi: 0,
-        jumlah: s.murid + s.guru,
-        jadwalPengantaran: '06.00-08.30',
-        assignedPetugasId: '',
-        assignedPetugasName: '-',
-        isSekolahLibur: false,
-        menuItems: [],
-        menuKeringanItems: [],
-        notes: '',
-        sortOrder: idx,
-        createdBy: 'system',
-        createdAt: '',
-        updatedAt: '',
-      } as unknown as MbgPmEntry;
-    });
+  // Check if entries are crippled (e.g. empty, or contains "Balita 1-5 Tahun", or all L/P numbers are zero)
+  const isCrippledEntries =
+    rawValidEntries.length === 0 ||
+    rawValidEntries.some((e) => e.institutionName.toLowerCase().includes('balita 1-5 tahun') || e.institutionName.toLowerCase().includes('bumil ds.')) ||
+    (rawValidEntries.length > 0 && rawValidEntries.every((e) => (e.qtPorsiKecilL || 0) === 0 && (e.qtPorsiBesarL || 0) === 0 && (e.qtGuruL || 0) === 0));
+
+  const effectiveEntries: MbgPmEntry[] = isCrippledEntries
+    ? (createDefaultOfficialPmEntries(report.batchId || '') as unknown as MbgPmEntry[])
+    : rawValidEntries.map((e) => enrichPmEntryWithMaster(e));
 
   const schoolEntries = effectiveEntries.filter((e) => e.institutionType !== 'posyandu');
   const posyanduEntries = effectiveEntries.filter((e) => e.institutionType === 'posyandu');
@@ -329,11 +296,11 @@ const renderRekapitulasiPmPage = (
 
   let curY = 27;
 
-  // Header 1: DATA PM — FORMAT AUTO REKAP
+  // Header 1: DATA PENERIMA MANFAAT (PM)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(15, 23, 42);
-  doc.text('DATA PM — FORMAT AUTO REKAP', 10, curY);
+  doc.text('DATA PENERIMA MANFAAT (PM)', 10, curY);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);

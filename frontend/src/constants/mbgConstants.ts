@@ -316,6 +316,139 @@ export const MBG_MASTER_INSTITUTIONS: MbgMasterInstitution[] = [
   { institutionName: 'Busui Cempaka', institutionType: 'posyandu', qtSiswaBalita: 0, qtBumilBusui: 92, qtBumil: 0, qtBusui: 92, qtGuruKader: 0, qtPorsiBumilBusui: 92, qtPorsiBesarL: 0, qtPorsiBesarP: 92, qtTidakAlergi: 92, jadwalPengantaran: '06.00-08.30' },
 ];
 
+/** Master Resmi Penerima Manfaat (17 Sekolah + 13 Posyandu = 2.775 Porsi) sesuai Laporan Standar Al-Umanaa */
+export const MBG_OFFICIAL_PM_MASTER: MbgMasterInstitution[] = [
+  // 17 SEKOLAH (Total 2.247 Porsi)
+  { institutionName: 'SPS CEMPAKA', institutionType: 'sekolah', schoolLevel: 'tk_paud', qtSiswaBalita: 31, qtBumilBusui: 0, qtGuruKader: 6, qtPorsiKecil: 31, qtPorsiBesar: 0, qtPorsiKecilL: 14, qtPorsiKecilP: 17, qtPorsiBesarL: 0, qtPorsiBesarP: 0, qtGuruL: 0, qtGuruP: 3, qtTendikL: 3, qtTendikP: 0, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'SPS CEMPAKA 10', institutionType: 'sekolah', schoolLevel: 'tk_paud', qtSiswaBalita: 53, qtBumilBusui: 0, qtGuruKader: 8, qtPorsiKecil: 53, qtPorsiBesar: 0, qtPorsiKecilL: 27, qtPorsiKecilP: 26, qtPorsiBesarL: 0, qtPorsiBesarP: 0, qtGuruL: 0, qtGuruP: 8, qtTendikL: 0, qtTendikP: 0, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'TK PADARAANG', institutionType: 'sekolah', schoolLevel: 'tk_paud', qtSiswaBalita: 17, qtBumilBusui: 0, qtGuruKader: 0, qtPorsiKecil: 17, qtPorsiBesar: 0, qtPorsiKecilL: 11, qtPorsiKecilP: 6, qtPorsiBesarL: 0, qtPorsiBesarP: 0, qtGuruL: 0, qtGuruP: 0, qtTendikL: 0, qtTendikP: 0, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'TK AL-MUJAHID', institutionType: 'sekolah', schoolLevel: 'tk_paud', qtSiswaBalita: 54, qtBumilBusui: 0, qtGuruKader: 7, qtPorsiKecil: 54, qtPorsiBesar: 0, qtPorsiKecilL: 27, qtPorsiKecilP: 27, qtPorsiBesarL: 0, qtPorsiBesarP: 0, qtGuruL: 0, qtGuruP: 6, qtTendikL: 1, qtTendikP: 0, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'SDN PASIRBADAK', institutionType: 'sekolah', schoolLevel: 'sd', qtSiswaBalita: 170, qtBumilBusui: 0, qtGuruKader: 11, qtPorsiKecil: 94, qtPorsiBesar: 76, qtPorsiKecilL: 49, qtPorsiKecilP: 45, qtPorsiBesarL: 39, qtPorsiBesarP: 37, qtGuruL: 2, qtGuruP: 8, qtTendikL: 1, qtTendikP: 0, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'SDN PADARAANG', institutionType: 'sekolah', schoolLevel: 'sd', qtSiswaBalita: 220, qtBumilBusui: 0, qtGuruKader: 10, qtPorsiKecil: 107, qtPorsiBesar: 113, qtPorsiKecilL: 58, qtPorsiKecilP: 49, qtPorsiBesarL: 59, qtPorsiBesarP: 54, qtGuruL: 2, qtGuruP: 8, qtTendikL: 0, qtTendikP: 0, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'SD ISLAM MASAGI', institutionType: 'sekolah', schoolLevel: 'sd', qtSiswaBalita: 61, qtBumilBusui: 0, qtGuruKader: 7, qtPorsiKecil: 30, qtPorsiBesar: 31, qtPorsiKecilL: 7, qtPorsiKecilP: 23, qtPorsiBesarL: 15, qtPorsiBesarP: 16, qtGuruL: 1, qtGuruP: 5, qtTendikL: 0, qtTendikP: 1, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'SMP AL - UMANAA', institutionType: 'sekolah', schoolLevel: 'sma', qtSiswaBalita: 277, qtBumilBusui: 0, qtGuruKader: 7, qtPorsiKecil: 0, qtPorsiBesar: 277, qtPorsiKecilL: 0, qtPorsiKecilP: 0, qtPorsiBesarL: 147, qtPorsiBesarP: 130, qtGuruL: 3, qtGuruP: 2, qtTendikL: 1, qtTendikP: 1, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'SMP ISLAM MASAGI', institutionType: 'sekolah', schoolLevel: 'sma', qtSiswaBalita: 169, qtBumilBusui: 0, qtGuruKader: 13, qtPorsiKecil: 0, qtPorsiBesar: 169, qtPorsiKecilL: 0, qtPorsiKecilP: 0, qtPorsiBesarL: 104, qtPorsiBesarP: 65, qtGuruL: 8, qtGuruP: 4, qtTendikL: 1, qtTendikP: 0, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'MTS AL-MUJAHID', institutionType: 'sekolah', schoolLevel: 'sma', qtSiswaBalita: 73, qtBumilBusui: 0, qtGuruKader: 10, qtPorsiKecil: 0, qtPorsiBesar: 73, qtPorsiKecilL: 0, qtPorsiKecilP: 0, qtPorsiBesarL: 40, qtPorsiBesarP: 33, qtGuruL: 6, qtGuruP: 4, qtTendikL: 0, qtTendikP: 0, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'MA SAMSUL MA\'ARIF', institutionType: 'sekolah', schoolLevel: 'sma', qtSiswaBalita: 44, qtBumilBusui: 0, qtGuruKader: 6, qtPorsiKecil: 0, qtPorsiBesar: 44, qtPorsiKecilL: 0, qtPorsiKecilP: 0, qtPorsiBesarL: 22, qtPorsiBesarP: 22, qtGuruL: 3, qtGuruP: 3, qtTendikL: 0, qtTendikP: 0, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'SMA AL UMANAA', institutionType: 'sekolah', schoolLevel: 'sma', qtSiswaBalita: 180, qtBumilBusui: 0, qtGuruKader: 12, qtPorsiKecil: 0, qtPorsiBesar: 180, qtPorsiKecilL: 0, qtPorsiKecilP: 0, qtPorsiBesarL: 101, qtPorsiBesarP: 79, qtGuruL: 5, qtGuruP: 4, qtTendikL: 2, qtTendikP: 1, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'MTS SAMSUL ULUM 2', institutionType: 'sekolah', schoolLevel: 'sma', qtSiswaBalita: 54, qtBumilBusui: 0, qtGuruKader: 12, qtPorsiKecil: 0, qtPorsiBesar: 54, qtPorsiKecilL: 0, qtPorsiKecilP: 0, qtPorsiBesarL: 24, qtPorsiBesarP: 30, qtGuruL: 5, qtGuruP: 6, qtTendikL: 0, qtTendikP: 1, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'MA NURUL AZIZ', institutionType: 'sekolah', schoolLevel: 'sma', qtSiswaBalita: 61, qtBumilBusui: 0, qtGuruKader: 12, qtPorsiKecil: 0, qtPorsiBesar: 61, qtPorsiKecilL: 0, qtPorsiKecilP: 0, qtPorsiBesarL: 32, qtPorsiBesarP: 29, qtGuruL: 2, qtGuruP: 7, qtTendikL: 1, qtTendikP: 2, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'SMK AL-FATHONAH', institutionType: 'sekolah', schoolLevel: 'sma', qtSiswaBalita: 309, qtBumilBusui: 0, qtGuruKader: 38, qtPorsiKecil: 0, qtPorsiBesar: 309, qtPorsiKecilL: 0, qtPorsiKecilP: 0, qtPorsiBesarL: 159, qtPorsiBesarP: 150, qtGuruL: 17, qtGuruP: 15, qtTendikL: 3, qtTendikP: 3, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'TK QURROTAYAUN', institutionType: 'sekolah', schoolLevel: 'tk_paud', qtSiswaBalita: 50, qtBumilBusui: 0, qtGuruKader: 6, qtPorsiKecil: 50, qtPorsiBesar: 0, qtPorsiKecilL: 24, qtPorsiKecilP: 26, qtPorsiBesarL: 0, qtPorsiBesarP: 0, qtGuruL: 0, qtGuruP: 4, qtTendikL: 0, qtTendikP: 2, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'SD QURROTAYAUN', institutionType: 'sekolah', schoolLevel: 'sd', qtSiswaBalita: 235, qtBumilBusui: 0, qtGuruKader: 24, qtPorsiKecil: 163, qtPorsiBesar: 72, qtPorsiKecilL: 86, qtPorsiKecilP: 77, qtPorsiBesarL: 40, qtPorsiBesarP: 32, qtGuruL: 5, qtGuruP: 17, qtTendikL: 1, qtTendikP: 1, jadwalPengantaran: '06.00-08.30' },
+
+  // 13 POSYANDU (Total 528 Porsi)
+  { institutionName: 'CEMPAKA 1', institutionType: 'posyandu', qtSiswaBalita: 23, qtBumilBusui: 7, qtBumil: 0, qtBusui: 7, qtGuruKader: 0, qtPorsiBalita: 23, qtPorsiKecilL: 11, qtPorsiKecilP: 12, qtPorsiBesarL: 0, qtPorsiBesarP: 7, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'CEMPAKA 2', institutionType: 'posyandu', qtSiswaBalita: 19, qtBumilBusui: 7, qtBumil: 4, qtBusui: 3, qtGuruKader: 0, qtPorsiBalita: 19, qtPorsiKecilL: 11, qtPorsiKecilP: 8, qtPorsiBesarL: 4, qtPorsiBesarP: 3, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'CEMPAKA 3', institutionType: 'posyandu', qtSiswaBalita: 33, qtBumilBusui: 8, qtBumil: 0, qtBusui: 8, qtGuruKader: 0, qtPorsiBalita: 33, qtPorsiKecilL: 20, qtPorsiKecilP: 13, qtPorsiBesarL: 0, qtPorsiBesarP: 8, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'CEMPAKA 4', institutionType: 'posyandu', qtSiswaBalita: 33, qtBumilBusui: 11, qtBumil: 2, qtBusui: 9, qtGuruKader: 0, qtPorsiBalita: 33, qtPorsiKecilL: 23, qtPorsiKecilP: 10, qtPorsiBesarL: 2, qtPorsiBesarP: 9, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'CEMPAKA 5', institutionType: 'posyandu', qtSiswaBalita: 21, qtBumilBusui: 11, qtBumil: 1, qtBusui: 10, qtGuruKader: 0, qtPorsiBalita: 21, qtPorsiKecilL: 11, qtPorsiKecilP: 10, qtPorsiBesarL: 1, qtPorsiBesarP: 10, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'CEMPAKA 6', institutionType: 'posyandu', qtSiswaBalita: 38, qtBumilBusui: 8, qtBumil: 2, qtBusui: 6, qtGuruKader: 0, qtPorsiBalita: 38, qtPorsiKecilL: 17, qtPorsiKecilP: 21, qtPorsiBesarL: 2, qtPorsiBesarP: 6, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'CEMPAKA 7', institutionType: 'posyandu', qtSiswaBalita: 34, qtBumilBusui: 10, qtBumil: 6, qtBusui: 4, qtGuruKader: 0, qtPorsiBalita: 34, qtPorsiKecilL: 18, qtPorsiKecilP: 16, qtPorsiBesarL: 6, qtPorsiBesarP: 4, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'CEMPAKA 8', institutionType: 'posyandu', qtSiswaBalita: 43, qtBumilBusui: 9, qtBumil: 3, qtBusui: 6, qtGuruKader: 0, qtPorsiBalita: 43, qtPorsiKecilL: 28, qtPorsiKecilP: 15, qtPorsiBesarL: 3, qtPorsiBesarP: 6, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'CEMPAKA 9', institutionType: 'posyandu', qtSiswaBalita: 16, qtBumilBusui: 11, qtBumil: 2, qtBusui: 9, qtGuruKader: 0, qtPorsiBalita: 16, qtPorsiKecilL: 7, qtPorsiKecilP: 9, qtPorsiBesarL: 2, qtPorsiBesarP: 9, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'CEMPAKA 10', institutionType: 'posyandu', qtSiswaBalita: 27, qtBumilBusui: 9, qtBumil: 3, qtBusui: 6, qtGuruKader: 0, qtPorsiBalita: 27, qtPorsiKecilL: 10, qtPorsiKecilP: 17, qtPorsiBesarL: 3, qtPorsiBesarP: 6, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'CEMPAKA 11', institutionType: 'posyandu', qtSiswaBalita: 48, qtBumilBusui: 12, qtBumil: 4, qtBusui: 8, qtGuruKader: 0, qtPorsiBalita: 48, qtPorsiKecilL: 21, qtPorsiKecilP: 27, qtPorsiBesarL: 4, qtPorsiBesarP: 8, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'CEMPAKA 12', institutionType: 'posyandu', qtSiswaBalita: 34, qtBumilBusui: 8, qtBumil: 0, qtBusui: 8, qtGuruKader: 0, qtPorsiBalita: 34, qtPorsiKecilL: 15, qtPorsiKecilP: 19, qtPorsiBesarL: 0, qtPorsiBesarP: 8, jadwalPengantaran: '06.00-08.30' },
+  { institutionName: 'CEMPAKA 13', institutionType: 'posyandu', qtSiswaBalita: 28, qtBumilBusui: 12, qtBumil: 1, qtBusui: 11, qtGuruKader: 0, qtPorsiBalita: 28, qtPorsiKecilL: 21, qtPorsiKecilP: 7, qtPorsiBesarL: 1, qtPorsiBesarP: 11, jadwalPengantaran: '06.00-08.30' },
+];
+
+/** Lookup master PM by name */
+export function findMasterPmInstitution(name: string): MbgMasterInstitution | undefined {
+  if (!name) return undefined;
+  const clean = name.trim().toLowerCase().replace(/[-_.\s]+/g, ' ');
+  return (
+    MBG_OFFICIAL_PM_MASTER.find((m) => m.institutionName.toLowerCase().replace(/[-_.\s]+/g, ' ') === clean) ||
+    MBG_OFFICIAL_PM_MASTER.find((m) => clean.includes(m.institutionName.toLowerCase().replace(/[-_.\s]+/g, ' ')))
+  );
+}
+
+/** Enrich an existing entry with official master details if granular L/P numbers are missing */
+export function enrichPmEntryWithMaster(entry: import('../types/mbg').MbgPmEntry): import('../types/mbg').MbgPmEntry {
+  const master = findMasterPmInstitution(entry.institutionName);
+  if (!master) return entry;
+
+  const hasGranularData =
+    (entry.qtPorsiKecilL || 0) > 0 ||
+    (entry.qtPorsiBesarL || 0) > 0 ||
+    (entry.qtGuruL || 0) > 0 ||
+    (entry.qtTendikL || 0) > 0;
+
+  if (hasGranularData) return entry;
+
+  // Fill in granular numbers from master
+  const isPos = master.institutionType === 'posyandu';
+  return {
+    ...entry,
+    institutionType: master.institutionType,
+    schoolLevel: master.schoolLevel || entry.schoolLevel,
+    qtPorsiKecilL: master.qtPorsiKecilL || 0,
+    qtPorsiKecilP: master.qtPorsiKecilP || 0,
+    qtPorsiBesarL: master.qtPorsiBesarL || 0,
+    qtPorsiBesarP: master.qtPorsiBesarP || 0,
+    qtGuruL: master.qtGuruL || 0,
+    qtGuruP: master.qtGuruP || 0,
+    qtTendikL: master.qtTendikL || 0,
+    qtTendikP: master.qtTendikP || 0,
+    qtBumil: master.qtBumil || 0,
+    qtBusui: master.qtBusui || 0,
+    qtBumilBusui: master.qtBumilBusui || 0,
+    qtSiswaBalita: master.qtSiswaBalita || entry.qtSiswaBalita,
+    qtGuruKader: master.qtGuruKader || entry.qtGuruKader,
+    qtPorsiBalita: isPos ? master.qtSiswaBalita : 0,
+    qtPorsiKecil: master.qtPorsiKecil || 0,
+    qtPorsiBesar: master.qtPorsiBesar || 0,
+    jumlah: master.qtSiswaBalita + (master.qtBumilBusui || 0) + (master.qtGuruKader || 0),
+  };
+}
+
+/** Convert master PM records to default entries for a batch */
+export function createDefaultOfficialPmEntries(
+  batchId: string,
+  createdBy: string = 'system'
+): Omit<import('../types/mbg').MbgPmEntry, 'id'>[] {
+  return MBG_OFFICIAL_PM_MASTER.map((m, idx) => {
+    const isPos = m.institutionType === 'posyandu';
+    const total = m.qtSiswaBalita + (m.qtBumilBusui || 0) + (m.qtGuruKader || 0);
+    return {
+      batchId,
+      institutionName: m.institutionName,
+      institutionType: m.institutionType,
+      schoolLevel: m.schoolLevel,
+      qtSiswaBalita: m.qtSiswaBalita,
+      qtBumil: m.qtBumil || 0,
+      qtBusui: m.qtBusui || 0,
+      qtBumilBusui: m.qtBumilBusui || 0,
+      qtGuruKader: m.qtGuruKader || 0,
+      qtPobiaNasi: 0,
+      qtPorsiBalita: isPos ? m.qtSiswaBalita : 0,
+      qtPorsiKecil: m.qtPorsiKecil || 0,
+      qtPorsiBesar: m.qtPorsiBesar || 0,
+      qtPorsiBumilBusui: m.qtBumilBusui || 0,
+      qtPorsiKecilL: m.qtPorsiKecilL || 0,
+      qtPorsiKecilP: m.qtPorsiKecilP || 0,
+      qtPorsiBesarL: m.qtPorsiBesarL || 0,
+      qtPorsiBesarP: m.qtPorsiBesarP || 0,
+      qtGuruL: m.qtGuruL || 0,
+      qtGuruP: m.qtGuruP || 0,
+      qtTendikL: m.qtTendikL || 0,
+      qtTendikP: m.qtTendikP || 0,
+      jumlah: total,
+      jadwalPengantaran: m.jadwalPengantaran || '06.00-08.30',
+      assignedPetugasId: '',
+      assignedPetugasName: '-',
+      menuItems: [],
+      menuKeringanItems: [],
+      isSekolahLibur: false,
+      notes: '',
+      sortOrder: idx + 1,
+      createdBy,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  });
+}
+
 import type { MbgDayMenu } from '@/types/mbg';
 
 /** Master Jadwal Menu Mingguan Default MBG */

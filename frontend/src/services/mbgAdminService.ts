@@ -275,6 +275,20 @@ export function subscribeEntries(
   );
 }
 
+export async function getBatchEntries(batchId: string): Promise<MbgPmEntry[]> {
+  const q = query(
+    collection(db, ENTRIES_COLLECTION),
+    where('batchId', '==', batchId)
+  );
+  const snap = await getDocs(q);
+  const entries = snap.docs.map((d) => ({
+    id: d.id,
+    ...d.data(),
+  })) as MbgPmEntry[];
+  entries.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  return entries;
+}
+
 export function subscribeAllEntries(
   callback: (entries: MbgPmEntry[]) => void,
   onError?: (error: Error) => void,
