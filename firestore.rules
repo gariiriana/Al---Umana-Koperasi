@@ -147,7 +147,7 @@ service cloud.firestore {
 
     function isMbgManager() { return isAdmin() || isSuperAdmin() || isAdminMbg() || isProduksiMbg() || isProduksiMbg2(); }
     function isMbgDeliveryTeam() { return isMbgManager() || isDistribusiMbg() || isKurirMbg(); }
-    function isMbgStaff() { return isSuperAdmin() || isAnyMbg() || isMoKatering() || isCoMoKatering(); }
+    function isMbgStaff() { return isAdmin() || isDeveloper() || isSuperAdmin() || isAnyMbg() || isMoKatering() || isCoMoKatering(); }
 
     // -------------------------------------------------------------------
     // Katering & Operational Role Helpers

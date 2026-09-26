@@ -26,7 +26,7 @@ import {
   MinusSquare,
   ExternalLink,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { ManageMenuModal } from './MbgAdminPage';
@@ -401,13 +401,20 @@ export function MbgArchivePage() {
   const { user } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const paramBatchId = searchParams.get('batchId');
 
   const [batches, setBatches] = useState<MbgPmBatch[]>([]);
-  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(paramBatchId);
+
+  useEffect(() => {
+    if (paramBatchId && paramBatchId !== selectedBatchId) {
+      setSelectedBatchId(paramBatchId);
+    }
+  }, [paramBatchId]);
   const [entries, setEntries] = useState<MbgPmEntry[]>([]);
   const [selectedBatchEntries, setSelectedBatchEntries] = useState<MbgPmEntry[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
-  const [loadingEntries, setLoadingEntries] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [loadingBatchDetail, setLoadingBatchDetail] = useState(false);
   const [selectedEntryForMenu, setSelectedEntryForMenu] = useState<MbgPmEntry | null>(null);
@@ -439,7 +446,6 @@ export function MbgArchivePage() {
     // previously left this page loading forever.
     const loadingTimeout = window.setTimeout(() => {
       setLoadingBatches(false);
-      setLoadingEntries(false);
       setLoadError('Data arsip belum merespons. Periksa koneksi lalu muat ulang halaman.');
     }, 10_000);
     const finishLoading = (source: 'batches' | 'entries') => {
@@ -467,17 +473,14 @@ export function MbgArchivePage() {
       true // includeBackup = true for MbgArchivePage
     );
 
-    setLoadingEntries(true);
     const unsubEntries = subscribeAllEntries(
       (e) => {
         setEntries(e);
-        setLoadingEntries(false);
         finishLoading('entries');
       },
       (err) => {
         hasLoadError = true;
         console.error('Error loading entries:', err);
-        setLoadingEntries(false);
         setLoadError(`Gagal memuat entri arsip: ${err.message}`);
         finishLoading('entries');
       },
@@ -514,9 +517,8 @@ export function MbgArchivePage() {
   }, [selectedBatchId]);
 
   const regularBatches = useMemo(() => {
-    // Arsip PM is the post-submit record. Drafts remain in Admin MBG as a
-    // working preview and must not appear here yet.
-    return batches.filter((b) => !b.isBackup && b.status !== 'DRAFT');
+    // Tampilkan seluruh batch aktif (tidak di-backup) agar tidak ada data yang tersembunyi
+    return batches.filter((b) => !b.isBackup);
   }, [batches]);
 
   const backupBatches = useMemo(() => {
@@ -552,14 +554,17 @@ export function MbgArchivePage() {
   // Filtered batches for folder list view
   const filteredBatches = useMemo(() => {
     return currentTabBatches.filter((b) => {
-      // Filter by the day the archive data was entered, not its delivery date.
+      // 1. Filter tanggal: mencocokkan Tanggal Pengiriman (b.tanggal) ATAU Tanggal Input (b.createdAt)
       const inputDate = b.createdAt ? b.createdAt.slice(0, 10) : '';
-      if (searchDate && inputDate !== searchDate) {
+      if (searchDate && b.tanggal !== searchDate && inputDate !== searchDate) {
         return false;
       }
       // 2. School/posyandu/petugas name filter
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
+        if ((b.petugasList || []).some((p) => p.toLowerCase().includes(q))) {
+          return true;
+        }
         const batchEntries = entries.filter((e) => e.batchId === b.id);
         const hasMatch = batchEntries.some(
           (e) =>
@@ -1007,10 +1012,10 @@ export function MbgArchivePage() {
             </div>
             {/* Date Input Filter */}
             <div className="relative max-w-xs flex items-center gap-2">
-              <span className="whitespace-nowrap text-[10px] font-bold text-slate-500">Tanggal input</span>
+              <span className="whitespace-nowrap text-[10px] font-bold text-slate-500">Cari Tanggal</span>
               <input
                 type="date"
-                title="Filter berdasarkan tanggal data diinput"
+                title="Filter berdasarkan tanggal pengiriman atau tanggal input"
                 value={searchDate}
                 onChange={(e) => setSearchDate(e.target.value)}
                 className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
@@ -1041,16 +1046,16 @@ export function MbgArchivePage() {
       )}
 
       {/* Main Body Grid */}
-      {loadingBatches || loadingEntries ? (
+      {loadingBatches ? (
         <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-2">
           <Loader2 className="h-8 w-8 animate-spin text-[#FBBF24]" />
           <span className="text-xs font-semibold">Memuat data arsip...</span>
         </div>
-      ) : batches.length === 0 ? (
+      ) : regularBatches.length === 0 && backupBatches.length === 0 ? (
         <div className="bg-white border border-[#E5E7EB] rounded-2xl p-12 text-center shadow-sm">
           <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
           <p className="text-sm font-bold text-[#6B7280]">Belum ada batch di arsip</p>
-          <p className="text-xs text-[#9CA3AF] mt-1">Data akan masuk ke arsip setelah disubmit di menu Administrasi MBG</p>
+          <p className="text-xs text-[#9CA3AF] mt-1">Data akan masuk ke arsip setelah dibuat atau disubmit di menu Administrasi MBG</p>
         </div>
       ) : !selectedBatchId ? (
         /* Folder List View */
@@ -1220,6 +1225,18 @@ export function MbgArchivePage() {
                   <Folder className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                   <p className="text-sm font-bold text-gray-600">Arsip tidak ditemukan</p>
                   <p className="text-xs text-gray-400 mt-1">Coba sesuaikan tanggal filter atau kata kunci pencarian Anda.</p>
+                  {backupBatches.length > 0 && (
+                    <div className="mt-4 inline-flex items-center gap-2 p-2.5 px-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 shadow-2xs">
+                      <span>Terdapat <strong>{backupBatches.length}</strong> batch tersimpan di Arsip Backup.</span>
+                      <button
+                        type="button"
+                        onClick={() => setArchiveTab('backup')}
+                        className="font-extrabold text-amber-700 underline hover:text-amber-900 cursor-pointer ml-1"
+                      >
+                        Buka Tab Arsip Backup &rarr;
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </div>

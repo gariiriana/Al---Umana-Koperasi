@@ -18,7 +18,9 @@ import {
   Edit,
   Archive,
   Sparkles,
+  BookOpen,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import * as XLSX from 'xlsx';
@@ -1125,6 +1127,7 @@ function PmEntryRow({
 export function MbgAdminPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
+  const navigate = useNavigate();
 
   const [batches, setBatches] = useState<MbgPmBatch[]>([]);
   const [allBatches, setAllBatches] = useState<MbgPmBatch[]>([]);
@@ -2111,6 +2114,15 @@ export function MbgAdminPage() {
                     </span>
                     <button
                       type="button"
+                      onClick={() => navigate(`/mbg/archive?batchId=${selectedBatchId}`)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-300 text-blue-800 text-xs font-bold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
+                      title="Lihat batch ini langsung di menu Arsip PM"
+                    >
+                      <BookOpen className="h-3.5 w-3.5 text-blue-600" />
+                      Lihat di Arsip PM
+                    </button>
+                    <button
+                      type="button"
                       onClick={handleReopenBatchToDraft}
                       disabled={saving}
                       className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 text-xs font-extrabold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
@@ -2155,11 +2167,11 @@ export function MbgAdminPage() {
               {selectedBatchId && (
                 <button
                   onClick={handleDeleteBatch}
-                  title="Amankan batch pengiriman ini ke Arsip Backup agar tidak hilang dan dapat dipulihkan kapan saja"
+                  title="Amankan batch pengiriman ini ke Arsip Backup agar tersimpan sebagai cadangan dan dapat dipulihkan kapan saja"
                   className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-amber-300 hover:border-amber-400 text-amber-900 bg-amber-50/70 hover:bg-amber-100 text-xs font-bold transition-colors cursor-pointer whitespace-nowrap"
                 >
                   <Archive className="h-3.5 w-3.5 text-amber-700" />
-                  Hapus / Pindah Arsip
+                  Backup Batch
                 </button>
               )}
 
@@ -2206,15 +2218,25 @@ export function MbgAdminPage() {
                         Submit Data PM
                       </button>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={handleReopenBatchToDraft}
-                        disabled={saving}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-extrabold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
-                      >
-                        <Edit className="h-3.5 w-3.5 text-amber-700" />
-                        Edit / Buka Batch
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/mbg/archive?batchId=${selectedBatchId}`)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 text-xs font-bold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
+                        >
+                          <BookOpen className="h-3.5 w-3.5 text-blue-600" />
+                          Lihat di Arsip PM
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleReopenBatchToDraft}
+                          disabled={saving}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-extrabold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
+                        >
+                          <Edit className="h-3.5 w-3.5 text-amber-700" />
+                          Edit / Buka Batch
+                        </button>
+                      </div>
                     )
                   )}
                 </div>
