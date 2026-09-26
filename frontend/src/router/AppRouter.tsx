@@ -84,8 +84,6 @@ const MbgProductionPage = safeLazy(() => import("@/pages/mbg/MbgProductionPage")
 const MbgDistributionPage = safeLazy(() => import("@/pages/mbg/MbgDistributionPage").then(module => ({ default: module.MbgDistributionPage })));
 const MbgDeliveryPage = safeLazy(() => import("@/pages/mbg/MbgDeliveryPage").then(module => ({ default: module.MbgDeliveryPage })));
 const MbgArchivePage = safeLazy(() => import("@/pages/mbg/MbgArchivePage").then(module => ({ default: module.MbgArchivePage })));
-const MbgReportPage = safeLazy(() => import("@/pages/mbg/MbgReportPage").then(module => ({ default: module.MbgReportPage })));
-const MbgOrdersPage = safeLazy(() => import("@/pages/mbg/MbgOrdersPage").then(module => ({ default: module.MbgOrdersPage })));
 const MbgBahanChecklistPage = safeLazy(() => import("@/pages/mbg/MbgBahanChecklistPage").then(module => ({ default: module.MbgBahanChecklistPage })));
 const PerformancePage = safeLazy(() => import("@/pages/PerformancePage").then(module => ({ default: module.PerformancePage })));
 const SuperAdminControlCenterPage = safeLazy(() => import("@/pages/SuperAdminControlCenterPage").then(module => ({ default: module.SuperAdminControlCenterPage })));
@@ -722,16 +720,7 @@ function RoutesTree() {
       {/* ================================================================ */}
       {/* MBG (Makan Bergizi Gratis) Routes                               */}
       {/* ================================================================ */}
-      <Route
-        path="/mbg/orders"
-        element={
-          <Protected>
-            <ShelledRoute pageTitle="Pesanan MBG" allowedRoles={["admin_mbg", "produksi_mbg", "dokumentasi_produksiMBG", "distribusi_mbg", "kurir_mbg"]}>
-              <MbgOrdersPage />
-            </ShelledRoute>
-          </Protected>
-        }
-      />
+      <Route path="/mbg/orders" element={<Navigate to="/mbg/admin" replace />} />
       <Route
         path="/mbg/admin"
         element={
@@ -752,16 +741,7 @@ function RoutesTree() {
           </Protected>
         }
       />
-      <Route
-        path="/mbg/reports"
-        element={
-          <Protected>
-            <ShelledRoute pageTitle="Laporan MBG" allowedRoles={["admin_mbg", "produksi_mbg"]}>
-              <MbgReportPage />
-            </ShelledRoute>
-          </Protected>
-        }
-      />
+      <Route path="/mbg/reports" element={<Navigate to="/mbg/admin" replace />} />
       <Route
         path="/mbg/production"
         element={

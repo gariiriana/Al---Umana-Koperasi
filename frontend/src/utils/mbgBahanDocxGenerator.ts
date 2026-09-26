@@ -280,12 +280,15 @@ export async function exportBahanChecklistDocx(form: MbgBahanChecklistForm): Pro
     })
   );
 
-  // Table Body (Min 17 rows)
-  const rows = form.rows || [];
-  const minRows = Math.max(17, rows.length);
+  // Table Body (Export exact items from form rows)
+  const rawRows = form.rows || [];
+  const rows = rawRows.filter(
+    (item) => (item?.jenisBahan && item.jenisBahan.trim() !== '') || (item?.banyaknya !== undefined && item?.banyaknya !== null && String(item.banyaknya).trim() !== '' && Number(item.banyaknya) !== 0)
+  );
+  const itemsToRender = rows.length > 0 ? rows : rawRows;
 
-  for (let i = 0; i < minRows; i++) {
-    const item = rows[i];
+  for (let i = 0; i < itemsToRender.length; i++) {
+    const item = itemsToRender[i];
     const no = `${i + 1}`;
     const nama = item?.jenisBahan || '';
     const qty = item?.banyaknya ? String(item.banyaknya) : '';

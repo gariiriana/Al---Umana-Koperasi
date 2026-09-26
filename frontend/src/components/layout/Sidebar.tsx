@@ -52,10 +52,8 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/katering/jobdesk", label: "Job Desk Saya", icon: ClipboardCheck },
   { to: "/katering/co-mo/review", label: "Review Job Desk", icon: ClipboardCheck },
   // --- MBG (Makan Bergizi Gratis) ---
-  { to: "/mbg/orders", label: "Pesanan MBG", icon: ShoppingCart },
   { to: "/mbg/admin", label: "Admin MBG", icon: ClipboardCheck },
   { to: "/mbg/archive", label: "Arsip PM", icon: History },
-  { to: "/mbg/reports", label: "Laporan MBG", icon: FileText },
   { to: "/mbg/production", label: "Produksi MBG", icon: UtensilsCrossed },
   { to: "/mbg/distribution", label: "Distribusi MBG", icon: ClipboardCheck },
   { to: "/mbg/checklist-bahan", label: "Cek List Bahan", icon: ClipboardCheck },
@@ -82,10 +80,8 @@ const LABELS_DICT = {
     "/katering/jobdesk": "Job Desk Saya",
     "/katering/co-mo/review": "Review Job Desk",
     // MBG
-    "/mbg/orders": "Pesanan MBG",
     "/mbg/admin": "Admin MBG",
     "/mbg/archive": "Arsip PM",
-    "/mbg/reports": "Laporan MBG",
     "/mbg/production": "Produksi MBG",
     "/mbg/distribution": "Distribusi MBG",
     "/mbg/checklist-bahan": "Cek List Bahan",
@@ -110,10 +106,8 @@ const LABELS_DICT = {
     "/katering/jobdesk": "My Job Desk",
     "/katering/co-mo/review": "Job Desk Review",
     // MBG
-    "/mbg/orders": "MBG Orders",
     "/mbg/admin": "MBG Admin",
     "/mbg/archive": "PM Archive",
-    "/mbg/reports": "MBG Reports",
     "/mbg/production": "MBG Production",
     "/mbg/distribution": "MBG Distribution",
     "/mbg/checklist-bahan": "Material Checklist",
@@ -290,7 +284,7 @@ export function Sidebar({
               <li key={to}>
                 <NavLink
                   to={to}
-                  end={to === "/mbg/orders" || to === "/admin/orders"}
+                  end={to === "/admin/orders"}
                   onClick={() => onClose?.()}
                   className={({ isActive }) =>
                     `${ITEM_BASE} ${isActive ? ITEM_ACTIVE : ITEM_INACTIVE}`

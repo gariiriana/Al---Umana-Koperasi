@@ -96,29 +96,27 @@ export async function exportBahanChecklistPdf(form: MbgBahanChecklistForm): Prom
 
   curY += 6;
 
-  // 4. Construct Table Data (Minimum 17 rows to replicate official layout exactly)
-  const rows = form.rows || [];
-  const minRows = Math.max(17, rows.length);
+  // 4. Construct Table Data (Export exact items from form rows)
+  const rawRows = form.rows || [];
+  const rows = rawRows.filter(
+    (item) => (item.jenisBahan && item.jenisBahan.trim() !== '') || (item.banyaknya !== undefined && item.banyaknya !== null && String(item.banyaknya).trim() !== '' && Number(item.banyaknya) !== 0)
+  );
+  const itemsToRender = rows.length > 0 ? rows : rawRows;
   const tableBody: (string | number)[][] = [];
 
-  for (let i = 0; i < minRows; i++) {
-    const item = rows[i];
-    if (item && item.jenisBahan) {
-      tableBody.push([
-        i + 1,
-        item.jenisBahan,
-        item.banyaknya ? String(item.banyaknya) : '',
-        item.satuan || '',
-        item.isSesuai === true ? 'V' : '',
-        item.isSesuai === false ? 'V' : '',
-        item.isBaik === true ? 'V' : '',
-        item.isBaik === false ? 'V' : '',
-        item.notes || '',
-      ]);
-    } else {
-      // Empty placeholder row
-      tableBody.push([i + 1, '', '', '', '', '', '', '', '']);
-    }
+  for (let i = 0; i < itemsToRender.length; i++) {
+    const item = itemsToRender[i];
+    tableBody.push([
+      i + 1,
+      item.jenisBahan || '',
+      item.banyaknya ? String(item.banyaknya) : '',
+      item.satuan || '',
+      item.isSesuai === true ? 'V' : '',
+      item.isSesuai === false ? 'V' : '',
+      item.isBaik === true ? 'V' : '',
+      item.isBaik === false ? 'V' : '',
+      item.notes || '',
+    ]);
   }
 
   // 5. Render AutoTable with exact dual-header layout
