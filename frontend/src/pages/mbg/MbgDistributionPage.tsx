@@ -364,10 +364,10 @@ export function MbgDistributionPage() {
     return ['Andi Kurir', 'Dede Kurir', 'Yusep Kurir', 'Erik Kurir', 'Agus Kurir', 'Firdi Kurir'];
   }, [kurirUsers]);
 
-  // Subscribe batches: semua batch yang diinput oleh Admin MBG / Produksi MBG langsung terlihat oleh Distribusi MBG
+  // Subscribe batches: mengikuti data yang ada di Arsip PM Aktif (!b.isBackup && b.status !== 'DRAFT')
   useEffect(() => {
     const unsub = subscribeBatches((data) => {
-      const activeBatches = data.filter((b) => !b.isBackup);
+      const activeBatches = data.filter((b) => !b.isBackup && b.status !== 'DRAFT');
       setBatches(activeBatches);
       setLoading(false);
     });
@@ -394,22 +394,24 @@ export function MbgDistributionPage() {
   }, [batches, savedReportBatchIds]);
 
   const displayBatches = useMemo(() => {
-    if (batchFilterMode === 'imported') {
+    if (batchFilterMode === 'imported' && importedBatches.length > 0) {
       return importedBatches;
     }
     return batches;
   }, [batchFilterMode, importedBatches, batches]);
 
-  // Keep selectedBatchId synced with displayBatches (auto-select latest imported batch)
+  // Keep selectedBatchId synced with displayBatches (auto-select today's batch or latest active batch)
   useEffect(() => {
     if (displayBatches.length > 0) {
       if (!selectedBatchId || !displayBatches.some((b) => b.id === selectedBatchId)) {
-        setSelectedBatchId(displayBatches[0].id);
+        const todayStr = getJakartaDate();
+        const todayBatch = displayBatches.find((b) => b.tanggal === todayStr);
+        setSelectedBatchId(todayBatch ? todayBatch.id : displayBatches[0].id);
       }
-    } else if (batchFilterMode === 'imported' && batches.length > 0 && importedBatches.length === 0) {
+    } else {
       setSelectedBatchId(null);
     }
-  }, [displayBatches, selectedBatchId, batchFilterMode, batches.length, importedBatches.length]);
+  }, [displayBatches, selectedBatchId]);
 
   // Helper to sync PM entries from Excel daily report if batch entries are empty in Firestore
   const syncEntriesFromDailyReport = async (report: MbgProductionDailyReport, targetBatchId: string) => {
@@ -1093,40 +1095,42 @@ export function MbgDistributionPage() {
                   PILIH TANGGAL BATCH / PENGIRIMAN:
                 </span>
                 <span className="text-[11px] font-black text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                  {importedBatches.length} Batch Siap Distribusi (Sudah Import)
+                  {batches.length} Batch Arsip PM Aktif
                 </span>
-                {batches.length - importedBatches.length > 0 && (
-                  <span className="text-[11px] font-bold text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-200">
-                    {batches.length - importedBatches.length} Belum Import
+                {importedBatches.length > 0 && (
+                  <span className="text-[11px] font-bold text-gray-500 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-200">
+                    {importedBatches.length} Ada Laporan Excel
                   </span>
                 )}
               </div>
 
-              {/* Mode Filter: Hanya Sudah Import vs Semua */}
-              <div className="inline-flex items-center bg-gray-100 p-1 rounded-xl text-xs font-bold shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setBatchFilterMode('imported')}
-                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                    batchFilterMode === 'imported'
-                      ? 'bg-white text-emerald-800 shadow-xs font-black'
-                      : 'text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  ✓ Hanya Sudah Import ({importedBatches.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBatchFilterMode('all')}
-                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                    batchFilterMode === 'all'
-                      ? 'bg-white text-gray-900 shadow-xs font-black'
-                      : 'text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  Semua Batch ({batches.length})
-                </button>
-              </div>
+              {/* Mode Filter: Hanya tampil jika ada sebagian batch dengan laporan Excel */}
+              {importedBatches.length > 0 && importedBatches.length < batches.length && (
+                <div className="inline-flex items-center bg-gray-100 p-1 rounded-xl text-xs font-bold shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setBatchFilterMode('imported')}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      batchFilterMode === 'imported'
+                        ? 'bg-white text-emerald-800 shadow-xs font-black'
+                        : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    ✓ Hanya Ada Excel ({importedBatches.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchFilterMode('all')}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      batchFilterMode === 'all'
+                        ? 'bg-white text-gray-900 shadow-xs font-black'
+                        : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    Semua Batch ({batches.length})
+                  </button>
+                </div>
+              )}
             </div>
 
             <div>

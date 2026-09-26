@@ -81,10 +81,10 @@ export function MbgDeliveryPage() {
   // Description edit state (per entry per proof type)
   const descTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // Subscribe active batches: semua batch aktif
+  // Subscribe active batches: mengikuti Arsip PM Aktif (!b.isBackup && b.status !== 'DRAFT')
   useEffect(() => {
     const unsub = subscribeBatches((data) => {
-      const activeBatches = data.filter((b) => !b.isBackup);
+      const activeBatches = data.filter((b) => !b.isBackup && b.status !== 'DRAFT');
       setBatches(activeBatches);
       const todayStr = getJakartaDate();
       const savedBatchId = sessionStorage.getItem('mbg_delivery_selected_batch');

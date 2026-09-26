@@ -68,16 +68,10 @@ export function SearchableBatchSelector({
                   {selectedBatchCfg.label}
                 </span>
               )}
-              {importedBatchIds && (
-                importedBatchIds.has(selectedBatch.id) ? (
-                  <span className="text-[10px] font-extrabold rounded-full px-2.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shrink-0">
-                    ✓ Excel Ada
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold rounded-full px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1 shrink-0">
-                    ⏳ Belum Import
-                  </span>
-                )
+              {importedBatchIds && importedBatchIds.has(selectedBatch.id) && (
+                <span className="text-[10px] font-extrabold rounded-full px-2.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shrink-0">
+                  ✓ Excel Ada
+                </span>
               )}
             </div>
           ) : (
@@ -134,16 +128,10 @@ export function SearchableBatchSelector({
                       <span className={`text-[9px] font-extrabold rounded-full px-2 py-0.5 ${cfg.textClass} ${cfg.bgClass}`}>
                         {cfg.label}
                       </span>
-                      {importedBatchIds && (
-                        isImported ? (
-                          <span className="text-[9px] font-black rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            ✓ Excel Ada
-                          </span>
-                        ) : (
-                          <span className="text-[9px] font-bold rounded-full px-2 py-0.5 bg-gray-100 text-gray-500">
-                            Belum Import
-                          </span>
-                        )
+                      {importedBatchIds && isImported && (
+                        <span className="text-[9px] font-black rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          ✓ Excel Ada
+                        </span>
                       )}
                     </div>
                     {isSelected && (
