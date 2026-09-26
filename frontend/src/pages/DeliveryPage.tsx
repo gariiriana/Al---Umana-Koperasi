@@ -963,30 +963,22 @@ export function DeliveryPage() {
 
       {/* ── DELIVERY LIST ─────────────────────────────────────────────── */}
       {step === "list" && (
-        <div className="space-y-4">
-          {/* 1. Mobile-Responsive Tactile Tab Switcher (Looks & Feels Like Interactive Buttons) */}
-          <div className="bg-slate-100/95 p-1.5 rounded-2xl border border-slate-200/90 shadow-inner grid grid-cols-2 gap-2">
+        <div className="space-y-3">
+          {/* 1. Mobile-Responsive Tactile Tab Switcher */}
+          <div className="bg-slate-100 p-1.5 rounded-2xl border border-slate-200/90 shadow-inner grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => setActiveTab("active")}
-              className={`w-full min-h-[48px] py-2 px-2 sm:px-3 rounded-xl text-xs sm:text-sm transition-all duration-200 flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer select-none ${
+              className={`w-full min-h-[46px] py-2 px-3 rounded-xl text-xs sm:text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer select-none ${
                 activeTab === "active"
-                  ? "bg-white text-slate-900 shadow-md ring-1 ring-slate-900/5 font-extrabold scale-[1.01]"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-white/60 bg-transparent font-medium active:scale-[0.98]"
+                  ? "bg-white text-slate-900 shadow-md ring-1 ring-slate-900/5 font-extrabold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/60 font-semibold active:scale-[0.98]"
               }`}
             >
-              <div
-                className={`p-1.5 rounded-lg shrink-0 transition-colors ${
-                  activeTab === "active"
-                    ? "bg-amber-100 text-amber-800"
-                    : "bg-slate-200/70 text-slate-600"
-                }`}
-              >
-                <Package className="h-4 w-4" />
-              </div>
+              <Package className={`h-4 w-4 shrink-0 ${activeTab === "active" ? "text-amber-500" : "text-slate-400"}`} />
               <span className="truncate">Tugas Aktif</span>
               <span
-                className={`text-[11px] font-black px-2 py-0.5 rounded-full shrink-0 transition-all ${
+                className={`text-[11px] font-black px-2 py-0.5 rounded-full shrink-0 ${
                   activeTab === "active"
                     ? "bg-amber-500 text-white shadow-xs"
                     : "bg-slate-200 text-slate-700"
@@ -999,26 +991,18 @@ export function DeliveryPage() {
             <button
               type="button"
               onClick={() => setActiveTab("history")}
-              className={`w-full min-h-[48px] py-2 px-2 sm:px-3 rounded-xl text-xs sm:text-sm transition-all duration-200 flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer select-none ${
+              className={`w-full min-h-[46px] py-2 px-3 rounded-xl text-xs sm:text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer select-none ${
                 activeTab === "history"
-                  ? "bg-white text-slate-900 shadow-md ring-1 ring-slate-900/5 font-extrabold scale-[1.01]"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-white/60 bg-transparent font-medium active:scale-[0.98]"
+                  ? "bg-white text-slate-900 shadow-md ring-1 ring-slate-900/5 font-extrabold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/60 font-semibold active:scale-[0.98]"
               }`}
             >
-              <div
-                className={`p-1.5 rounded-lg shrink-0 transition-colors ${
-                  activeTab === "history"
-                    ? "bg-emerald-100 text-emerald-800"
-                    : "bg-slate-200/70 text-slate-600"
-                }`}
-              >
-                <FolderOpen className="h-4 w-4" />
-              </div>
+              <FolderOpen className={`h-4 w-4 shrink-0 ${activeTab === "history" ? "text-emerald-500" : "text-slate-400"}`} />
               <span className="truncate">
                 Arsip <span className="hidden sm:inline">Dokumen </span>Selesai
               </span>
               <span
-                className={`text-[11px] font-black px-2 py-0.5 rounded-full shrink-0 transition-all ${
+                className={`text-[11px] font-black px-2 py-0.5 rounded-full shrink-0 ${
                   activeTab === "history"
                     ? "bg-emerald-600 text-white shadow-xs"
                     : "bg-slate-200 text-slate-700"
@@ -1029,127 +1013,95 @@ export function DeliveryPage() {
             </button>
           </div>
 
-          {/* 2. Filter Waktu (Tanggal, Bulan, Tahun) dengan UX Jelas & Ramah Kurir */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-3.5 sm:p-4 space-y-3">
-            {/* Header / Friendly Guidance */}
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-xl bg-amber-100 text-amber-800 shrink-0">
-                  <Calendar className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-tight">
-                    Saring Berdasarkan Waktu
-                  </h2>
-                  <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
-                    Pilih waktu agar mudah menemukan pesanan tanpa scroll panjang
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowFilterHelp(!showFilterHelp)}
-                className="shrink-0 text-[11px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
-              >
-                <HelpCircle className="h-3.5 w-3.5" />
-                <span>{showFilterHelp ? "Tutup" : "Bantuan"}</span>
-              </button>
+          {/* 2. Unified Search & Time Filter Card (Rapi, Terstruktur, Tanpa Tombol Terpotong) */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-3 space-y-2.5">
+            {/* Search Input Bar */}
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-slate-400" />
+              </span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari nama instansi, pemesan, produk, ID..."
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-10 pr-9 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:bg-white transition font-['Hanken_Grotesk']"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  title="Bersihkan pencarian"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-700 cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
 
-            {/* Expandable Help Explanation */}
-            <AnimatePresence>
-              {showFilterHelp && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden"
-                >
-                  <div className="bg-amber-50/90 border border-amber-200/80 rounded-xl p-3 text-[11px] text-amber-950 space-y-1.5 leading-relaxed">
-                    <p className="font-extrabold flex items-center gap-1.5 text-amber-900">
-                      <Sparkles className="h-3.5 w-3.5 text-amber-600" />
-                      Petunjuk Penggunaan Filter Waktu:
-                    </p>
-                    <ul className="list-disc pl-4 space-y-1 text-slate-700">
-                      <li>
-                        <strong className="text-slate-900">Semua:</strong> Menampilkan seluruh data pesanan tanpa batasan tanggal.
-                      </li>
-                      <li>
-                        <strong className="text-slate-900">Hari Ini:</strong> Hanya menampilkan pesanan yang diantar / dijadwalkan hari ini.
-                      </li>
-                      <li>
-                        <strong className="text-slate-900">Bulan Ini:</strong> Menampilkan seluruh pesanan di bulan berjalan.
-                      </li>
-                      <li>
-                        <strong className="text-slate-900">Pilih Waktu:</strong> Memilih satu tanggal tertentu atau bulan & tahun spesifik di masa lalu / depan.
-                      </li>
-                    </ul>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Quick Filter Buttons (Pill Bar) */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar pt-1">
-              {/* Tombol Semua */}
+            {/* Quick Filter Presets (3 Kolom Seimbang - Pas 100% di layar HP, TIDAK AKAN TERPOTONG!) */}
+            <div className="grid grid-cols-3 gap-1.5">
               <button
                 type="button"
                 onClick={handleClearDateFilterOnly}
-                className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs ${
+                className={`min-h-[38px] py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
                   dateFilterType === "all"
-                    ? "bg-slate-900 text-white shadow-md font-extrabold scale-[1.02]"
-                    : "bg-slate-100 text-slate-700 border border-slate-200/80 hover:bg-slate-200/70"
+                    ? "bg-slate-900 text-white shadow-xs font-extrabold"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200/80"
                 }`}
               >
-                <span>Semua</span>
+                <span>Semua Waktu</span>
               </button>
 
-              {/* Tombol Hari Ini */}
               <button
                 type="button"
                 onClick={handleSetFilterToday}
-                className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs ${
+                className={`min-h-[38px] py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
                   dateFilterType === "today"
-                    ? "bg-amber-500 text-white shadow-md font-extrabold scale-[1.02]"
-                    : "bg-slate-100 text-slate-700 border border-slate-200/80 hover:bg-amber-50 hover:text-amber-900"
+                    ? "bg-amber-500 text-white shadow-xs font-extrabold"
+                    : "bg-slate-100 text-slate-700 hover:bg-amber-50 hover:text-amber-900"
                 }`}
               >
-                <Calendar className="h-3.5 w-3.5" />
+                <Calendar className="h-3.5 w-3.5 shrink-0" />
                 <span>Hari Ini</span>
               </button>
 
-              {/* Tombol Bulan Ini */}
               <button
                 type="button"
                 onClick={handleSetFilterThisMonth}
-                className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs ${
+                className={`min-h-[38px] py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
                   dateFilterType === "this_month"
-                    ? "bg-amber-500 text-white shadow-md font-extrabold scale-[1.02]"
-                    : "bg-slate-100 text-slate-700 border border-slate-200/80 hover:bg-amber-50 hover:text-amber-900"
+                    ? "bg-amber-500 text-white shadow-xs font-extrabold"
+                    : "bg-slate-100 text-slate-700 hover:bg-amber-50 hover:text-amber-900"
                 }`}
               >
-                <CalendarDays className="h-3.5 w-3.5" />
+                <CalendarDays className="h-3.5 w-3.5 shrink-0" />
                 <span>Bulan Ini</span>
               </button>
-
-              {/* Tombol Pilih Waktu Spesifik */}
-              <button
-                type="button"
-                onClick={() => setShowCustomPicker(!showCustomPicker)}
-                className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs ${
-                  dateFilterType === "custom_date" || dateFilterType === "custom_month" || dateFilterType === "custom_year"
-                    ? "bg-blue-600 text-white shadow-md font-extrabold scale-[1.02]"
-                    : showCustomPicker
-                    ? "bg-blue-50 text-blue-700 border border-blue-300"
-                    : "bg-slate-100 text-slate-700 border border-slate-200/80 hover:bg-slate-200/70"
-                }`}
-              >
-                <Filter className="h-3.5 w-3.5" />
-                <span>Pilih Waktu</span>
-                <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${showCustomPicker ? "rotate-180" : ""}`} />
-              </button>
             </div>
+
+            {/* Baris Kedua: Tombol Kalender / Tanggal Khusus (Full Width, Jelas, Rapi) */}
+            <button
+              type="button"
+              onClick={() => setShowCustomPicker(!showCustomPicker)}
+              className={`w-full min-h-[38px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer border ${
+                dateFilterType === "custom_date" || dateFilterType === "custom_month" || dateFilterType === "custom_year"
+                  ? "bg-blue-50 border-blue-300 text-blue-800 font-extrabold shadow-2xs"
+                  : showCustomPicker
+                  ? "bg-slate-100 border-slate-300 text-slate-900"
+                  : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Filter className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                <span className="truncate">
+                  {dateFilterType === "custom_date" || dateFilterType === "custom_month" || dateFilterType === "custom_year"
+                    ? `Waktu Khusus: ${activeFilterDescription}`
+                    : "Pilih Tanggal, Bulan, atau Tahun Tertentu..."}
+                </span>
+              </div>
+              <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${showCustomPicker ? "rotate-180 text-blue-600" : "text-slate-400"}`} />
+            </button>
 
             {/* Expandable Custom Date / Month / Year Picker Drawer */}
             <AnimatePresence>
@@ -1160,11 +1112,11 @@ export function DeliveryPage() {
                   exit={{ opacity: 0, height: 0 }}
                   className="overflow-hidden pt-1"
                 >
-                  <div className="bg-slate-50 border-2 border-blue-100 rounded-2xl p-3.5 sm:p-4 space-y-3.5">
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
                       <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-                        <Filter className="h-4 w-4 text-blue-600" />
-                        Cari Waktu Spesifik (Tanggal, Bulan, Tahun)
+                        <Filter className="h-3.5 w-3.5 text-blue-600" />
+                        Pilih Waktu Spesifik
                       </span>
                       <button
                         type="button"
@@ -1177,14 +1129,11 @@ export function DeliveryPage() {
                     </div>
 
                     {/* Opsi 1: 1 Tanggal Spesifik */}
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-800">
-                        📅 Opsi 1: Pilih Satu Tanggal Spesifik
+                    <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
+                      <label className="block text-[11px] font-bold text-slate-700">
+                        📅 Opsi 1: Pilih 1 Tanggal Tertentu
                       </label>
-                      <p className="text-[11px] text-slate-500">
-                        Pilih tanggal di bawah untuk melihat pesanan di hari tersebut:
-                      </p>
-                      <div className="flex items-center gap-2 pt-1">
+                      <div className="flex items-center gap-1.5">
                         <input
                           type="date"
                           value={customDate}
@@ -1196,7 +1145,7 @@ export function DeliveryPage() {
                               setCustomMonth("");
                             }
                           }}
-                          className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none min-h-[42px]"
+                          className="flex-1 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         />
                         {customDate && (
                           <button
@@ -1205,27 +1154,24 @@ export function DeliveryPage() {
                               setCustomDate("");
                               if (dateFilterType === "custom_date") setDateFilterType("all");
                             }}
-                            className="min-h-[42px] px-3 text-slate-500 hover:text-red-600 rounded-xl bg-slate-100 hover:bg-red-50 border border-slate-200 transition-colors text-xs font-bold cursor-pointer"
+                            className="px-2.5 py-1.5 text-slate-500 hover:text-red-600 rounded-lg bg-slate-100 hover:bg-red-50 border border-slate-200 text-xs font-bold cursor-pointer"
                             title="Hapus tanggal"
                           >
-                            <X className="h-4 w-4" />
+                            <X className="h-3.5 w-3.5" />
                           </button>
                         )}
                       </div>
                     </div>
 
                     {/* Opsi 2: Bulan & Tahun */}
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-800">
+                    <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
+                      <label className="block text-[11px] font-bold text-slate-700">
                         🗓️ Opsi 2: Saring Berdasarkan Bulan & Tahun
                       </label>
-                      <p className="text-[11px] text-slate-500">
-                        Pilih bulan dan tahun untuk melihat seluruh dokumen pada periode tersebut:
-                      </p>
-                      <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div className="grid grid-cols-2 gap-1.5">
                         <div>
-                          <span className="block text-[10px] font-extrabold text-slate-600 mb-1">
-                            PILIH BULAN:
+                          <span className="block text-[10px] font-semibold text-slate-500 mb-0.5">
+                            Bulan:
                           </span>
                           <select
                             value={customMonth}
@@ -1241,7 +1187,7 @@ export function DeliveryPage() {
                                 setDateFilterType("all");
                               }
                             }}
-                            className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer min-h-[42px]"
+                            className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
                           >
                             <option value="">Semua Bulan</option>
                             {MONTHS_INDO.map((m) => (
@@ -1253,8 +1199,8 @@ export function DeliveryPage() {
                         </div>
 
                         <div>
-                          <span className="block text-[10px] font-extrabold text-slate-600 mb-1">
-                            PILIH TAHUN:
+                          <span className="block text-[10px] font-semibold text-slate-500 mb-0.5">
+                            Tahun:
                           </span>
                           <select
                             value={customYear}
@@ -1268,11 +1214,11 @@ export function DeliveryPage() {
                                 setDateFilterType("custom_year");
                               }
                             }}
-                            className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer min-h-[42px]"
+                            className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
                           >
                             {availableYears.map((yr) => (
                               <option key={yr} value={yr}>
-                                Tahun {yr}
+                                {yr}
                               </option>
                             ))}
                           </select>
@@ -1285,17 +1231,17 @@ export function DeliveryPage() {
                       <button
                         type="button"
                         onClick={handleClearDateFilterOnly}
-                        className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1.5 cursor-pointer py-1.5 px-2.5 rounded-lg hover:bg-red-50 transition-colors"
+                        className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 cursor-pointer py-1 px-2 rounded hover:bg-red-50"
                       >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        <span>Reset Filter</span>
+                        <RotateCcw className="h-3 w-3" />
+                        <span>Reset</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setShowCustomPicker(false)}
-                        className="bg-slate-900 hover:bg-black text-white font-bold text-xs px-4 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
+                        className="bg-slate-900 hover:bg-black text-white font-bold text-xs px-3.5 py-1.5 rounded-lg shadow-xs cursor-pointer"
                       >
-                        Selesai Memilih
+                        Selesai
                       </button>
                     </div>
                   </div>
@@ -1303,54 +1249,66 @@ export function DeliveryPage() {
               )}
             </AnimatePresence>
 
-            {/* Active Filter Banner / Status Pill */}
-            {dateFilterType !== "all" && (
-              <div className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200/90 rounded-xl px-3 py-2 text-xs font-['Hanken_Grotesk',system-ui,sans-serif]">
-                <div className="flex items-center gap-2 text-amber-950 font-bold min-w-0">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 animate-pulse" />
-                  <span className="truncate">
-                    Menampilkan: <strong>{activeFilterDescription}</strong>
+            {/* Status Bar / Active Filter Pill / Bantuan */}
+            <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5 px-1 border-t border-slate-100">
+              <span className="flex items-center gap-1.5 min-w-0">
+                {dateFilterType !== "all" ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                    <span className="truncate text-slate-800 font-semibold">
+                      Filter: <strong>{activeFilterDescription}</strong> ({activeTab === "active" ? filteredDeliveries.length : filteredCompletedDeliveries.length} pesanan)
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-slate-500">
+                    Menampilkan seluruh pesanan ({activeTab === "active" ? myDeliveries.length : myCompletedDeliveries.length})
                   </span>
-                  <span className="text-[11px] font-black bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full shrink-0">
-                    {activeTab === "active" ? filteredDeliveries.length : filteredCompletedDeliveries.length} pesanan
-                  </span>
-                </div>
+                )}
+              </span>
+
+              {dateFilterType !== "all" ? (
                 <button
                   type="button"
                   onClick={handleClearDateFilterOnly}
-                  className="shrink-0 text-[11px] font-bold text-amber-800 hover:text-amber-950 bg-white hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                  title="Hapus filter dan tampilkan semua pesanan"
+                  className="shrink-0 text-amber-800 font-bold hover:underline cursor-pointer flex items-center gap-1 pl-2 text-[11px]"
                 >
-                  <X className="h-3.5 w-3.5" />
-                  <span>Hapus Filter</span>
+                  <X className="h-3 w-3" />
+                  Hapus Filter
                 </button>
-              </div>
-            )}
-          </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowFilterHelp(!showFilterHelp)}
+                  className="shrink-0 text-slate-500 hover:text-slate-800 underline cursor-pointer flex items-center gap-1 pl-2 text-[11px]"
+                >
+                  <HelpCircle className="h-3 w-3" />
+                  {showFilterHelp ? "Tutup Bantuan" : "Bantuan"}
+                </button>
+              )}
+            </div>
 
-          {/* 3. Search Bar */}
-          <div className="relative">
-            <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-[#9CA3AF]" />
-            </span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari berdasarkan nama instansi, pemesan, produk, atau ID pesanan..."
-              className="w-full rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] pl-10 pr-10 py-2.5 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition font-['Hanken_Grotesk'] shadow-2xs"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                title="Bersihkan pencarian"
-                aria-label="Bersihkan pencarian"
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#9CA3AF] hover:text-[#4B5563] cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
+            {/* Expandable Help Explanation */}
+            <AnimatePresence>
+              {showFilterHelp && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="bg-amber-50/90 border border-amber-200/80 rounded-xl p-2.5 text-[11px] text-amber-950 space-y-1">
+                    <p className="font-extrabold flex items-center gap-1 text-amber-900">
+                      <Sparkles className="h-3 w-3 text-amber-600" />
+                      Petunjuk Filter:
+                    </p>
+                    <p>• Tekan <strong>"Hari Ini"</strong> untuk melihat tugas hari ini saja.</p>
+                    <p>• Tekan <strong>"Bulan Ini"</strong> untuk melihat tugas bulan ini.</p>
+                    <p>• Tekan <strong>"Pilih Tanggal, Bulan..."</strong> untuk memilih tanggal kalender lain.</p>
+                    <p>• Tekan <strong>"Semua Waktu"</strong> untuk menampilkan seluruh pesanan.</p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {activeTab === "active" ? (
