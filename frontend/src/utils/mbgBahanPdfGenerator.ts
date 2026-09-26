@@ -112,10 +112,10 @@ export async function exportBahanChecklistPdf(form: MbgBahanChecklistForm): Prom
         item.jenisBahan,
         item.banyaknya ? String(item.banyaknya) : '',
         item.satuan || '',
-        item.isSesuai ? 'V' : '',
-        !item.isSesuai ? 'V' : '',
-        item.isBaik ? 'V' : '',
-        !item.isBaik ? 'V' : '',
+        item.isSesuai === true ? 'V' : '',
+        item.isSesuai === false ? 'V' : '',
+        item.isBaik === true ? 'V' : '',
+        item.isBaik === false ? 'V' : '',
         item.notes || '',
       ]);
     } else {

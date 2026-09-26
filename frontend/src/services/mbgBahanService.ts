@@ -303,8 +303,8 @@ export function extractIngredientsFromDailyReport(
       jenisBahan: r.jenisBahan || '',
       banyaknya: Number(r.banyaknya) || 0,
       satuan: r.satuan || 'kg',
-      isSesuai: r.isSesuai !== false,
-      isBaik: r.isBaik !== false,
+      isSesuai: r.isSesuai ?? null,
+      isBaik: r.isBaik ?? null,
       notes: r.notes || '',
     }));
   }
@@ -315,8 +315,8 @@ export function extractIngredientsFromDailyReport(
       jenisBahan: rp.namaBahan || '',
       banyaknya: Number(rp.kuantitas) || 0,
       satuan: rp.satuan || 'kg',
-      isSesuai: true,
-      isBaik: true,
+      isSesuai: null,
+      isBaik: null,
       notes: '',
     }));
   }
@@ -327,8 +327,8 @@ export function extractIngredientsFromDailyReport(
       jenisBahan: po.item || '',
       banyaknya: Number(po.jumlah) || 0,
       satuan: po.satuan || 'kg',
-      isSesuai: true,
-      isBaik: true,
+      isSesuai: null,
+      isBaik: null,
       notes: po.keterangan || '',
     }));
   }

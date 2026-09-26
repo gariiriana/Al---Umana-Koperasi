@@ -289,10 +289,10 @@ export async function exportBahanChecklistDocx(form: MbgBahanChecklistForm): Pro
     const nama = item?.jenisBahan || '';
     const qty = item?.banyaknya ? String(item.banyaknya) : '';
     const sat = item?.satuan || '';
-    const sesuai = item ? (item.isSesuai ? 'V' : '') : '';
-    const tdkSesuai = item ? (!item.isSesuai ? 'V' : '') : '';
-    const baik = item ? (item.isBaik ? 'V' : '') : '';
-    const rusak = item ? (!item.isBaik ? 'V' : '') : '';
+    const sesuai = item?.isSesuai === true ? 'V' : '';
+    const tdkSesuai = item?.isSesuai === false ? 'V' : '';
+    const baik = item?.isBaik === true ? 'V' : '';
+    const rusak = item?.isBaik === false ? 'V' : '';
     const notes = item?.notes || '';
 
     tableRows.push(

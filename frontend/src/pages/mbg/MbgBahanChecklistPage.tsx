@@ -181,14 +181,14 @@ export function MbgBahanChecklistPage() {
       if (extracted.length > 0) {
         setRows(extracted);
       } else {
-        // Sample standard template rows if batch has no data yet
+        // Sample standard template rows if batch has no data yet (default empty checklists)
         setRows([
-          { jenisBahan: 'Beras Medium / Premium', banyaknya: 250, satuan: 'kg', isSesuai: true, isBaik: true, notes: 'Kemasan bersih dan utuh' },
-          { jenisBahan: 'Daging Ayam Broiler', banyaknya: 180, satuan: 'kg', isSesuai: true, isBaik: true, notes: 'Segar dan bersertifikat halal' },
-          { jenisBahan: 'Telur Ayam Ras', banyaknya: 220, satuan: 'butir', isSesuai: true, isBaik: true, notes: 'Cangkang bersih dan tidak retak' },
-          { jenisBahan: 'Wortel Segar', banyaknya: 35, satuan: 'kg', isSesuai: true, isBaik: true, notes: 'Keras dan segar' },
-          { jenisBahan: 'Buncis', banyaknya: 25, satuan: 'kg', isSesuai: true, isBaik: true, notes: 'Hijau segar' },
-          { jenisBahan: 'Tempe Kedelai', banyaknya: 40, satuan: 'papan', isSesuai: true, isBaik: true, notes: 'Padat dan beraroma segar' },
+          { jenisBahan: 'Beras Medium / Premium', banyaknya: 250, satuan: 'kg', isSesuai: null, isBaik: null, notes: '' },
+          { jenisBahan: 'Daging Ayam Broiler', banyaknya: 180, satuan: 'kg', isSesuai: null, isBaik: null, notes: '' },
+          { jenisBahan: 'Telur Ayam Ras', banyaknya: 220, satuan: 'butir', isSesuai: null, isBaik: null, notes: '' },
+          { jenisBahan: 'Wortel Segar', banyaknya: 35, satuan: 'kg', isSesuai: null, isBaik: null, notes: '' },
+          { jenisBahan: 'Buncis', banyaknya: 25, satuan: 'kg', isSesuai: null, isBaik: null, notes: '' },
+          { jenisBahan: 'Tempe Kedelai', banyaknya: 40, satuan: 'papan', isSesuai: null, isBaik: null, notes: '' },
         ]);
       }
     }
@@ -210,8 +210,8 @@ export function MbgBahanChecklistPage() {
         jenisBahan: '',
         banyaknya: 0,
         satuan: 'kg',
-        isSesuai: true,
-        isBaik: true,
+        isSesuai: null,
+        isBaik: null,
         notes: '',
       },
     ]);
@@ -231,6 +231,18 @@ export function MbgBahanChecklistPage() {
       }))
     );
     showToast({ message: 'Semua bahan diceklis Sesuai & Baik!', variant: 'success' });
+  };
+
+  // Quick 1-click shortcut: clear all checks (kosongkan semua)
+  const handleClearAllChecks = () => {
+    setRows((prev) =>
+      prev.map((r) => ({
+        ...r,
+        isSesuai: null,
+        isBaik: null,
+      }))
+    );
+    showToast({ message: 'Semua ceklis berhasil dikosongkan', variant: 'info' });
   };
 
   // Build current form object
@@ -381,22 +393,32 @@ export function MbgBahanChecklistPage() {
               />
             </div>
 
-            {/* Quick Check All */}
+            {/* Quick Check All & Clear All */}
             <button
               type="button"
               onClick={handleCheckAll}
-              className="px-3 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 font-bold text-xs hover:bg-emerald-100 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 font-bold text-xs hover:bg-emerald-100 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               title="Ceklis semua item menjadi Sesuai dan Baik"
             >
               <Check className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Ceklis Semua Baik</span>
+              <span>Ceklis Semua</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleClearAllChecks}
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              title="Kosongkan semua centang ceklis"
+            >
+              <X className="h-3.5 w-3.5 text-slate-400" />
+              <span>Kosongkan</span>
             </button>
 
             {/* Archive Drawer Button */}
             <button
               type="button"
               onClick={() => setShowArchiveModal(true)}
-              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               title="Lihat arsip laporan cek list yang pernah dibuat"
             >
               <History className="h-3.5 w-3.5 text-slate-500" />
@@ -627,53 +649,57 @@ export function MbgBahanChecklistPage() {
 
                       {/* 5. Jumlah: Sesuai */}
                       <td
-                        onClick={() => handleUpdateRow(idx, { isSesuai: true })}
+                        onClick={() => handleUpdateRow(idx, { isSesuai: row.isSesuai === true ? null : true })}
                         className="border-r border-black p-0 sm:p-1 text-center cursor-pointer hover:bg-emerald-50 select-none"
+                        title={row.isSesuai === true ? 'Klik untuk membatalkan (kosongkan)' : 'Klik untuk ceklis Sesuai'}
                       >
                         <input
                           type="checkbox"
                           checked={row.isSesuai === true}
-                          onChange={() => handleUpdateRow(idx, { isSesuai: true })}
-                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-emerald-600 cursor-pointer align-middle"
+                          readOnly
+                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-emerald-600 cursor-pointer align-middle pointer-events-none"
                         />
                       </td>
 
                       {/* 6. Jumlah: Tidak Sesuai */}
                       <td
-                        onClick={() => handleUpdateRow(idx, { isSesuai: false })}
+                        onClick={() => handleUpdateRow(idx, { isSesuai: row.isSesuai === false ? null : false })}
                         className="border-r border-black p-0 sm:p-1 text-center cursor-pointer hover:bg-red-50 select-none"
+                        title={row.isSesuai === false ? 'Klik untuk membatalkan (kosongkan)' : 'Klik untuk ceklis Tidak Sesuai'}
                       >
                         <input
                           type="checkbox"
                           checked={row.isSesuai === false}
-                          onChange={() => handleUpdateRow(idx, { isSesuai: false })}
-                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-red-600 cursor-pointer align-middle"
+                          readOnly
+                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-red-600 cursor-pointer align-middle pointer-events-none"
                         />
                       </td>
 
                       {/* 7. Kondisi: Baik */}
                       <td
-                        onClick={() => handleUpdateRow(idx, { isBaik: true })}
+                        onClick={() => handleUpdateRow(idx, { isBaik: row.isBaik === true ? null : true })}
                         className="border-r border-black p-0 sm:p-1 text-center cursor-pointer hover:bg-emerald-50 select-none"
+                        title={row.isBaik === true ? 'Klik untuk membatalkan (kosongkan)' : 'Klik untuk ceklis Baik'}
                       >
                         <input
                           type="checkbox"
                           checked={row.isBaik === true}
-                          onChange={() => handleUpdateRow(idx, { isBaik: true })}
-                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-emerald-600 cursor-pointer align-middle"
+                          readOnly
+                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-emerald-600 cursor-pointer align-middle pointer-events-none"
                         />
                       </td>
 
                       {/* 8. Kondisi: Rusak */}
                       <td
-                        onClick={() => handleUpdateRow(idx, { isBaik: false })}
+                        onClick={() => handleUpdateRow(idx, { isBaik: row.isBaik === false ? null : false })}
                         className="border-r border-black p-0 sm:p-1 text-center cursor-pointer hover:bg-red-50 select-none"
+                        title={row.isBaik === false ? 'Klik untuk membatalkan (kosongkan)' : 'Klik untuk ceklis Rusak'}
                       >
                         <input
                           type="checkbox"
                           checked={row.isBaik === false}
-                          onChange={() => handleUpdateRow(idx, { isBaik: false })}
-                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-red-600 cursor-pointer align-middle"
+                          readOnly
+                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-red-600 cursor-pointer align-middle pointer-events-none"
                         />
                       </td>
 

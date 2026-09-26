@@ -646,8 +646,8 @@ export interface MbgInspectionFormRow {
   jenisBahan: string;
   banyaknya: number;
   satuan: string;
-  isSesuai: boolean;
-  isBaik: boolean;
+  isSesuai?: boolean | null;
+  isBaik?: boolean | null;
   notes?: string;
 }
 
