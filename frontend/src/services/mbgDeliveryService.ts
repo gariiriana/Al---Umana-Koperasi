@@ -3,7 +3,7 @@
 // ============================================================================
 
 import {
-  collection, doc, updateDoc, addDoc, getDoc, getDocs,
+  collection, doc, updateDoc, addDoc, getDocs,
   query, where, orderBy, onSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -11,17 +11,6 @@ import type { MbgDeliveryTask, MbgDeliveryStatus } from '@/types/mbg';
 
 const DELIVERY_COLLECTION = 'mbg_delivery_tasks';
 const DOCUMENTS_COLLECTION = 'mbg_delivery_documents';
-
-async function ensureBatchCooked(taskId: string): Promise<void> {
-  const task = await getDoc(doc(db, DELIVERY_COLLECTION, taskId));
-  if (!task.exists()) throw new Error('Tugas pengiriman tidak ditemukan.');
-  const batchId = task.data().batchId as string;
-  const batch = await getDoc(doc(db, 'mbg_pm_batches', batchId));
-  const cookingStatus = batch.data()?.productionCookingStatus as string | undefined;
-  if (cookingStatus !== 'cooked') {
-    throw new Error('Pesanan belum selesai dimasak. Kurir belum dapat mengeksekusi atau menyelesaikan laporan pengantaran.');
-  }
-}
 
 export function subscribeKurirTasks(
   batchId: string,
@@ -127,9 +116,6 @@ export async function updateTaskStatus(
   taskId: string,
   status: MbgDeliveryStatus
 ): Promise<void> {
-  if (status === 'delivered') {
-    await ensureBatchCooked(taskId);
-  }
   const updates: Partial<MbgDeliveryTask> = {
     status,
     updatedAt: new Date().toISOString(),

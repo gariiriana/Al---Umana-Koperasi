@@ -126,7 +126,7 @@ export function MbgDistributionPage() {
   const [activeTab, setActiveTab] = useState<'assignment' | 'reports' | 'bahan'>('assignment');
   const [isExportingDailyPdf, setIsExportingDailyPdf] = useState(false);
   const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
-  const [batchFilterMode, setBatchFilterMode] = useState<'imported' | 'all'>('imported');
+  const [batchFilterMode, setBatchFilterMode] = useState<'imported' | 'all'>('all');
   const [isSyncingEntries, setIsSyncingEntries] = useState(false);
   const [pmSearch, setPmSearch] = useState('');
   const [selectedCourierFilter, setSelectedCourierFilter] = useState('all');
@@ -364,13 +364,10 @@ export function MbgDistributionPage() {
     return ['Andi Kurir', 'Dede Kurir', 'Yusep Kurir', 'Erik Kurir', 'Agus Kurir', 'Firdi Kurir'];
   }, [kurirUsers]);
 
-  // Subscribe batches: hanya batch yang SUDAH disubmit oleh Produksi MBG ke Distribusi MBG
+  // Subscribe batches: semua batch yang diinput oleh Admin MBG / Produksi MBG langsung terlihat oleh Distribusi MBG
   useEffect(() => {
     const unsub = subscribeBatches((data) => {
-      const activeBatches = data.filter((b) =>
-        !b.isBackup &&
-        (b.submittedToDistribution === true || ['DELIVERING', 'DELIVERED'].includes(b.status))
-      );
+      const activeBatches = data.filter((b) => !b.isBackup);
       setBatches(activeBatches);
       setLoading(false);
     });

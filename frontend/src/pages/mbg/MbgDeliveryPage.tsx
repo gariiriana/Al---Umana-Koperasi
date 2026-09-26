@@ -81,13 +81,10 @@ export function MbgDeliveryPage() {
   // Description edit state (per entry per proof type)
   const descTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // Subscribe active batches: hanya batch yang SUDAH disubmit oleh Produksi MBG
+  // Subscribe active batches: semua batch aktif
   useEffect(() => {
     const unsub = subscribeBatches((data) => {
-      const activeBatches = data.filter((b) =>
-        !b.isBackup &&
-        (b.submittedToDistribution === true || ['DELIVERING', 'DELIVERED'].includes(b.status))
-      );
+      const activeBatches = data.filter((b) => !b.isBackup);
       setBatches(activeBatches);
       const todayStr = getJakartaDate();
       const savedBatchId = sessionStorage.getItem('mbg_delivery_selected_batch');
@@ -234,11 +231,6 @@ export function MbgDeliveryPage() {
 
     return tasks[0] || null;
   }, [tasks, selectedPetugasName, profile?.displayName, user]);
-
-  const productionReady = useMemo(() => {
-    const batch = batches.find((item) => item.id === selectedBatchId);
-    return batch?.productionCookingStatus === 'cooked';
-  }, [batches, selectedBatchId]);
 
   // Get full entries detail for the current task
   const taskEntries = useMemo(() => {
@@ -598,13 +590,6 @@ export function MbgDeliveryPage() {
   // ─── PDF Export (Sesuai Layout Resmi Google Doc) ───
   const handleExportDeliveryPdf = async () => {
     if (!activeTask || taskEntries.length === 0) return;
-    if (!productionReady) {
-      showToast({
-        message: 'Laporan pengantaran belum dapat dieksekusi/diselesaikan karena proses memasak di dapur/produksi belum selesai.',
-        variant: 'error',
-      });
-      return;
-    }
     showToast({ message: 'Menyiapkan PDF Laporan Distribusi...', variant: 'info' });
 
     try {
@@ -1207,9 +1192,8 @@ export function MbgDeliveryPage() {
                         </span>
                         <button
                           onClick={handleExportDeliveryPdf}
-                          disabled={!productionReady}
-                          className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-2.5 rounded-xl cursor-pointer shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                          title={!productionReady ? 'Laporan terkunci: Menunggu proses memasak selesai di dapur' : 'Export PDF Laporan'}
+                          className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-2.5 rounded-xl cursor-pointer shadow-sm"
+                          title="Export PDF Laporan"
                         >
                           <FileDown className="h-4 w-4 text-[#FBBF24]" /> Export PDF
                         </button>
@@ -1223,9 +1207,8 @@ export function MbgDeliveryPage() {
                         </span>
                         <button
                           onClick={handleExportDeliveryPdf}
-                          disabled={!productionReady}
-                          className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-2.5 rounded-xl cursor-pointer shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                          title={!productionReady ? 'Laporan terkunci: Menunggu proses memasak selesai di dapur' : 'Export PDF Laporan'}
+                          className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-2.5 rounded-xl cursor-pointer shadow-sm"
+                          title="Export PDF Laporan"
                         >
                           <FileDown className="h-4 w-4 text-[#FBBF24]" /> Export PDF
                         </button>
@@ -1233,18 +1216,6 @@ export function MbgDeliveryPage() {
                     )}
                   </div>
                 </div>
-
-                {!productionReady && (
-                  <div className="w-full bg-amber-50/90 border border-amber-200/90 rounded-xl p-3.5 flex items-start gap-3 text-xs text-amber-900 shadow-xs">
-                    <span className="text-lg shrink-0 leading-none">🍳</span>
-                    <div className="space-y-0.5">
-                      <span className="font-extrabold text-amber-950">Tahap Memasak di Dapur Belum Selesai</span>
-                      <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
-                        Serah terima (handover) dari Distribusi ke Kurir sudah dapat dilakukan. Namun eksekusi dan export laporan pengantaran akan terkunci hingga dapur menandai makanan “Selesai dimasak”.
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Task Details - Mobile Card Layout + Desktop Table */}
