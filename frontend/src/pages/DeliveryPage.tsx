@@ -3,8 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft,
   AlertCircle, Loader2, Navigation, Phone, Search, X, FileDown,
-  FolderOpen, Calendar, CalendarDays, Filter, ChevronDown, RotateCcw,
-  Sparkles, HelpCircle
+  FolderOpen, Calendar, CalendarDays, Filter, ChevronDown, RotateCcw
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -599,7 +598,7 @@ export function DeliveryPage() {
   const [customMonth, setCustomMonth] = useState<string>(""); // "01" - "12"
   const [customYear, setCustomYear] = useState<string>(() => String(new Date().getFullYear()));
   const [showCustomPicker, setShowCustomPicker] = useState<boolean>(false);
-  const [showFilterHelp, setShowFilterHelp] = useState<boolean>(false);
+  const [overdueFilter, setOverdueFilter] = useState<"all" | "overdue" | "not_overdue">("all");
 
   const [reportingSick, setReportingSick] = useState(false);
   const [showSickConfirm, setShowSickConfirm] = useState(false);
@@ -787,6 +786,7 @@ export function DeliveryPage() {
     setCustomMonth("");
     setShowCustomPicker(false);
     setSearchQuery("");
+    setOverdueFilter("all");
   };
 
   const handleClearDateFilterOnly = () => {
@@ -810,7 +810,12 @@ export function DeliveryPage() {
     setShowCustomPicker(false);
   };
 
-  const filteredDeliveries = useMemo(() => {
+  const isOrderOverdue = useCallback((order: Order): boolean => {
+    const deadline = getOrderDeadline(order);
+    return deadline !== Infinity && Date.now() > deadline;
+  }, []);
+
+  const baseActiveDeliveries = useMemo(() => {
     return myDeliveries.filter((o) => {
       if (!matchesDateFilter(o)) return false;
       if (!searchQuery.trim()) return true;
@@ -824,6 +829,24 @@ export function DeliveryPage() {
       );
     });
   }, [myDeliveries, matchesDateFilter, searchQuery]);
+
+  const overdueCount = useMemo(() => {
+    return baseActiveDeliveries.filter((o) => isOrderOverdue(o)).length;
+  }, [baseActiveDeliveries, isOrderOverdue]);
+
+  const notOverdueCount = useMemo(() => {
+    return baseActiveDeliveries.filter((o) => !isOrderOverdue(o)).length;
+  }, [baseActiveDeliveries, isOrderOverdue]);
+
+  const filteredDeliveries = useMemo(() => {
+    if (overdueFilter === "overdue") {
+      return baseActiveDeliveries.filter((o) => isOrderOverdue(o));
+    }
+    if (overdueFilter === "not_overdue") {
+      return baseActiveDeliveries.filter((o) => !isOrderOverdue(o));
+    }
+    return baseActiveDeliveries;
+  }, [baseActiveDeliveries, overdueFilter, isOrderOverdue]);
 
   const filteredCompletedDeliveries = useMemo(() => {
     return myCompletedDeliveries.filter((o) => {
@@ -1014,95 +1037,76 @@ export function DeliveryPage() {
             </button>
           </div>
 
-          {/* 2. Unified Search & Time Filter Card (Rapi, Terstruktur, Tanpa Tombol Terpotong) */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-3 space-y-2.5">
-            {/* Search Input Bar */}
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-slate-400" />
-              </span>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari nama instansi, pemesan, produk, ID..."
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-10 pr-9 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:bg-white transition font-['Hanken_Grotesk']"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  title="Bersihkan pencarian"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-700 cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Quick Filter Presets (3 Kolom Seimbang - Pas 100% di layar HP, TIDAK AKAN TERPOTONG!) */}
-            <div className="grid grid-cols-3 gap-1.5">
-              <button
-                type="button"
-                onClick={handleClearDateFilterOnly}
-                className={`min-h-[38px] py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
-                  dateFilterType === "all"
-                    ? "bg-slate-900 text-white shadow-xs font-extrabold"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200/80"
-                }`}
-              >
-                <span>Semua Waktu</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSetFilterToday}
-                className={`min-h-[38px] py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
-                  dateFilterType === "today"
-                    ? "bg-amber-500 text-white shadow-xs font-extrabold"
-                    : "bg-slate-100 text-slate-700 hover:bg-amber-50 hover:text-amber-900"
-                }`}
-              >
-                <Calendar className="h-3.5 w-3.5 shrink-0" />
-                <span>Hari Ini</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSetFilterThisMonth}
-                className={`min-h-[38px] py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
-                  dateFilterType === "this_month"
-                    ? "bg-amber-500 text-white shadow-xs font-extrabold"
-                    : "bg-slate-100 text-slate-700 hover:bg-amber-50 hover:text-amber-900"
-                }`}
-              >
-                <CalendarDays className="h-3.5 w-3.5 shrink-0" />
-                <span>Bulan Ini</span>
-              </button>
-            </div>
-
-            {/* Baris Kedua: Tombol Kalender / Tanggal Khusus (Full Width, Jelas, Rapi) */}
-            <button
-              type="button"
-              onClick={() => setShowCustomPicker(!showCustomPicker)}
-              className={`w-full min-h-[38px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer border ${
-                dateFilterType === "custom_date" || dateFilterType === "custom_month" || dateFilterType === "custom_year"
-                  ? "bg-blue-50 border-blue-300 text-blue-800 font-extrabold shadow-2xs"
-                  : showCustomPicker
-                  ? "bg-slate-100 border-slate-300 text-slate-900"
-                  : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <Filter className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                <span className="truncate">
-                  {dateFilterType === "custom_date" || dateFilterType === "custom_month" || dateFilterType === "custom_year"
-                    ? `Waktu Khusus: ${activeFilterDescription}`
-                    : "Pilih Tanggal, Bulan, atau Tahun Tertentu..."}
+          {/* 2. Unified Compact Search & Filter Card */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-2.5 space-y-2">
+            {/* Baris 1: Search Input + Tombol Kalender Kompak (Side-by-side) */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 min-w-0">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-3.5 w-3.5 text-slate-400" />
                 </span>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari nama instansi, pemesan, produk, ID..."
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-8.5 pr-7 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:bg-white transition font-['Hanken_Grotesk']"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    title="Bersihkan pencarian"
+                    className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-700 cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
-              <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${showCustomPicker ? "rotate-180 text-blue-600" : "text-slate-400"}`} />
-            </button>
+
+              {/* Tombol Kalender / Tanggal Kompak */}
+              <button
+                type="button"
+                onClick={() => setShowCustomPicker(!showCustomPicker)}
+                className={`shrink-0 h-[36px] px-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border select-none ${
+                  dateFilterType !== "all"
+                    ? "bg-amber-500 border-amber-600 text-white shadow-xs font-extrabold"
+                    : showCustomPicker
+                    ? "bg-slate-100 border-slate-300 text-slate-900"
+                    : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                }`}
+                title={dateFilterType !== "all" ? activeFilterDescription : "Pilih Tanggal"}
+              >
+                <Calendar className={`h-3.5 w-3.5 shrink-0 ${dateFilterType !== "all" ? "text-white" : "text-slate-500"}`} />
+                <span className="max-w-[85px] sm:max-w-none truncate">
+                  {dateFilterType === "today"
+                    ? "Hari Ini"
+                    : dateFilterType === "this_month"
+                    ? "Bulan Ini"
+                    : dateFilterType === "custom_date"
+                    ? formatIndoDate(customDate)
+                    : dateFilterType === "custom_month"
+                    ? `${customMonth ? MONTHS_INDO.find((m) => m.value === customMonth)?.label : ""} ${customYear}`
+                    : dateFilterType === "custom_year"
+                    ? customYear
+                    : "Tanggal"}
+                </span>
+                {dateFilterType !== "all" ? (
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleClearDateFilterOnly();
+                    }}
+                    className="ml-0.5 p-0.5 rounded-full hover:bg-black/20"
+                    title="Hapus filter tanggal"
+                  >
+                    <X className="h-3 w-3" />
+                  </span>
+                ) : (
+                  <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${showCustomPicker ? "rotate-180 text-blue-600" : "text-slate-400"}`} />
+                )}
+              </button>
+            </div>
 
             {/* Expandable Custom Date / Month / Year Picker Drawer */}
             <AnimatePresence>
@@ -1113,11 +1117,11 @@ export function DeliveryPage() {
                   exit={{ opacity: 0, height: 0 }}
                   className="overflow-hidden pt-1"
                 >
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5">
                     <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
                       <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
                         <Filter className="h-3.5 w-3.5 text-blue-600" />
-                        Pilih Waktu Spesifik
+                        Pilih Rentang Waktu
                       </span>
                       <button
                         type="button"
@@ -1126,6 +1130,45 @@ export function DeliveryPage() {
                         title="Tutup pilihan"
                       >
                         <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {/* Presets di dalam Drawer agar layar utama tetap lega */}
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleClearDateFilterOnly}
+                        className={`min-h-[34px] py-1 px-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                          dateFilterType === "all"
+                            ? "bg-slate-900 text-white shadow-xs font-extrabold"
+                            : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+                        }`}
+                      >
+                        Semua Waktu
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSetFilterToday}
+                        className={`min-h-[34px] py-1 px-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                          dateFilterType === "today"
+                            ? "bg-amber-500 text-white shadow-xs font-extrabold"
+                            : "bg-white text-slate-700 hover:bg-amber-50 border border-slate-200"
+                        }`}
+                      >
+                        <Calendar className="h-3 w-3 shrink-0" />
+                        Hari Ini
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSetFilterThisMonth}
+                        className={`min-h-[34px] py-1 px-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                          dateFilterType === "this_month"
+                            ? "bg-amber-500 text-white shadow-xs font-extrabold"
+                            : "bg-white text-slate-700 hover:bg-amber-50 border border-slate-200"
+                        }`}
+                      >
+                        <CalendarDays className="h-3 w-3 shrink-0" />
+                        Bulan Ini
                       </button>
                     </div>
 
@@ -1250,100 +1293,151 @@ export function DeliveryPage() {
               )}
             </AnimatePresence>
 
-            {/* Status Bar / Active Filter Pill / Bantuan */}
-            <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5 px-1 border-t border-slate-100">
-              <span className="flex items-center gap-1.5 min-w-0">
-                {dateFilterType !== "all" ? (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                    <span className="truncate text-slate-800 font-semibold">
-                      Filter: <strong>{activeFilterDescription}</strong> ({activeTab === "active" ? filteredDeliveries.length : filteredCompletedDeliveries.length} pesanan)
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-slate-500">
-                    Menampilkan seluruh pesanan ({activeTab === "active" ? myDeliveries.length : myCompletedDeliveries.length})
-                  </span>
-                )}
-              </span>
-
-              {dateFilterType !== "all" ? (
+            {/* Baris 2: Filter Status Batas Waktu (Khusus Tugas Aktif: Semua, Terlewat, Belum Terlewat) */}
+            {activeTab === "active" && (
+              <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                {/* 1. Semua */}
                 <button
                   type="button"
-                  onClick={handleClearDateFilterOnly}
+                  onClick={() => setOverdueFilter("all")}
+                  className={`min-h-[34px] py-1 px-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer select-none ${
+                    overdueFilter === "all"
+                      ? "bg-slate-900 text-white shadow-xs font-black"
+                      : "bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200/70"
+                  }`}
+                >
+                  <span>Semua</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
+                      overdueFilter === "all"
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-200 text-slate-700"
+                    }`}
+                  >
+                    {baseActiveDeliveries.length}
+                  </span>
+                </button>
+
+                {/* 2. Terlewat */}
+                <button
+                  type="button"
+                  onClick={() => setOverdueFilter("overdue")}
+                  className={`min-h-[34px] py-1 px-1 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer select-none ${
+                    overdueFilter === "overdue"
+                      ? "bg-red-600 text-white shadow-xs font-black ring-1 ring-red-700"
+                      : overdueCount > 0
+                      ? "bg-red-50 border border-red-200 text-red-700 hover:bg-red-100/80 font-extrabold"
+                      : "bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200/70"
+                  }`}
+                >
+                  <AlertCircle className={`h-3 w-3 shrink-0 ${overdueFilter === "overdue" ? "text-white" : overdueCount > 0 ? "text-red-600" : "text-slate-400"}`} />
+                  <span className="truncate">Terlewat</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-black shrink-0 ${
+                      overdueFilter === "overdue"
+                        ? "bg-white text-red-700"
+                        : overdueCount > 0
+                        ? "bg-red-200 text-red-800"
+                        : "bg-slate-200 text-slate-600"
+                    }`}
+                  >
+                    {overdueCount}
+                  </span>
+                </button>
+
+                {/* 3. Belum Terlewat */}
+                <button
+                  type="button"
+                  onClick={() => setOverdueFilter("not_overdue")}
+                  className={`min-h-[34px] py-1 px-1 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer select-none ${
+                    overdueFilter === "not_overdue"
+                      ? "bg-emerald-600 text-white shadow-xs font-black ring-1 ring-emerald-700"
+                      : "bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200/70"
+                  }`}
+                >
+                  <CheckCircle2 className={`h-3 w-3 shrink-0 ${overdueFilter === "not_overdue" ? "text-white" : "text-emerald-600"}`} />
+                  <span className="truncate">Belum Terlewat</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-black shrink-0 ${
+                      overdueFilter === "not_overdue"
+                        ? "bg-white text-emerald-700"
+                        : "bg-slate-200 text-slate-700"
+                    }`}
+                  >
+                    {notOverdueCount}
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {/* Active Date Filter Indicator / Reset Status (Hanya muncul jika ada filter aktif agar hemat tempat) */}
+            {(dateFilterType !== "all" || overdueFilter !== "all" || searchQuery.trim()) && (
+              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 px-1 border-t border-slate-100">
+                <span className="flex items-center gap-1.5 min-w-0 truncate">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                  <span className="truncate text-slate-700">
+                    Menampilkan <strong>{activeTab === "active" ? filteredDeliveries.length : filteredCompletedDeliveries.length}</strong> pesanan
+                    {dateFilterType !== "all" && <span className="text-amber-800 font-semibold"> • {activeFilterDescription}</span>}
+                    {overdueFilter !== "all" && <span className="text-slate-800 font-semibold"> • {overdueFilter === "overdue" ? "Terlewat" : "Belum Terlewat"}</span>}
+                  </span>
+                </span>
+
+                <button
+                  type="button"
+                  onClick={handleSetFilterAll}
                   className="shrink-0 text-amber-800 font-bold hover:underline cursor-pointer flex items-center gap-1 pl-2 text-[11px]"
                 >
                   <X className="h-3 w-3" />
-                  Hapus Filter
+                  Reset
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowFilterHelp(!showFilterHelp)}
-                  className="shrink-0 text-slate-500 hover:text-slate-800 underline cursor-pointer flex items-center gap-1 pl-2 text-[11px]"
-                >
-                  <HelpCircle className="h-3 w-3" />
-                  {showFilterHelp ? "Tutup Bantuan" : "Bantuan"}
-                </button>
-              )}
-            </div>
-
-            {/* Expandable Help Explanation */}
-            <AnimatePresence>
-              {showFilterHelp && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden"
-                >
-                  <div className="bg-amber-50/90 border border-amber-200/80 rounded-xl p-2.5 text-[11px] text-amber-950 space-y-1">
-                    <p className="font-extrabold flex items-center gap-1 text-amber-900">
-                      <Sparkles className="h-3 w-3 text-amber-600" />
-                      Petunjuk Filter:
-                    </p>
-                    <p>• Tekan <strong>"Hari Ini"</strong> untuk melihat tugas hari ini saja.</p>
-                    <p>• Tekan <strong>"Bulan Ini"</strong> untuk melihat tugas bulan ini.</p>
-                    <p>• Tekan <strong>"Pilih Tanggal, Bulan..."</strong> untuk memilih tanggal kalender lain.</p>
-                    <p>• Tekan <strong>"Semua Waktu"</strong> untuk menampilkan seluruh pesanan.</p>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+              </div>
+            )}
           </div>
 
           {activeTab === "active" ? (
-            filteredDeliveries.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-8 sm:p-12 text-center space-y-3 shadow-xs">
-                <Package className="h-14 w-14 mx-auto text-[#D1D5DB] bg-[#F3F4F6] rounded-full p-3.5" />
-                <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827] text-base">
-                  {dateFilterType !== "all"
-                    ? "Tidak Ada Tugas Pada Waktu Ini"
-                    : searchQuery
-                    ? "Hasil Pencarian Kosong"
-                    : "Tidak Ada Pengantaran"}
-                </p>
-                <p className="text-xs sm:text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-sm mx-auto leading-relaxed">
-                  {dateFilterType !== "all"
-                    ? `Tidak ditemukan tugas aktif yang cocok dengan filter "${activeFilterDescription}". Pesanan Anda aman dan tidak hilang.`
-                    : searchQuery
-                    ? "Tidak ada tugas aktif yang cocok dengan kata kunci pencarian Anda."
-                    : "Belum ada pesanan yang ditugaskan ke Anda untuk diantarkan."}
-                </p>
-                {(dateFilterType !== "all" || searchQuery) && (
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={handleSetFilterAll}
-                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-black cursor-pointer shadow-sm active:scale-95 transition-all"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      <span>Tampilkan Semua Pesanan</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
+            <div className="space-y-3">
+              {filteredDeliveries.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-[#E5E7EB] p-8 sm:p-12 text-center space-y-3 shadow-xs">
+                  <Package className="h-14 w-14 mx-auto text-[#D1D5DB] bg-[#F3F4F6] rounded-full p-3.5" />
+                  <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827] text-base">
+                    {overdueFilter === "overdue"
+                      ? "Tidak Ada Pesanan Terlewat"
+                      : overdueFilter === "not_overdue"
+                      ? "Tidak Ada Pesanan yang Belum Terlewat"
+                      : dateFilterType !== "all"
+                      ? "Tidak Ada Tugas Pada Waktu Ini"
+                      : searchQuery
+                      ? "Hasil Pencarian Kosong"
+                      : "Tidak Ada Pengantaran"}
+                  </p>
+                  <p className="text-xs sm:text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-sm mx-auto leading-relaxed">
+                    {overdueFilter === "overdue"
+                      ? "Hebat! Semua pesanan aktif saat ini masih sesuai jadwal dan belum melewati batas waktu pengantaran."
+                      : overdueFilter === "not_overdue"
+                      ? "Seluruh pesanan aktif saat ini sudah melewati batas waktu pengantaran (terlewat)."
+                      : dateFilterType !== "all"
+                      ? `Tidak ditemukan tugas aktif yang cocok dengan filter "${activeFilterDescription}". Pesanan Anda aman dan tidak hilang.`
+                      : searchQuery
+                      ? "Tidak ada tugas aktif yang cocok dengan kata kunci pencarian Anda."
+                      : "Belum ada pesanan yang ditugaskan ke Anda untuk diantarkan."}
+                  </p>
+                  {(overdueFilter !== "all" || dateFilterType !== "all" || searchQuery) && (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOverdueFilter("all");
+                          handleSetFilterAll();
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-black cursor-pointer shadow-sm active:scale-95 transition-all"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        <span>Tampilkan Semua Pesanan</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
               <div className="space-y-3">
                 <AnimatePresence>
                   {filteredDeliveries.map((o, idx) => {
@@ -1440,7 +1534,8 @@ export function DeliveryPage() {
                   })}
                 </AnimatePresence>
               </div>
-            )
+            )}
+            </div>
           ) : (
             filteredCompletedDeliveries.length === 0 ? (
               <div className="bg-white rounded-2xl border border-[#E5E7EB] p-8 sm:p-12 text-center space-y-3 shadow-xs">
