@@ -592,6 +592,13 @@ export function MbgDeliveryPage() {
   // ─── PDF Export (Sesuai Layout Resmi Google Doc) ───
   const handleExportDeliveryPdf = async () => {
     if (!activeTask || taskEntries.length === 0) return;
+    if (!productionReady) {
+      showToast({
+        message: 'Laporan pengantaran belum dapat dieksekusi/diselesaikan karena proses memasak di dapur/produksi belum selesai.',
+        variant: 'error',
+      });
+      return;
+    }
     showToast({ message: 'Menyiapkan PDF Laporan Distribusi...', variant: 'info' });
 
     try {
@@ -1126,96 +1133,112 @@ export function MbgDeliveryPage() {
           {selectedBatchId && activeTask ? (
             <div className="space-y-6">
               {/* Task Summary Card */}
-              <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 md:p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
-                    <User className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-gray-400 block uppercase">
-                      Kurir Penanggung Jawab
-                    </span>
-                    <h3 className="text-base font-extrabold text-[#111827]">
-                      {activeTask.petugasName}
-                    </h3>
-                    {activeTask.kenekName && (
-                      <span className="mt-1 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 inline-block">
-                        Kenek: {activeTask.kenekName}
+              <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 md:p-6 shadow-sm flex flex-col gap-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
+                      <User className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-gray-400 block uppercase">
+                        Kurir Penanggung Jawab
                       </span>
-                    )}
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      Status Tugas: {MBG_DELIVERY_STATUS_CONFIG[activeTask.status]?.label}
-                    </p>
-                    {activeTask.deadlineAt && (
-                      <div className="mt-2 px-3 py-1 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 bg-gray-100 text-gray-700 border border-gray-200">
-                        <span>🕒</span>
-                        <span>
-                          Target Sampai: {new Date(activeTask.deadlineAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                      <h3 className="text-base font-extrabold text-[#111827]">
+                        {activeTask.petugasName}
+                      </h3>
+                      {activeTask.kenekName && (
+                        <span className="mt-1 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 inline-block">
+                          Kenek: {activeTask.kenekName}
                         </span>
+                      )}
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Status Tugas: {MBG_DELIVERY_STATUS_CONFIG[activeTask.status]?.label}
+                      </p>
+                      {activeTask.deadlineAt && (
+                        <div className="mt-2 px-3 py-1 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 bg-gray-100 text-gray-700 border border-gray-200">
+                          <span>🕒</span>
+                          <span>
+                            Target Sampai: {new Date(activeTask.deadlineAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Progress actions based on status */}
+                  <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
+                    {activeTask.status === 'waiting' && (
+                      <div className="flex flex-col items-end gap-1">
+                        <button
+                          onClick={handleStartHandover}
+                          className="flex-1 md:flex-initial flex items-center justify-center gap-2 font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-sm bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] cursor-pointer active:scale-95"
+                          title="Klik untuk konfirmasi serah terima dari dapur/distribusi sebelum berangkat"
+                        >
+                          🤝 Konfirmasi Serah Terima
+                        </button>
+                        {!isAllInstitutionsComplete && (
+                          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                            ⚠️ Kelola bukti {completedInstitutionsCount}/{activeNonLiburEntries.length} institusi selesai
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {activeTask.status === 'handover_done' && (
+                      <button
+                        onClick={handleStartDelivery}
+                        className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-5 py-3 rounded-xl cursor-pointer transition-all shadow-sm active:scale-95"
+                      >
+                        <Navigation className="h-4 w-4 text-[#FBBF24]" />
+                        Mulai Pengantaran
+                      </button>
+                    )}
+
+                    {activeTask.status === 'delivering' && (
+                      <>
+                        <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-4 py-2.5 rounded-xl">
+                          🚚 Silakan ambil foto bukti di setiap tujuan sekolah/posyandu
+                        </span>
+                        <button
+                          onClick={handleExportDeliveryPdf}
+                          disabled={!productionReady}
+                          className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-2.5 rounded-xl cursor-pointer shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={!productionReady ? 'Laporan terkunci: Menunggu proses memasak selesai di dapur' : 'Export PDF Laporan'}
+                        >
+                          <FileDown className="h-4 w-4 text-[#FBBF24]" /> Export PDF
+                        </button>
+                      </>
+                    )}
+
+                    {activeTask.status === 'delivered' && (
+                      <div className="flex gap-2">
+                        <span className="text-xs font-extrabold text-green-700 bg-green-50 border border-green-200 px-4 py-2.5 rounded-xl flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4" /> Pengiriman Selesai!
+                        </span>
+                        <button
+                          onClick={handleExportDeliveryPdf}
+                          disabled={!productionReady}
+                          className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-2.5 rounded-xl cursor-pointer shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={!productionReady ? 'Laporan terkunci: Menunggu proses memasak selesai di dapur' : 'Export PDF Laporan'}
+                        >
+                          <FileDown className="h-4 w-4 text-[#FBBF24]" /> Export PDF
+                        </button>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Progress actions based on status */}
-                <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
-                  {activeTask.status === 'waiting' && (
-                    <div className="flex flex-col items-end gap-1">
-                      <button
-                        onClick={handleStartHandover}
-                        disabled={!productionReady}
-                        className="flex-1 md:flex-initial flex items-center justify-center gap-2 font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-sm bg-[#FBBF24] hover:bg-[#F59E0B] text-[#111827] cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-                        title="Klik untuk konfirmasi serah terima dari dapur sebelum berangkat"
-                      >
-                        🤝 Konfirmasi Serah Terima
-                      </button>
-                      {!productionReady && <span className="text-[10px] font-bold text-red-700">Terkunci: Produksi belum berstatus Selesai dimasak.</span>}
-                      {!isAllInstitutionsComplete && (
-                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
-                          ⚠️ Kelola bukti {completedInstitutionsCount}/{activeNonLiburEntries.length} institusi selesai
-                        </span>
-                      )}
+                {!productionReady && (
+                  <div className="w-full bg-amber-50/90 border border-amber-200/90 rounded-xl p-3.5 flex items-start gap-3 text-xs text-amber-900 shadow-xs">
+                    <span className="text-lg shrink-0 leading-none">🍳</span>
+                    <div className="space-y-0.5">
+                      <span className="font-extrabold text-amber-950">Tahap Memasak di Dapur Belum Selesai</span>
+                      <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                        Serah terima (handover) dari Distribusi ke Kurir sudah dapat dilakukan. Namun eksekusi dan export laporan pengantaran akan terkunci hingga dapur menandai makanan “Selesai dimasak”.
+                      </p>
                     </div>
-                  )}
-
-                  {activeTask.status === 'handover_done' && (
-                    <button
-                      onClick={handleStartDelivery}
-                      className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-5 py-3 rounded-xl cursor-pointer transition-all shadow-sm active:scale-95"
-                    >
-                      <Navigation className="h-4 w-4 text-[#FBBF24]" />
-                      Mulai Pengantaran
-                    </button>
-                  )}
-
-                  {activeTask.status === 'delivering' && (
-                    <>
-                      <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-4 py-2.5 rounded-xl">
-                        🚚 Silakan ambil foto bukti di setiap tujuan sekolah/posyandu
-                      </span>
-                      <button
-                        onClick={handleExportDeliveryPdf}
-                        className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-2.5 rounded-xl cursor-pointer shadow-sm"
-                      >
-                        <FileDown className="h-4 w-4 text-[#FBBF24]" /> Export PDF
-                      </button>
-                    </>
-                  )}
-
-                  {activeTask.status === 'delivered' && (
-                    <div className="flex gap-2">
-                      <span className="text-xs font-extrabold text-green-700 bg-green-50 border border-green-200 px-4 py-2.5 rounded-xl flex items-center gap-1.5">
-                        <CheckCircle2 className="h-4 w-4" /> Pengiriman Selesai!
-                      </span>
-                      <button
-                        onClick={handleExportDeliveryPdf}
-                        className="flex items-center gap-2 bg-[#111827] text-white hover:bg-black font-extrabold text-xs px-4 py-2.5 rounded-xl cursor-pointer shadow-sm"
-                      >
-                        <FileDown className="h-4 w-4 text-[#FBBF24]" /> Export PDF
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
               {/* Task Details - Mobile Card Layout + Desktop Table */}

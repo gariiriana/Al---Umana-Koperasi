@@ -494,7 +494,8 @@ service cloud.firestore {
           && request.resource.data.productionCookingStatus in ['cooking', 'cooked']
           && (request.resource.data.productionCookingStatus == 'cooking' || resource.data.productionCookingStatus == 'cooking'))
         || (isKurirMbg() && request.resource.data.status == 'DELIVERED'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']));
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+          && resource.data.productionCookingStatus == 'cooked');
     }
 
     // -------------------------------------------------------------------
@@ -606,10 +607,18 @@ service cloud.firestore {
       allow create, delete: if isMbgManager() || isDistribusiMbg();
       allow update: if isMbgManager() || isDistribusiMbg()
         || (isKurirMbg() && (resource.data.petugasId == request.auth.uid || resource.data.kenekId == request.auth.uid)
-          && get(/databases/$(database)/documents/mbg_pm_batches/$(resource.data.batchId)).data.productionCookingStatus == 'cooked'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'status', 'handoverPhotoId', 'handoverAt', 'deliveryPhotos', 'schoolProofs', 'completedAt', 'updatedAt'
-          ]));
+          && (
+            // Handover & delivery progress updates can be made by courier even before cooking finishes
+            (request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'handoverPhotoId', 'handoverAt', 'deliveryPhotos', 'schoolProofs', 'updatedAt'
+            ]) && request.resource.data.status != 'delivered')
+            ||
+            // Final execution of report ('delivered' / completedAt) requires cooking to be finished
+            (get(/databases/$(database)/documents/mbg_pm_batches/$(resource.data.batchId)).data.productionCookingStatus == 'cooked'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'status', 'handoverPhotoId', 'handoverAt', 'deliveryPhotos', 'schoolProofs', 'completedAt', 'updatedAt'
+              ]))
+          ));
     }
 
     // -------------------------------------------------------------------

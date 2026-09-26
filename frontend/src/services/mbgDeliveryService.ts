@@ -19,7 +19,7 @@ async function ensureBatchCooked(taskId: string): Promise<void> {
   const batch = await getDoc(doc(db, 'mbg_pm_batches', batchId));
   const cookingStatus = batch.data()?.productionCookingStatus as string | undefined;
   if (cookingStatus !== 'cooked') {
-    throw new Error('Pesanan belum selesai dimasak. Kurir belum dapat melakukan handover atau pengiriman.');
+    throw new Error('Pesanan belum selesai dimasak. Kurir belum dapat mengeksekusi atau menyelesaikan laporan pengantaran.');
   }
 }
 
@@ -127,7 +127,7 @@ export async function updateTaskStatus(
   taskId: string,
   status: MbgDeliveryStatus
 ): Promise<void> {
-  if (status === 'handover_done' || status === 'delivering' || status === 'delivered') {
+  if (status === 'delivered') {
     await ensureBatchCooked(taskId);
   }
   const updates: Partial<MbgDeliveryTask> = {
@@ -159,7 +159,6 @@ export async function setHandoverPhoto(
   taskId: string,
   photoId: string
 ): Promise<void> {
-  await ensureBatchCooked(taskId);
   await updateDoc(doc(db, DELIVERY_COLLECTION, taskId), {
     handoverPhotoId: photoId,
     handoverAt: new Date().toISOString(),

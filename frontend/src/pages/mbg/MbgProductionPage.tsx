@@ -1472,10 +1472,6 @@ export function MbgProductionPage() {
 
   const handleSubmitToDistribution = () => {
     if (!selectedBatchId) return;
-    if (selectedBatch?.productionCookingStatus !== 'cooked') {
-      showToast({ message: 'Tandai makanan “Selesai dimasak” dulu sebelum mengirim ke Distribusi.', variant: 'error' });
-      return;
-    }
     setConfirmModal({
       isOpen: true,
       title: 'Kirim Data ke Distribusi MBG',
@@ -1925,8 +1921,7 @@ export function MbgProductionPage() {
               )}
               <button
                 onClick={handleSubmitToDistribution}
-                disabled={selectedBatch?.productionCookingStatus !== 'cooked'}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#0284C7] hover:bg-[#0369A1] disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer"
                 title="Kirim data batch dan alokasi penerima manfaat ke Distribusi MBG"
               >
                 <Truck className="h-4 w-4 text-white" />
