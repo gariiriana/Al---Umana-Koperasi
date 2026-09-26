@@ -298,6 +298,63 @@ describe('productionSheetParser - Dynamic Menu & Fruit Parsing', () => {
     expect(report.inspectionForm.rows[0].isSesuai).toBeNull();
     expect(report.inspectionForm.rows[0].isBaik).toBeNull();
   });
+
+  it('accurately parses List Pesanan Bahan when header is in row 1, without explicit supplier column and with Item Bahan unit header', () => {
+    const rows: unknown[][] = [];
+    for (let i = 0; i < 15; i++) rows[i] = [];
+
+    // Title on row 0
+    rows[0][42] = 'LAPORAN BELANJA HARIAN';
+
+    // Header on row 1: Column AQ (index 42) is 'List Pesanan Bahan', Column 44 is 'Jumlah', Column 45 is 'Item Bahan'
+    rows[1][42] = 'List Pesanan Bahan';
+    rows[1][43] = 'Jam Kedatangan';
+    rows[1][44] = 'Jumlah';
+    rows[1][45] = 'Item Bahan';
+    rows[1][46] = 'Harga Satuan';
+    rows[1][47] = 'Total Harga';
+
+    // Row 2: Minyak Goreng
+    rows[2][42] = 'Minyak Goreng';
+    rows[2][43] = '06:00';
+    rows[2][44] = 5;
+    rows[2][45] = 'karton';
+    rows[2][46] = 250000;
+    rows[2][47] = 1250000;
+
+    // Row 3: Beras Putih (Premium)
+    rows[3][42] = 'Beras Putih (Premium)';
+    rows[3][43] = '06:30';
+    rows[3][44] = 256;
+    rows[3][45] = 'kg';
+    rows[3][46] = 14500;
+    rows[3][47] = 3712000;
+
+    // Row 4: Gula Pasir Rose Brand @1kg
+    rows[4][42] = 'Gula Pasir Rose Brand @1kg';
+    rows[4][43] = '07:00';
+    rows[4][44] = 10;
+    rows[4][45] = 'pcs';
+    rows[4][46] = 18000;
+    rows[4][47] = 180000;
+
+    const report = parseProductionSheetRows(rows, 'batch-img-1', '2026-09-26', 'HARI 1');
+    expect(report.poRows).toBeDefined();
+    expect(report.poRows.length).toBe(3);
+
+    // Verify item names are NEVER the unit
+    expect(report.poRows[0].item).toBe('Minyak Goreng');
+    expect(report.poRows[0].satuan).toBe('karton');
+    expect(report.poRows[0].jumlah).toBe(5);
+
+    expect(report.poRows[1].item).toBe('Beras Putih (Premium)');
+    expect(report.poRows[1].satuan).toBe('kg');
+    expect(report.poRows[1].jumlah).toBe(256);
+
+    expect(report.poRows[2].item).toBe('Gula Pasir Rose Brand @1kg');
+    expect(report.poRows[2].satuan).toBe('pcs');
+    expect(report.poRows[2].jumlah).toBe(10);
+  });
 });
 
 describe('productionSheetParser - Penerima Manfaat import fidelity', () => {

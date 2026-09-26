@@ -1123,70 +1123,146 @@ export function parseProductionSheetRows(
   }
 
   // 7. Extract PO Rows / Logistik Kedatangan with Real Suppliers
-  // First check if there is a dedicated Supplier Table block (e.g., Image 5: Supplier, List Pesanan Bahan, Kedatangan, Jumlah, Item, n, Harga Satuan, Total Harga)
+  // Primary strategy: Directly locate the "List Pesanan Bahan" column across rows 0..15 and all cols
   let dedicatedSupplierCol = -1;
   let dedicatedSupplierRow = -1;
-  for (let r = 0; r < Math.min(rows.length, 6); r++) {
+  let dedicatedListPesananCol = -1;
+
+  for (let r = 0; r < Math.min(rows.length, 15); r++) {
     const row = rows[r] || [];
     for (let c = 0; c < row.length; c++) {
-      const val = str(row[c]).toLowerCase();
-      const valNext = str(row[c + 1]).toLowerCase();
-      if (val === 'supplier' && (valNext.includes('pesanan') || valNext.includes('bahan') || valNext.includes('list'))) {
-        dedicatedSupplierCol = c;
+      const val = str(row[c]).toLowerCase().trim();
+      if (
+        val === 'list pesanan bahan' ||
+        val === 'list pesanan' ||
+        val === 'pesanan bahan' ||
+        (val.includes('list pesanan') && !val.includes('total'))
+      ) {
+        dedicatedListPesananCol = c;
         dedicatedSupplierRow = r;
         break;
       }
     }
-    if (dedicatedSupplierCol !== -1) break;
+    if (dedicatedListPesananCol !== -1) break;
+  }
+
+  if (dedicatedListPesananCol !== -1) {
+    // Check if supplier is to the left of List Pesanan Bahan
+    const headRow = rows[dedicatedSupplierRow] || [];
+    for (let c = Math.max(0, dedicatedListPesananCol - 4); c < dedicatedListPesananCol; c++) {
+      const val = str(headRow[c]).toLowerCase().trim();
+      if (val === 'supplier' || val.includes('supplier') || val.includes('rekanan') || val.includes('vendor')) {
+        dedicatedSupplierCol = c;
+        break;
+      }
+    }
+    if (dedicatedSupplierCol === -1 && dedicatedListPesananCol > 0) {
+      dedicatedSupplierCol = dedicatedListPesananCol - 1;
+    }
+  } else {
+    // Secondary fallback: check for 'supplier' header adjacent to 'pesanan'/'bahan'/'list'
+    for (let r = 0; r < Math.min(rows.length, 10); r++) {
+      const row = rows[r] || [];
+      for (let c = 0; c < row.length; c++) {
+        const val = str(row[c]).toLowerCase().trim();
+        const valNext = str(row[c + 1]).toLowerCase().trim();
+        if (
+          (val === 'supplier' || val.includes('supplier')) &&
+          (valNext.includes('pesanan') || valNext.includes('bahan') || valNext.includes('list'))
+        ) {
+          dedicatedSupplierCol = c;
+          dedicatedListPesananCol = c + 1;
+          dedicatedSupplierRow = r;
+          break;
+        }
+      }
+      if (dedicatedSupplierCol !== -1) break;
+    }
   }
 
   const dedicatedPoRows: MbgPoReportRow[] = [];
-  if (dedicatedSupplierCol !== -1) {
-    const c = dedicatedSupplierCol;
+  if (dedicatedListPesananCol !== -1 || dedicatedSupplierCol !== -1) {
+    const c = dedicatedSupplierCol !== -1 ? dedicatedSupplierCol : Math.max(0, dedicatedListPesananCol - 1);
     let currentSupplier = 'Koperasi Al Umanaa Sejahtera Mandiri';
 
     // Scan headers dynamically to find exact column indices
-    let colItem = c + 1;
-    let colJamKedatangan = c + 2;
-    let colJumlah = c + 3;
-    let colSatuan = c + 4;
-    let colKeterangan = c + 5;
-    let colHargaSatuan = c + 6;
-    let colTotalHarga = c + 7;
+    let colItem = dedicatedListPesananCol !== -1 ? dedicatedListPesananCol : c + 1;
+    let colJamKedatangan = colItem + 1;
+    let colJumlah = colItem + 2;
+    let colSatuan = colItem + 3;
+    let colKeterangan = colItem + 4;
+    let colHargaSatuan = colItem + 5;
+    let colTotalHarga = colItem + 6;
 
     const headRow = rows[dedicatedSupplierRow] || [];
-    for (let colIdx = c; colIdx < Math.min(headRow.length, c + 12); colIdx++) {
+    const minCol = Math.max(0, colItem - 4);
+    const maxCol = Math.min(headRow.length, colItem + 12);
+
+    for (let colIdx = minCol; colIdx < maxCol; colIdx++) {
       const headerText = str(headRow[colIdx]).toLowerCase().trim();
       if (!headerText) continue;
 
-      if ((headerText.includes('pesanan') || headerText.includes('nama bahan') || headerText.includes('list bahan') || (headerText.includes('bahan') && !headerText.includes('satuan'))) && !headerText.includes('harga')) {
+      if (colIdx === dedicatedListPesananCol || headerText === 'list pesanan bahan' || headerText === 'list pesanan') {
         colItem = colIdx;
-      } else if (headerText.includes('kedatangan') || headerText.includes('jam')) {
+      } else if (headerText.includes('kedatangan') || headerText.includes('jam') || headerText.includes('waktu')) {
         colJamKedatangan = colIdx;
       } else if (headerText.includes('jumlah') || headerText.includes('qty') || headerText.includes('kuantitas') || headerText.includes('banyak')) {
         colJumlah = colIdx;
-      } else if (headerText.includes('total harga') || (headerText.includes('total') && colIdx > c + 5)) {
+      } else if (headerText.includes('total harga') || (headerText.includes('total') && colIdx > colItem + 3)) {
         colTotalHarga = colIdx;
       } else if (headerText.includes('harga satuan') || headerText.includes('harga unit') || headerText.includes('harga/satuan') || headerText.includes('harga')) {
         colHargaSatuan = colIdx;
-      } else if ((headerText.includes('satuan') || headerText.includes('unit') || headerText === 'item' || headerText.includes('item (satuan)')) && !headerText.includes('harga')) {
+      } else if (
+        (headerText.includes('satuan') ||
+          headerText.includes('unit') ||
+          headerText === 'item' ||
+          headerText.includes('item (satuan)') ||
+          headerText.includes('satuan bahan') ||
+          headerText.includes('item bahan')) &&
+        colIdx !== colItem
+      ) {
         // In Indonesian MBG sheets, 'Item' or 'Satuan' after 'Jumlah' represents the unit (kg, karton, liter, pcs, etc.)
         colSatuan = colIdx;
       } else if (headerText.includes('keterangan') || headerText.includes('spesifikasi') || headerText.includes('ket')) {
         colKeterangan = colIdx;
+      } else if ((headerText === 'supplier' || headerText.includes('supplier')) && colIdx < colItem) {
+        dedicatedSupplierCol = colIdx;
       }
     }
 
-    for (let r = dedicatedSupplierRow + 1; r < Math.min(rows.length, dedicatedSupplierRow + 60); r++) {
+    const KNOWN_UNITS = new Set([
+      'kg', 'karton', 'pcs', 'liter', 'ltr', 'l', 'butir', 'papan', 'bungkus', 'ikat',
+      'gr', 'gram', 'dus', 'sak', 'pack', 'botol', 'bal', 'tray', 'lonjor', 'ekor', 'kaleng', 'lembar'
+    ]);
+
+    for (let r = dedicatedSupplierRow + 1; r < Math.min(rows.length, dedicatedSupplierRow + 70); r++) {
       const row = rows[r] || [];
       const suppInRow = str(row[c]);
       if (suppInRow && !suppInRow.toLowerCase().includes('total') && !suppInRow.startsWith('=')) {
         currentSupplier = suppInRow === 'Koperasi Al Umanaa' ? 'Koperasi Al Umanaa Sejahtera Mandiri' : suppInRow;
       }
-      const item = str(row[colItem]);
+      let item = str(row[colItem]);
       if (!item || item.toLowerCase().includes('total') || item.toLowerCase() === 'list pesanan bahan' || item.startsWith('=')) {
         continue;
       }
+
+      let satuan = str(row[colSatuan]) || '';
+
+      // Unit/Item swap sanity check:
+      // If item is a unit (e.g. 'karton', 'kg', 'pcs', 'liter'), it was accidentally read from the unit column.
+      // Recover or swap with the real List Pesanan Bahan column!
+      if (KNOWN_UNITS.has(item.toLowerCase().trim())) {
+        const candidateItem = dedicatedListPesananCol !== -1 ? str(row[dedicatedListPesananCol]) : '';
+        if (candidateItem && !KNOWN_UNITS.has(candidateItem.toLowerCase().trim())) {
+          satuan = item;
+          item = candidateItem;
+        } else if (satuan && !KNOWN_UNITS.has(satuan.toLowerCase().trim())) {
+          const temp = item;
+          item = satuan;
+          satuan = temp;
+        }
+      }
+      if (!satuan) satuan = 'kg';
 
       let jumlah = num(row[colJumlah]);
       if ((!jumlah || jumlah === 0) && ws) {
@@ -1194,8 +1270,6 @@ export function parseProductionSheetRows(
         if (cellObj?.v != null && cellObj.v !== '' && cellObj.v !== 0) jumlah = num(cellObj.v);
         else if (cellObj?.w != null && cellObj.w !== '' && cellObj.w !== '0') jumlah = num(cellObj.w);
       }
-
-      const satuan = str(row[colSatuan]) || 'kg';
 
       let hargaSatuan = num(row[colHargaSatuan]);
       if ((!hargaSatuan || hargaSatuan === 0) && ws) {
@@ -1232,30 +1306,50 @@ export function parseProductionSheetRows(
   for (let r = 2; r < Math.min(rows.length, 60); r++) {
     const row = rows[r] || [];
     const bSup = str(row[colMap.colSupplierBahan]);
-    const bName = str(row[colMap.colBahanOrder]);
+    let bName = str(row[colMap.colBahanOrder]);
+    let bSat = str(row[colMap.colSatuanBahan]) || 'kg';
     if (bName && bName.toLowerCase() !== 'rincian bahan' && bName.toLowerCase() !== 'total pembelanjaan') {
+      const KNOWN_UNITS_SET = new Set([
+        'kg', 'karton', 'pcs', 'liter', 'ltr', 'l', 'butir', 'papan', 'bungkus', 'ikat',
+        'gr', 'gram', 'dus', 'sak', 'pack', 'botol', 'bal', 'tray', 'lonjor', 'ekor', 'kaleng', 'lembar'
+      ]);
+      if (KNOWN_UNITS_SET.has(bName.toLowerCase().trim()) && !KNOWN_UNITS_SET.has(bSat.toLowerCase().trim())) {
+        const tmp = bName;
+        bName = bSat;
+        bSat = tmp;
+      }
       const hUnit = num(row[colMap.colHargaBahan]);
       const hTotal = num(row[colMap.colHargaTotalBahan]);
       rawPoItems.push({
         supplier: bSup ? (bSup === 'Koperasi Al Umanaa' ? 'Koperasi Al Umanaa Sejahtera Mandiri' : bSup) : 'Koperasi Al Umanaa Sejahtera Mandiri',
         item: bName,
         jumlah: num(row[colMap.colKebutuhanBahan]),
-        satuan: str(row[colMap.colSatuanBahan]) || 'kg',
+        satuan: bSat,
         hargaSatuan: hUnit,
         harga: hTotal,
       });
     }
 
     const bmSup = str(row[colMap.colSupplierBumbu]);
-    const bmName = str(row[colMap.colNamaBumbu]);
+    let bmName = str(row[colMap.colNamaBumbu]);
+    let bmSat = str(row[colMap.colSatuanBumbu]) || 'kg';
     if (bmName && bmName.toLowerCase() !== 'jenis bumbu' && bmName.toLowerCase() !== 'total pembelanjaan bumbu') {
+      const KNOWN_UNITS_SET = new Set([
+        'kg', 'karton', 'pcs', 'liter', 'ltr', 'l', 'butir', 'papan', 'bungkus', 'ikat',
+        'gr', 'gram', 'dus', 'sak', 'pack', 'botol', 'bal', 'tray', 'lonjor', 'ekor', 'kaleng', 'lembar'
+      ]);
+      if (KNOWN_UNITS_SET.has(bmName.toLowerCase().trim()) && !KNOWN_UNITS_SET.has(bmSat.toLowerCase().trim())) {
+        const tmp = bmName;
+        bmName = bmSat;
+        bmSat = tmp;
+      }
       const hUnit = num(row[colMap.colHargaBumbu]);
       const hTotal = num(row[colMap.colHargaTotalBumbu]);
       rawPoItems.push({
         supplier: bmSup ? (bmSup === 'Koperasi Al Umanaa' ? 'Koperasi Al Umanaa Sejahtera Mandiri' : bmSup) : 'Koperasi Al Umanaa Sejahtera Mandiri',
         item: bmName,
         jumlah: num(row[colMap.colKebutuhanBumbu]),
-        satuan: str(row[colMap.colSatuanBumbu]) || 'kg',
+        satuan: bmSat,
         hargaSatuan: hUnit,
         harga: hTotal,
       });

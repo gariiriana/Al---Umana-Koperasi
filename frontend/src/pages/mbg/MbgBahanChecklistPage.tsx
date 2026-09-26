@@ -32,6 +32,7 @@ import {
 } from '@/services/mbgAdminService';
 import {
   subscribeDailyReport,
+  subscribeAllDailyReports,
 } from '@/services/mbgProductionService';
 import {
   subscribeBahanChecklist,
@@ -66,7 +67,8 @@ export function MbgBahanChecklistPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const [batches, setBatches] = useState<MbgPmBatch[]>([]);
+  const [rawBatches, setRawBatches] = useState<MbgPmBatch[]>([]);
+  const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [dailyReport, setDailyReport] = useState<MbgProductionDailyReport | null>(null);
   const [savedForm, setSavedForm] = useState<MbgBahanChecklistForm | null>(null);
@@ -92,18 +94,55 @@ export function MbgBahanChecklistPage() {
   // 1. Subscribe Batches
   useEffect(() => {
     const unsub = subscribeBatches((list) => {
-      setBatches(list);
-      setSelectedBatchId((prev) => {
-        if (!prev && list.length > 0) {
-          const todayStr = getJakartaDate();
-          const active = list.find((b) => b.tanggal === todayStr) || list[0];
-          return active.id;
-        }
-        return prev;
-      });
+      setRawBatches(list);
     });
     return () => unsub();
   }, []);
+
+  // 1b. Subscribe all daily reports from Produksi MBG
+  useEffect(() => {
+    const unsub = subscribeAllDailyReports((reports) => {
+      setAllDailyReports(reports);
+    });
+    return () => unsub();
+  }, []);
+
+  const dailyReportBatchIds = useMemo(
+    () => new Set(allDailyReports.map((r) => r.batchId)),
+    [allDailyReports]
+  );
+  const savedFormBatchIds = useMemo(
+    () => new Set(allForms.map((f) => f.batchId)),
+    [allForms]
+  );
+
+  // Filter batches: ONLY show batches that have been submitted from Produksi MBG
+  // or have a production daily report / inspection form
+  const batches = useMemo(() => {
+    return rawBatches.filter((b) => {
+      if (b.isBackup) return false;
+      // 1. Explicitly submitted to distribution by Produksi MBG
+      if (b.submittedToDistribution === true) return true;
+      // 2. Status indicates batch has progressed through / past production
+      if (['DELIVERING', 'DELIVERED', 'COOKING', 'PURCHASING'].includes(b.status)) return true;
+      // 3. Has a saved daily report with ingredient / PO data from Produksi MBG
+      if (dailyReportBatchIds.has(b.id)) return true;
+      // 4. Has an existing saved checklist inspection form
+      if (savedFormBatchIds.has(b.id)) return true;
+      return false;
+    });
+  }, [rawBatches, dailyReportBatchIds, savedFormBatchIds]);
+
+  // Synchronize selected batch from the submitted batches list
+  useEffect(() => {
+    setSelectedBatchId((prev) => {
+      if (batches.length === 0) return null;
+      if (prev && batches.some((b) => b.id === prev)) return prev;
+      const todayStr = getJakartaDate();
+      const active = batches.find((b) => b.tanggal === todayStr) || batches[0];
+      return active ? active.id : null;
+    });
+  }, [batches]);
 
   const selectedBatch = useMemo(
     () => batches.find((b) => b.id === selectedBatchId),
@@ -175,21 +214,11 @@ export function MbgBahanChecklistPage() {
         setNoForm('01/PBM/IX/2026');
       }
 
-      // Extract ingredients from daily report if available
+      // Extract real ingredients from daily report from Produksi MBG
       const extracted = extractIngredientsFromDailyReport(dailyReport);
-      if (extracted.length > 0) {
-        setRows(extracted);
-      } else {
-        // Sample standard template rows if batch has no data yet (default empty checklists)
-        setRows([
-          { jenisBahan: 'Beras Medium / Premium', banyaknya: 250, satuan: 'kg', isSesuai: null, isBaik: null, notes: '' },
-          { jenisBahan: 'Daging Ayam Broiler', banyaknya: 180, satuan: 'kg', isSesuai: null, isBaik: null, notes: '' },
-          { jenisBahan: 'Telur Ayam Ras', banyaknya: 220, satuan: 'butir', isSesuai: null, isBaik: null, notes: '' },
-          { jenisBahan: 'Wortel Segar', banyaknya: 35, satuan: 'kg', isSesuai: null, isBaik: null, notes: '' },
-          { jenisBahan: 'Buncis', banyaknya: 25, satuan: 'kg', isSesuai: null, isBaik: null, notes: '' },
-          { jenisBahan: 'Tempe Kedelai', banyaknya: 40, satuan: 'papan', isSesuai: null, isBaik: null, notes: '' },
-        ]);
-      }
+      setRows(extracted);
+    } else {
+      setRows([]);
     }
   }, [selectedBatch, savedForm, dailyReport]);
 
@@ -365,6 +394,7 @@ export function MbgBahanChecklistPage() {
                 batches={batches}
                 selectedBatchId={selectedBatchId}
                 onSelectBatch={(id) => setSelectedBatchId(id)}
+                importedBatchIds={dailyReportBatchIds}
               />
             </div>
 
@@ -419,6 +449,11 @@ export function MbgBahanChecklistPage() {
 
       {/* Main Form Canvas (Paper-like WYSIWYG Document Card - Fits 100% on mobile without horizontal scroll) */}
       <div className="max-w-4xl mx-auto px-1 sm:px-4 mt-2 sm:mt-6">
+        {batches.length === 0 && (
+          <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 text-xs text-amber-900 font-bold mb-4 flex items-center gap-2 shadow-xs">
+            <span>⚠️ Belum ada batch yang disubmit dari Produksi MBG. Pastikan batch sudah diproduksi & disubmit dari Produksi MBG agar data bahan otomatis terisi.</span>
+          </div>
+        )}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}

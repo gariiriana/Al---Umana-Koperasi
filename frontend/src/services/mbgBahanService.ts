@@ -297,19 +297,19 @@ export function extractIngredientsFromDailyReport(
 ): MbgInspectionFormRow[] {
   if (!report) return [];
 
-  // 1. If inspectionForm rows already populated
-  if (report.inspectionForm?.rows && report.inspectionForm.rows.length > 0) {
-    return report.inspectionForm.rows.map((r) => ({
-      jenisBahan: r.jenisBahan || '',
-      banyaknya: Number(r.banyaknya) || 0,
-      satuan: r.satuan || 'kg',
-      isSesuai: r.isSesuai ?? null,
-      isBaik: r.isBaik ?? null,
-      notes: r.notes || '',
+  // 1. Direct PO Rows from Produksi MBG (List Pesanan Bahan)
+  if (report.poRows && report.poRows.length > 0) {
+    return report.poRows.map((po) => ({
+      jenisBahan: po.item || '',
+      banyaknya: Number(po.jumlah) || 0,
+      satuan: po.satuan || 'kg',
+      isSesuai: null,
+      isBaik: null,
+      notes: po.keterangan || '',
     }));
   }
 
-  // 2. Fallback from realisasiPembelianRows
+  // 2. Realisasi Pembelian Rows
   if (report.realisasiPembelianRows && report.realisasiPembelianRows.length > 0) {
     return report.realisasiPembelianRows.map((rp) => ({
       jenisBahan: rp.namaBahan || '',
@@ -321,17 +321,44 @@ export function extractIngredientsFromDailyReport(
     }));
   }
 
-  // 3. Fallback from poRows
-  if (report.poRows && report.poRows.length > 0) {
-    return report.poRows.map((po) => ({
-      jenisBahan: po.item || '',
-      banyaknya: Number(po.jumlah) || 0,
-      satuan: po.satuan || 'kg',
-      isSesuai: null,
-      isBaik: null,
-      notes: po.keterangan || '',
+  // 3. If inspectionForm rows already populated with custom inspection items
+  if (report.inspectionForm?.rows && report.inspectionForm.rows.length > 0) {
+    return report.inspectionForm.rows.map((r) => ({
+      jenisBahan: r.jenisBahan || '',
+      banyaknya: Number(r.banyaknya) || 0,
+      satuan: r.satuan || 'kg',
+      isSesuai: r.isSesuai ?? null,
+      isBaik: r.isBaik ?? null,
+      notes: r.notes || '',
     }));
   }
+
+  // 4. Fallback: extract from portion bahanItems and bumbuItems
+  const portionItems: MbgInspectionFormRow[] = [];
+  const seen = new Set<string>();
+  const addItems = (items?: { rincianBahan: string; kebutuhan: number; satuan: string }[]) => {
+    if (!items) return;
+    for (const it of items) {
+      const key = it.rincianBahan.toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      portionItems.push({
+        jenisBahan: it.rincianBahan,
+        banyaknya: it.kebutuhan || 0,
+        satuan: it.satuan || 'kg',
+        isSesuai: null,
+        isBaik: null,
+        notes: '',
+      });
+    }
+  };
+
+  addItems(report.porsiBesar?.bahanItems);
+  addItems(report.porsiKecil?.bahanItems);
+  addItems(report.porsiBesar?.bumbuItems?.map((b) => ({ rincianBahan: b.namaBumbu, kebutuhan: b.kebutuhan, satuan: b.satuan })));
+  addItems(report.porsiKecil?.bumbuItems?.map((b) => ({ rincianBahan: b.namaBumbu, kebutuhan: b.kebutuhan, satuan: b.satuan })));
+
+  if (portionItems.length > 0) return portionItems;
 
   return [];
 }
