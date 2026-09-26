@@ -400,35 +400,35 @@ export function MbgBahanChecklistPage() {
               <span>Arsip ({allForms.length})</span>
             </button>
 
-            {/* Save Button */}
+            {/* Save Button (Desktop only; on mobile it is in the bottom action bar) */}
             <button
               type="button"
               disabled={isSaving}
               onClick={handleSave}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+              className="hidden sm:flex px-3.5 py-1.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
             >
               {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 text-emerald-400" />}
               <span>Simpan Form</span>
             </button>
 
-            {/* Export PDF Button */}
+            {/* Export PDF Button (Desktop only) */}
             <button
               type="button"
               disabled={isExportingPdf}
               onClick={handleExportPdf}
-              className="px-3.5 py-1.5 rounded-xl bg-red-600 text-white font-bold text-xs hover:bg-red-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+              className="hidden sm:flex px-3.5 py-1.5 rounded-xl bg-red-600 text-white font-bold text-xs hover:bg-red-700 transition-colors items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
               title="Export format PDF resmi Badan Gizi Nasional"
             >
               {isExportingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
               <span>Export PDF</span>
             </button>
 
-            {/* Export DOCX Button */}
+            {/* Export DOCX Button (Desktop only) */}
             <button
               type="button"
               disabled={isExportingDocx}
               onClick={handleExportDocx}
-              className="px-3.5 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+              className="hidden sm:flex px-3.5 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 transition-colors items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
               title="Export format Microsoft Word DOCX"
             >
               {isExportingDocx ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
@@ -438,84 +438,72 @@ export function MbgBahanChecklistPage() {
         </div>
       </div>
 
-      {/* Mobile helper notice */}
-      <div className="max-w-4xl mx-auto px-4 sm:hidden mt-3">
-        <div className="flex items-center justify-between text-[11px] text-slate-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
-          <span className="font-bold text-emerald-900 flex items-center gap-1">
-            <ClipboardCheck className="h-3.5 w-3.5 text-emerald-700" />
-            Format Standar A4 Resmi BGN
-          </span>
-          <span className="text-[10px] text-emerald-700 font-semibold">👉 Geser untuk tabel lengkap</span>
-        </div>
-      </div>
-
-      {/* Main Form Canvas (Paper-like WYSIWYG Document Card) */}
-      <div className="max-w-4xl mx-auto px-2 sm:px-4 mt-2 sm:mt-6 overflow-x-auto pb-4">
-        <div className="min-w-[700px] sm:min-w-0">
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-2xl shadow-xl border border-slate-300 p-6 sm:p-10 font-['Times_New_Roman',serif] text-black"
-          >
-            {/* Header section */}
-            <div className="flex items-start justify-between border-b-2 border-black pb-4 mb-4 gap-4">
-              {/* Logo BGN & Title Left */}
-              <div className="flex items-center gap-3 shrink-0">
-                <img
-                  src="/logo_badan_gizi.png"
-                  alt="Badan Gizi Nasional"
-                  className="h-14 w-14 object-contain"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-                <div className="leading-tight">
-                  <span className="font-bold text-sm block tracking-wide">BADAN GIZI</span>
-                  <span className="font-bold text-sm block tracking-wide">NASIONAL</span>
-                </div>
-              </div>
-
-              {/* Form Title & Number Right */}
-              <div className="text-right flex flex-col items-end shrink-0">
-                <h2 className="font-bold text-sm sm:text-base uppercase tracking-tight">
-                  FORM PEMERIKSAAN BAHAN MAKANAN
-                </h2>
-                <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm">
-                  <span>NO :</span>
-                  <input
-                    type="text"
-                    value={noForm}
-                    onChange={(e) => setNoForm(e.target.value)}
-                    className="font-bold border-b border-dashed border-slate-400 focus:border-black outline-hidden px-1 text-right w-44 bg-transparent font-['Times_New_Roman',serif]"
-                    title="Klik untuk mengedit Nomor Formulir"
-                  />
-                </div>
+      {/* Main Form Canvas (Paper-like WYSIWYG Document Card - Fits 100% on mobile without horizontal scroll) */}
+      <div className="max-w-4xl mx-auto px-1 sm:px-4 mt-2 sm:mt-6">
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-xl sm:rounded-2xl shadow-lg sm:shadow-xl border border-slate-300 p-1.5 sm:p-8 md:p-10 font-['Times_New_Roman',serif] text-black overflow-hidden"
+        >
+          {/* Header section */}
+          <div className="flex items-start justify-between border-b sm:border-b-2 border-black pb-2 sm:pb-4 mb-2 sm:mb-4 gap-1 sm:gap-4">
+            {/* Logo BGN & Title Left */}
+            <div className="flex items-center gap-1 sm:gap-3 shrink-0">
+              <img
+                src="/logo_badan_gizi.png"
+                alt="Badan Gizi Nasional"
+                className="h-7 w-7 sm:h-14 sm:w-14 object-contain shrink-0"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+              <div className="leading-tight">
+                <span className="font-bold text-[8px] sm:text-sm block tracking-tight sm:tracking-wide">BADAN GIZI</span>
+                <span className="font-bold text-[8px] sm:text-sm block tracking-tight sm:tracking-wide">NASIONAL</span>
               </div>
             </div>
 
+            {/* Form Title & Number Right */}
+            <div className="text-right flex flex-col items-end shrink-0">
+              <h2 className="font-bold text-[8px] sm:text-base uppercase tracking-tight">
+                FORM PEMERIKSAAN BAHAN MAKANAN
+              </h2>
+              <div className="flex items-center gap-1 mt-0.5 font-bold text-[7px] sm:text-sm">
+                <span>NO :</span>
+                <input
+                  type="text"
+                  value={noForm}
+                  onChange={(e) => setNoForm(e.target.value)}
+                  className="font-bold border-b border-dashed border-slate-400 focus:border-black outline-hidden px-0.5 text-right w-20 sm:w-44 bg-transparent font-['Times_New_Roman',serif] text-[7px] sm:text-sm"
+                  title="Klik untuk mengedit Nomor Formulir"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Metadata Block: Dari, Kepada, Waktu */}
-          <div className="space-y-1.5 text-xs sm:text-sm mb-5 font-normal">
-            <div className="grid grid-cols-[70px_10px_1fr] items-center">
+          <div className="space-y-0.5 sm:space-y-1.5 text-[8px] sm:text-sm mb-2 sm:mb-5 font-normal">
+            <div className="grid grid-cols-[34px_6px_1fr] sm:grid-cols-[70px_10px_1fr] items-center">
               <span className="font-medium">Dari</span>
               <span>:</span>
               <input
                 type="text"
                 value={dari}
                 onChange={(e) => setDari(e.target.value)}
-                className="border-b border-dotted border-slate-300 focus:border-black outline-hidden px-1 w-full bg-transparent font-['Times_New_Roman',serif]"
+                className="border-b border-dotted border-slate-300 focus:border-black outline-hidden px-0.5 w-full bg-transparent font-['Times_New_Roman',serif] text-[8px] sm:text-sm"
               />
             </div>
-            <div className="grid grid-cols-[70px_10px_1fr] items-center">
+            <div className="grid grid-cols-[34px_6px_1fr] sm:grid-cols-[70px_10px_1fr] items-center">
               <span className="font-medium">Kepada</span>
               <span>:</span>
               <input
                 type="text"
                 value={kepada}
                 onChange={(e) => setKepada(e.target.value)}
-                className="border-b border-dotted border-slate-300 focus:border-black outline-hidden px-1 w-full bg-transparent font-['Times_New_Roman',serif]"
+                className="border-b border-dotted border-slate-300 focus:border-black outline-hidden px-0.5 w-full bg-transparent font-['Times_New_Roman',serif] text-[8px] sm:text-sm"
               />
             </div>
-            <div className="grid grid-cols-[70px_10px_1fr] items-center">
+            <div className="grid grid-cols-[34px_6px_1fr] sm:grid-cols-[70px_10px_1fr] items-center">
               <span className="font-medium">Waktu</span>
               <span>:</span>
               <input
@@ -523,38 +511,76 @@ export function MbgBahanChecklistPage() {
                 value={waktu}
                 onChange={(e) => setWaktu(e.target.value)}
                 placeholder="Contoh: 06.00 - 08.00 WIB"
-                className="border-b border-dotted border-slate-300 focus:border-black outline-hidden px-1 w-full bg-transparent font-['Times_New_Roman',serif]"
+                className="border-b border-dotted border-slate-300 focus:border-black outline-hidden px-0.5 w-full bg-transparent font-['Times_New_Roman',serif] text-[8px] sm:text-sm"
               />
             </div>
           </div>
 
-          {/* Interactive Inspection Table */}
-          <div className="overflow-x-auto border border-black">
-            <table className="w-full text-xs border-collapse border border-black font-['Times_New_Roman',serif]">
+          {/* Interactive Inspection Table (Fits 100% on mobile without horizontal scroll) */}
+          <div className="border border-black overflow-hidden rounded-xs sm:rounded-none">
+            <table className="w-full table-fixed text-[8px] sm:text-xs border-collapse font-['Times_New_Roman',serif]">
+              <colgroup>
+                <col className="w-[6%] sm:w-[5%]" />
+                <col className="w-[32%] sm:w-[32%]" />
+                <col className="w-[11%] sm:w-[10%]" />
+                <col className="w-[9%] sm:w-[8%]" />
+                <col className="w-[6%] sm:w-[6%]" />
+                <col className="w-[6%] sm:w-[6%]" />
+                <col className="w-[6%] sm:w-[6%]" />
+                <col className="w-[6%] sm:w-[6%]" />
+                <col className="w-[13%] sm:w-[16%]" />
+                <col className="w-[5%] sm:w-[5%]" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-black text-center font-bold">
-                  <th rowSpan={2} className="border-r border-black p-1.5 w-8">No</th>
-                  <th rowSpan={2} className="border-r border-black p-1.5 min-w-[180px]">Jenis Bahan Makanan</th>
-                  <th rowSpan={2} className="border-r border-black p-1.5 w-20 leading-tight">
-                    Banyaknya<br />(Angka)
+                  <th rowSpan={2} className="border-r border-black p-0 sm:p-1.5">No</th>
+                  <th rowSpan={2} className="border-r border-black p-0 sm:p-1.5 text-left sm:text-center">
+                    Jenis Bahan Makanan
                   </th>
-                  <th rowSpan={2} className="border-r border-black p-1.5 w-14">Satuan</th>
-                  <th colSpan={2} className="border-r border-black p-1 text-center">Jumlah</th>
-                  <th colSpan={2} className="border-r border-black p-1 text-center">Kondisi Bahan Makanan</th>
-                  <th rowSpan={2} className="border-r border-black p-1.5 min-w-[120px]">Keterangan</th>
-                  <th rowSpan={2} className="p-1 w-8 text-center no-print"></th>
+                  <th rowSpan={2} className="border-r border-black p-0 sm:p-1.5 leading-tight">
+                    <span className="hidden sm:inline">Banyaknya<br />(Angka)</span>
+                    <span className="sm:hidden text-[7px] leading-none block">Banyak</span>
+                  </th>
+                  <th rowSpan={2} className="border-r border-black p-0 sm:p-1.5">
+                    <span className="hidden sm:inline">Satuan</span>
+                    <span className="sm:hidden text-[7px] block">Sat</span>
+                  </th>
+                  <th colSpan={2} className="border-r border-black p-0 sm:p-1 text-center">
+                    Jumlah
+                  </th>
+                  <th colSpan={2} className="border-r border-black p-0 sm:p-1 text-center">
+                    <span className="hidden sm:inline">Kondisi Bahan Makanan</span>
+                    <span className="sm:hidden text-[7px] block">Kondisi</span>
+                  </th>
+                  <th rowSpan={2} className="border-r border-black p-0 sm:p-1.5">
+                    <span className="hidden sm:inline">Keterangan</span>
+                    <span className="sm:hidden text-[7px] block">Ket</span>
+                  </th>
+                  <th rowSpan={2} className="p-0 text-center no-print"></th>
                 </tr>
-                <tr className="border-b border-black text-center font-bold text-[11px]">
-                  <th className="border-r border-black p-1 w-12 bg-slate-50">Sesuai</th>
-                  <th className="border-r border-black p-1 w-12 bg-slate-50">Tidak</th>
-                  <th className="border-r border-black p-1 w-12 bg-slate-50">Baik</th>
-                  <th className="border-r border-black p-1 w-12 bg-slate-50">Rusak</th>
+                <tr className="border-b border-black text-center font-bold text-[7px] sm:text-[11px]">
+                  <th className="border-r border-black p-0 sm:p-1 bg-slate-50">
+                    <span className="hidden sm:inline">Sesuai</span>
+                    <span className="sm:hidden">S</span>
+                  </th>
+                  <th className="border-r border-black p-0 sm:p-1 bg-slate-50">
+                    <span className="hidden sm:inline">Tidak</span>
+                    <span className="sm:hidden">T</span>
+                  </th>
+                  <th className="border-r border-black p-0 sm:p-1 bg-slate-50">
+                    <span className="hidden sm:inline">Baik</span>
+                    <span className="sm:hidden">B</span>
+                  </th>
+                  <th className="border-r border-black p-0 sm:p-1 bg-slate-50">
+                    <span className="hidden sm:inline">Rusak</span>
+                    <span className="sm:hidden">R</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="p-4 text-center text-slate-400 italic font-sans text-xs">
+                    <td colSpan={10} className="p-3 sm:p-4 text-center text-slate-400 italic font-sans text-[10px] sm:text-xs">
                       Belum ada data bahan. Klik tombol "Tambah Baris Bahan" di bawah.
                     </td>
                   </tr>
@@ -562,112 +588,112 @@ export function MbgBahanChecklistPage() {
                   rows.map((row, idx) => (
                     <tr key={idx} className="border-b border-black hover:bg-slate-50/70 transition-colors">
                       {/* 1. No */}
-                      <td className="border-r border-black p-1 text-center font-semibold">
+                      <td className="border-r border-black p-0 sm:p-1 text-center font-semibold text-[8px] sm:text-xs">
                         {idx + 1}
                       </td>
 
                       {/* 2. Jenis Bahan Makanan */}
-                      <td className="border-r border-black p-1">
+                      <td className="border-r border-black p-0 sm:p-1 overflow-hidden">
                         <input
                           type="text"
                           value={row.jenisBahan}
                           onChange={(e) => handleUpdateRow(idx, { jenisBahan: e.target.value })}
-                          className="w-full bg-transparent px-1 py-0.5 outline-hidden focus:bg-amber-50/60 font-semibold"
+                          className="w-full bg-transparent px-0.5 py-0 outline-hidden focus:bg-amber-50/60 font-semibold text-[8px] sm:text-xs leading-tight"
                         />
                       </td>
 
                       {/* 3. Banyaknya (Angka) */}
-                      <td className="border-r border-black p-1 text-center">
+                      <td className="border-r border-black p-0 sm:p-1 text-center">
                         <input
                           type="number"
                           value={row.banyaknya || ''}
                           onChange={(e) => handleUpdateRow(idx, { banyaknya: parseFloat(e.target.value) || 0 })}
-                          className="w-full text-center bg-transparent px-1 py-0.5 outline-hidden focus:bg-amber-50/60 font-bold"
+                          className="w-full text-center bg-transparent px-0.5 py-0 outline-hidden focus:bg-amber-50/60 font-bold text-[8px] sm:text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </td>
 
                       {/* 4. Satuan */}
-                      <td className="border-r border-black p-1 text-center">
+                      <td className="border-r border-black p-0 sm:p-1 text-center">
                         <input
                           type="text"
                           value={row.satuan}
                           onChange={(e) => handleUpdateRow(idx, { satuan: e.target.value })}
-                          className="w-full text-center bg-transparent px-1 py-0.5 outline-hidden focus:bg-amber-50/60"
+                          className="w-full text-center bg-transparent px-0.5 py-0 outline-hidden focus:bg-amber-50/60 text-[8px] sm:text-xs"
                         />
                       </td>
 
                       {/* 5. Jumlah: Sesuai */}
                       <td
                         onClick={() => handleUpdateRow(idx, { isSesuai: true })}
-                        className="border-r border-black p-1 text-center cursor-pointer hover:bg-emerald-50 select-none"
+                        className="border-r border-black p-0 sm:p-1 text-center cursor-pointer hover:bg-emerald-50 select-none"
                       >
                         <input
                           type="checkbox"
                           checked={row.isSesuai === true}
                           onChange={() => handleUpdateRow(idx, { isSesuai: true })}
-                          className="h-3.5 w-3.5 accent-emerald-600 cursor-pointer"
+                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-emerald-600 cursor-pointer align-middle"
                         />
                       </td>
 
                       {/* 6. Jumlah: Tidak Sesuai */}
                       <td
                         onClick={() => handleUpdateRow(idx, { isSesuai: false })}
-                        className="border-r border-black p-1 text-center cursor-pointer hover:bg-red-50 select-none"
+                        className="border-r border-black p-0 sm:p-1 text-center cursor-pointer hover:bg-red-50 select-none"
                       >
                         <input
                           type="checkbox"
                           checked={row.isSesuai === false}
                           onChange={() => handleUpdateRow(idx, { isSesuai: false })}
-                          className="h-3.5 w-3.5 accent-red-600 cursor-pointer"
+                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-red-600 cursor-pointer align-middle"
                         />
                       </td>
 
                       {/* 7. Kondisi: Baik */}
                       <td
                         onClick={() => handleUpdateRow(idx, { isBaik: true })}
-                        className="border-r border-black p-1 text-center cursor-pointer hover:bg-emerald-50 select-none"
+                        className="border-r border-black p-0 sm:p-1 text-center cursor-pointer hover:bg-emerald-50 select-none"
                       >
                         <input
                           type="checkbox"
                           checked={row.isBaik === true}
                           onChange={() => handleUpdateRow(idx, { isBaik: true })}
-                          className="h-3.5 w-3.5 accent-emerald-600 cursor-pointer"
+                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-emerald-600 cursor-pointer align-middle"
                         />
                       </td>
 
                       {/* 8. Kondisi: Rusak */}
                       <td
                         onClick={() => handleUpdateRow(idx, { isBaik: false })}
-                        className="border-r border-black p-1 text-center cursor-pointer hover:bg-red-50 select-none"
+                        className="border-r border-black p-0 sm:p-1 text-center cursor-pointer hover:bg-red-50 select-none"
                       >
                         <input
                           type="checkbox"
                           checked={row.isBaik === false}
                           onChange={() => handleUpdateRow(idx, { isBaik: false })}
-                          className="h-3.5 w-3.5 accent-red-600 cursor-pointer"
+                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-red-600 cursor-pointer align-middle"
                         />
                       </td>
 
                       {/* 9. Keterangan */}
-                      <td className="border-r border-black p-1">
+                      <td className="border-r border-black p-0 sm:p-1">
                         <input
                           type="text"
                           value={row.notes || ''}
                           onChange={(e) => handleUpdateRow(idx, { notes: e.target.value })}
-                          placeholder="Catatan / spesifikasi..."
-                          className="w-full bg-transparent px-1 py-0.5 outline-hidden focus:bg-amber-50/60"
+                          placeholder="..."
+                          className="w-full bg-transparent px-0.5 py-0 outline-hidden focus:bg-amber-50/60 text-[8px] sm:text-xs"
                         />
                       </td>
 
                       {/* 10. Delete Button */}
-                      <td className="p-1 text-center no-print">
+                      <td className="p-0 text-center no-print">
                         <button
                           type="button"
                           onClick={() => handleDeleteRow(idx)}
-                          className="p-1 text-slate-300 hover:text-red-600 transition-colors cursor-pointer"
+                          className="p-0.5 text-slate-300 hover:text-red-600 transition-colors cursor-pointer"
                           title="Hapus baris bahan"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 mx-auto" />
                         </button>
                       </td>
                     </tr>
@@ -677,35 +703,42 @@ export function MbgBahanChecklistPage() {
             </table>
           </div>
 
-          {/* Add Row Button */}
-          <div className="mt-3 flex justify-between items-center text-xs font-sans">
+          {/* Add Row Button & Legend */}
+          <div className="mt-2 sm:mt-3 flex justify-between items-center text-[8px] sm:text-xs font-sans">
             <button
               type="button"
               onClick={handleAddRow}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-slate-300 text-slate-700 hover:border-slate-500 hover:bg-slate-50 font-bold transition-all cursor-pointer"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 sm:px-3 sm:py-1.5 rounded-lg border border-dashed border-slate-300 text-slate-700 hover:border-slate-500 hover:bg-slate-50 font-bold transition-all cursor-pointer text-[8px] sm:text-xs"
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-600" />
               <span>Tambah Baris Bahan</span>
             </button>
-            <span className="text-slate-400">Total {rows.length} item bahan baku</span>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="sm:hidden text-[7px] text-slate-400">
+                S=Sesuai T=Tidak B=Baik R=Rusak
+              </span>
+              <span className="text-slate-500 font-medium">
+                Total {rows.length} item
+              </span>
+            </div>
           </div>
 
           {/* Signature Block (Bottom Right) */}
-          <div className="mt-10 flex justify-end font-['Times_New_Roman',serif] text-xs sm:text-sm">
-            <div className="text-left w-64">
-              <div className="flex items-center gap-1">
+          <div className="mt-5 sm:mt-10 flex justify-end font-['Times_New_Roman',serif] text-[9px] sm:text-sm">
+            <div className="text-left w-40 sm:w-64">
+              <div className="flex items-center gap-0.5 sm:gap-1">
                 <input
                   type="text"
                   value={lokasiTtd}
                   onChange={(e) => setLokasiTtd(e.target.value)}
-                  className="w-20 border-b border-dotted border-slate-300 focus:border-black outline-hidden bg-transparent"
+                  className="w-14 sm:w-20 border-b border-dotted border-slate-300 focus:border-black outline-hidden bg-transparent text-[9px] sm:text-sm"
                 />
                 <span>,</span>
                 <input
                   type="text"
                   value={tanggalTtd}
                   onChange={(e) => setTanggalTtd(e.target.value)}
-                  className="w-36 border-b border-dotted border-slate-300 focus:border-black outline-hidden bg-transparent"
+                  className="w-24 sm:w-36 border-b border-dotted border-slate-300 focus:border-black outline-hidden bg-transparent text-[9px] sm:text-sm"
                 />
               </div>
 
@@ -713,11 +746,11 @@ export function MbgBahanChecklistPage() {
                 type="text"
                 value={officerTitle}
                 onChange={(e) => setOfficerTitle(e.target.value)}
-                className="w-full mt-1 border-b border-dotted border-slate-300 focus:border-black outline-hidden bg-transparent"
+                className="w-full mt-0.5 sm:mt-1 border-b border-dotted border-slate-300 focus:border-black outline-hidden bg-transparent text-[9px] sm:text-sm"
               />
 
               {/* Signature space */}
-              <div className="h-20 flex items-center justify-center text-slate-300 italic text-[11px] font-sans">
+              <div className="h-10 sm:h-20 flex items-center justify-center text-slate-300 italic text-[9px] sm:text-[11px] font-sans">
                 (Tanda Tangan)
               </div>
 
@@ -725,16 +758,15 @@ export function MbgBahanChecklistPage() {
                 type="text"
                 value={officerName}
                 onChange={(e) => setOfficerName(e.target.value)}
-                className="w-full font-bold border-b border-dotted border-slate-300 focus:border-black outline-hidden bg-transparent"
+                className="w-full font-bold border-b border-dotted border-slate-300 focus:border-black outline-hidden bg-transparent text-[9px] sm:text-sm"
               />
             </div>
           </div>
         </motion.div>
-        </div>
       </div>
 
       {/* Action Bar Paling Bawah (Simpan Form, Export PDF, Export DOCX) */}
-      <div className="max-w-4xl mx-auto px-4 mt-4 mb-10">
+      <div className="max-w-4xl mx-auto px-1 sm:px-4 mt-3 sm:mt-4 mb-10">
         <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 font-['Hanken_Grotesk']">
           <div>
             <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">

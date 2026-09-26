@@ -327,31 +327,33 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
       />
 
       {/* Sub Tabs: Input / Foto Bahan vs Arsip Dokumentasi Bahan */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-3 gap-3">
+      <div className="flex items-center justify-between border-b border-slate-200 pb-3 gap-2 sm:gap-3">
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => setSubTab('capture')}
-            className={`flex-1 sm:flex-none px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 ${
+            className={`flex-1 sm:flex-none px-2.5 sm:px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap ${
               subTab === 'capture'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            <Camera className="h-4 w-4" />
-            <span>Foto & Dokumentasi Bahan</span>
+            <Camera className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+            <span className="hidden sm:inline">Foto & Dokumentasi Bahan</span>
+            <span className="sm:hidden inline">Foto Bahan</span>
           </button>
           <button
             type="button"
             onClick={() => setSubTab('archive')}
-            className={`flex-1 sm:flex-none px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 ${
+            className={`flex-1 sm:flex-none px-2.5 sm:px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap ${
               subTab === 'archive'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            <History className="h-4 w-4" />
-            <span>Arsip Dokumentasi ({allDocs.length})</span>
+            <History className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+            <span className="hidden sm:inline">Arsip Dokumentasi ({allDocs.length})</span>
+            <span className="sm:hidden inline">Arsip ({allDocs.length})</span>
           </button>
         </div>
       </div>
