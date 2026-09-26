@@ -426,20 +426,16 @@ export function MbgBahanChecklistPage() {
         >
           {/* Header section */}
           <div className="flex items-start justify-between border-b sm:border-b-2 border-black pb-2 sm:pb-4 mb-2 sm:mb-4 gap-1 sm:gap-4">
-            {/* Logo BGN & Title Left */}
-            <div className="flex items-center gap-1 sm:gap-3 shrink-0">
+            {/* Logo BGN Resmi */}
+            <div className="flex items-center shrink-0">
               <img
-                src="/logo_badan_gizi.png"
+                src="/logo_bgn_official.png"
                 alt="Badan Gizi Nasional"
-                className="h-7 w-7 sm:h-14 sm:w-14 object-contain shrink-0"
+                className="h-7 sm:h-14 w-auto object-contain shrink-0"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
+                  (e.target as HTMLImageElement).src = '/logo_badan_gizi.png';
                 }}
               />
-              <div className="leading-tight">
-                <span className="font-bold text-[8px] sm:text-sm block tracking-tight sm:tracking-wide">BADAN GIZI</span>
-                <span className="font-bold text-[8px] sm:text-sm block tracking-tight sm:tracking-wide">NASIONAL</span>
-              </div>
             </div>
 
             {/* Form Title & Number Right */}

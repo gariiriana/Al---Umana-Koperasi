@@ -231,6 +231,73 @@ describe('productionSheetParser - Dynamic Menu & Fruit Parsing', () => {
     expect(semangkaPo?.totalHarga).toBe(500000);
     expect(semangkaPo?.hargaSatuan).toBe(0); // Harga satuan not detected, as requested
   });
+
+  it('correctly maps List Pesanan Bahan as item name and Item as unit (satuan) from user spreadsheet format', () => {
+    const rows: unknown[][] = [];
+    for (let i = 0; i < 10; i++) rows[i] = [];
+
+    // Header matching user spreadsheet columns AP..AW
+    rows[0][41] = 'Supplier';
+    rows[0][42] = 'List Pesanan Bahan';
+    rows[0][43] = 'Jam Kedatangan';
+    rows[0][44] = 'Jumlah';
+    rows[0][45] = 'Item';
+    rows[0][46] = 'Keterangan';
+    rows[0][47] = 'Harga Satuan';
+    rows[0][48] = 'Total Harga';
+
+    // Row 1
+    rows[1][41] = 'INDOGROSIR';
+    rows[1][42] = 'Minyak Goreng';
+    rows[1][43] = '06:00';
+    rows[1][44] = 5;
+    rows[1][45] = 'karton';
+    rows[1][46] = 'Sesuai Spesifikasi';
+    rows[1][47] = 252000;
+    rows[1][48] = 1260000;
+
+    // Row 2
+    rows[2][41] = 'H. DONAT';
+    rows[2][42] = 'Beras Putih (Premium)';
+    rows[2][43] = '';
+    rows[2][44] = 256;
+    rows[2][45] = 'kg';
+    rows[2][46] = '';
+    rows[2][47] = 14800;
+    rows[2][48] = 3793240;
+
+    const report = parseProductionSheetRows(rows, 'batch-user', '2026-09-26', 'HARI 1');
+    expect(report.poRows).toBeDefined();
+    expect(report.poRows.length).toBe(2);
+
+    // Row 1 checks
+    expect(report.poRows[0].supplier).toBe('INDOGROSIR');
+    expect(report.poRows[0].item).toBe('Minyak Goreng'); // NOT 'karton'!
+    expect(report.poRows[0].jumlah).toBe(5);
+    expect(report.poRows[0].satuan).toBe('karton');
+    expect(report.poRows[0].hargaSatuan).toBe(252000);
+    expect(report.poRows[0].totalHarga).toBe(1260000);
+
+    // Row 2 checks
+    expect(report.poRows[1].supplier).toBe('H. DONAT');
+    expect(report.poRows[1].item).toBe('Beras Putih (Premium)'); // NOT 'kg'!
+    expect(report.poRows[1].jumlah).toBe(256);
+    expect(report.poRows[1].satuan).toBe('kg');
+    expect(report.poRows[1].hargaSatuan).toBe(14800);
+    expect(report.poRows[1].totalHarga).toBe(3793240);
+
+    // Realisasi pembelian checks
+    expect(report.realisasiPembelianRows[0].namaBahan).toBe('Minyak Goreng');
+    expect(report.realisasiPembelianRows[0].satuan).toBe('karton');
+    expect(report.realisasiPembelianRows[1].namaBahan).toBe('Beras Putih (Premium)');
+    expect(report.realisasiPembelianRows[1].satuan).toBe('kg');
+
+    // Inspection form checks (checkboxes must be null / empty)
+    expect(report.inspectionForm.rows[0].jenisBahan).toBe('Minyak Goreng');
+    expect(report.inspectionForm.rows[0].satuan).toBe('karton');
+    expect(report.inspectionForm.rows[0].isSesuai).toBeNull();
+    expect(report.inspectionForm.rows[0].isBaik).toBeNull();
+  });
 });
 
 describe('productionSheetParser - Penerima Manfaat import fidelity', () => {

@@ -70,12 +70,18 @@ function triggerDownload(blob: Blob, filename: string) {
 export async function exportBahanChecklistDocx(form: MbgBahanChecklistForm): Promise<void> {
   const children: (Paragraph | Table)[] = [];
 
-  // Header Table: Logo & "BADAN GIZI NASIONAL" on left, "FORM PEMERIKSAAN..." on right
+  // Header Table: Logo Badan Gizi Nasional on left, "FORM PEMERIKSAAN..." on right
   let logoBytes: Uint8Array | null = null;
+  let logoRatio = 2.376;
   try {
-    const logoInfo = await getBase64ImageWithDimensions('/logo_badan_gizi.png');
+    const logoInfo =
+      (await getBase64ImageWithDimensions('/logo_bgn_official.png', 'image/png')) ||
+      (await getBase64ImageWithDimensions('/logo_badan_gizi.png', 'image/png'));
     if (logoInfo?.dataUrl) {
       logoBytes = dataUriToUint8Array(logoInfo.dataUrl);
+      if (logoInfo.height > 0) {
+        logoRatio = logoInfo.width / logoInfo.height;
+      }
     }
   } catch {
     // ignore
@@ -83,26 +89,21 @@ export async function exportBahanChecklistDocx(form: MbgBahanChecklistForm): Pro
 
   const leftHeaderParagraphs: Paragraph[] = [];
   if (logoBytes) {
+    const h = 48;
+    const w = Math.round(h * logoRatio);
     leftHeaderParagraphs.push(
       new Paragraph({
         children: [
           new ImageRun({
             data: logoBytes,
-            transformation: { width: 55, height: 55 },
+            transformation: { width: w, height: h },
             type: 'png',
           }),
         ],
-        spacing: { after: 40 },
+        spacing: { after: 20 },
       })
     );
   }
-  leftHeaderParagraphs.push(
-    new Paragraph({
-      children: [
-        new TextRun({ text: 'BADAN GIZI NASIONAL', bold: true, size: 20, font: 'Times New Roman' }),
-      ],
-    })
-  );
 
   const rightHeaderParagraphs = [
     new Paragraph({

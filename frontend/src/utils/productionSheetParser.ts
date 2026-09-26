@@ -1147,21 +1147,33 @@ export function parseProductionSheetRows(
 
     // Scan headers dynamically to find exact column indices
     let colItem = c + 1;
+    let colJamKedatangan = c + 2;
     let colJumlah = c + 3;
     let colSatuan = c + 4;
+    let colKeterangan = c + 5;
+    let colHargaSatuan = c + 6;
     let colTotalHarga = c + 7;
 
     const headRow = rows[dedicatedSupplierRow] || [];
     for (let colIdx = c; colIdx < Math.min(headRow.length, c + 12); colIdx++) {
-      const headerText = str(headRow[colIdx]).toLowerCase();
-      if ((headerText.includes('pesanan') || headerText.includes('item') || headerText.includes('bahan')) && !headerText.includes('satuan') && !headerText.includes('harga')) {
+      const headerText = str(headRow[colIdx]).toLowerCase().trim();
+      if (!headerText) continue;
+
+      if ((headerText.includes('pesanan') || headerText.includes('nama bahan') || headerText.includes('list bahan') || (headerText.includes('bahan') && !headerText.includes('satuan'))) && !headerText.includes('harga')) {
         colItem = colIdx;
-      } else if (headerText.includes('jumlah') || headerText.includes('qty') || headerText.includes('kuantitas')) {
+      } else if (headerText.includes('kedatangan') || headerText.includes('jam')) {
+        colJamKedatangan = colIdx;
+      } else if (headerText.includes('jumlah') || headerText.includes('qty') || headerText.includes('kuantitas') || headerText.includes('banyak')) {
         colJumlah = colIdx;
-      } else if (headerText.includes('satuan') && !headerText.includes('harga')) {
-        colSatuan = colIdx;
       } else if (headerText.includes('total harga') || (headerText.includes('total') && colIdx > c + 5)) {
         colTotalHarga = colIdx;
+      } else if (headerText.includes('harga satuan') || headerText.includes('harga unit') || headerText.includes('harga/satuan') || headerText.includes('harga')) {
+        colHargaSatuan = colIdx;
+      } else if ((headerText.includes('satuan') || headerText.includes('unit') || headerText === 'item' || headerText.includes('item (satuan)')) && !headerText.includes('harga')) {
+        // In Indonesian MBG sheets, 'Item' or 'Satuan' after 'Jumlah' represents the unit (kg, karton, liter, pcs, etc.)
+        colSatuan = colIdx;
+      } else if (headerText.includes('keterangan') || headerText.includes('spesifikasi') || headerText.includes('ket')) {
+        colKeterangan = colIdx;
       }
     }
 
@@ -1185,6 +1197,13 @@ export function parseProductionSheetRows(
 
       const satuan = str(row[colSatuan]) || 'kg';
 
+      let hargaSatuan = num(row[colHargaSatuan]);
+      if ((!hargaSatuan || hargaSatuan === 0) && ws) {
+        const cellObj = ws[XLSX.utils.encode_cell({ r, c: colHargaSatuan })];
+        if (cellObj?.v != null && cellObj.v !== '' && cellObj.v !== 0) hargaSatuan = num(cellObj.v);
+        else if (cellObj?.w != null && cellObj.w !== '' && cellObj.w !== '0') hargaSatuan = num(cellObj.w);
+      }
+
       let totalHarga = num(row[colTotalHarga]);
       if ((!totalHarga || totalHarga === 0) && ws) {
         const cellObj = ws[XLSX.utils.encode_cell({ r, c: colTotalHarga })];
@@ -1192,14 +1211,17 @@ export function parseProductionSheetRows(
         else if (cellObj?.w != null && cellObj.w !== '' && cellObj.w !== '0') totalHarga = num(cellObj.w);
       }
 
+      const jamKedatangan = str(row[colJamKedatangan]);
+      const keterangan = str(row[colKeterangan]);
+
       dedicatedPoRows.push({
         supplier: currentSupplier,
         item,
-        jamKedatangan: '',
-        jumlah: Math.round(jumlah),
+        jamKedatangan: jamKedatangan || '06:00',
+        jumlah: Math.round(jumlah * 100) / 100,
         satuan,
-        keterangan: 'Sesuai Spesifikasi',
-        hargaSatuan: 0,
+        keterangan: keterangan || 'Sesuai Spesifikasi',
+        hargaSatuan: hargaSatuan > 0 ? hargaSatuan : 0,
         totalHarga: totalHarga > 0 ? totalHarga : 0,
       });
     }
@@ -1303,8 +1325,8 @@ export function parseProductionSheetRows(
     jenisBahan: po.item,
     banyaknya: po.jumlah,
     satuan: po.satuan,
-    isSesuai: true,
-    isBaik: true,
+    isSesuai: null,
+    isBaik: null,
     notes: 'Kualitas Segar & Sesuai Spesifikasi',
   }));
 

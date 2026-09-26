@@ -48,21 +48,18 @@ export async function exportBahanChecklistPdf(form: MbgBahanChecklistForm): Prom
 
   // 1. Logo Badan Gizi Nasional (Top Left)
   try {
-    const logoInfo = await getBase64ImageWithDimensions('/logo_badan_gizi.png');
+    const logoInfo =
+      (await getBase64ImageWithDimensions('/logo_bgn_official.png', 'image/png')) ||
+      (await getBase64ImageWithDimensions('/logo_badan_gizi.png', 'image/png'));
     if (logoInfo) {
-      // Draw BGN round emblem logo + text
-      doc.addImage(logoInfo.dataUrl, 'PNG', margin, 12, 18, 18);
+      const targetHeight = 14;
+      const ratio = logoInfo.height > 0 ? logoInfo.width / logoInfo.height : 2.376;
+      const targetWidth = Math.min(42, Math.round(targetHeight * ratio * 10) / 10);
+      doc.addImage(logoInfo.dataUrl, 'PNG', margin, 11, targetWidth, targetHeight);
     }
   } catch (err) {
     console.warn('[PDF] Could not load BGN logo:', err);
   }
-
-  // Text next to Logo: BADAN GIZI NASIONAL
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(20, 20, 20);
-  doc.text('BADAN GIZI', margin + 21, 19);
-  doc.text('NASIONAL', margin + 21, 24);
 
   // 2. Title & Nomor Form (Top Right / Center)
   doc.setFont('times', 'bold');
