@@ -1146,15 +1146,16 @@ export function MbgDistributionPage() {
           {selectedBatchId ? (
             <>
               {/* Tab Controller */}
-              <div className="flex gap-1 mb-6 bg-[#F3F4F6] rounded-xl p-1 max-w-2xl">
+              <div className="flex gap-1.5 mb-6 bg-[#F3F4F6] rounded-xl p-1 overflow-x-auto no-scrollbar max-w-2xl">
                 {(['assignment', 'reports', 'bahan'] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`flex-1 py-2.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${activeTab === tab
-                        ? 'bg-white text-[#111827] shadow-sm'
+                    className={`shrink-0 sm:flex-1 py-2 sm:py-2.5 px-3.5 sm:px-3 rounded-lg text-xs font-bold cursor-pointer transition-all whitespace-nowrap ${
+                      activeTab === tab
+                        ? 'bg-white text-[#111827] shadow-sm font-black'
                         : 'text-[#6B7280] hover:text-[#111827]'
-                      }`}
+                    }`}
                   >
                     {tab === 'assignment'
                       ? '🚚 Penugasan Kurir'

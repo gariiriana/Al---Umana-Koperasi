@@ -327,12 +327,12 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
       />
 
       {/* Sub Tabs: Input / Foto Bahan vs Arsip Dokumentasi Bahan */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-3 gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between border-b border-slate-200 pb-3 gap-3">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => setSubTab('capture')}
-            className={`px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
+            className={`flex-1 sm:flex-none px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 ${
               subTab === 'capture'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -344,52 +344,16 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
           <button
             type="button"
             onClick={() => setSubTab('archive')}
-            className={`px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
+            className={`flex-1 sm:flex-none px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 ${
               subTab === 'archive'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
             <History className="h-4 w-4" />
-            <span>Arsip Dokumentasi Bahan ({allDocs.length})</span>
+            <span>Arsip Dokumentasi ({allDocs.length})</span>
           </button>
         </div>
-
-        {subTab === 'capture' && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              disabled={isSaving}
-              onClick={handleSaveDocumentation}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
-            >
-              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 text-emerald-400" />}
-              <span>Simpan ke Arsip</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={isExportingPdf}
-              onClick={handleExportPdf}
-              className="px-3.5 py-1.5 rounded-xl bg-red-600 text-white font-bold text-xs hover:bg-red-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
-              title="Export PDF Dokumentasi Bahan"
-            >
-              {isExportingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
-              <span>Export PDF</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={isExportingDocx}
-              onClick={handleExportDocx}
-              className="px-3.5 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
-              title="Export Word DOCX Dokumentasi Bahan"
-            >
-              {isExportingDocx ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-              <span>Export DOCX</span>
-            </button>
-          </div>
-        )}
       </div>
 
       {/* VIEW 1: CAPTURE FOTO BAHAN */}
@@ -647,6 +611,55 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
               <Plus className="h-4 w-4 text-emerald-600" />
               <span>Tambah Bahan Baku Lain</span>
             </button>
+          </div>
+
+          {/* Action Bar Paling Bawah (Simpan Arsip, Export PDF, Export DOCX) */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm mt-6">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+              <div>
+                <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                  <Save className="h-4 w-4 text-emerald-600" />
+                  Finalisasi Dokumentasi Bahan
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Simpan hasil foto ke arsip sistem atau download laporan resmi PDF & Word.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={handleSaveDocumentation}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 text-emerald-400" />}
+                  <span>Simpan ke Arsip</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isExportingPdf}
+                  onClick={handleExportPdf}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+                  title="Export PDF Dokumentasi Bahan"
+                >
+                  {isExportingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+                  <span>Export PDF</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isExportingDocx}
+                  onClick={handleExportDocx}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+                  title="Export Word DOCX Dokumentasi Bahan"
+                >
+                  {isExportingDocx ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                  <span>Export DOCX</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

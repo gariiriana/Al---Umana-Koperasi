@@ -438,48 +438,60 @@ export function MbgBahanChecklistPage() {
         </div>
       </div>
 
-      {/* Main Form Canvas (Paper-like WYSIWYG Document Card) */}
-      <div className="max-w-4xl mx-auto px-4 mt-6">
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl shadow-xl border border-slate-300 p-6 sm:p-10 font-['Times_New_Roman',serif] text-black"
-        >
-          {/* Header section */}
-          <div className="flex items-start justify-between border-b border-black pb-4 mb-4">
-            {/* Logo BGN & Title Left */}
-            <div className="flex items-center gap-3">
-              <img
-                src="/logo_badan_gizi.png"
-                alt="Badan Gizi Nasional"
-                className="h-14 w-14 object-contain"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-              <div className="leading-tight">
-                <span className="font-bold text-sm block tracking-wide">BADAN GIZI</span>
-                <span className="font-bold text-sm block tracking-wide">NASIONAL</span>
-              </div>
-            </div>
+      {/* Mobile helper notice */}
+      <div className="max-w-4xl mx-auto px-4 sm:hidden mt-3">
+        <div className="flex items-center justify-between text-[11px] text-slate-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
+          <span className="font-bold text-emerald-900 flex items-center gap-1">
+            <ClipboardCheck className="h-3.5 w-3.5 text-emerald-700" />
+            Format Standar A4 Resmi BGN
+          </span>
+          <span className="text-[10px] text-emerald-700 font-semibold">👉 Geser untuk tabel lengkap</span>
+        </div>
+      </div>
 
-            {/* Form Title & Number Right */}
-            <div className="text-right flex flex-col items-end">
-              <h2 className="font-bold text-sm sm:text-base uppercase tracking-tight">
-                FORM PEMERIKSAAN BAHAN MAKANAN
-              </h2>
-              <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm">
-                <span>NO :</span>
-                <input
-                  type="text"
-                  value={noForm}
-                  onChange={(e) => setNoForm(e.target.value)}
-                  className="font-bold border-b border-dashed border-slate-400 focus:border-black outline-hidden px-1 text-right w-44 bg-transparent font-['Times_New_Roman',serif]"
-                  title="Klik untuk mengedit Nomor Formulir"
+      {/* Main Form Canvas (Paper-like WYSIWYG Document Card) */}
+      <div className="max-w-4xl mx-auto px-2 sm:px-4 mt-2 sm:mt-6 overflow-x-auto pb-4">
+        <div className="min-w-[700px] sm:min-w-0">
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-2xl shadow-xl border border-slate-300 p-6 sm:p-10 font-['Times_New_Roman',serif] text-black"
+          >
+            {/* Header section */}
+            <div className="flex items-start justify-between border-b-2 border-black pb-4 mb-4 gap-4">
+              {/* Logo BGN & Title Left */}
+              <div className="flex items-center gap-3 shrink-0">
+                <img
+                  src="/logo_badan_gizi.png"
+                  alt="Badan Gizi Nasional"
+                  className="h-14 w-14 object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
                 />
+                <div className="leading-tight">
+                  <span className="font-bold text-sm block tracking-wide">BADAN GIZI</span>
+                  <span className="font-bold text-sm block tracking-wide">NASIONAL</span>
+                </div>
+              </div>
+
+              {/* Form Title & Number Right */}
+              <div className="text-right flex flex-col items-end shrink-0">
+                <h2 className="font-bold text-sm sm:text-base uppercase tracking-tight">
+                  FORM PEMERIKSAAN BAHAN MAKANAN
+                </h2>
+                <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm">
+                  <span>NO :</span>
+                  <input
+                    type="text"
+                    value={noForm}
+                    onChange={(e) => setNoForm(e.target.value)}
+                    className="font-bold border-b border-dashed border-slate-400 focus:border-black outline-hidden px-1 text-right w-44 bg-transparent font-['Times_New_Roman',serif]"
+                    title="Klik untuk mengedit Nomor Formulir"
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
           {/* Metadata Block: Dari, Kepada, Waktu */}
           <div className="space-y-1.5 text-xs sm:text-sm mb-5 font-normal">
@@ -718,6 +730,56 @@ export function MbgBahanChecklistPage() {
             </div>
           </div>
         </motion.div>
+        </div>
+      </div>
+
+      {/* Action Bar Paling Bawah (Simpan Form, Export PDF, Export DOCX) */}
+      <div className="max-w-4xl mx-auto px-4 mt-4 mb-10">
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 font-['Hanken_Grotesk']">
+          <div>
+            <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4 text-emerald-600" />
+              Finalisasi Form Pemeriksaan Bahan Makanan
+            </h4>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Simpan hasil pemeriksaan ke arsip sistem atau download format resmi PDF & Word.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={handleSave}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+            >
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 text-emerald-400" />}
+              <span>Simpan Form</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isExportingPdf}
+              onClick={handleExportPdf}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+              title="Export format PDF resmi Badan Gizi Nasional"
+            >
+              {isExportingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+              <span>Export PDF</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isExportingDocx}
+              onClick={handleExportDocx}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+              title="Export format Microsoft Word DOCX"
+            >
+              {isExportingDocx ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+              <span>Export DOCX</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Archive Modal / Drawer */}
