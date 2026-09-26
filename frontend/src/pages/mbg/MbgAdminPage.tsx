@@ -15,10 +15,10 @@ import {
   AlertTriangle,
   ChefHat,
   FileSpreadsheet,
-  Edit,
   Archive,
   Sparkles,
   BookOpen,
+  Save,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -32,6 +32,7 @@ import {
   subscribeBatches,
   subscribeEntries,
   createBatch,
+  updateBatch,
   updateBatchStatus,
   addEntry,
   updateEntry,
@@ -1299,11 +1300,10 @@ export function MbgAdminPage() {
               menuKeringanItems: (e.menuKeringanItems && e.menuKeringanItems.length > 0) ? e.menuKeringanItems : menuKeringanItems,
             }));
 
-            await replaceBatchEntries(targetBatchId, entriesToSave);
-
-            if (currentBatch && currentBatch.status !== 'DRAFT') {
-              await updateBatchStatus(targetBatchId, 'DRAFT');
-            }
+            const isSubmitted = !!(currentBatch && currentBatch.status !== 'DRAFT');
+            await replaceBatchEntries(targetBatchId, entriesToSave, {
+              preserveBatchStatus: isSubmitted,
+            });
 
             setSelectedBatchId(targetBatchId);
 
@@ -1388,11 +1388,10 @@ export function MbgAdminPage() {
         menuKeringanItems: (e.menuKeringanItems && e.menuKeringanItems.length > 0) ? e.menuKeringanItems : menuKeringanItems,
       }));
 
-      await replaceBatchEntries(targetBatchId, entriesToSave);
-
-      if (currentBatch && currentBatch.status !== 'DRAFT') {
-        await updateBatchStatus(targetBatchId, 'DRAFT');
-      }
+      const isSubmitted = !!(currentBatch && currentBatch.status !== 'DRAFT');
+      await replaceBatchEntries(targetBatchId, entriesToSave, {
+        preserveBatchStatus: isSubmitted,
+      });
 
       // Pastikan selectedBatchId aktif mengarah ke batch yang baru saja diisi
       setSelectedBatchId(targetBatchId);
@@ -1939,26 +1938,60 @@ export function MbgAdminPage() {
     });
   };
 
-  const handleReopenBatchToDraft = () => {
+  const handleSaveUpdateBatch = async () => {
     if (!selectedBatchId || !selectedBatch) return;
 
-    setConfirmState({
-      title: 'Buka Kembali Batch',
-      message: `Apakah Anda ingin membuka kembali batch untuk tanggal ${selectedBatch.tanggal} ke status DRAFT agar dapat diedit dan disubmit ulang?`,
-      variant: 'info',
-      onConfirm: async () => {
-        setSaving(true);
-        try {
-          await updateBatchStatus(selectedBatchId, 'DRAFT');
-          showToast({ message: 'Batch berhasil dibuka kembali ke status DRAFT!', variant: 'success' });
-        } catch (err) {
-          console.error(err);
-          showToast({ message: 'Gagal membuka kembali batch', variant: 'error' });
-        } finally {
-          setSaving(false);
+    setSaving(true);
+    try {
+      // 1. Hitung total dari entries lokal aktif untuk kepastian konsistensi data
+      let totalSiswaBalita = 0;
+      let totalBumilBusui = 0;
+      let totalGuruKader = 0;
+      let totalPobiaNasi = 0;
+      let totalJumlah = 0;
+      const petugasSet = new Set<string>();
+
+      entries.forEach((e) => {
+        if (!e.isSekolahLibur) {
+          totalSiswaBalita += e.qtSiswaBalita || 0;
+          totalBumilBusui += e.qtBumilBusui || 0;
+          totalGuruKader += e.qtGuruKader || 0;
+          totalPobiaNasi += e.qtPobiaNasi || 0;
+          totalJumlah += e.jumlah || 0;
         }
-      },
-    });
+        if (e.assignedPetugasName) {
+          petugasSet.add(e.assignedPetugasName.trim());
+        }
+      });
+
+      // 2. Update dokumen batch yang sudah ada secara in-place (TIDAK membuat batch baru / tidak double laporan)
+      await updateBatch(selectedBatchId, {
+        totalSiswaBalita,
+        totalBumilBusui,
+        totalGuruKader,
+        totalPobiaNasi,
+        totalJumlah,
+        totalInstitusi: entries.length,
+        petugasList: Array.from(petugasSet),
+        updatedAt: new Date().toISOString(),
+      });
+
+      // 3. Pastikan penulisan latar belakang tersinkronisasi dan hitung ulang batch totals dari database
+      await recalculateBatchTotals(selectedBatchId);
+
+      showToast({
+        message: 'Data PM berhasil diperbarui! Laporan di Arsip PM otomatis ter-update.',
+        variant: 'success',
+      });
+
+      // 4. Arahkan kembali ke Arsip PM agar user langsung melihat laporannya yang sudah ter-update
+      navigate(`/mbg/archive?batchId=${selectedBatchId}`);
+    } catch (err) {
+      console.error('Failed to save update batch:', err);
+      showToast({ message: 'Gagal menyimpan update data PM', variant: 'error' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDeleteBatch = async () => {
@@ -2175,51 +2208,7 @@ export function MbgAdminPage() {
                 Import Link / Excel
               </button>
 
-              {/* Submit / Reopen Button in Top Action Bar */}
-              {selectedBatch && entries.length > 0 && (
-                selectedBatch.status === 'DRAFT' ? (
-                  <button
-                    type="button"
-                    onClick={handleSubmitBatch}
-                    disabled={saving}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#059669] hover:bg-[#047857] text-white text-xs font-extrabold transition-all cursor-pointer shadow-sm disabled:opacity-50 whitespace-nowrap active:scale-95"
-                    title="Submit Data PM untuk diteruskan ke Purchasing dan Produksi"
-                  >
-                    {saving ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    )}
-                    Submit Data PM
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-1">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300 whitespace-nowrap">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                      PM Disubmit
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/mbg/archive?batchId=${selectedBatchId}`)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-300 text-blue-800 text-xs font-bold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
-                      title="Lihat batch ini langsung di menu Arsip PM"
-                    >
-                      <BookOpen className="h-3.5 w-3.5 text-blue-600" />
-                      Lihat di Arsip PM
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleReopenBatchToDraft}
-                      disabled={saving}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 text-xs font-extrabold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
-                      title="Buka kembali batch ke mode DRAFT untuk mengedit data dan submit ulang"
-                    >
-                      <Edit className="h-3.5 w-3.5 text-amber-700" />
-                      Buka / Edit Batch
-                    </button>
-                  </div>
-                )
-              )}
+
 
               <button
                 onClick={() => setShowScheduleModal(true)}
@@ -2292,39 +2281,7 @@ export function MbgAdminPage() {
                     Total: {filteredEntries.length} Institusi
                   </span>
 
-                  {selectedBatch && entries.length > 0 && (
-                    selectedBatch.status === 'DRAFT' ? (
-                      <button
-                        type="button"
-                        onClick={handleSubmitBatch}
-                        disabled={saving}
-                        className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#059669] hover:bg-[#047857] text-white text-xs font-extrabold transition-all cursor-pointer shadow-md shadow-green-600/20 disabled:opacity-50 whitespace-nowrap active:scale-95"
-                      >
-                        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                        Submit Data PM
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/mbg/archive?batchId=${selectedBatchId}`)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 text-xs font-bold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
-                        >
-                          <BookOpen className="h-3.5 w-3.5 text-blue-600" />
-                          Lihat di Arsip PM
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleReopenBatchToDraft}
-                          disabled={saving}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-extrabold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
-                        >
-                          <Edit className="h-3.5 w-3.5 text-amber-700" />
-                          Edit / Buka Batch
-                        </button>
-                      </div>
-                    )
-                  )}
+
                 </div>
               </div>
 
@@ -2563,14 +2520,15 @@ export function MbgAdminPage() {
                     </button>
                   </div>
 
-                  {/* Submit / Reopen Bottom Bar */}
+                  {/* Submit / Simpan Update Bottom Bar */}
                   {selectedBatch && entries.length > 0 && (
-                    <div className="mt-8 flex justify-end gap-3">
+                    <div className="mt-8 flex justify-end items-center gap-3">
                       {selectedBatch.status === 'DRAFT' ? (
                         <button
+                          type="button"
                           onClick={handleSubmitBatch}
                           disabled={saving}
-                          className="inline-flex items-center gap-2 px-6 py-3 bg-[#059669] text-white text-sm font-extrabold rounded-xl hover:bg-[#047857] cursor-pointer transition-colors shadow-lg shadow-green-500/20 disabled:opacity-50"
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-[#059669] text-white text-sm font-extrabold rounded-xl hover:bg-[#047857] cursor-pointer transition-colors shadow-lg shadow-green-500/20 disabled:opacity-50 active:scale-95"
                         >
                           {saving ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -2580,14 +2538,29 @@ export function MbgAdminPage() {
                           Submit Data PM
                         </button>
                       ) : (
-                        <button
-                          onClick={handleReopenBatchToDraft}
-                          disabled={saving}
-                          className="inline-flex items-center gap-2 px-6 py-3 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-sm font-extrabold rounded-xl cursor-pointer transition-colors shadow-sm disabled:opacity-50"
-                        >
-                          <Edit className="h-4 w-4 text-amber-700" />
-                          Buka Kembali / Edit Data PM
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/mbg/archive?batchId=${selectedBatchId}`)}
+                            className="inline-flex items-center gap-2 px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold rounded-xl cursor-pointer transition-colors border border-slate-300 shadow-2xs active:scale-95"
+                          >
+                            <BookOpen className="h-4 w-4 text-slate-600" />
+                            Lihat di Arsip PM
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveUpdateBatch}
+                            disabled={saving}
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-[#059669] hover:bg-[#047857] text-white text-sm font-extrabold rounded-xl cursor-pointer transition-colors shadow-lg shadow-green-500/20 disabled:opacity-50 active:scale-95"
+                          >
+                            {saving ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Save className="h-4 w-4" />
+                            )}
+                            Simpan Update Data PM
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
