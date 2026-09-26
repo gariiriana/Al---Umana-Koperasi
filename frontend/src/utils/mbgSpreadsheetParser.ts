@@ -775,7 +775,7 @@ function parseSecondaryPosyanduTable(
             balitaLCol = c;
             balitaPCol = c + 1;
           }
-        } else if (subCell === 'l' && balitaLCol !== -1 && balitaPCol === -1) {
+        } else if ((subCell === 'l' || subCell === 'p') && balitaLCol !== -1 && balitaPCol === -1) {
           balitaPCol = c;
         }
 
@@ -792,14 +792,14 @@ function parseSecondaryPosyanduTable(
           kaderCol = c;
         }
 
-        if (topCell === 'jumlah' || subCell === 'jumlah') {
+        if (topCell === 'jumlah' || subCell === 'jumlah' || topCell === 'total' || subCell === 'total') {
           jumlahCol = c;
         }
       }
 
       const hasSubHeader = subRow.some((c) => {
         const s = String(c || '').trim().toUpperCase();
-        return s === 'L' || s === 'P';
+        return s === 'L' || s === 'P' || s === 'BUMIL' || s === 'BUSUI';
       });
       firstDataRowIdx = hasSubHeader ? r + 2 : r + 1;
       break;
@@ -936,10 +936,12 @@ function parseSecondaryPosyanduTable(
       qtPobiaNasi: 0,
       qtPorsiBalita: balitaTotal,
       qtPorsiKecil: balitaTotal,
-      qtPorsiBesar: kader,
+      qtPorsiBesar: bumilBusuiTotal + kader,
       qtPorsiBumilBusui: bumilBusuiTotal,
       qtPorsiKecilL: balitaL || undefined,
       qtPorsiKecilP: balitaP || undefined,
+      qtPorsiBesarL: bumil || undefined,
+      qtPorsiBesarP: busui || undefined,
       jumlah,
       jadwalPengantaran: '06.00-08.30',
       assignedPetugasId: '',

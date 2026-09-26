@@ -1050,8 +1050,8 @@ export function DailyReportExcelSections({
                   <td colSpan={3} className="px-3 py-2 text-left uppercase font-black text-rose-950 border-r border-rose-200">
                     Total
                   </td>
-                  <td className="px-1.5 py-2 text-center border-r border-rose-200 font-bold">
-                    {formatNum(data.totalGizi?.beratBersih, 1)}
+                  <td className="px-1.5 py-2 text-center border-r border-rose-200 font-bold text-slate-400">
+                    -
                   </td>
                   <td className="px-1.5 py-2 text-center text-amber-900 bg-amber-200/60 font-black border-r border-rose-200">
                     {formatNum(data.totalGizi?.energi, 1)}
@@ -1087,16 +1087,38 @@ export function DailyReportExcelSections({
                   {isEditing && <td></td>}
                 </tr>
 
-                {/* Biaya per Porsi */}
+                {/* Biaya per Porsi (Row 26 in Excel) */}
                 <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
                   <td colSpan={9} className="px-3 py-1.5 text-right font-bold text-slate-500 border-r-2 border-slate-300">
-                    Biaya Bahan Pokok per Porsi:
+                    Biaya per Porsi:
                   </td>
                   <td colSpan={9} className="px-3 py-1.5 text-right font-black text-sky-900 border-r-2 border-slate-300">
                     {formatRp(data.hargaBahanPerPorsi || (data.pmCount ? data.totalBelanjaBahan / data.pmCount : 0))} / porsi
                   </td>
                   <td colSpan={isEditing ? 7 : 6} className="px-3 py-1.5 text-right font-black text-amber-900">
                     {formatRp(data.hargaBumbuPerPorsi || (data.pmCount ? data.totalBelanjaBumbu / data.pmCount : 0))} / porsi
+                  </td>
+                </tr>
+
+                {/* Total Biaya per Porsi (Green Box persis Excel cell AC27 / AB27) */}
+                <tr className="bg-emerald-50/70 border-b border-emerald-300 font-black">
+                  <td colSpan={9} className="px-3 py-2 text-right font-extrabold text-emerald-950 border-r-2 border-slate-300">
+                    Total Biaya per Porsi (Bahan + Bumbu):
+                  </td>
+                  <td colSpan={9} className="px-3 py-2 text-right font-bold text-slate-500 border-r-2 border-slate-300 text-xs">
+                    {formatRp(data.hargaBahanPerPorsi || (data.pmCount ? data.totalBelanjaBahan / data.pmCount : 0))} + {formatRp(data.hargaBumbuPerPorsi || (data.pmCount ? data.totalBelanjaBumbu / data.pmCount : 0))}
+                  </td>
+                  <td colSpan={isEditing ? 7 : 6} className="px-3 py-2 text-right bg-[#00E676] text-emerald-950">
+                    <div className="flex items-center justify-end gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-950">Grand Total:</span>
+                      <span className="px-2.5 py-1 bg-white text-emerald-950 font-black text-sm rounded shadow-xs border border-emerald-500 whitespace-nowrap">
+                        {formatRp(
+                          data.hargaPerPorsiOverall ||
+                          ((data.hargaBahanPerPorsi || (data.pmCount ? data.totalBelanjaBahan / data.pmCount : 0)) +
+                           (data.hargaBumbuPerPorsi || (data.pmCount ? data.totalBelanjaBumbu / data.pmCount : 0)))
+                        )} / porsi
+                      </span>
+                    </div>
                   </td>
                 </tr>
 

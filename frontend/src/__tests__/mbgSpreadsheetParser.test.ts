@@ -90,8 +90,11 @@ describe('mbgSpreadsheetParser', () => {
     expect(cempaka1).toBeDefined();
     expect(cempaka1.institutionType).toBe('posyandu');
     expect(cempaka1.qtPorsiBalita).toBe(23); // 11 L + 12 P
+    expect(cempaka1.qtPorsiKecil).toBe(23);
     expect(cempaka1.qtPorsiKecilL).toBe(11);
     expect(cempaka1.qtPorsiKecilP).toBe(12);
+    expect(cempaka1.qtPorsiBesar).toBe(7); // Bumil (0) + Busui (7) + Kader (0) = 7
+    expect(cempaka1.qtPorsiBesarP).toBe(7);
     expect(cempaka1.qtBusui).toBe(7);
     expect(cempaka1.qtBumilBusui).toBe(7);
     expect(cempaka1.jumlah).toBe(30);

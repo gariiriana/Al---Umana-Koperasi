@@ -621,8 +621,40 @@ function parsePortionBlock(
     rawTotalBumbu ||
     bumbuItems.reduce((s, b) => s + b.harga, 0);
 
-  const hargaBahanPerPorsi = pmCount > 0 ? totalBelanjaBahan / pmCount : 0;
-  const hargaBumbuPerPorsi = pmCount > 0 ? totalBelanjaBumbu / pmCount : 0;
+  // Check if sheet has explicit per porsi cells in row endRow + 1 and endRow + 2 (Excel cell AB26 and AB27)
+  let rawHargaBahanPerPorsi = 0;
+  let rawHargaBumbuPerPorsi = 0;
+  let rawHargaPerPorsiOverall = 0;
+
+  if (ws) {
+    // Check endRow + 1 (biaya bahan & bumbu per porsi)
+    for (let c = map.colHargaTotalBahan - 1; c <= map.colHargaTotalBahan + 1; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: endRow + 1, c })];
+      if (cell?.v && num(cell.v) > 0) {
+        rawHargaBahanPerPorsi = num(cell.v);
+        break;
+      }
+    }
+    for (let c = map.colHargaTotalBumbu - 1; c <= map.colHargaTotalBumbu + 1; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: endRow + 1, c })];
+      if (cell?.v && num(cell.v) > 0) {
+        rawHargaBumbuPerPorsi = num(cell.v);
+        break;
+      }
+    }
+    // Check endRow + 2 (green grand total per porsi cell in Excel, e.g. AB27 / AC27: Rp 6.616)
+    for (let c = map.colHargaTotalBumbu - 1; c <= map.colHargaTotalBumbu + 1; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: endRow + 2, c })];
+      if (cell?.v && num(cell.v) > 0) {
+        rawHargaPerPorsiOverall = num(cell.v);
+        break;
+      }
+    }
+  }
+
+  const hargaBahanPerPorsi = rawHargaBahanPerPorsi || (pmCount > 0 ? Math.round(totalBelanjaBahan / pmCount) : 0);
+  const hargaBumbuPerPorsi = rawHargaBumbuPerPorsi || (pmCount > 0 ? Math.round(totalBelanjaBumbu / pmCount) : 0);
+  const hargaPerPorsiOverall = rawHargaPerPorsiOverall || (hargaBahanPerPorsi + hargaBumbuPerPorsi);
 
   return {
     portionType,
@@ -640,7 +672,7 @@ function parsePortionBlock(
     totalBelanjaBumbu,
     hargaBumbuPerPorsi,
     totalBelanjaOverall: totalBelanjaBahan + totalBelanjaBumbu,
-    hargaPerPorsiOverall: hargaBahanPerPorsi + hargaBumbuPerPorsi,
+    hargaPerPorsiOverall,
   };
 }
 

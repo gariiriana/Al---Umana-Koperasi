@@ -65,10 +65,12 @@ function getAutoPortions(entry: Partial<MbgPmEntry>) {
 
   if (entry.institutionType === 'posyandu') {
     const balita = (entry.qtPorsiKecilL || 0) + (entry.qtPorsiKecilP || 0) || entry.qtSiswaBalita || entry.qtPorsiBalita || 0;
+    const bumil = entry.qtBumil ?? entry.qtPorsiBesarL ?? 0;
+    const busui = entry.qtBusui ?? entry.qtPorsiBesarP ?? 0;
     qtPorsiBalita = balita;
-    qtPorsiBumilBusui = (entry.qtBumil || 0) + (entry.qtBusui || 0) || entry.qtBumilBusui || 0;
-    qtPorsiBesar = (entry.qtPorsiBesarL || 0) + (entry.qtPorsiBesarP || 0) + (entry.qtGuruKader || 0);
-    qtPorsiKecil = 0;
+    qtPorsiKecil = balita;
+    qtPorsiBumilBusui = bumil + busui;
+    qtPorsiBesar = bumil + busui + (entry.qtGuruKader || 0);
   } else {
     // sekolah
     const pkl = (entry.qtPorsiKecilL || 0) + (entry.qtPorsiKecilP || 0);
@@ -82,14 +84,25 @@ function getAutoPortions(entry: Partial<MbgPmEntry>) {
 
 // ---- Helper: Calculate jumlah ----
 function calcJumlah(entry: Partial<MbgPmEntry>): number {
-  const porsiTotal = (entry.qtPorsiBalita || 0) + (entry.qtPorsiKecil || 0) + (entry.qtPorsiBesar || 0) + (entry.qtPorsiBumilBusui || 0);
-  if (porsiTotal > 0) return porsiTotal;
+  if (entry.institutionType === 'posyandu') {
+    const balita = (entry.qtPorsiKecilL || 0) + (entry.qtPorsiKecilP || 0) || entry.qtSiswaBalita || entry.qtPorsiBalita || 0;
+    const bumil = entry.qtBumil ?? entry.qtPorsiBesarL ?? 0;
+    const busui = entry.qtBusui ?? entry.qtPorsiBesarP ?? 0;
+    const kader = entry.qtGuruKader || (entry.qtGuruL || 0) + (entry.qtGuruP || 0) + (entry.qtTendikL || 0) + (entry.qtTendikP || 0);
+    return balita + bumil + busui + kader;
+  }
 
-  const bumilBusuiSum = entry.qtBumilBusui || ((entry.qtBumil || 0) + (entry.qtBusui || 0));
+  const pkl = (entry.qtPorsiKecilL || 0) + (entry.qtPorsiKecilP || 0);
+  const pbl = (entry.qtPorsiBesarL || 0) + (entry.qtPorsiBesarP || 0);
+  const staf = entry.qtGuruKader || (entry.qtGuruL || 0) + (entry.qtGuruP || 0) + (entry.qtTendikL || 0) + (entry.qtTendikP || 0);
+  if (pkl > 0 || pbl > 0) {
+    return pkl + pbl + staf;
+  }
+
   return (
     (entry.qtSiswaBalita || 0) +
-    bumilBusuiSum +
-    (entry.qtGuruKader || 0)
+    (entry.qtBumilBusui || ((entry.qtBumil || 0) + (entry.qtBusui || 0))) +
+    staf
   );
 }
 
@@ -99,8 +112,8 @@ function getAutoRekapTotals(entries: MbgPmEntry[]) {
       const isPos = entry.institutionType === 'posyandu';
       const porsiKecilL = entry.qtPorsiKecilL || 0;
       const porsiKecilP = entry.qtPorsiKecilP || 0;
-      const bumil = entry.qtBumil || 0;
-      const busui = entry.qtBusui || 0;
+      const bumil = entry.qtBumil ?? (isPos ? entry.qtPorsiBesarL || 0 : 0);
+      const busui = entry.qtBusui ?? (isPos ? entry.qtPorsiBesarP || 0 : 0);
       const porsiBesarL = isPos ? bumil : (entry.qtPorsiBesarL || 0);
       const porsiBesarP = isPos ? busui : (entry.qtPorsiBesarP || 0);
       const guruL = entry.qtGuruL || 0;
@@ -112,8 +125,8 @@ function getAutoRekapTotals(entries: MbgPmEntry[]) {
       total.porsiKecilP += porsiKecilP;
       total.porsiBesarL += porsiBesarL;
       total.porsiBesarP += porsiBesarP;
-      total.totalL += porsiKecilL + (isPos ? 0 : porsiBesarL);
-      total.totalP += porsiKecilP + (isPos ? 0 : porsiBesarP) + bumil + busui;
+      total.totalL += isPos ? porsiKecilL : (porsiKecilL + porsiBesarL);
+      total.totalP += isPos ? (porsiKecilP + bumil + busui) : (porsiKecilP + porsiBesarP);
       total.guruL += guruL;
       total.guruP += guruP;
       total.tendikL += tendikL;
@@ -370,41 +383,46 @@ function AutoRekapEntryRow({
     : (entry.qtPorsiKecilL || 0) + (entry.qtPorsiBesarL || 0);
 
   const totalP = isPosyandu
-    ? (entry.qtPorsiKecilP || 0) + (entry.qtBumil || 0) + (entry.qtBusui || 0)
-    : (entry.qtPorsiKecilP || 0) + (entry.qtPorsiBesarP || 0) + (entry.qtBumil || 0) + (entry.qtBusui || 0);
+    ? (entry.qtPorsiKecilP || 0) + (entry.qtBumil ?? entry.qtPorsiBesarL ?? 0) + (entry.qtBusui ?? entry.qtPorsiBesarP ?? 0)
+    : (entry.qtPorsiKecilP || 0) + (entry.qtPorsiBesarP || 0);
 
   const totalSiswa = totalL + totalP;
   const totalStaf = (entry.qtGuruL || 0) + (entry.qtGuruP || 0) + (entry.qtTendikL || 0) + (entry.qtTendikP || 0);
 
   const updateNumber = (field: keyof MbgPmEntry, value: number) => {
     const next = { ...entry, [field]: value } as MbgPmEntry;
-    const nextName = next.institutionName.toLowerCase();
     const nextIsPosyandu = next.institutionType === 'posyandu';
-    const nextIsBumil = nextIsPosyandu && nextName.includes('bumil');
-    const nextIsBusui = nextIsPosyandu && nextName.includes('busui');
-    const nextBalita = (next.qtPorsiKecilL || 0) + (next.qtPorsiKecilP || 0);
-    const nextBumil = next.qtBumil || 0;
-    const nextBusui = next.qtBusui || 0;
+    const nextBalitaL = (field === 'qtPorsiKecilL' ? value : (next.qtPorsiKecilL || 0));
+    const nextBalitaP = (field === 'qtPorsiKecilP' ? value : (next.qtPorsiKecilP || 0));
+    const nextBalita = nextBalitaL + nextBalitaP;
+    const nextBumil = nextIsPosyandu
+      ? ((field === 'qtBumil' || field === 'qtPorsiBesarL') ? value : (next.qtBumil ?? next.qtPorsiBesarL ?? 0))
+      : 0;
+    const nextBusui = nextIsPosyandu
+      ? ((field === 'qtBusui' || field === 'qtPorsiBesarP') ? value : (next.qtBusui ?? next.qtPorsiBesarP ?? 0))
+      : 0;
     const nextSiswaL = nextIsPosyandu
-      ? (next.qtPorsiKecilL || 0)
+      ? nextBalitaL
       : (next.qtPorsiKecilL || 0) + (next.qtPorsiBesarL || 0);
     const nextSiswaP = nextIsPosyandu
-      ? (next.qtPorsiKecilP || 0) + nextBumil + nextBusui
-      : (next.qtPorsiKecilP || 0) + (next.qtPorsiBesarP || 0) + nextBumil + nextBusui;
+      ? nextBalitaP + nextBumil + nextBusui
+      : (next.qtPorsiKecilP || 0) + (next.qtPorsiBesarP || 0);
     const nextStaf = (next.qtGuruL || 0) + (next.qtGuruP || 0) + (next.qtTendikL || 0) + (next.qtTendikP || 0);
 
     onUpdate(entry.id, {
       [field]: value,
-      qtSiswaBalita: nextIsPosyandu ? (nextIsBumil || nextIsBusui ? 0 : nextBalita) : (next.qtPorsiKecilL || 0) + (next.qtPorsiKecilP || 0) + (next.qtPorsiBesarL || 0) + (next.qtPorsiBesarP || 0),
+      qtSiswaBalita: nextIsPosyandu ? nextBalita : (next.qtPorsiKecilL || 0) + (next.qtPorsiKecilP || 0) + (next.qtPorsiBesarL || 0) + (next.qtPorsiBesarP || 0),
       qtBumil: nextBumil,
       qtBusui: nextBusui,
+      qtPorsiBesarL: nextIsPosyandu ? nextBumil : (next.qtPorsiBesarL || 0),
+      qtPorsiBesarP: nextIsPosyandu ? nextBusui : (next.qtPorsiBesarP || 0),
       qtBumilBusui: nextBumil + nextBusui,
       qtGuruKader: nextStaf,
       qtPorsiBalita: nextIsPosyandu ? nextBalita : 0,
-      qtPorsiKecil: nextIsPosyandu ? 0 : (next.qtPorsiKecilL || 0) + (next.qtPorsiKecilP || 0),
-      qtPorsiBesar: nextIsPosyandu ? 0 : (next.qtPorsiBesarL || 0) + (next.qtPorsiBesarP || 0),
+      qtPorsiKecil: nextIsPosyandu ? nextBalita : (next.qtPorsiKecilL || 0) + (next.qtPorsiKecilP || 0),
+      qtPorsiBesar: nextIsPosyandu ? (nextBumil + nextBusui + nextStaf) : (next.qtPorsiBesarL || 0) + (next.qtPorsiBesarP || 0) + nextStaf,
       qtPorsiBumilBusui: nextBumil + nextBusui,
-      jumlah: nextSiswaL + nextSiswaP + nextStaf,
+      jumlah: nextIsPosyandu ? (nextBalita + nextBumil + nextBusui + nextStaf) : (nextSiswaL + nextSiswaP + nextStaf),
     });
   };
 
@@ -446,12 +464,12 @@ function AutoRekapEntryRow({
       <td className="border-r border-slate-200 p-1 text-center">{numberInput('qtPorsiKecilP', entry.qtPorsiKecilP || 0, isBumil || isBusui)}</td>
       <td className="border-r border-slate-200 p-1 text-center">
         {isPosyandu
-          ? numberInput('qtBumil', entry.qtBumil || 0, isBusui)
+          ? numberInput('qtBumil', entry.qtBumil ?? entry.qtPorsiBesarL ?? 0, isBusui)
           : numberInput('qtPorsiBesarL', entry.qtPorsiBesarL || 0)}
       </td>
       <td className="border-r border-slate-200 p-1 text-center">
         {isPosyandu
-          ? numberInput('qtBusui', entry.qtBusui || 0, isBumil)
+          ? numberInput('qtBusui', entry.qtBusui ?? entry.qtPorsiBesarP ?? 0, isBumil)
           : numberInput('qtPorsiBesarP', entry.qtPorsiBesarP || 0)}
       </td>
       <td className="border-r border-slate-200 bg-slate-50 px-2 py-1 text-center">{totalL || '—'}</td>

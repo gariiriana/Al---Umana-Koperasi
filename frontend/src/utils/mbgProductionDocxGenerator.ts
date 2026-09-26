@@ -815,7 +815,7 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
       new TableRow({
         children: [
           new TableCell({ columnSpan: 2, shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Total', bold: true, color: '854D0E', size: 13, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.beratBersih, 1), bold: true, color: '854D0E', size: 13, font: 'Arial' })] })] }),
+          new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '-', bold: true, color: '854D0E', size: 13, font: 'Arial' })] })] }),
           new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.energi, 1), bold: true, color: 'B45309', size: 13, font: 'Arial' })] })] }),
           new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.protein, 1), bold: true, color: '854D0E', size: 13, font: 'Arial' })] })] }),
           new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatNum(data.totalGizi?.lemak, 1), bold: true, color: '854D0E', size: 13, font: 'Arial' })] })] }),

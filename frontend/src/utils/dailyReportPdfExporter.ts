@@ -326,7 +326,7 @@ const renderPortionStackedPage = (
     // Row 1: Total
     [
       { content: 'Total', colSpan: 2, styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
-      { content: formatNum(data.totalGizi?.beratBersih, 1), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
+      { content: '-', styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
       { content: formatNum(data.totalGizi?.energi, 1), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [180, 83, 9] } },
       { content: formatNum(data.totalGizi?.protein, 1), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
       { content: formatNum(data.totalGizi?.lemak, 1), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 240, 138], textColor: [133, 77, 14] } },
