@@ -94,11 +94,14 @@ export function MbgBahanChecklistPage() {
   useEffect(() => {
     const unsub = subscribeBatches((list) => {
       setBatches(list);
-      if (!selectedBatchId && list.length > 0) {
-        const todayStr = getJakartaDate();
-        const active = list.find((b) => b.tanggal === todayStr) || list[0];
-        setSelectedBatchId(active.id);
-      }
+      setSelectedBatchId((prev) => {
+        if (!prev && list.length > 0) {
+          const todayStr = getJakartaDate();
+          const active = list.find((b) => b.tanggal === todayStr) || list[0];
+          return active.id;
+        }
+        return prev;
+      });
     });
     return () => unsub();
   }, []);
