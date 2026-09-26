@@ -14,7 +14,6 @@ import {
   Trash2,
   Loader2,
   Search,
-  Check,
   History,
   FileText,
   X,
@@ -221,30 +220,6 @@ export function MbgBahanChecklistPage() {
     setRows((prev) => prev.filter((_, idx) => idx !== index));
   };
 
-  // Quick 1-click shortcut: check all Sesuai & Baik
-  const handleCheckAll = () => {
-    setRows((prev) =>
-      prev.map((r) => ({
-        ...r,
-        isSesuai: true,
-        isBaik: true,
-      }))
-    );
-    showToast({ message: 'Semua bahan diceklis Sesuai & Baik!', variant: 'success' });
-  };
-
-  // Quick 1-click shortcut: clear all checks (kosongkan semua)
-  const handleClearAllChecks = () => {
-    setRows((prev) =>
-      prev.map((r) => ({
-        ...r,
-        isSesuai: null,
-        isBaik: null,
-      }))
-    );
-    showToast({ message: 'Semua ceklis berhasil dikosongkan', variant: 'info' });
-  };
-
   // Build current form object
   const currentFormData: Omit<MbgBahanChecklistForm, 'id'> = useMemo(() => {
     return {
@@ -393,32 +368,11 @@ export function MbgBahanChecklistPage() {
               />
             </div>
 
-            {/* Quick Check All & Clear All */}
-            <button
-              type="button"
-              onClick={handleCheckAll}
-              className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 font-bold text-xs hover:bg-emerald-100 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-              title="Ceklis semua item menjadi Sesuai dan Baik"
-            >
-              <Check className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Ceklis Semua</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleClearAllChecks}
-              className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-              title="Kosongkan semua centang ceklis"
-            >
-              <X className="h-3.5 w-3.5 text-slate-400" />
-              <span>Kosongkan</span>
-            </button>
-
             {/* Archive Drawer Button */}
             <button
               type="button"
               onClick={() => setShowArchiveModal(true)}
-              className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               title="Lihat arsip laporan cek list yang pernah dibuat"
             >
               <History className="h-3.5 w-3.5 text-slate-500" />
