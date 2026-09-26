@@ -290,14 +290,16 @@ export async function deleteBahanChecklist(id: string): Promise<void> {
 }
 
 /**
- * Helper to extract ingredients list from a Daily Report or Batch data
+ * Helper to extract ingredients list from a Daily Report or Batch data.
+ * Sesuai aturan operasional: Data di fitur Cek List Bahan HANYA diambil dari
+ * "Daftar Pesanan Bahan" (Tab 5 Produksi MBG: poRows ke Mitra Supplier).
  */
 export function extractIngredientsFromDailyReport(
   report?: MbgProductionDailyReport | null
 ): MbgInspectionFormRow[] {
   if (!report) return [];
 
-  // 1. Direct PO Rows from Produksi MBG (List Pesanan Bahan)
+  // HANYA diambil dari data Daftar Pesanan Bahan (Tab 5: poRows ke Mitra Supplier)
   if (report.poRows && report.poRows.length > 0) {
     return report.poRows.map((po) => ({
       jenisBahan: po.item || '',
@@ -305,60 +307,9 @@ export function extractIngredientsFromDailyReport(
       satuan: po.satuan || 'kg',
       isSesuai: null,
       isBaik: null,
-      notes: po.keterangan || '',
+      notes: po.keterangan || (po.supplier ? `Supplier: ${po.supplier}` : ''),
     }));
   }
-
-  // 2. Realisasi Pembelian Rows
-  if (report.realisasiPembelianRows && report.realisasiPembelianRows.length > 0) {
-    return report.realisasiPembelianRows.map((rp) => ({
-      jenisBahan: rp.namaBahan || '',
-      banyaknya: Number(rp.kuantitas) || 0,
-      satuan: rp.satuan || 'kg',
-      isSesuai: null,
-      isBaik: null,
-      notes: '',
-    }));
-  }
-
-  // 3. If inspectionForm rows already populated with custom inspection items
-  if (report.inspectionForm?.rows && report.inspectionForm.rows.length > 0) {
-    return report.inspectionForm.rows.map((r) => ({
-      jenisBahan: r.jenisBahan || '',
-      banyaknya: Number(r.banyaknya) || 0,
-      satuan: r.satuan || 'kg',
-      isSesuai: r.isSesuai ?? null,
-      isBaik: r.isBaik ?? null,
-      notes: r.notes || '',
-    }));
-  }
-
-  // 4. Fallback: extract from portion bahanItems and bumbuItems
-  const portionItems: MbgInspectionFormRow[] = [];
-  const seen = new Set<string>();
-  const addItems = (items?: { rincianBahan: string; kebutuhan: number; satuan: string }[]) => {
-    if (!items) return;
-    for (const it of items) {
-      const key = it.rincianBahan.toLowerCase().trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      portionItems.push({
-        jenisBahan: it.rincianBahan,
-        banyaknya: it.kebutuhan || 0,
-        satuan: it.satuan || 'kg',
-        isSesuai: null,
-        isBaik: null,
-        notes: '',
-      });
-    }
-  };
-
-  addItems(report.porsiBesar?.bahanItems);
-  addItems(report.porsiKecil?.bahanItems);
-  addItems(report.porsiBesar?.bumbuItems?.map((b) => ({ rincianBahan: b.namaBumbu, kebutuhan: b.kebutuhan, satuan: b.satuan })));
-  addItems(report.porsiKecil?.bumbuItems?.map((b) => ({ rincianBahan: b.namaBumbu, kebutuhan: b.kebutuhan, satuan: b.satuan })));
-
-  if (portionItems.length > 0) return portionItems;
 
   return [];
 }

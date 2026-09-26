@@ -591,7 +591,7 @@ export function MbgBahanChecklistPage() {
                 {rows.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="p-3 sm:p-4 text-center text-slate-400 italic font-sans text-[10px] sm:text-xs">
-                      Belum ada data bahan. Klik tombol "Tambah Baris Bahan" di bawah.
+                      Belum ada data pesanan bahan pada batch ini (data otomatis disinkronkan dari Tab 5: "Daftar Pesanan Bahan" di Produksi MBG). Anda juga dapat menambah manual lewat tombol di bawah.
                     </td>
                   </tr>
                 ) : (
