@@ -543,7 +543,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /mbg_daily_reports/{reportId} {
       allow read: if isMbgStaff();
-      allow write: if isMbgManager();
+      allow write: if isMbgManager() || isDistribusiMbg();
     }
 
     // -------------------------------------------------------------------
@@ -652,6 +652,22 @@ service cloud.firestore {
     match /mbg_purchasing_documents/{docId} {
       allow read: if isMbgStaff();
       allow create, update, delete: if isAdmin() || isAdminMbg() || isPurchasingMbg() || isSubPurchasingMbg();
+    }
+
+    // -------------------------------------------------------------------
+    // MBG Bahan Documentation (arsip dokumentasi foto bahan distribusi)
+    // -------------------------------------------------------------------
+    match /mbg_bahan_documentation/{docId} {
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isMbgManager() || isDistribusiMbg() || isKurirMbg();
+    }
+
+    // -------------------------------------------------------------------
+    // MBG Inspection Forms (form pemeriksaan / cek list bahan makanan)
+    // -------------------------------------------------------------------
+    match /mbg_inspection_forms/{formId} {
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isMbgManager() || isDistribusiMbg() || isKurirMbg();
     }
   }
 }

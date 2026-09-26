@@ -86,6 +86,7 @@ const MbgDeliveryPage = safeLazy(() => import("@/pages/mbg/MbgDeliveryPage").the
 const MbgArchivePage = safeLazy(() => import("@/pages/mbg/MbgArchivePage").then(module => ({ default: module.MbgArchivePage })));
 const MbgReportPage = safeLazy(() => import("@/pages/mbg/MbgReportPage").then(module => ({ default: module.MbgReportPage })));
 const MbgOrdersPage = safeLazy(() => import("@/pages/mbg/MbgOrdersPage").then(module => ({ default: module.MbgOrdersPage })));
+const MbgBahanChecklistPage = safeLazy(() => import("@/pages/mbg/MbgBahanChecklistPage").then(module => ({ default: module.MbgBahanChecklistPage })));
 const PerformancePage = safeLazy(() => import("@/pages/PerformancePage").then(module => ({ default: module.PerformancePage })));
 const SuperAdminControlCenterPage = safeLazy(() => import("@/pages/SuperAdminControlCenterPage").then(module => ({ default: module.SuperAdminControlCenterPage })));
 const DeveloperControlCenterPage = safeLazy(() => import("@/pages/DeveloperControlCenterPage").then(module => ({ default: module.DeveloperControlCenterPage })));
@@ -795,6 +796,16 @@ function RoutesTree() {
           <Protected>
             <ShelledRoute pageTitle="Kurir MBG" allowedRoles={["kurir_mbg", "distribusi_mbg", "distribusi_mbg_2", "admin_mbg", "produksi_mbg"]}>
               <MbgDeliveryPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
+        path="/mbg/checklist-bahan"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Form Cek List Bahan" allowedRoles={["distribusi_mbg", "distribusi_mbg_2", "admin_mbg", "produksi_mbg", "kurir_mbg"]}>
+              <MbgBahanChecklistPage />
             </ShelledRoute>
           </Protected>
         }

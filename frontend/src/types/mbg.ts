@@ -690,3 +690,52 @@ export interface MbgProductionDailyReport {
   createdAt: string;
   updatedAt: string;
 }
+
+// === DOKUMENTASI BAHAN & CEK LIST BAHAN (DISTRIBUSI & PEMERIKSAAN) ===
+
+/** Foto dan status per bahan makanan */
+export interface MbgBahanPhotoItem {
+  id: string;
+  namaBahan: string;
+  kuantitas?: number;
+  satuan?: string;
+  photoUrl?: string; // base64 compressed dataUrl
+  waktuFoto?: string;
+  kondisi?: 'baik' | 'rusak' | 'segar';
+  catatan?: string;
+}
+
+/** Arsip Dokumen Dokumentasi Foto Bahan Makanan MBG */
+export interface MbgBahanDocumentation {
+  id: string;
+  batchId: string;
+  tanggal: string;
+  title: string;
+  officerName: string;
+  officerRole: string;
+  items: MbgBahanPhotoItem[];
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+/** Formulir Pemeriksaan / Cek List Bahan Makanan Harian (Standar Badan Gizi Nasional) */
+export interface MbgBahanChecklistForm {
+  id: string;
+  batchId: string;
+  tanggal: string;
+  noForm: string; // e.g. "01/PBM/IX/2026"
+  dari: string; // "Koperasi Al Umanaa Sejahtera Mandiri"
+  kepada: string; // "SPPG Sukabumi Gunungguruh Kebonmanggu"
+  waktu: string; // e.g. "06.00 - 08.00 WIB"
+  rows: MbgInspectionFormRow[];
+  officerName: string; // "Ragha Eskha Utama, S. Hum."
+  officerTitle: string; // "Kepala Satuan Pelayanan Pemenuhan Gizi"
+  lokasiTtd: string; // "Sukabumi"
+  tanggalTtd: string; // e.g. "01 September 2026"
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
