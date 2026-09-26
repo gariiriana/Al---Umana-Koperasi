@@ -364,11 +364,13 @@ export function MbgDistributionPage() {
     return ['Andi Kurir', 'Dede Kurir', 'Yusep Kurir', 'Erik Kurir', 'Agus Kurir', 'Firdi Kurir'];
   }, [kurirUsers]);
 
-  // Subscribe batches
+  // Subscribe batches: hanya batch yang SUDAH disubmit oleh Produksi MBG ke Distribusi MBG
   useEffect(() => {
     const unsub = subscribeBatches((data) => {
-      // A populated import is still a draft until Admin MBG submits it.
-      const activeBatches = data.filter((b) => b.status !== 'DRAFT');
+      const activeBatches = data.filter((b) =>
+        !b.isBackup &&
+        (b.submittedToDistribution === true || ['DELIVERING', 'DELIVERED'].includes(b.status))
+      );
       setBatches(activeBatches);
       setLoading(false);
     });
@@ -1781,9 +1783,13 @@ export function MbgDistributionPage() {
           ) : (
             <div className="bg-white border border-[#E5E7EB] rounded-2xl p-12 text-center">
               <Calendar className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-              <h3 className="text-lg font-bold text-[#111827]">Pilih batch pengiriman</h3>
+              <h3 className="text-lg font-bold text-[#111827]">
+                {displayBatches.length === 0 ? 'Belum Ada Batch Disubmit dari Produksi' : 'Pilih batch pengiriman'}
+              </h3>
               <p className="text-sm text-gray-500 mt-1 max-w-sm mx-auto">
-                Silakan pilih batch pengiriman di atas untuk melihat data Penugasan Kurir dan Laporan.
+                {displayBatches.length === 0
+                  ? 'Batch pengiriman akan muncul di Distribusi MBG setelah tim Produksi MBG menekan tombol "Kirim ke Distribusi".'
+                  : 'Silakan pilih batch pengiriman di atas untuk melihat data Penugasan Kurir dan Laporan.'}
               </p>
             </div>
           )}

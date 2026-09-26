@@ -1482,7 +1482,12 @@ export function MbgProductionPage() {
       icon: 'send',
       onConfirm: async () => {
         try {
-          await updateBatchStatus(selectedBatchId, 'DELIVERING');
+          await updateBatch(selectedBatchId, {
+            status: 'DELIVERING',
+            submittedToDistribution: true,
+            submittedToDistributionAt: new Date().toISOString(),
+            submittedToDistributionBy: user?.uid || '',
+          });
           showToast({ message: 'Data berhasil disubmit ke Distribusi MBG!', variant: 'success' });
         } catch (err) {
           console.error(err);
@@ -2844,7 +2849,7 @@ export function MbgProductionPage() {
                   </div>
 
                   {/* Submit to Distribution CTA */}
-                  {selectedBatch && ['NUTRITION_DONE', 'PDF_EXPORTED', 'DRAFT', 'PM_SUBMITTED'].includes(selectedBatch.status) && (
+                  {selectedBatch && !selectedBatch.submittedToDistribution && ['NUTRITION_DONE', 'PDF_EXPORTED', 'DRAFT', 'PM_SUBMITTED'].includes(selectedBatch.status) && (
                     <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
                       <div className="space-y-1">
                         <h4 className="text-sm font-extrabold text-emerald-800">Kadar Gizi Selesai Dihitung</h4>
@@ -2862,7 +2867,7 @@ export function MbgProductionPage() {
                     </div>
                   )}
 
-                  {selectedBatch && ['DELIVERING', 'DELIVERED', 'COOKING', 'PURCHASING'].includes(selectedBatch.status) && (
+                  {selectedBatch && (selectedBatch.submittedToDistribution || ['DELIVERING', 'DELIVERED', 'COOKING', 'PURCHASING'].includes(selectedBatch.status)) && (
                     <div className="bg-emerald-100/70 border border-emerald-300 rounded-2xl p-4 text-center text-xs font-bold text-emerald-800 mt-6 flex items-center justify-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                       <span>Data batch ini sudah terkirim & siap didistribusikan di Distribusi MBG.</span>

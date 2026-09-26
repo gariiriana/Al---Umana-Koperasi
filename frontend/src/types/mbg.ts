@@ -215,6 +215,12 @@ export interface MbgPmBatch {
   backedUpBy?: string;
   /** Timestamp saat dipulihkan kembali dari backup */
   restoredAt?: string;
+  /** Flag apakah batch telah disubmit oleh Produksi MBG ke Distribusi MBG */
+  submittedToDistribution?: boolean;
+  /** Timestamp saat batch disubmit ke Distribusi MBG */
+  submittedToDistributionAt?: string;
+  /** UID pengguna yang mensubmit batch ke Distribusi MBG */
+  submittedToDistributionBy?: string;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

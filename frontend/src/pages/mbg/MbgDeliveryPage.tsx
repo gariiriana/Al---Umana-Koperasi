@@ -81,20 +81,26 @@ export function MbgDeliveryPage() {
   // Description edit state (per entry per proof type)
   const descTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // Subscribe active batches with smart fallback to today's batch or active tasks batch
+  // Subscribe active batches: hanya batch yang SUDAH disubmit oleh Produksi MBG
   useEffect(() => {
     const unsub = subscribeBatches((data) => {
-      setBatches(data);
+      const activeBatches = data.filter((b) =>
+        !b.isBackup &&
+        (b.submittedToDistribution === true || ['DELIVERING', 'DELIVERED'].includes(b.status))
+      );
+      setBatches(activeBatches);
       const todayStr = getJakartaDate();
       const savedBatchId = sessionStorage.getItem('mbg_delivery_selected_batch');
-      if (savedBatchId && data.some((b) => b.id === savedBatchId)) {
+      if (savedBatchId && activeBatches.some((b) => b.id === savedBatchId)) {
         setSelectedBatchId(savedBatchId);
       } else {
-        const todayBatch = data.find((b) => b.tanggal === todayStr);
-        const initialBatch = todayBatch || data[0];
+        const todayBatch = activeBatches.find((b) => b.tanggal === todayStr);
+        const initialBatch = todayBatch || activeBatches[0];
         if (initialBatch) {
           setSelectedBatchId(initialBatch.id);
           sessionStorage.setItem('mbg_delivery_selected_batch', initialBatch.id);
+        } else {
+          setSelectedBatchId(null);
         }
       }
       setLoading(false);

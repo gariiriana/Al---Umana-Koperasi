@@ -517,8 +517,8 @@ export function MbgArchivePage() {
   }, [selectedBatchId]);
 
   const regularBatches = useMemo(() => {
-    // Tampilkan seluruh batch aktif (tidak di-backup) agar tidak ada data yang tersembunyi
-    return batches.filter((b) => !b.isBackup);
+    // Hanya tampilkan batch aktif yang SUDAH disubmit oleh Admin MBG (b.status !== 'DRAFT') dan tidak di-backup
+    return batches.filter((b) => !b.isBackup && b.status !== 'DRAFT');
   }, [batches]);
 
   const backupBatches = useMemo(() => {
@@ -1055,7 +1055,7 @@ export function MbgArchivePage() {
         <div className="bg-white border border-[#E5E7EB] rounded-2xl p-12 text-center shadow-sm">
           <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
           <p className="text-sm font-bold text-[#6B7280]">Belum ada batch di arsip</p>
-          <p className="text-xs text-[#9CA3AF] mt-1">Data akan masuk ke arsip setelah dibuat atau disubmit di menu Administrasi MBG</p>
+          <p className="text-xs text-[#9CA3AF] mt-1">Data akan masuk ke arsip PM aktif setelah disubmit di menu Administrasi MBG</p>
         </div>
       ) : !selectedBatchId ? (
         /* Folder List View */
