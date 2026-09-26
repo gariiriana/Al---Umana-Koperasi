@@ -1409,8 +1409,18 @@ export function MbgProductionPage() {
         logoBase64,
       }, `Laporan_Produksi_MBG_${batchToUse.tanggal}.docx`);
 
-      // Status tetap Data PM Lengkap saat ekspor DOCX
-      showToast({ message: 'Laporan DOCX resmi berhasil di-export!', variant: 'success' });
+      // Auto-save ke Arsip Gizi (mbg_daily_reports) saat export DOCX
+      if (reportToUse && user) {
+        saveDailyReport(reportToUse.id || null, {
+          ...reportToUse,
+          batchId: batchToUse.id,
+          tanggal: batchToUse.tanggal,
+          updatedAt: new Date().toISOString(),
+          createdBy: reportToUse.createdBy || user.uid,
+        }).catch((e) => console.error('Auto-save to Arsip Gizi on DOCX export failed:', e));
+      }
+
+      showToast({ message: 'Laporan DOCX resmi berhasil di-export & tersimpan di Arsip Gizi!', variant: 'success' });
     } catch (err) {
       console.error('Export DOCX error:', err);
       showToast({ message: err instanceof Error ? err.message : 'Gagal export DOCX', variant: 'error' });
@@ -1457,8 +1467,18 @@ export function MbgProductionPage() {
       setExportingPdf(true);
       await export8PageDailyReportPdf(reportToUse, batchToUse, entriesToUse);
 
-      // Status tetap Data PM Lengkap saat ekspor PDF
-      showToast({ message: 'Laporan PDF resmi berhasil di-export!', variant: 'success' });
+      // Auto-save ke Arsip Gizi (mbg_daily_reports) saat export PDF
+      if (reportToUse && user) {
+        saveDailyReport(reportToUse.id || null, {
+          ...reportToUse,
+          batchId: batchToUse.id,
+          tanggal: batchToUse.tanggal,
+          updatedAt: new Date().toISOString(),
+          createdBy: reportToUse.createdBy || user.uid,
+        }).catch((e) => console.error('Auto-save to Arsip Gizi on PDF export failed:', e));
+      }
+
+      showToast({ message: 'Laporan PDF resmi berhasil di-export & tersimpan di Arsip Gizi!', variant: 'success' });
     } catch (err) {
       console.error('Export PDF error:', err);
       showToast({ message: err instanceof Error ? err.message : 'Gagal export PDF', variant: 'error' });
@@ -1554,13 +1574,26 @@ export function MbgProductionPage() {
       icon: 'send',
       onConfirm: async () => {
         try {
+          // 1. Update batch status ke DELIVERING
           await updateBatch(selectedBatchId, {
             status: 'DELIVERING',
             submittedToDistribution: true,
             submittedToDistributionAt: new Date().toISOString(),
             submittedToDistributionBy: user?.uid || '',
           });
-          showToast({ message: 'Data berhasil disubmit ke Distribusi MBG!', variant: 'success' });
+
+          // 2. Auto-save laporan ke Arsip Gizi (mbg_daily_reports) — BUKAN ke Arsip PM
+          if (dailyReport && user) {
+            await saveDailyReport(dailyReport.id || null, {
+              ...dailyReport,
+              batchId: selectedBatchId,
+              tanggal: selectedBatch?.tanggal || '',
+              updatedAt: new Date().toISOString(),
+              createdBy: dailyReport.createdBy || user.uid,
+            });
+          }
+
+          showToast({ message: 'Data berhasil disubmit ke Distribusi MBG & tersimpan di Arsip Gizi!', variant: 'success' });
         } catch (err) {
           console.error(err);
           showToast({ message: 'Gagal menyubmit data ke Distribusi', variant: 'error' });
