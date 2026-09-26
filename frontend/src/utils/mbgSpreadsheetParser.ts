@@ -223,6 +223,7 @@ export function detectIsPosyandu(name: string): boolean {
     lowerName.startsWith('bumil') ||
     lowerName.startsWith('busui') ||
     (lowerName.includes('cempaka') && (lowerName.includes('balita') || lowerName.includes('bumil') || lowerName.includes('busui') || /^cempaka\s*\d+/i.test(lowerName) || /^posyandu\s*cempaka/i.test(lowerName))) ||
+    /^(cempaka|mawar|melati|anggrek|dahlia|flamboyan|kenanga|teratai|kamboja|matahari|tulip|bougenville|asoka|kemuning)\s*\d*/i.test(lowerName) ||
     lowerName.includes('paket 3b') ||
     lowerName.includes('paket3b')
   );
@@ -445,6 +446,7 @@ export function parsePmRowsToEntries(
   const colOffset = nameColIdx !== -1 ? nameColIdx : 0;
 
   const parsedEntries: Omit<MbgPmEntry, 'id'>[] = [];
+  let totalRowIdx = -1;
 
   for (let i = startRow; i < rows.length; i++) {
     const cols = rows[i] || [];
@@ -480,7 +482,7 @@ export function parsePmRowsToEntries(
 
     const firstColUpper = instName.toUpperCase();
 
-    // STOP total saat menemukan baris TOTAL / JUMLAH utama untuk menghindari data duplikat breakdown di bawah tabel
+    // Catat baris TOTAL pertama (pemisah tabel utama dengan breakdown sekunder Posyandu jika ada)
     if (
       firstColUpper === 'TOTAL' ||
       firstColUpper === 'JUMLAH' ||
@@ -489,6 +491,7 @@ export function parsePmRowsToEntries(
       firstColUpper === 'SUBTOTAL' ||
       firstColUpper === 'GRAND TOTAL'
     ) {
+      totalRowIdx = i;
       break;
     }
 
@@ -675,5 +678,282 @@ export function parsePmRowsToEntries(
     });
   }
 
-  return parsedEntries;
+  // Periksa apakah terdapat tabel breakdown Posyandu sekunder di bawah baris TOTAL pertama (misal Cempaka 1 s/d 13)
+  let secondaryEntries: Omit<MbgPmEntry, 'id'>[] = [];
+  if (totalRowIdx !== -1 && totalRowIdx + 1 < rows.length) {
+    secondaryEntries = parseSecondaryPosyanduTable(
+      rows,
+      totalRowIdx + 1,
+      batchId,
+      userUid,
+      menuItems,
+      menuKeringanItems
+    );
+  }
+
+  // Jika tabel breakdown Posyandu sekunder terdeteksi (seperti CEMPAKA 1-13):
+  // Gantikan baris rekapitulasi agregat umum (seperti "Balita Cempaka", "Bumil Cempaka", "Busui Cempaka")
+  // dari tabel utama agar porsi tidak terhitung ganda dan setiap posyandu muncul secara terperinci.
+  let resultEntries = parsedEntries;
+  if (secondaryEntries.length > 0) {
+    resultEntries = parsedEntries.filter((entry) => {
+      const lower = entry.institutionName.toLowerCase().trim();
+      const isAggregateSummary =
+        lower.startsWith('balita ') ||
+        lower.startsWith('bumil ') ||
+        lower.startsWith('busui ') ||
+        lower === 'posyandu' ||
+        lower.startsWith('rekap posyandu') ||
+        lower.startsWith('total posyandu');
+      return !isAggregateSummary;
+    });
+
+    resultEntries = [...resultEntries, ...secondaryEntries];
+  }
+
+  return resultEntries.map((e, idx) => ({ ...e, sortOrder: idx }));
+}
+
+/**
+ * Dynamic parser for secondary Posyandu breakdown tables located beneath the primary table.
+ * Common in MBG reports where schools are in Table 1, and Posyandu stations (e.g. CEMPAKA 1..13)
+ * are detailed below the primary TOTAL row.
+ */
+function parseSecondaryPosyanduTable(
+  rows: Array<Array<string | number | undefined | null>>,
+  startIndex: number,
+  batchId: string,
+  userUid: string,
+  menuItems: string[],
+  menuKeringanItems: string[]
+): Omit<MbgPmEntry, 'id'>[] {
+  if (startIndex >= rows.length) return [];
+
+  const secondaryEntries: Omit<MbgPmEntry, 'id'>[] = [];
+
+  let firstDataRowIdx = -1;
+  let balitaLCol = -1;
+  let balitaPCol = -1;
+  let bumilCol = -1;
+  let busuiCol = -1;
+  let kaderCol = -1;
+  let jumlahCol = -1;
+
+  // 1. Scan rows after the first TOTAL to locate the secondary header or first institution row
+  for (let r = startIndex; r < rows.length; r++) {
+    const row = rows[r] || [];
+    if (!row || row.length === 0) continue;
+
+    let hasBalitaHeader = false;
+    let hasBumilHeader = false;
+
+    for (let c = 0; c < row.length; c++) {
+      const cellStr = String(row[c] || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (!cellStr) continue;
+
+      if (cellStr.includes('balita')) {
+        hasBalitaHeader = true;
+      }
+      if (cellStr.includes('bumil') || cellStr.includes('busui')) {
+        hasBumilHeader = true;
+      }
+      if (cellStr === 'jumlah' || cellStr === 'total' || cellStr.includes('jumlah')) {
+        jumlahCol = c;
+      }
+    }
+
+    if (hasBalitaHeader || hasBumilHeader) {
+      const subRow = rows[r + 1] || [];
+      for (let c = 0; c < Math.max(row.length, subRow.length); c++) {
+        const topCell = String(row[c] || '').toLowerCase().trim();
+        const subCell = String(subRow[c] || '').toLowerCase().trim();
+
+        if (topCell.includes('balita') || subCell.includes('balita')) {
+          if (subCell === 'l') balitaLCol = c;
+          else if (subCell === 'p') balitaPCol = c;
+          else if (balitaLCol === -1) {
+            balitaLCol = c;
+            balitaPCol = c + 1;
+          }
+        } else if (subCell === 'l' && balitaLCol !== -1 && balitaPCol === -1) {
+          balitaPCol = c;
+        }
+
+        if (topCell.includes('bumil/busui') || subCell.includes('bumil/busui')) {
+          bumilCol = c;
+          busuiCol = c + 1;
+        } else if (topCell.includes('bumil') || subCell.includes('bumil')) {
+          bumilCol = c;
+        } else if (topCell.includes('busui') || subCell.includes('busui')) {
+          busuiCol = c;
+        }
+
+        if (topCell.includes('kader') || subCell.includes('kader')) {
+          kaderCol = c;
+        }
+
+        if (topCell === 'jumlah' || subCell === 'jumlah') {
+          jumlahCol = c;
+        }
+      }
+
+      const hasSubHeader = subRow.some((c) => {
+        const s = String(c || '').trim().toUpperCase();
+        return s === 'L' || s === 'P';
+      });
+      firstDataRowIdx = hasSubHeader ? r + 2 : r + 1;
+      break;
+    }
+
+    // Check if row directly begins with a posyandu name (e.g. 'CEMPAKA 1' or 'Posyandu Cempaka 1')
+    const col0Str = String(row[0] || '').trim();
+    const col1Str = String(row[1] || '').trim();
+    const isInst = (s: string) =>
+      Boolean(s && isNaN(Number(s)) && (detectIsPosyandu(s) || /^cempaka\s*\d+/i.test(s)));
+
+    if (isInst(col0Str) || (!isNaN(Number(col0Str)) && isInst(col1Str))) {
+      firstDataRowIdx = r;
+      break;
+    }
+  }
+
+  if (firstDataRowIdx === -1 || firstDataRowIdx >= rows.length) return [];
+
+  // 2. Iterate through secondary table data rows
+  for (let r = firstDataRowIdx; r < rows.length; r++) {
+    const row = rows[r] || [];
+    if (!row || row.length === 0) continue;
+
+    const col0Str = String(row[0] || '').trim();
+    const col1Str = String(row[1] || '').trim();
+    const upper0 = col0Str.toUpperCase();
+
+    // Secondary table TOTAL stops parsing
+    if (
+      upper0 === 'TOTAL' ||
+      upper0 === 'JUMLAH' ||
+      upper0.startsWith('TOTAL ') ||
+      upper0.startsWith('JUMLAH ') ||
+      upper0 === 'GRAND TOTAL'
+    ) {
+      break;
+    }
+
+    // Skip repeated headers
+    if (
+      upper0 === 'NO' ||
+      upper0 === 'NO.' ||
+      upper0 === 'BALITA' ||
+      upper0 === 'BUMIL' ||
+      upper0 === 'BUSUI' ||
+      upper0 === 'L' ||
+      upper0 === 'P' ||
+      upper0.includes('REKAP') ||
+      upper0.includes('PERIODE')
+    ) {
+      continue;
+    }
+
+    let instName = '';
+    let dataOffset = 0;
+
+    if (col0Str && isNaN(Number(col0Str))) {
+      instName = col0Str;
+      dataOffset = 0;
+    } else if (col0Str && !isNaN(Number(col0Str)) && col1Str && isNaN(Number(col1Str))) {
+      instName = col1Str;
+      dataOffset = 1;
+    } else {
+      continue;
+    }
+
+    if (!instName || instName === '-' || instName === '—') continue;
+
+    let balitaL = 0;
+    let balitaP = 0;
+    let bumil = 0;
+    let busui = 0;
+    let kader = 0;
+    let sourceJumlah = 0;
+
+    if (balitaLCol !== -1 && balitaPCol !== -1) {
+      balitaL = parseCellToNumber(row[balitaLCol]);
+      balitaP = parseCellToNumber(row[balitaPCol]);
+    } else {
+      balitaL = parseCellToNumber(row[dataOffset + 1]);
+      balitaP = parseCellToNumber(row[dataOffset + 2]);
+    }
+
+    if (bumilCol !== -1) {
+      bumil = parseCellToNumber(row[bumilCol]);
+    } else {
+      bumil = parseCellToNumber(row[dataOffset + 3]);
+    }
+
+    if (busuiCol !== -1) {
+      busui = parseCellToNumber(row[busuiCol]);
+    } else {
+      busui = parseCellToNumber(row[dataOffset + 4]);
+    }
+
+    if (kaderCol !== -1) {
+      kader = parseCellToNumber(row[kaderCol]);
+    }
+
+    if (jumlahCol !== -1) {
+      sourceJumlah = parseCellToNumber(row[jumlahCol]);
+    }
+
+    // Fallback: search for rightmost numeric cell as sourceJumlah
+    if (sourceJumlah === 0) {
+      for (let c = row.length - 1; c > dataOffset + 4; c--) {
+        const val = parseCellToNumber(row[c]);
+        if (val > 0) {
+          sourceJumlah = val;
+          break;
+        }
+      }
+    }
+
+    const balitaTotal = balitaL + balitaP;
+    const bumilBusuiTotal = bumil + busui;
+    const calcJml = balitaTotal + bumilBusuiTotal + kader;
+    const jumlah = sourceJumlah > 0 ? sourceJumlah : calcJml;
+
+    if (jumlah === 0 && balitaTotal === 0 && bumilBusuiTotal === 0) {
+      continue;
+    }
+
+    secondaryEntries.push({
+      batchId,
+      institutionName: instName,
+      institutionType: 'posyandu',
+      qtSiswaBalita: balitaTotal,
+      qtBumilBusui: bumilBusuiTotal,
+      qtBumil: bumil || undefined,
+      qtBusui: busui || undefined,
+      qtGuruKader: kader,
+      qtPobiaNasi: 0,
+      qtPorsiBalita: balitaTotal,
+      qtPorsiKecil: balitaTotal,
+      qtPorsiBesar: kader,
+      qtPorsiBumilBusui: bumilBusuiTotal,
+      qtPorsiKecilL: balitaL || undefined,
+      qtPorsiKecilP: balitaP || undefined,
+      jumlah,
+      jadwalPengantaran: '06.00-08.30',
+      assignedPetugasId: '',
+      assignedPetugasName: '',
+      isSekolahLibur: jumlah === 0,
+      sortOrder: secondaryEntries.length,
+      notes: '',
+      menuItems: [...menuItems],
+      menuKeringanItems: [...menuKeringanItems],
+      createdBy: userUid || 'system',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  return secondaryEntries;
 }

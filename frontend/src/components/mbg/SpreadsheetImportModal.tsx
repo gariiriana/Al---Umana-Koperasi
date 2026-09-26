@@ -534,10 +534,10 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
                             <tr>
                               <th className="px-2.5 py-1.5 w-8 text-center">No</th>
                               <th className="px-2.5 py-1.5">Nama Lembaga</th>
-                              <th className="px-2.5 py-1.5 text-center">Tipe</th>
-                              <th className="px-2.5 py-1.5 text-right">Porsi Kecil</th>
-                              <th className="px-2.5 py-1.5 text-right">Porsi Besar</th>
-                              <th className="px-2.5 py-1.5 text-right">Guru/Kader</th>
+                              <th className="px-2.5 py-1.5 text-right">Balita (L/P)</th>
+                              <th className="px-2.5 py-1.5 text-right">Bumil</th>
+                              <th className="px-2.5 py-1.5 text-right">Busui</th>
+                              <th className="px-2.5 py-1.5 text-right">Kader</th>
                               <th className="px-2.5 py-1.5 text-right font-black text-pink-900">Total</th>
                             </tr>
                           </thead>
@@ -546,15 +546,11 @@ export const SpreadsheetImportModal: React.FC<SpreadsheetImportModalProps> = ({
                               <tr key={`posyandu-${entry.institutionName}-${idx}`} className="hover:bg-slate-50">
                                 <td className="px-2.5 py-1.5 text-center text-slate-400">{idx + 1}</td>
                                 <td className="px-2.5 py-1.5 font-bold text-slate-800">{entry.institutionName}</td>
-                                <td className="px-2.5 py-1.5 text-center">
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-pink-100 text-pink-700">
-                                    {entry.institutionType}
-                                  </span>
-                                </td>
                                 <td className="px-2.5 py-1.5 text-right text-slate-600">
-                                  {(entry.qtPorsiKecil || 0) + (entry.qtPorsiBalita || 0) || '-'}
+                                  {(entry.qtPorsiKecilL || 0) + (entry.qtPorsiKecilP || 0) || entry.qtPorsiBalita || entry.qtSiswaBalita || '-'}
                                 </td>
-                                <td className="px-2.5 py-1.5 text-right text-slate-600">{entry.qtPorsiBesar || '-'}</td>
+                                <td className="px-2.5 py-1.5 text-right text-slate-600">{entry.qtBumil || '-'}</td>
+                                <td className="px-2.5 py-1.5 text-right text-slate-600">{entry.qtBusui || '-'}</td>
                                 <td className="px-2.5 py-1.5 text-right text-slate-600">{entry.qtGuruKader || '-'}</td>
                                 <td className="px-2.5 py-1.5 text-right font-black text-pink-800">
                                   {entry.jumlah || 0}

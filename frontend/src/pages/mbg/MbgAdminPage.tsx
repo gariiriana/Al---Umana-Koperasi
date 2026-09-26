@@ -96,12 +96,13 @@ function calcJumlah(entry: Partial<MbgPmEntry>): number {
 function getAutoRekapTotals(entries: MbgPmEntry[]) {
   return entries.filter((entry) => !entry.isSekolahLibur).reduce(
     (total, entry) => {
+      const isPos = entry.institutionType === 'posyandu';
       const porsiKecilL = entry.qtPorsiKecilL || 0;
       const porsiKecilP = entry.qtPorsiKecilP || 0;
-      const porsiBesarL = entry.qtPorsiBesarL || 0;
-      const porsiBesarP = entry.qtPorsiBesarP || 0;
       const bumil = entry.qtBumil || 0;
       const busui = entry.qtBusui || 0;
+      const porsiBesarL = isPos ? bumil : (entry.qtPorsiBesarL || 0);
+      const porsiBesarP = isPos ? busui : (entry.qtPorsiBesarP || 0);
       const guruL = entry.qtGuruL || 0;
       const guruP = entry.qtGuruP || 0;
       const tendikL = entry.qtTendikL || 0;
@@ -111,8 +112,8 @@ function getAutoRekapTotals(entries: MbgPmEntry[]) {
       total.porsiKecilP += porsiKecilP;
       total.porsiBesarL += porsiBesarL;
       total.porsiBesarP += porsiBesarP;
-      total.totalL += porsiKecilL + porsiBesarL;
-      total.totalP += porsiKecilP + porsiBesarP + bumil + busui;
+      total.totalL += porsiKecilL + (isPos ? 0 : porsiBesarL);
+      total.totalP += porsiKecilP + (isPos ? 0 : porsiBesarP) + bumil + busui;
       total.guruL += guruL;
       total.guruP += guruP;
       total.tendikL += tendikL;
@@ -364,8 +365,14 @@ function AutoRekapEntryRow({
   const isBumil = isPosyandu && nameLower.includes('bumil');
   const isBusui = isPosyandu && nameLower.includes('busui');
 
-  const totalL = (entry.qtPorsiKecilL || 0) + (entry.qtPorsiBesarL || 0);
-  const totalP = (entry.qtPorsiKecilP || 0) + (entry.qtPorsiBesarP || 0) + (entry.qtBumil || 0) + (entry.qtBusui || 0);
+  const totalL = isPosyandu
+    ? (entry.qtPorsiKecilL || 0)
+    : (entry.qtPorsiKecilL || 0) + (entry.qtPorsiBesarL || 0);
+
+  const totalP = isPosyandu
+    ? (entry.qtPorsiKecilP || 0) + (entry.qtBumil || 0) + (entry.qtBusui || 0)
+    : (entry.qtPorsiKecilP || 0) + (entry.qtPorsiBesarP || 0) + (entry.qtBumil || 0) + (entry.qtBusui || 0);
+
   const totalSiswa = totalL + totalP;
   const totalStaf = (entry.qtGuruL || 0) + (entry.qtGuruP || 0) + (entry.qtTendikL || 0) + (entry.qtTendikP || 0);
 
@@ -378,13 +385,19 @@ function AutoRekapEntryRow({
     const nextBalita = (next.qtPorsiKecilL || 0) + (next.qtPorsiKecilP || 0);
     const nextBumil = next.qtBumil || 0;
     const nextBusui = next.qtBusui || 0;
-    const nextSiswaL = (next.qtPorsiKecilL || 0) + (next.qtPorsiBesarL || 0);
-    const nextSiswaP = (next.qtPorsiKecilP || 0) + (next.qtPorsiBesarP || 0) + nextBumil + nextBusui;
+    const nextSiswaL = nextIsPosyandu
+      ? (next.qtPorsiKecilL || 0)
+      : (next.qtPorsiKecilL || 0) + (next.qtPorsiBesarL || 0);
+    const nextSiswaP = nextIsPosyandu
+      ? (next.qtPorsiKecilP || 0) + nextBumil + nextBusui
+      : (next.qtPorsiKecilP || 0) + (next.qtPorsiBesarP || 0) + nextBumil + nextBusui;
     const nextStaf = (next.qtGuruL || 0) + (next.qtGuruP || 0) + (next.qtTendikL || 0) + (next.qtTendikP || 0);
 
     onUpdate(entry.id, {
       [field]: value,
       qtSiswaBalita: nextIsPosyandu ? (nextIsBumil || nextIsBusui ? 0 : nextBalita) : (next.qtPorsiKecilL || 0) + (next.qtPorsiKecilP || 0) + (next.qtPorsiBesarL || 0) + (next.qtPorsiBesarP || 0),
+      qtBumil: nextBumil,
+      qtBusui: nextBusui,
       qtBumilBusui: nextBumil + nextBusui,
       qtGuruKader: nextStaf,
       qtPorsiBalita: nextIsPosyandu ? nextBalita : 0,
@@ -431,8 +444,16 @@ function AutoRekapEntryRow({
       </td>
       <td className="border-r border-slate-200 p-1 text-center">{numberInput('qtPorsiKecilL', entry.qtPorsiKecilL || 0, isBumil || isBusui)}</td>
       <td className="border-r border-slate-200 p-1 text-center">{numberInput('qtPorsiKecilP', entry.qtPorsiKecilP || 0, isBumil || isBusui)}</td>
-      <td className="border-r border-slate-200 p-1 text-center">{numberInput('qtPorsiBesarL', entry.qtPorsiBesarL || 0, isPosyandu)}</td>
-      <td className="border-r border-slate-200 p-1 text-center">{numberInput('qtPorsiBesarP', entry.qtPorsiBesarP || 0, isPosyandu)}</td>
+      <td className="border-r border-slate-200 p-1 text-center">
+        {isPosyandu
+          ? numberInput('qtBumil', entry.qtBumil || 0, isBusui)
+          : numberInput('qtPorsiBesarL', entry.qtPorsiBesarL || 0)}
+      </td>
+      <td className="border-r border-slate-200 p-1 text-center">
+        {isPosyandu
+          ? numberInput('qtBusui', entry.qtBusui || 0, isBumil)
+          : numberInput('qtPorsiBesarP', entry.qtPorsiBesarP || 0)}
+      </td>
       <td className="border-r border-slate-200 bg-slate-50 px-2 py-1 text-center">{totalL || '—'}</td>
       <td className="border-r border-slate-200 bg-slate-50 px-2 py-1 text-center">{totalP || '—'}</td>
       <td className="border-r border-slate-300 bg-slate-100 px-2 py-1 text-center font-extrabold">{totalSiswa}</td>
@@ -1647,9 +1668,11 @@ export function MbgAdminPage() {
           } else if (lowerName.includes('busui')) {
             busui = pbl || pkl || pbp || pkp || e.qtBusui || e.qtSiswaBalita || 0;
           } else {
-            // Balita
-            balitaL = pbl || pkl;
-            balitaP = pbp || pkp;
+            // Balita & Posyandu umum
+            balitaL = e.qtPorsiKecilL ?? (pbl || pkl);
+            balitaP = e.qtPorsiKecilP ?? (pbp || pkp);
+            bumil = e.qtBumil || 0;
+            busui = e.qtBusui || 0;
           }
 
           const totalBalita = balitaL + balitaP;
@@ -2320,13 +2343,23 @@ export function MbgAdminPage() {
                         <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] border-collapse border border-slate-300">
                           <thead>
                             <tr className="bg-slate-200 text-[9px] font-extrabold text-slate-800 uppercase tracking-tight text-center border-b border-slate-300">
-                              <th rowSpan={2} className="px-2 py-1.5 border-r border-slate-300 text-left min-w-[170px]">SEKOLAH</th>
-                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI KECIL</th>
-                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">PORSI BESAR</th>
+                              <th rowSpan={2} className="px-2 py-1.5 border-r border-slate-300 text-left min-w-[170px]">
+                                {title.includes('POSYANDU') ? 'POSYANDU' : 'SEKOLAH'}
+                              </th>
+                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">
+                                {title.includes('POSYANDU') ? 'BALITA' : 'PORSI KECIL'}
+                              </th>
+                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">
+                                {title.includes('POSYANDU') ? 'BUMIL / BUSUI' : 'PORSI BESAR'}
+                              </th>
                               <th colSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/60 font-black">TOTAL</th>
                               <th rowSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/60 font-black">JML</th>
-                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">GURU</th>
-                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">TENDIK</th>
+                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">
+                                {title.includes('POSYANDU') ? 'KADER' : 'GURU'}
+                              </th>
+                              <th colSpan={2} className="px-1 py-1 border-r border-slate-300">
+                                {title.includes('POSYANDU') ? 'STAF' : 'TENDIK'}
+                              </th>
                               <th rowSpan={2} className="px-1 py-1 border-r border-slate-300 bg-slate-300/50 font-extrabold">JML</th>
                               <th rowSpan={2} className="px-1.5 py-1 border-r border-slate-300 bg-amber-100/80 text-amber-900 font-black text-[9px]">TOTAL KESELURUHAN</th>
                               <th rowSpan={2} className="px-1 py-1">AKSI</th>
@@ -2334,8 +2367,8 @@ export function MbgAdminPage() {
                             <tr className="bg-slate-100 text-[8.5px] font-bold text-slate-700 uppercase tracking-tight text-center border-b border-slate-300">
                               <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
                               <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
-                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
-                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">P</th>
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">{title.includes('POSYANDU') ? 'BUMIL' : 'L'}</th>
+                              <th className="px-1 py-0.5 border-r border-slate-300 w-8">{title.includes('POSYANDU') ? 'BUSUI' : 'P'}</th>
                               <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">L</th>
                               <th className="px-1 py-0.5 border-r border-slate-300 bg-slate-200/50 w-8">P</th>
                               <th className="px-1 py-0.5 border-r border-slate-300 w-8">L</th>
