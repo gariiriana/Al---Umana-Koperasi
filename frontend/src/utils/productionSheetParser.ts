@@ -12,6 +12,9 @@ import type {
   MbgPmEntry,
   MbgInstitutionType,
 } from '@/types/mbg';
+import { isSummaryOrCategoryRow } from './mbgPmFilter';
+export { isSummaryOrCategoryRow };
+
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1033,7 +1036,7 @@ export function parseProductionSheetRows(
     for (let r = startR; r < Math.min(rows.length, startR + 40); r++) {
       const row = rows[r] || [];
       const nama = str(row[colSekolahNama]);
-      if (nama && !nama.toLowerCase().includes('total') && !nama.toLowerCase().includes('murid')) {
+      if (nama && !isSummaryOrCategoryRow(nama)) {
         sekolahList.push({
           nama,
           murid: num(row[colSekolahNama + 1]),
@@ -1046,7 +1049,7 @@ export function parseProductionSheetRows(
     for (let r = 2; r < Math.min(rows.length, 50); r++) {
       const row = rows[r] || [];
       const nama = str(row[COL_SEKOLAH_NAMA]);
-      if (nama && nama !== 'Sekolah Yang Dikirim:' && !nama.toLowerCase().includes('murid') && !nama.toLowerCase().includes('total')) {
+      if (nama && nama !== 'Sekolah Yang Dikirim:' && !isSummaryOrCategoryRow(nama)) {
         sekolahList.push({
           nama,
           murid: num(row[COL_SEKOLAH_MURID]),
@@ -1073,12 +1076,7 @@ export function parseProductionSheetRows(
         const guru = num(row[3]);
         if (
           nama &&
-          !nama.toLowerCase().includes('total') &&
-          !nama.toLowerCase().includes('porsi') &&
-          !nama.toLowerCase().includes('paud/tk') &&
-          !nama.toLowerCase().includes('sd/mi') &&
-          !nama.toLowerCase().includes('smp/mts') &&
-          !nama.toLowerCase().includes('sma/ma') &&
+          !isSummaryOrCategoryRow(nama) &&
           (typeof no === 'number' || (typeof no === 'string' && !isNaN(Number(no))))
         ) {
           sekolahList.push({ nama, murid, guru });

@@ -25,6 +25,10 @@ import {
   Square,
   MinusSquare,
   ExternalLink,
+  Edit,
+  CheckCircle2,
+  Info,
+  Sparkles,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -34,7 +38,6 @@ import type { MbgPmBatch, MbgPmEntry, MbgInstitutionType, MbgClassBreakdown } fr
 import {
   subscribeBatches,
   subscribeEntries,
-  subscribeAllEntries,
   addEntry,
   updateEntry,
   deleteEntry,
@@ -46,7 +49,6 @@ import {
   restoreMultipleBatchesFromBackup,
   deleteMultipleBatches,
 } from '@/services/mbgAdminService';
-import { MBG_BATCH_STATUS_CONFIG } from '@/constants/mbgConstants';
 
 // ---- Helper: Auto-calculate portion suggestions based on levels and inputs ----
 function getAutoPortions(entry: Partial<MbgPmEntry>) {
@@ -205,11 +207,10 @@ function PmEntryRow({
 
               <button
                 onClick={onManageClasses}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors cursor-pointer shadow-sm w-full justify-center ${
-                  hasClasses
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors cursor-pointer shadow-sm w-full justify-center ${hasClasses
                     ? 'bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100/70 hover:border-blue-300'
                     : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                }`}
+                  }`}
                 title="Atur Breakdown Kelas"
               >
                 <span>Atur Kelas ({entry.classesBreakdown?.length || 0})</span>
@@ -238,11 +239,10 @@ function PmEntryRow({
             value={entry.qtSiswaBalita || ''}
             onChange={(e) => handleFieldChange('qtSiswaBalita', parseInt(e.target.value) || 0)}
             placeholder={isPosyandu ? 'Balita' : 'Siswa'}
-            className={`w-14 rounded-lg border px-1.5 py-1 text-xs text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#FBBF24] ${
-              hasClasses
+            className={`w-14 rounded-lg border px-1.5 py-1 text-xs text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#FBBF24] ${hasClasses
                 ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'
                 : 'border-[#E5E7EB] text-[#111827]'
-            }`}
+              }`}
           />
         </div>
       </td>
@@ -308,11 +308,10 @@ function PmEntryRow({
             value={entry.qtPobiaNasi || ''}
             onChange={(e) => handleFieldChange('qtPobiaNasi', parseInt(e.target.value) || 0)}
             placeholder="0"
-            className={`w-12 rounded-lg border px-1.5 py-1 text-xs text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#FBBF24] ${
-              hasClasses
+            className={`w-12 rounded-lg border px-1.5 py-1 text-xs text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#FBBF24] ${hasClasses
                 ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'
                 : 'border-[#E5E7EB] text-[#111827]'
-            }`}
+              }`}
           />
         </div>
       </td>
@@ -343,11 +342,10 @@ function PmEntryRow({
           value={entry.jadwalPengantaran}
           onChange={(e) => handleFieldChange('jadwalPengantaran', e.target.value)}
           placeholder="06.00-08.30"
-          className={`w-full min-w-[105px] rounded-lg border px-1.5 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-2 focus:ring-[#FBBF24] ${
-            hasClasses
+          className={`w-full min-w-[105px] rounded-lg border px-1.5 py-1 text-xs text-center font-semibold focus:outline-none focus:ring-2 focus:ring-[#FBBF24] ${hasClasses
               ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'
               : 'border-[#E5E7EB] text-[#111827]'
-          }`}
+            }`}
         />
       </td>
 
@@ -364,11 +362,10 @@ function PmEntryRow({
               });
             }}
             title={entry.isSekolahLibur ? 'Aktifkan' : 'Tandai Libur'}
-            className={`p-1.5 rounded-lg text-[10px] font-bold cursor-pointer transition-colors ${
-              entry.isSekolahLibur
+            className={`p-1.5 rounded-lg text-[10px] font-bold cursor-pointer transition-colors ${entry.isSekolahLibur
                 ? 'bg-red-100 text-red-700 hover:bg-red-200'
                 : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
-            }`}
+              }`}
           >
             {entry.isSekolahLibur ? '🔴' : '⚪'}
           </button>
@@ -411,7 +408,7 @@ export function MbgArchivePage() {
     if (paramBatchId && paramBatchId !== selectedBatchId) {
       setSelectedBatchId(paramBatchId);
     }
-  }, [paramBatchId]);
+  }, [paramBatchId, selectedBatchId]);
   const [entries, setEntries] = useState<MbgPmEntry[]>([]);
   const [selectedBatchEntries, setSelectedBatchEntries] = useState<MbgPmEntry[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
@@ -430,6 +427,7 @@ export function MbgArchivePage() {
 
   const [archiveTab, setArchiveTab] = useState<'active' | 'backup'>('active');
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
+  const [showPmInfoModal, setShowPmInfoModal] = useState(false);
 
   // Reset selection when tab changes or navigating between batch views
   useEffect(() => {
@@ -437,52 +435,27 @@ export function MbgArchivePage() {
   }, [archiveTab, selectedBatchId]);
 
   // Subscribe to all batches (termasuk DRAFT dan backup agar tidak ada data PM yang tersembunyi dari arsip)
+  // Subscribe to all batches (termasuk DRAFT dan backup agar tidak ada data PM yang tersembunyi dari arsip)
   useEffect(() => {
-    let batchesSettled = false;
-    let entriesSettled = false;
     let hasLoadError = false;
-    // Firestore normally returns an empty cached/server snapshot immediately.
-    // On a stalled network/listener it may not invoke either callback, which
-    // previously left this page loading forever.
     const loadingTimeout = window.setTimeout(() => {
       setLoadingBatches(false);
       setLoadError('Data arsip belum merespons. Periksa koneksi lalu muat ulang halaman.');
     }, 10_000);
-    const finishLoading = (source: 'batches' | 'entries') => {
-      if (source === 'batches') batchesSettled = true;
-      else entriesSettled = true;
-      if (batchesSettled && entriesSettled) {
-        window.clearTimeout(loadingTimeout);
-        if (!hasLoadError) setLoadError('');
-      }
-    };
 
     const unsubBatches = subscribeBatches(
       (b) => {
         setBatches(b);
         setLoadingBatches(false);
-        finishLoading('batches');
+        window.clearTimeout(loadingTimeout);
+        if (!hasLoadError) setLoadError('');
       },
       (err) => {
         hasLoadError = true;
         console.error('Error loading batches:', err);
         setLoadingBatches(false);
         setLoadError(`Gagal memuat batch arsip: ${err.message}`);
-        finishLoading('batches');
-      },
-      true // includeBackup = true for MbgArchivePage
-    );
-
-    const unsubEntries = subscribeAllEntries(
-      (e) => {
-        setEntries(e);
-        finishLoading('entries');
-      },
-      (err) => {
-        hasLoadError = true;
-        console.error('Error loading entries:', err);
-        setLoadError(`Gagal memuat entri arsip: ${err.message}`);
-        finishLoading('entries');
+        window.clearTimeout(loadingTimeout);
       },
       true // includeBackup = true for MbgArchivePage
     );
@@ -490,7 +463,6 @@ export function MbgArchivePage() {
     return () => {
       window.clearTimeout(loadingTimeout);
       unsubBatches();
-      unsubEntries();
     };
   }, []);
 
@@ -989,7 +961,7 @@ export function MbgArchivePage() {
             {selectedBatchId ? `Detail Arsip Batch` : 'Arsip Data PM MBG'}
           </h1>
           <p className="text-sm text-[#6B7280] mt-1">
-            {selectedBatchId 
+            {selectedBatchId
               ? `Melihat dan mengedit data PM historis untuk batch tanggal ${selectedBatch?.tanggal}`
               : 'Kelola, edit, atau hapus data PM historis yang sudah disubmit'
             }
@@ -1066,17 +1038,15 @@ export function MbgArchivePage() {
               <button
                 type="button"
                 onClick={() => setArchiveTab('active')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  archiveTab === 'active'
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${archiveTab === 'active'
                     ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
                     : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 <Folder className="h-4 w-4" />
                 <span>Arsip PM Aktif</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                  archiveTab === 'active' ? 'bg-slate-950 text-amber-300' : 'bg-gray-200 text-gray-700'
-                }`}>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${archiveTab === 'active' ? 'bg-slate-950 text-amber-300' : 'bg-gray-200 text-gray-700'
+                  }`}>
                   {regularBatches.length}
                 </span>
               </button>
@@ -1084,17 +1054,15 @@ export function MbgArchivePage() {
               <button
                 type="button"
                 onClick={() => setArchiveTab('backup')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  archiveTab === 'backup'
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${archiveTab === 'backup'
                     ? 'bg-slate-900 text-amber-300 font-black shadow-xs'
                     : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 <Archive className="h-4 w-4 text-amber-400" />
                 <span>Data Arsip Backup</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                  archiveTab === 'backup' ? 'bg-amber-400 text-slate-950' : 'bg-gray-200 text-gray-700'
-                }`}>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${archiveTab === 'backup' ? 'bg-amber-400 text-slate-950' : 'bg-gray-200 text-gray-700'
+                  }`}>
                   {backupBatches.length}
                 </span>
               </button>
@@ -1247,53 +1215,49 @@ export function MbgArchivePage() {
                 const matchingQuery = searchQuery.toLowerCase();
                 const matchedSchools = searchQuery
                   ? batchEntries.filter(
-                      (e) =>
-                        e.institutionName.toLowerCase().includes(matchingQuery) ||
-                        (e.assignedPetugasName || '').toLowerCase().includes(matchingQuery)
-                    )
+                    (e) =>
+                      e.institutionName.toLowerCase().includes(matchingQuery) ||
+                      (e.assignedPetugasName || '').toLowerCase().includes(matchingQuery)
+                  )
                   : [];
                 const isSelected = selectedBatchIds.includes(b.id);
-                
+
                 return (
                   <motion.div
                     key={b.id}
                     whileHover={{ y: -4, scale: 1.02 }}
                     onClick={() => setSelectedBatchId(b.id)}
-                    className={`bg-white rounded-2xl border p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden group font-['Hanken_Grotesk'] ${
-                      isSelected
+                    className={`bg-white rounded-2xl border p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden group font-['Hanken_Grotesk'] ${isSelected
                         ? 'ring-2 ring-amber-400 border-amber-400 bg-amber-50/30 shadow-md'
                         : b.isBackup
-                        ? 'border-slate-300 hover:border-slate-500 bg-slate-50/40'
-                        : 'border-[#E5E7EB] hover:border-amber-300'
-                    }`}
+                          ? 'border-slate-300 hover:border-slate-500 bg-slate-50/40'
+                          : 'border-[#E5E7EB] hover:border-amber-300'
+                      }`}
                   >
                     {/* Visual tab of a folder */}
-                    <div className={`absolute top-0 left-0 w-24 h-1 transition-colors ${
-                      isSelected
+                    <div className={`absolute top-0 left-0 w-24 h-1 transition-colors ${isSelected
                         ? 'bg-amber-500'
                         : b.isBackup
-                        ? 'bg-slate-700 group-hover:bg-slate-900'
-                        : 'bg-amber-400 group-hover:bg-[#F59E0B]'
-                    }`} />
-                    
+                          ? 'bg-slate-700 group-hover:bg-slate-900'
+                          : 'bg-amber-400 group-hover:bg-[#F59E0B]'
+                      }`} />
+
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={(e) => handleToggleSelectBatch(b.id, e)}
-                            className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
-                              isSelected
+                            className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${isSelected
                                 ? 'bg-amber-400 border-amber-500 text-slate-950 shadow-xs'
                                 : 'bg-white border-gray-300 text-transparent hover:border-amber-400 hover:text-gray-300'
-                            }`}
+                              }`}
                             title={isSelected ? 'Batalkan pilihan batch ini' : 'Pilih batch ini'}
                           >
                             <Check className={`h-4 w-4 stroke-[3] ${isSelected ? 'opacity-100 text-slate-950' : 'opacity-0'}`} />
                           </button>
-                          <div className={`p-2.5 rounded-xl transition-colors ${
-                            b.isBackup ? 'bg-slate-100 text-slate-700 group-hover:bg-slate-200' : 'bg-amber-50 text-amber-500 group-hover:bg-amber-100'
-                          }`}>
+                          <div className={`p-2.5 rounded-xl transition-colors ${b.isBackup ? 'bg-slate-100 text-slate-700 group-hover:bg-slate-200' : 'bg-amber-50 text-amber-500 group-hover:bg-amber-100'
+                            }`}>
                             {b.isBackup ? <Archive className="h-5 w-5" /> : <Folder className="h-5 w-5 fill-amber-100" />}
                           </div>
                         </div>
@@ -1304,9 +1268,19 @@ export function MbgArchivePage() {
                               Backup
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-[#FEF3C7] text-[#92400E]">
-                              {MBG_BATCH_STATUS_CONFIG[b.status]?.label || b.status}
-                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowPmInfoModal(true);
+                              }}
+                              title="Klik untuk melihat penjelasan status Data PM Lengkap"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 hover:border-emerald-400 hover:text-emerald-800 transition-all cursor-pointer shadow-xs group/btn"
+                            >
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600 group-hover/btn:scale-110 transition-transform" />
+                              <span>Data PM Lengkap</span>
+                              <Info className="h-2.5 w-2.5 opacity-60 text-emerald-600" />
+                            </button>
                           )}
                           <button
                             type="button"
@@ -1321,7 +1295,7 @@ export function MbgArchivePage() {
                           </button>
                         </div>
                       </div>
-                      
+
                       <div>
                         <h4 className="text-xs font-extrabold text-gray-800 break-all select-none">
                           Pengiriman: {b.tanggal}
@@ -1366,7 +1340,7 @@ export function MbgArchivePage() {
 
                     <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-[10px]">
                       <span className="text-gray-400 font-medium truncate max-w-[80px]">
-                        {b.petugasList && b.petugasList.length > 0 
+                        {b.petugasList && b.petugasList.length > 0
                           ? `${b.petugasList.length} Kurir`
                           : 'Belum ada kurir'
                         }
@@ -1399,6 +1373,18 @@ export function MbgArchivePage() {
                             Backup
                           </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/mbg/admin?batchId=${b.id}`);
+                          }}
+                          className="px-2 py-1 rounded-lg text-amber-800 hover:text-amber-950 hover:bg-amber-100 font-bold flex items-center gap-1 transition-colors cursor-pointer border border-amber-300 bg-amber-50"
+                          title={`Edit data batch ${b.tanggal} di Admin MBG`}
+                        >
+                          <Edit className="h-3 w-3 text-amber-600" />
+                          Edit
+                        </button>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1444,9 +1430,16 @@ export function MbgArchivePage() {
                     </span>
                   ) : (
                     selectedBatch && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-200">
-                        {MBG_BATCH_STATUS_CONFIG[selectedBatch.status]?.label || selectedBatch.status}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowPmInfoModal(true)}
+                        title="Klik untuk melihat penjelasan status Data PM Lengkap"
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 hover:border-emerald-400 hover:text-emerald-800 transition-all cursor-pointer shadow-xs"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Data PM Lengkap</span>
+                        <Info className="h-3 w-3 opacity-60 text-emerald-600" />
+                      </button>
                     )
                   )}
                 </div>
@@ -1481,27 +1474,29 @@ export function MbgArchivePage() {
                 </button>
               )}
 
-              {selectedBatch && !selectedBatch.isBackup && (
+              {selectedBatch && (
                 <>
                   <button
                     type="button"
-                    onClick={() => navigate('/mbg/admin')}
+                    onClick={() => navigate(`/mbg/admin?batchId=${selectedBatch.id}`)}
                     className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl cursor-pointer shadow-md transition-all hover:scale-[1.02]"
-                    title="Buka dan kelola batch ini di menu Admin MBG (Input / Submit Data PM)"
+                    title={`Edit data batch ${selectedBatch.tanggal} di menu Admin MBG`}
                   >
-                    <ExternalLink className="h-4 w-4" />
-                    <span>Buka di Admin MBG</span>
+                    <Edit className="h-4 w-4" />
+                    <span>Edit di Admin MBG</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/mbg/production?batchId=${selectedBatch.id}`)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black rounded-xl cursor-pointer shadow-md transition-all hover:scale-[1.02]"
-                    title="Lihat data batch ini langsung di menu Produksi MBG"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    <span>Buka di Produksi MBG</span>
-                  </button>
+                  {!selectedBatch.isBackup && (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/mbg/production?batchId=${selectedBatch.id}`)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black rounded-xl cursor-pointer shadow-md transition-all hover:scale-[1.02]"
+                      title="Lihat data batch ini langsung di menu Produksi MBG"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      <span>Buka di Produksi MBG</span>
+                    </button>
+                  )}
                 </>
               )}
 
@@ -1680,13 +1675,12 @@ export function MbgArchivePage() {
               className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 relative"
             >
               <div className="flex items-center gap-3 mb-4">
-                <div className={`p-2.5 rounded-xl ${
-                  confirmState.variant === 'danger'
+                <div className={`p-2.5 rounded-xl ${confirmState.variant === 'danger'
                     ? 'bg-red-50 text-red-600'
                     : confirmState.variant === 'warning'
-                    ? 'bg-amber-50 text-amber-600'
-                    : 'bg-blue-50 text-blue-600'
-                }`}>
+                      ? 'bg-amber-50 text-amber-600'
+                      : 'bg-blue-50 text-blue-600'
+                  }`}>
                   {confirmState.variant === 'danger' ? (
                     <Trash2 className="h-5 w-5" />
                   ) : (
@@ -1722,13 +1716,131 @@ export function MbgArchivePage() {
                       }
                     }
                   }}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
-                    confirmState.variant === 'danger'
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${confirmState.variant === 'danger'
                       ? 'bg-red-600 hover:bg-red-700'
                       : 'bg-[#FBBF24] text-[#111827] hover:bg-[#F59E0B]'
-                  }`}
+                    }`}
                 >
                   Ya, Lanjutkan
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Pop-up Penjelasan Arti "Data PM Lengkap" */}
+      <AnimatePresence>
+        {showPmInfoModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-['Hanken_Grotesk']"
+            onClick={() => setShowPmInfoModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              transition={{ type: "spring", duration: 0.3 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-emerald-100 overflow-hidden relative"
+              role="dialog"
+              aria-modal="true"
+            >
+              {/* Header Decorative Accent */}
+              <div className="absolute top-0 left-0 right-0 h-2.5 bg-gradient-to-r from-emerald-400 via-teal-500 to-green-500" />
+
+              <div className="flex items-start justify-between gap-4 mb-4 pt-1">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-100/80 border border-emerald-200 text-emerald-700 flex items-center justify-center shrink-0 shadow-xs">
+                    <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 mb-1">
+                      <Sparkles className="w-3 h-3 text-emerald-600" /> Status Resmi Arsip MBG
+                    </div>
+                    <h3 className="text-lg font-black text-gray-900 tracking-tight">
+                      Arti Status "Data PM Lengkap"
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPmInfoModal(false)}
+                  className="p-1.5 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+                  title="Tutup penjelasan"
+                >
+                  <span className="text-xl font-bold leading-none">&times;</span>
+                </button>
+              </div>
+
+              <div className="space-y-3.5 text-xs text-gray-600 leading-relaxed border-y border-gray-100 py-4 my-4 max-h-[60vh] overflow-y-auto pr-1">
+                <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/60 space-y-1.5">
+                  <p className="font-extrabold text-emerald-950 text-[13px] flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    Apa itu Data PM Lengkap?
+                  </p>
+                  <p className="text-emerald-900">
+                    Status <strong>Data PM Lengkap</strong> menandakan bahwa data historis alokasi penerima manfaat (PM) untuk tanggal pengiriman ini telah <strong>tervalidasi 100% tuntas</strong> dan dikunci sebagai rujukan resmi operasional.
+                  </p>
+                </div>
+
+                <div className="space-y-2.5">
+                  <p className="font-bold text-gray-900 text-[11px] uppercase tracking-wider">
+                    Komponen & Jaminan Kelengkapan Data:
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2.5 p-2 rounded-xl bg-gray-50 border border-gray-100">
+                      <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
+                        <Check className="w-2.5 h-2.5 stroke-[3]" />
+                      </div>
+                      <span className="text-gray-700">
+                        <strong>Rincian Sekolah & Posyandu:</strong> Seluruh institusi penerima telah tercatat lengkap dengan pembagian kuota porsi (Siswa/Balita, Guru/Kader, dan Bumil/Busui).
+                      </span>
+                    </div>
+
+                    <div className="flex items-start gap-2.5 p-2 rounded-xl bg-gray-50 border border-gray-100">
+                      <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
+                        <Check className="w-2.5 h-2.5 stroke-[3]" />
+                      </div>
+                      <span className="text-gray-700">
+                        <strong>Menu & Porsi Terkunci:</strong> Kebutuhan porsi dan daftar menu hidangan telah terhitung otomatis sebagai panduan divisi <em>Produksi (Dapur)</em>.
+                      </span>
+                    </div>
+
+                    <div className="flex items-start gap-2.5 p-2 rounded-xl bg-gray-50 border border-gray-100">
+                      <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
+                        <Check className="w-2.5 h-2.5 stroke-[3]" />
+                      </div>
+                      <span className="text-gray-700">
+                        <strong>Distribusi & Kurir Siap:</strong> Alokasi rute pengantaran ke petugas/kurir telah terpetakan untuk proses pengiriman ke lapangan.
+                      </span>
+                    </div>
+
+                    <div className="flex items-start gap-2.5 p-2 rounded-xl bg-gray-50 border border-gray-100">
+                      <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
+                        <Check className="w-2.5 h-2.5 stroke-[3]" />
+                      </div>
+                      <span className="text-gray-700">
+                        <strong>Status Tetap Saat Ekspor:</strong> Dokumen yang diekspor menjadi PDF laporan resmi tetap mempertahankan status sebagai <strong>Data PM Lengkap</strong> tanpa perubahan label.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <span className="text-[11px] text-gray-400 font-medium">
+                  Koperasi Al-Umanaa MBG
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowPmInfoModal(false)}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-sm hover:shadow transition-all cursor-pointer"
+                >
+                  Saya Mengerti
                 </button>
               </div>
             </motion.div>

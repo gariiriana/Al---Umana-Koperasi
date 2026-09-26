@@ -41,7 +41,6 @@ import { getJakartaDate } from "@/utils/date";
 import { subscribeOrders } from "@/services/realtimeService";
 import {
   subscribeBatches,
-  subscribeAllEntries,
   subscribeWeeklySchedule,
   getMenuForDate,
 } from "@/services/mbgAdminService";
@@ -185,7 +184,7 @@ export function MoJobDeskPage() {
   const [jobDesks, setJobDesks] = useState<CateringJobDesk[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [mbgBatches, setMbgBatches] = useState<MbgPmBatch[]>([]);
-  const [mbgEntries, setMbgEntries] = useState<MbgPmEntry[]>([]);
+  const [mbgEntries] = useState<MbgPmEntry[]>([]);
   const [weeklySchedule, setWeeklySchedule] = useState<MbgDayMenu[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"dates" | "form" | "table">("dates");
@@ -278,16 +277,6 @@ export function MoJobDeskPage() {
       }
     );
 
-    const unsubEntries = subscribeAllEntries(
-      (entries) => {
-        if (!mounted) return;
-        setMbgEntries(entries);
-      },
-      (err) => {
-        console.error("MO: failed to load MBG entries:", err);
-      }
-    );
-
     const unsubSchedule = subscribeWeeklySchedule(
       (days) => {
         if (!mounted) return;
@@ -305,7 +294,6 @@ export function MoJobDeskPage() {
       unsubDesks();
       unsubOrders();
       unsubBatches();
-      unsubEntries();
       unsubSchedule();
     };
   }, []);
@@ -465,6 +453,9 @@ export function MoJobDeskPage() {
           (entry.qtBumilBusui || 0) +
           (entry.qtPobiaNasi || 0);
       }
+      if (!totalPortions && item.batch) {
+        totalPortions = item.batch.totalJumlah || 0;
+      }
 
       const dateJobDesks = jobDesks
         .filter((jd) => jd.tanggal === date && jd.division === "mbg")
@@ -475,8 +466,8 @@ export function MoJobDeskPage() {
         hari: getHariFromDate(date),
         batch: item.batch,
         entries: item.entries,
-        totalPortions,
-        totalSchools: item.entries.length,
+        totalPortions: totalPortions || item.batch?.totalJumlah || 0,
+        totalSchools: item.entries.length || item.batch?.totalInstitusi || 0,
         menuName: resolveMbgMenuName(date, item.batch, item.entries, weeklySchedule),
         jobDesks: dateJobDesks,
         isAssigned: dateJobDesks.length > 0,
@@ -1044,7 +1035,7 @@ export function MoJobDeskPage() {
   // Overall Statistics
   const stats = useMemo(() => {
     const totalOrders = orders.length;
-    const totalMbgEntries = mbgEntries.length;
+    const totalMbgEntries = mbgEntries.length || mbgBatches.reduce((sum, b) => sum + (b.totalInstitusi || 0), 0);
     const totalCateringDates = cateringDateGroups.length;
     const totalMbgDates = mbgDateGroups.length;
     const unassignedCateringDates = cateringDateGroups.filter((g) => !g.isAssigned).length;

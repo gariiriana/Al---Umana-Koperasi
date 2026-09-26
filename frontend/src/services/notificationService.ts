@@ -181,7 +181,7 @@ export function subscribeUnreadCount(
       collection(db, "notifications"),
       where("recipientId", "==", userId),
       where("read", "==", false),
-      limit(50)
+      limit(15)
     );
 
     unsubUser = onSnapshot(
@@ -202,7 +202,7 @@ export function subscribeUnreadCount(
         collection(db, "notifications"),
         where("recipientId", "==", role),
         where("read", "==", false),
-        limit(50)
+        limit(15)
       );
 
       unsubRole = onSnapshot(

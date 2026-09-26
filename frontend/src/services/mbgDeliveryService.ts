@@ -408,6 +408,20 @@ export function subscribeDeliveryDocuments(
   });
 }
 
+export function subscribeBatchDeliveryDocuments(
+  batchId: string,
+  callback: (docs: MbgDeliveryDocument[]) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, DOCUMENTS_COLLECTION),
+    where('batchId', '==', batchId),
+    orderBy('createdAt', 'desc')
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryDocument)));
+  });
+}
+
 export function subscribeAllDeliveryDocuments(
   callback: (docs: MbgDeliveryDocument[]) => void
 ): Unsubscribe {
@@ -419,3 +433,4 @@ export function subscribeAllDeliveryDocuments(
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryDocument)));
   });
 }
+

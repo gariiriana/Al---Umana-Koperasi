@@ -13,6 +13,126 @@ export interface FilteredPmRow {
   detailBreakdown?: string;
 }
 
+export function isSummaryOrCategoryRow(rawName: string): boolean {
+  const n = (rawName || '').toLowerCase().trim();
+  if (!n) return true;
+
+  if (
+    n === 'total' ||
+    n.startsWith('total ') ||
+    n.startsWith('rekap') ||
+    n.startsWith('jumlah') ||
+    n.startsWith('catatan') ||
+    n.includes('sekolah yang dikirim') ||
+    n === 'murid' ||
+    n === 'guru' ||
+    n === 'tendik'
+  ) {
+    return true;
+  }
+
+  if (
+    n === 'porsi kecil' ||
+    n === 'porsi besar' ||
+    n === 'porsi balita' ||
+    n === 'porsi bumil' ||
+    n === 'porsi busui' ||
+    n === 'porsi bumil/busui' ||
+    n === 'porsi bumil / busui'
+  ) {
+    return true;
+  }
+
+  if (
+    n === 'paud/tk' ||
+    n === 'paud / tk' ||
+    n === 'sd/mi' ||
+    n === 'sd / mi' ||
+    n.startsWith('sd/mi (kelas') ||
+    n.startsWith('sd / mi (kelas') ||
+    n.startsWith('sd/mi kelas') ||
+    n === 'smp/mts' ||
+    n === 'smp / mts' ||
+    n === 'sma/ma/smk' ||
+    n === 'sma / ma / smk' ||
+    n === 'sma/ma' ||
+    n === 'sma / ma'
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export interface AutoRekapTotals {
+  porsiKecilL: number;
+  porsiKecilP: number;
+  porsiBesarL: number;
+  porsiBesarP: number;
+  totalL: number;
+  totalP: number;
+  totalSiswa: number;
+  guruL: number;
+  guruP: number;
+  tendikL: number;
+  tendikP: number;
+  totalStaf: number;
+  jumlah: number;
+}
+
+export function getAutoRekapTotals(entries: MbgPmEntry[]): AutoRekapTotals {
+  return entries
+    .filter((entry) => !entry.isSekolahLibur && !isSummaryOrCategoryRow(entry.institutionName))
+    .reduce(
+      (total, entry) => {
+        const isPos = entry.institutionType === 'posyandu';
+        const porsiKecilL = entry.qtPorsiKecilL || 0;
+        const porsiKecilP = entry.qtPorsiKecilP || 0;
+        const bumil = entry.qtBumil ?? (isPos ? entry.qtPorsiBesarL || 0 : 0);
+        const busui = entry.qtBusui ?? (isPos ? entry.qtPorsiBesarP || 0 : 0);
+        const porsiBesarL = isPos ? bumil : (entry.qtPorsiBesarL || 0);
+        const porsiBesarP = isPos ? busui : (entry.qtPorsiBesarP || 0);
+        const guruL = entry.qtGuruL || 0;
+        const guruP = entry.qtGuruP || 0;
+        const tendikL = entry.qtTendikL || 0;
+        const tendikP = entry.qtTendikP || 0;
+
+        const rowTotalL = isPos ? porsiKecilL : (porsiKecilL + porsiBesarL);
+        const rowTotalP = isPos ? (porsiKecilP + bumil + busui) : (porsiKecilP + porsiBesarP);
+
+        total.porsiKecilL += porsiKecilL;
+        total.porsiKecilP += porsiKecilP;
+        total.porsiBesarL += porsiBesarL;
+        total.porsiBesarP += porsiBesarP;
+        total.totalL += rowTotalL;
+        total.totalP += rowTotalP;
+        total.totalSiswa += (rowTotalL + rowTotalP);
+        total.guruL += guruL;
+        total.guruP += guruP;
+        total.tendikL += tendikL;
+        total.tendikP += tendikP;
+        total.totalStaf += (guruL + guruP + tendikL + tendikP);
+        total.jumlah += entry.jumlah || 0;
+        return total;
+      },
+      {
+        porsiKecilL: 0,
+        porsiKecilP: 0,
+        porsiBesarL: 0,
+        porsiBesarP: 0,
+        totalL: 0,
+        totalP: 0,
+        totalSiswa: 0,
+        guruL: 0,
+        guruP: 0,
+        tendikL: 0,
+        tendikP: 0,
+        totalStaf: 0,
+        jumlah: 0,
+      }
+    );
+}
+
 export function getFilteredPmEntries(
   entries: MbgPmEntry[] = [],
   portionType: 'kecil' | 'besar' | 'balita' | 'bumil',
@@ -21,6 +141,7 @@ export function getFilteredPmEntries(
   if (!entries || entries.length === 0) {
     if (fallbackSekolahList && fallbackSekolahList.length > 0) {
       return fallbackSekolahList
+        .filter((s) => !isSummaryOrCategoryRow(s.nama))
         .map((s, idx) => {
           let count = 0;
           let cat = 'Sekolah';
@@ -61,6 +182,7 @@ export function getFilteredPmEntries(
   const result: FilteredPmRow[] = [];
 
   entries.forEach((e) => {
+    if (isSummaryOrCategoryRow(e.institutionName)) return;
     let count = 0;
     let cat = '';
     let detail = '';
@@ -205,7 +327,9 @@ export function getAllDetailedPmEntries(
 ): DetailedPmRow[] {
   if (!entries || entries.length === 0) {
     if (fallbackSekolahList && fallbackSekolahList.length > 0) {
-      return fallbackSekolahList.map((s, idx) => {
+      return fallbackSekolahList
+        .filter((s) => !isSummaryOrCategoryRow(s.nama))
+        .map((s, idx) => {
         const name = (s.nama || '').toLowerCase().trim();
         const isTk = name.includes('tk') || name.includes('paud') || name.includes('sps') || name.includes('kober');
         const isSma = name.includes('sma') || name.includes('smk') || name.includes('ma ') || name.includes('aliyah');
@@ -261,6 +385,7 @@ export function getAllDetailedPmEntries(
   const result: DetailedPmRow[] = [];
 
   entries.forEach((e) => {
+    if (isSummaryOrCategoryRow(e.institutionName)) return;
     const cleanName = (e.institutionName || '')
       .toLowerCase()
       .replace(/kelas\s*[0-9-]+/gi, '')

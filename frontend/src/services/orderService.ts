@@ -17,6 +17,9 @@ import {
   doc,
   getDoc,
   getDocs,
+  setDoc,
+  updateDoc,
+  increment,
   query,
   where,
   limit,
@@ -262,7 +265,8 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
     updatedAt: now,
   };
 
-  await runTransaction(db, async (tx) => {
+  try {
+    await runTransaction(db, async (tx) => {
     const outOfStockItems: string[] = [];
     const inventoryDataMap = new Map<string, { quantity: number; available?: boolean }>();
 
@@ -326,7 +330,39 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
     }
 
     tx.set(orderDocRef, cleanUndefined(orderData));
-  });
+    });
+  } catch (err: unknown) {
+    const errMsg = String(err instanceof Error ? err.message : err).toLowerCase();
+    const errCode = (typeof err === "object" && err !== null && "code" in err) ? String((err as { code: unknown }).code).toLowerCase() : "";
+    const isQuotaOrReadError =
+      errMsg.includes("quota") ||
+      errMsg.includes("resource-exhausted") ||
+      errMsg.includes("unavailable") ||
+      errCode.includes("resource-exhausted") ||
+      errCode.includes("quota");
+
+    if (isQuotaOrReadError) {
+      console.warn("[createOrder] Transaction failed (read quota exhausted). Falling back to direct write (setDoc):", err);
+      if (payload.paymentMethod === "cod") {
+        orderData.status = "CONFIRMED";
+      } else {
+        orderData.status = "AWAITING_PAYMENT_PROOF";
+        orderData.paymentStatus = "awaiting_proof";
+      }
+      await setDoc(orderDocRef, cleanUndefined(orderData));
+
+      for (const item of payload.items) {
+        if (!item.itemId) continue;
+        const itemRef = doc(db, "inventory", item.itemId);
+        updateDoc(itemRef, {
+          quantity: increment(-item.quantity),
+          updatedAt: now.toISOString(),
+        }).catch((e) => console.warn("[createOrder] Stock decrement warning:", e));
+      }
+    } else {
+      throw err;
+    }
+  }
 
   const order = localDataToOrder(orderDocRef.id, orderData);
 
@@ -1417,7 +1453,8 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
     updatedAt: now.toISOString(),
   };
 
-  await runTransaction(db, async (tx) => {
+  try {
+    await runTransaction(db, async (tx) => {
     const outOfStockItems: string[] = [];
     const inventoryDataMap = new Map<string, { quantity: number; available?: boolean }>();
 
@@ -1491,7 +1528,35 @@ export async function createAdminOrder(payload: CreateAdminOrderPayload): Promis
     }
 
     tx.set(orderDocRef, cleanUndefined(orderData));
-  });
+    });
+  } catch (err: unknown) {
+    const errMsg = String(err instanceof Error ? err.message : err).toLowerCase();
+    const errCode = (typeof err === "object" && err !== null && "code" in err) ? String((err as { code: unknown }).code).toLowerCase() : "";
+    const isQuotaOrReadError =
+      errMsg.includes("quota") ||
+      errMsg.includes("resource-exhausted") ||
+      errMsg.includes("unavailable") ||
+      errCode.includes("resource-exhausted") ||
+      errCode.includes("quota");
+
+    if (isQuotaOrReadError) {
+      console.warn("[createAdminOrder] Transaction failed (read quota exhausted). Falling back to direct write (setDoc):", err);
+      await setDoc(orderDocRef, cleanUndefined(orderData));
+
+      if (!payload.isPreOrder) {
+        for (const item of payload.items) {
+          if (!item.itemId || item.itemId.startsWith("manual_")) continue;
+          const itemRef = doc(db, "inventory", item.itemId);
+          updateDoc(itemRef, {
+            quantity: increment(-item.quantity),
+            updatedAt: now.toISOString(),
+          }).catch((e) => console.warn("[createAdminOrder] Stock decrement warning:", e));
+        }
+      }
+    } else {
+      throw err;
+    }
+  }
 
   const order = localDataToOrder(orderDocRef.id, orderData);
 
@@ -1753,7 +1818,8 @@ export async function updateAdminOrder(orderId: string, payload: CreateAdminOrde
     updatedAt: now.toISOString(),
   };
 
-  await runTransaction(db, async (tx) => {
+  try {
+    await runTransaction(db, async (tx) => {
     const oldSnap = await tx.get(orderDocRef);
     if (!oldSnap.exists()) {
       throw new Error("Order not found");
@@ -1872,9 +1938,31 @@ export async function updateAdminOrder(orderId: string, payload: CreateAdminOrde
     }
 
     tx.set(orderDocRef, cleanUndefined(orderUpdates), { merge: true });
-  });
+    });
+  } catch (err: unknown) {
+    const errMsg = String(err instanceof Error ? err.message : err).toLowerCase();
+    const errCode = (typeof err === "object" && err !== null && "code" in err) ? String((err as { code: unknown }).code).toLowerCase() : "";
+    const isQuotaOrReadError =
+      errMsg.includes("quota") ||
+      errMsg.includes("resource-exhausted") ||
+      errMsg.includes("unavailable") ||
+      errCode.includes("resource-exhausted") ||
+      errCode.includes("quota");
 
-  const order = await getOrder(orderId);
+    if (isQuotaOrReadError) {
+      console.warn("[updateAdminOrder] Transaction failed (read quota exhausted). Falling back to direct write (setDoc merge):", err);
+      await setDoc(orderDocRef, cleanUndefined(orderUpdates), { merge: true });
+    } else {
+      throw err;
+    }
+  }
+
+  let order: Order;
+  try {
+    order = await getOrder(orderId);
+  } catch {
+    order = localDataToOrder(orderId, orderUpdates);
+  }
 
   // Send WhatsApp notification / Push notifications
   const shortId = order.id.length > 6 ? order.id.slice(-6).toUpperCase() : order.id.toUpperCase();

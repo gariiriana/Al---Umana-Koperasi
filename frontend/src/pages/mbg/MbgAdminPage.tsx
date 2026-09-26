@@ -20,7 +20,7 @@ import {
   Sparkles,
   BookOpen,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import * as XLSX from 'xlsx';
@@ -1167,10 +1167,12 @@ export function MbgAdminPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlBatchId = searchParams.get('batchId');
 
   const [batches, setBatches] = useState<MbgPmBatch[]>([]);
   const [allBatches, setAllBatches] = useState<MbgPmBatch[]>([]);
-  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(urlBatchId);
   const [entries, setEntries] = useState<MbgPmEntry[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
   const [loadingEntries, setLoadingEntries] = useState(false);
@@ -1420,23 +1422,28 @@ export function MbgAdminPage() {
     const unsub = subscribeBatches(
       async (b) => {
         setAllBatches(b);
-        // Tampilkan semua batch agar batch yang telah disubmit tetap dapat diakses dan diedit/reopen
-        setBatches(b);
+        // Tampilkan semua batch aktif, serta batch yang dituju via URL jika berstatus backup
+        const visibleBatches = b.filter((item) => !item.isBackup || item.id === urlBatchId);
+        setBatches(visibleBatches);
         setLoadingBatches(false);
 
         const todayStr = getJakartaDate();
-        const todayBatch = b.find((batch) => batch.tanggal === todayStr);
+        const todayBatch = b.find((batch) => batch.tanggal === todayStr && !batch.isBackup);
 
         setSelectedBatchId((current) => {
+          if (urlBatchId && b.some((batch) => batch.id === urlBatchId)) {
+            return urlBatchId;
+          }
           const isCurrentValid = current ? b.some((batch) => batch.id === current) : false;
           if (isCurrentValid) return current;
           if (todayBatch) return todayBatch.id;
+          if (visibleBatches.length > 0) return visibleBatches[0].id;
           if (b.length > 0) return b[0].id;
           return null;
         });
 
-        // Auto-create batch for today if completely absent from Firestore
-        if (!todayBatch) {
+        // Auto-create batch for today if completely absent from Firestore (only if not loading a specific batch via URL)
+        if (!todayBatch && !urlBatchId) {
           try {
             const newId = await createBatch(todayStr, user?.uid || 'admin', false, weeklySchedule);
             setSelectedBatchId((current) => current || newId);
@@ -1448,10 +1455,31 @@ export function MbgAdminPage() {
       (err) => {
         console.error('Error loading batches:', err);
         setLoadingBatches(false);
-      }
+      },
+      true // includeBackup = true agar batch yang diarahkan dari arsip dapat diakses
     );
     return unsub;
-  }, [user, weeklySchedule]);
+  }, [user, weeklySchedule, urlBatchId]);
+
+  // Sinkronisasi selectedBatchId ketika url search param batchId berubah
+  useEffect(() => {
+    if (urlBatchId && allBatches.length > 0) {
+      const match = allBatches.find((b) => b.id === urlBatchId);
+      if (match) {
+        if (selectedBatchId !== urlBatchId) {
+          setSelectedBatchId(urlBatchId);
+        }
+        setBatches((prev) => (prev.some((b) => b.id === urlBatchId) ? prev : [match, ...prev]));
+      }
+    }
+  }, [urlBatchId, allBatches, selectedBatchId]);
+
+  // Sinkronisasi query param ketika selectedBatchId berubah
+  useEffect(() => {
+    if (selectedBatchId && selectedBatchId !== urlBatchId) {
+      setSearchParams({ batchId: selectedBatchId }, { replace: true });
+    }
+  }, [selectedBatchId, urlBatchId, setSearchParams]);
 
   // Subscribe to entries when batch is selected
   useEffect(() => {
@@ -1482,6 +1510,7 @@ export function MbgAdminPage() {
     const existing = allBatches.find((b) => b.tanggal === newDateStr) || batches.find((b) => b.tanggal === newDateStr);
     if (existing) {
       setSelectedBatchId(existing.id);
+      setSearchParams({ batchId: existing.id }, { replace: true });
       return;
     }
 
@@ -1489,6 +1518,7 @@ export function MbgAdminPage() {
       setSaving(true);
       const newId = await createBatch(newDateStr, user.uid, false, weeklySchedule);
       setSelectedBatchId(newId);
+      setSearchParams({ batchId: newId }, { replace: true });
       showToast({
         message: `Berhasil membuat batch ${newDateStr}. Silakan klik "Import Excel / CSV PM" untuk mengisi data penerima manfaat!`,
         variant: 'success',
@@ -2077,6 +2107,12 @@ export function MbgAdminPage() {
                   {selectedBatch && (
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200">
                       {MBG_BATCH_STATUS_CONFIG[selectedBatch.status]?.label || selectedBatch.status}
+                    </span>
+                  )}
+                  {selectedBatch?.isBackup && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-slate-900 text-amber-300 border border-slate-700">
+                      <Archive className="h-3 w-3 text-amber-400" />
+                      Arsip Backup
                     </span>
                   )}
                 </div>

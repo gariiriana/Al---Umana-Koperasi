@@ -129,9 +129,9 @@ export const MBG_COLUMN_LABELS = {
 /** Status batch labels & warna */
 export const MBG_BATCH_STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string; textClass: string; bgClass: string }> = {
   DRAFT: { label: 'Draft', color: '#6B7280', bgColor: '#F3F4F6', textClass: 'text-[#6B7280]', bgClass: 'bg-[#F3F4F6]' },
-  PM_SUBMITTED: { label: 'Data PM Lengkap', color: '#2563EB', bgColor: '#DBEAFE', textClass: 'text-[#2563EB]', bgClass: 'bg-[#DBEAFE]' },
+  PM_SUBMITTED: { label: 'Data PM Lengkap', color: '#059669', bgColor: '#D1FAE5', textClass: 'text-emerald-700', bgClass: 'bg-emerald-50' },
   NUTRITION_DONE: { label: 'Gizi Dihitung', color: '#7C3AED', bgColor: '#EDE9FE', textClass: 'text-[#7C3AED]', bgClass: 'bg-[#EDE9FE]' },
-  PDF_EXPORTED: { label: 'PDF Diekspor', color: '#6D28D9', bgColor: '#EDE9FE', textClass: 'text-[#6D28D9]', bgClass: 'bg-[#EDE9FE]' },
+  PDF_EXPORTED: { label: 'Data PM Lengkap', color: '#059669', bgColor: '#D1FAE5', textClass: 'text-emerald-700', bgClass: 'bg-emerald-50' },
   PURCHASING: { label: 'Sedang Belanja', color: '#D97706', bgColor: '#FEF3C7', textClass: 'text-[#D97706]', bgClass: 'bg-[#FEF3C7]' },
   PURCHASED: { label: 'Belanja Selesai', color: '#059669', bgColor: '#D1FAE5', textClass: 'text-[#059669]', bgClass: 'bg-[#D1FAE5]' },
   QC_PENDING: { label: 'Menunggu QC', color: '#D97706', bgColor: '#FEF3C7', textClass: 'text-[#D97706]', bgClass: 'bg-[#FEF3C7]' },

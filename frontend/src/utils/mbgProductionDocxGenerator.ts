@@ -26,13 +26,8 @@ import type {
   MbgProductionDailyReport,
   MbgPortionDailyData,
 } from '@/types/mbg';
-import {
-  buildMbgPmRecipientTable,
-  formatMbgPmRecipientName,
-  formatMbgPmRecipientPetugas,
-  formatMbgPmRecipientValue,
-  MBG_PM_RECIPIENT_TABLE_COLUMNS,
-} from '@/utils/mbgPmRecipientTable';
+import { getAutoRekapTotals, isSummaryOrCategoryRow } from '@/utils/mbgPmFilter';
+
 
 export interface MbgProductionDocxData {
   batch: MbgPmBatch;
@@ -421,179 +416,75 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
   // ==========================================================================
   // HALAMAN 1 (FOTO 1): REKAPITULASI PENERIMA MANFAAT
   // ==========================================================================
-  const recipientTable = buildMbgPmRecipientTable(entries, dailyReport.sekolahList);
-  appendOfficialHeader('REKAPITULASI PENERIMA MANFAAT', false, recipientTable.totals.totalPorsi);
+  const validEntries = (entries || []).filter((e) => !isSummaryOrCategoryRow(e.institutionName));
 
-  // The former 18-column gender recap is retained below only until the next
-  // cleanup cycle. It is not rendered; the canonical 12-column table follows.
-  const renderLegacyRecipientTable = false;
-  if (renderLegacyRecipientTable) {
-  const rekapRowsData = buildRekapPmRows(entries, dailyReport.sekolahList);
-  const totals = rekapRowsData.reduce(
-    (acc, r) => {
-      acc.kecilL += r.kecilL;
-      acc.kecilP += r.kecilP;
-      acc.besarL += r.besarL;
-      acc.besarP += r.besarP;
-      acc.balitaL += r.balitaL;
-      acc.balitaP += r.balitaP;
-      acc.bumilL += r.bumilL;
-      acc.bumilP += r.bumilP;
-      acc.siswaL += r.siswaL;
-      acc.siswaP += r.siswaP;
-      acc.siswaJumlah += r.siswaJumlah;
-      acc.guruL += r.guruL;
-      acc.guruP += r.guruP;
-      acc.tendikL += r.tendikL;
-      acc.tendikP += r.tendikP;
-      acc.tendikJumlah += r.tendikJumlah;
-      acc.totalAkhir += r.totalAkhir;
-      return acc;
-    },
-    {
-      kecilL: 0,
-      kecilP: 0,
-      besarL: 0,
-      besarP: 0,
-      balitaL: 0,
-      balitaP: 0,
-      bumilL: 0,
-      bumilP: 0,
-      siswaL: 0,
-      siswaP: 0,
-      siswaJumlah: 0,
-      guruL: 0,
-      guruP: 0,
-      tendikL: 0,
-      tendikP: 0,
-      tendikJumlah: 0,
-      totalAkhir: 0,
-    }
-  );
+  const effectiveEntries: MbgPmEntry[] = validEntries.length > 0 ? validEntries : (dailyReport.sekolahList || [])
+    .filter((s) => !isSummaryOrCategoryRow(s.nama))
+    .map((s, idx) => {
+      const isPos = s.nama.toLowerCase().includes('posyandu');
+      const isTk = s.nama.toLowerCase().includes('tk') || s.nama.toLowerCase().includes('paud');
+      const pKecilL = isPos ? Math.ceil(s.murid / 2) : (isTk ? Math.ceil(s.murid / 2) : 0);
+      const pKecilP = isPos ? Math.floor(s.murid / 2) : (isTk ? Math.floor(s.murid / 2) : 0);
+      const pBesarL = !isPos && !isTk ? Math.ceil(s.murid / 2) : 0;
+      const pBesarP = !isPos && !isTk ? Math.floor(s.murid / 2) : 0;
+      const bumil = isPos ? s.guru : 0;
+      return {
+        id: `fallback-${idx}`,
+        batchId: '',
+        institutionName: s.nama,
+        institutionType: isPos ? ('posyandu' as const) : ('sekolah' as const),
+        qtPorsiKecilL: pKecilL,
+        qtPorsiKecilP: pKecilP,
+        qtPorsiBesarL: pBesarL,
+        qtPorsiBesarP: pBesarP,
+        qtSiswaBalita: s.murid,
+        qtBumil: bumil,
+        qtBusui: 0,
+        qtBumilBusui: bumil,
+        qtGuruL: isPos ? 0 : Math.ceil(s.guru / 2),
+        qtGuruP: isPos ? 0 : Math.floor(s.guru / 2),
+        qtGuruKader: s.guru,
+        qtTendikL: 0,
+        qtTendikP: 0,
+        qtPobiaNasi: 0,
+        jumlah: s.murid + s.guru,
+        jadwalPengantaran: '06.00-08.30',
+        assignedPetugasId: '',
+        assignedPetugasName: '-',
+        isSekolahLibur: false,
+        menuItems: [],
+        menuKeringanItems: [],
+        notes: '',
+        sortOrder: idx,
+        createdBy: 'system',
+        createdAt: '',
+        updatedAt: '',
+      } as unknown as MbgPmEntry;
+    });
 
-  const rekapTableRows: TableRow[] = [
-    // Banner Row
-    new TableRow({
-      tableHeader: true,
-      children: [
-        new TableCell({
-          columnSpan: 18,
-          shading: { fill: '0F2D59' }, // Navy #0F2D59
-          margins: COMPACT_CELL_MARGINS,
-          children: [
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: 'REKAPITULASI PENERIMA MANFAAT', bold: true, color: 'FFFFFF', size: 14, font: 'Arial' })],
-            }),
-          ],
-        }),
-      ],
-    }),
-    // Level 1 Subheader
-    new TableRow({
-      tableHeader: true,
-      children: [
-        new TableCell({ rowSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'PENERIMA MANFAAT', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ columnSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Porsi Kecil', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ columnSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Porsi Besar', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ columnSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Porsi Balita', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ columnSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Porsi Bumil/Busui', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ columnSpan: 3, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Total Siswa', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ columnSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Guru', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ columnSpan: 3, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Tendik', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ rowSpan: 2, shading: { fill: '1E3A8A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Total', bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })] }),
-      ],
-    }),
-    // Level 2 Subheader (L, P, Jumlah)
-    new TableRow({
-      tableHeader: true,
-      children: [
-        ...['L', 'P', 'L', 'P', 'L', 'P', 'L', 'P', 'L', 'P', 'Jumlah', 'L', 'P', 'L', 'P', 'Jumlah'].map((col) =>
-          new TableCell({
-            shading: { fill: col === 'Jumlah' ? '1D4ED8' : '3B82F6' },
-            margins: COMPACT_CELL_MARGINS,
-            children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: col, bold: true, color: 'FFFFFF', size: 12, font: 'Arial' })] })],
-          })
-        ),
-      ],
-    }),
-  ];
+  const schoolEntries = effectiveEntries.filter((e) => e.institutionType !== 'posyandu');
+  const posyanduEntries = effectiveEntries.filter((e) => e.institutionType === 'posyandu');
 
-  // Data rows
-  rekapRowsData.forEach((r, idx) => {
-    const isEven = idx % 2 === 0;
-    const rowBg = isEven ? 'FFFFFF' : 'F8FAFC';
+  const schoolTotals = getAutoRekapTotals(schoolEntries);
+  const posyanduTotals = getAutoRekapTotals(posyanduEntries);
+  const overallTotals = getAutoRekapTotals(effectiveEntries);
 
-    const renderCellVal = (val: number) => (val > 0 ? val.toString() : '-');
+  appendOfficialHeader('REKAPITULASI PENERIMA MANFAAT', false, overallTotals.jumlah || batch.totalJumlah);
 
-    rekapTableRows.push(
-      new TableRow({
-        children: [
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.nama, bold: true, size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.kecilL), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.kecilP), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.besarL), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.besarP), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.balitaL), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.balitaP), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.bumilL), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.bumilP), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.siswaL), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.siswaP), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: 'F1F5F9' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.siswaJumlah), bold: true, size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.guruL), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.guruP), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.tendikL), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.tendikP), size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: 'F1F5F9' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.tendikJumlah), bold: true, size: 12, font: 'Arial' })] })] }),
-          new TableCell({ shading: { fill: 'FEF3C7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: renderCellVal(r.totalAkhir), bold: true, color: 'B45309', size: 12, font: 'Arial' })] })] }),
-        ],
-      })
-    );
-  });
+  // Column widths for 16 columns matching website
+  const colWidths = [2500, 600, 600, 600, 600, 700, 700, 800, 600, 600, 600, 600, 800, 1200, 2438, 2000];
 
-  // Total Yellow Row
-  rekapTableRows.push(
-    new TableRow({
-      children: [
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'TOTAL', bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.kecilL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.kecilP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.besarL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.besarP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.balitaL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.balitaP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.bumilL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.bumilP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.siswaL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.siswaP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.siswaJumlah.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.guruL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.guruP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.tendikL.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.tendikP.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.tendikJumlah.toString(), bold: true, color: '854D0E', size: 12, font: 'Arial' })] })] }),
-        new TableCell({ shading: { fill: 'FEF08A' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: totals.totalAkhir.toString(), bold: true, color: 'B45309', size: 12, font: 'Arial' })] })] }),
-      ],
-    })
-  );
-
-  docChildren.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: CELL_BORDER, rows: rekapTableRows }));
-
-  }
-
-  // A4 landscape printable width: 15,838 DXA after the document margins.
-  // Explicit grid widths prevent Word from equalizing the 12 output columns.
-  const recipientColumnWidths = [634, 3009, 1425, 950, 950, 950, 1109, 1109, 2376, 1584, 1109, 634];
-  const recipientCell = (
+  const makeCell = (
     text: string,
     width: number,
-    options: {
+    opts: {
       fill?: string;
       color?: string;
       bold?: boolean;
       alignment?: (typeof AlignmentType)[keyof typeof AlignmentType];
       columnSpan?: number;
+      rowSpan?: number;
+      size?: number;
     } = {}
   ) => {
     const {
@@ -602,10 +493,13 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
       bold = false,
       alignment = AlignmentType.LEFT,
       columnSpan,
-    } = options;
+      rowSpan,
+      size = 11, // 5.5pt
+    } = opts;
 
     return new TableCell({
       ...(columnSpan ? { columnSpan } : {}),
+      ...(rowSpan ? { rowSpan } : {}),
       width: { size: width, type: WidthType.DXA },
       shading: { fill },
       margins: COMPACT_CELL_MARGINS,
@@ -613,102 +507,233 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
         new Paragraph({
           alignment,
           spacing: { before: 0, after: 0 },
-          children: [new TextRun({ text, bold, color, size: 11, font: 'Arial' })],
+          children: [new TextRun({ text, bold, color, size, font: 'Arial' })],
         }),
       ],
     });
   };
 
-  const recipientTableRows: TableRow[] = [
-    new TableRow({
-      tableHeader: true,
-      children: MBG_PM_RECIPIENT_TABLE_COLUMNS.map((column, index) =>
-        recipientCell(column, recipientColumnWidths[index], {
-          fill: 'F1F5F9',
-          color: '334155',
-          bold: true,
-          alignment: AlignmentType.CENTER,
+  const buildDocxAutoRekapTable = (
+    list: MbgPmEntry[],
+    totals: ReturnType<typeof getAutoRekapTotals>,
+    isPosyandu: boolean
+  ): Table => {
+    const rows: TableRow[] = [
+      // Header Row 1
+      new TableRow({
+        tableHeader: true,
+        children: [
+          makeCell(isPosyandu ? 'POSYANDU' : 'SEKOLAH', colWidths[0], { rowSpan: 2, fill: 'E2E8F0', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('PORSI KECIL', colWidths[1] + colWidths[2], { columnSpan: 2, fill: 'E2E8F0', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('PORSI BESAR', colWidths[3] + colWidths[4], { columnSpan: 2, fill: 'E2E8F0', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('TOTAL', colWidths[5] + colWidths[6], { columnSpan: 2, fill: 'CBD5E1', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('JML', colWidths[7], { rowSpan: 2, fill: 'CBD5E1', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('GURU', colWidths[8] + colWidths[9], { columnSpan: 2, fill: 'E2E8F0', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('TENDIK', colWidths[10] + colWidths[11], { columnSpan: 2, fill: 'E2E8F0', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('JML', colWidths[12], { rowSpan: 2, fill: 'CBD5E1', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('TOTAL KESELURUHAN', colWidths[13], { rowSpan: 2, fill: 'FEF3C7', color: '78350F', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('PETUGAS KURIR', colWidths[14], { rowSpan: 2, fill: 'E2E8F0', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('JADWAL', colWidths[15], { rowSpan: 2, fill: 'E2E8F0', bold: true, alignment: AlignmentType.CENTER }),
+        ],
+      }),
+      // Header Row 2
+      new TableRow({
+        tableHeader: true,
+        children: [
+          makeCell('L', colWidths[1], { fill: 'F1F5F9', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('P', colWidths[2], { fill: 'F1F5F9', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('L', colWidths[3], { fill: 'F1F5F9', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('P', colWidths[4], { fill: 'F1F5F9', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('L', colWidths[5], { fill: 'E2E8F0', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('P', colWidths[6], { fill: 'E2E8F0', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('L', colWidths[8], { fill: 'F1F5F9', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('P', colWidths[9], { fill: 'F1F5F9', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('L', colWidths[10], { fill: 'F1F5F9', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('P', colWidths[11], { fill: 'F1F5F9', bold: true, alignment: AlignmentType.CENTER }),
+        ],
+      }),
+    ];
+
+    if (list.length === 0) {
+      rows.push(
+        new TableRow({
+          children: [
+            makeCell(`Belum ada data ${isPosyandu ? 'Posyandu' : 'Sekolah'}`, 15838, {
+              columnSpan: 16,
+              alignment: AlignmentType.CENTER,
+              color: '94A3B8',
+            }),
+          ],
         })
-      ),
-    }),
-  ];
+      );
+    } else {
+      list.forEach((entry, idx) => {
+        const rowBg = entry.isSekolahLibur ? 'FEF2F2' : idx % 2 === 0 ? 'FFFFFF' : 'F8FAFC';
+        const txtColor = entry.isSekolahLibur ? '991B1B' : '1E293B';
 
-  recipientTable.rows.forEach((row, index) => {
-    const rowFill = row.isLibur ? 'FEF2F2' : index % 2 === 0 ? 'FFFFFF' : 'F8FAFC';
-    const textColor = row.isLibur ? '991B1B' : '1E293B';
-    const numericCell = (value: number, columnIndex: number) =>
-      recipientCell(formatMbgPmRecipientValue(value), recipientColumnWidths[columnIndex], {
-        fill: rowFill,
-        color: textColor,
-        bold: true,
-        alignment: AlignmentType.CENTER,
+        if (entry.isSekolahLibur) {
+          rows.push(
+            new TableRow({
+              children: [
+                makeCell(`${entry.institutionName} (LIBUR)`, colWidths[0], { fill: 'FEE2E2', color: '991B1B', bold: true }),
+                makeCell('TIDAK ADA PENGIRIMAN (LIBUR)', colWidths.slice(1, 14).reduce((a, b) => a + b, 0), {
+                  columnSpan: 12,
+                  fill: 'FEE2E2',
+                  color: '991B1B',
+                  bold: true,
+                  alignment: AlignmentType.CENTER,
+                }),
+                makeCell(entry.assignedPetugasName || '—', colWidths[14], { fill: rowBg, color: '64748B' }),
+                makeCell(entry.jadwalPengantaran || '—', colWidths[15], { fill: rowBg, color: '64748B', alignment: AlignmentType.CENTER }),
+              ],
+            })
+          );
+          return;
+        }
+
+        const totalL = isPosyandu ? (entry.qtPorsiKecilL || 0) : ((entry.qtPorsiKecilL || 0) + (entry.qtPorsiBesarL || 0));
+        const bumil = entry.qtBumil ?? (isPosyandu ? entry.qtPorsiBesarL || 0 : 0);
+        const busui = entry.qtBusui ?? (isPosyandu ? entry.qtPorsiBesarP || 0 : 0);
+        const totalP = isPosyandu ? ((entry.qtPorsiKecilP || 0) + bumil + busui) : ((entry.qtPorsiKecilP || 0) + (entry.qtPorsiBesarP || 0));
+        const totalSiswa = totalL + totalP;
+        const totalStaf = (entry.qtGuruL || 0) + (entry.qtGuruP || 0) + (entry.qtTendikL || 0) + (entry.qtTendikP || 0);
+
+        rows.push(
+          new TableRow({
+            children: [
+              makeCell(entry.institutionName, colWidths[0], { fill: rowBg, color: txtColor, bold: true }),
+              makeCell(entry.qtPorsiKecilL ? String(entry.qtPorsiKecilL) : '—', colWidths[1], { fill: rowBg, color: txtColor, alignment: AlignmentType.CENTER }),
+              makeCell(entry.qtPorsiKecilP ? String(entry.qtPorsiKecilP) : '—', colWidths[2], { fill: rowBg, color: txtColor, alignment: AlignmentType.CENTER }),
+              makeCell(entry.qtPorsiBesarL ? String(entry.qtPorsiBesarL) : (isPosyandu && bumil ? String(bumil) : '—'), colWidths[3], { fill: rowBg, color: txtColor, alignment: AlignmentType.CENTER }),
+              makeCell(entry.qtPorsiBesarP ? String(entry.qtPorsiBesarP) : (isPosyandu && busui ? String(busui) : '—'), colWidths[4], { fill: rowBg, color: txtColor, alignment: AlignmentType.CENTER }),
+              makeCell(totalL ? String(totalL) : '—', colWidths[5], { fill: 'F8FAFC', color: txtColor, bold: true, alignment: AlignmentType.CENTER }),
+              makeCell(totalP ? String(totalP) : '—', colWidths[6], { fill: 'F8FAFC', color: txtColor, bold: true, alignment: AlignmentType.CENTER }),
+              makeCell(totalSiswa ? String(totalSiswa) : '—', colWidths[7], { fill: 'F1F5F9', color: txtColor, bold: true, alignment: AlignmentType.CENTER }),
+              makeCell(entry.qtGuruL ? String(entry.qtGuruL) : '—', colWidths[8], { fill: rowBg, color: txtColor, alignment: AlignmentType.CENTER }),
+              makeCell(entry.qtGuruP ? String(entry.qtGuruP) : '—', colWidths[9], { fill: rowBg, color: txtColor, alignment: AlignmentType.CENTER }),
+              makeCell(entry.qtTendikL ? String(entry.qtTendikL) : '—', colWidths[10], { fill: rowBg, color: txtColor, alignment: AlignmentType.CENTER }),
+              makeCell(entry.qtTendikP ? String(entry.qtTendikP) : '—', colWidths[11], { fill: rowBg, color: txtColor, alignment: AlignmentType.CENTER }),
+              makeCell(totalStaf ? String(totalStaf) : '—', colWidths[12], { fill: 'F1F5F9', color: txtColor, bold: true, alignment: AlignmentType.CENTER }),
+              makeCell(String(entry.jumlah), colWidths[13], { fill: 'FFFBEB', color: '92400E', bold: true, alignment: AlignmentType.CENTER }),
+              makeCell(entry.assignedPetugasName || '—', colWidths[14], { fill: rowBg, color: txtColor }),
+              makeCell(entry.jadwalPengantaran || '—', colWidths[15], { fill: rowBg, color: txtColor, alignment: AlignmentType.CENTER }),
+            ],
+          })
+        );
       });
+    }
 
-    recipientTableRows.push(
+    // Foot Row
+    rows.push(
       new TableRow({
         children: [
-          recipientCell(String(index + 1), recipientColumnWidths[0], { fill: rowFill, color: textColor, alignment: AlignmentType.CENTER }),
-          recipientCell(formatMbgPmRecipientName(row), recipientColumnWidths[1], { fill: rowFill, color: textColor, bold: true }),
-          recipientCell(row.categoryLabel, recipientColumnWidths[2], { fill: rowFill, color: textColor, alignment: AlignmentType.CENTER }),
-          numericCell(row.porsiKecil, 3),
-          numericCell(row.porsiBesar, 4),
-          numericCell(row.porsiBalita, 5),
-          numericCell(row.porsiBumilBusui, 6),
-          recipientCell(row.totalJumlah.toLocaleString('id-ID'), recipientColumnWidths[7], {
-            fill: row.isLibur ? 'FEE2E2' : 'FFFBEB',
-            color: row.isLibur ? '991B1B' : '92400E',
-            bold: true,
-            alignment: AlignmentType.CENTER,
-          }),
-          recipientCell(row.rincian || '-', recipientColumnWidths[8], { fill: rowFill, color: textColor }),
-          recipientCell(formatMbgPmRecipientPetugas(row), recipientColumnWidths[9], { fill: rowFill, color: textColor }),
-          recipientCell(row.jadwal, recipientColumnWidths[10], { fill: rowFill, color: textColor, bold: true, alignment: AlignmentType.CENTER }),
-          recipientCell(row.isLibur ? 'Libur' : 'Aktif', recipientColumnWidths[11], {
-            fill: row.isLibur ? 'FEE2E2' : 'D1FAE5',
-            color: row.isLibur ? 'B91C1C' : '065F46',
-            bold: true,
-            alignment: AlignmentType.CENTER,
-          }),
+          makeCell('TOTAL', colWidths[0], { fill: '0F172A', color: 'FFFFFF', bold: true }),
+          makeCell(totals.porsiKecilL ? String(totals.porsiKecilL) : '—', colWidths[1], { fill: '0F172A', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell(totals.porsiKecilP ? String(totals.porsiKecilP) : '—', colWidths[2], { fill: '0F172A', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell(totals.porsiBesarL ? String(totals.porsiBesarL) : '—', colWidths[3], { fill: '0F172A', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell(totals.porsiBesarP ? String(totals.porsiBesarP) : '—', colWidths[4], { fill: '0F172A', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell(totals.totalL ? String(totals.totalL) : '—', colWidths[5], { fill: '1E293B', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell(totals.totalP ? String(totals.totalP) : '—', colWidths[6], { fill: '1E293B', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell((totals.totalL + totals.totalP) ? String(totals.totalL + totals.totalP) : '—', colWidths[7], { fill: '334155', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell(totals.guruL ? String(totals.guruL) : '—', colWidths[8], { fill: '0F172A', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell(totals.guruP ? String(totals.guruP) : '—', colWidths[9], { fill: '0F172A', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell(totals.tendikL ? String(totals.tendikL) : '—', colWidths[10], { fill: '0F172A', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell(totals.tendikP ? String(totals.tendikP) : '—', colWidths[11], { fill: '0F172A', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell(totals.totalStaf ? String(totals.totalStaf) : '—', colWidths[12], { fill: '1E293B', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell(totals.jumlah ? String(totals.jumlah) : '—', colWidths[13], { fill: 'F59E0B', color: '0F172A', bold: true, alignment: AlignmentType.CENTER }),
+          makeCell('—', colWidths[14], { fill: '0F172A', color: '94A3B8', alignment: AlignmentType.CENTER }),
+          makeCell('—', colWidths[15], { fill: '0F172A', color: '94A3B8', alignment: AlignmentType.CENTER }),
         ],
       })
     );
-  });
 
-  const { totals } = recipientTable;
-  recipientTableRows.push(
-    new TableRow({
+    return new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      columnWidths: colWidths,
+      borders: CELL_BORDER,
+      rows,
+    });
+  };
+
+  // Section 1: Sekolah
+  docChildren.push(
+    new Paragraph({
+      spacing: { before: 100, after: 60 },
       children: [
-        recipientCell(`TOTAL (${recipientTable.rows.length} LEMBAGA):`, 5068, {
-          fill: '0F172A', color: 'FFFFFF', bold: true, alignment: AlignmentType.RIGHT, columnSpan: 3,
-        }),
-        recipientCell(totals.porsiKecil.toLocaleString('id-ID'), recipientColumnWidths[3], {
-          fill: '1E293B', color: 'FCD34D', bold: true, alignment: AlignmentType.CENTER,
-        }),
-        recipientCell(totals.porsiBesar.toLocaleString('id-ID'), recipientColumnWidths[4], {
-          fill: '1E293B', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER,
-        }),
-        recipientCell(totals.porsiBalita.toLocaleString('id-ID'), recipientColumnWidths[5], {
-          fill: '1E293B', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER,
-        }),
-        recipientCell(totals.porsiBumilBusui.toLocaleString('id-ID'), recipientColumnWidths[6], {
-          fill: '1E293B', color: 'FFFFFF', bold: true, alignment: AlignmentType.CENTER,
-        }),
-        recipientCell(totals.totalPorsi.toLocaleString('id-ID'), recipientColumnWidths[7], {
-          fill: '020617', color: 'FCD34D', bold: true, alignment: AlignmentType.CENTER,
-        }),
-        recipientCell('Data otomatis terhubung dengan inputan Administrasi PM MBG.', 5703, {
-          fill: '0F172A', color: '94A3B8', alignment: AlignmentType.LEFT, columnSpan: 4,
-        }),
+        new TextRun({ text: '● DATA PM — FORMAT AUTO REKAP  ', bold: true, size: 18, color: '059669', font: 'Arial' }),
+        new TextRun({ text: `(${schoolEntries.length} Sekolah • ${schoolTotals.jumlah.toLocaleString('id-ID')} Porsi)`, size: 14, color: '64748B', font: 'Arial' }),
       ],
-    })
+    }),
+    buildDocxAutoRekapTable(schoolEntries, schoolTotals, false),
+    new Paragraph({ spacing: { before: 160, after: 60 }, children: [] })
   );
 
+  // Section 2: Posyandu
+  docChildren.push(
+    new Paragraph({
+      spacing: { before: 100, after: 60 },
+      children: [
+        new TextRun({ text: '● DATA POSYANDU  ', bold: true, size: 18, color: '7C3AED', font: 'Arial' }),
+        new TextRun({ text: `(${posyanduEntries.length} Posyandu • ${posyanduTotals.jumlah.toLocaleString('id-ID')} Porsi)`, size: 14, color: '64748B', font: 'Arial' }),
+      ],
+    }),
+    buildDocxAutoRekapTable(posyanduEntries, posyanduTotals, true),
+    new Paragraph({ spacing: { before: 120, after: 60 }, children: [] })
+  );
+
+  // Grand Total Summary Box
   docChildren.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      columnWidths: recipientColumnWidths,
       borders: CELL_BORDER,
-      rows: recipientTableRows,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              width: { size: 11000, type: WidthType.DXA },
+              shading: { fill: 'ECFDF5' },
+              margins: COMPACT_CELL_MARGINS,
+              children: [
+                new Paragraph({
+                  spacing: { before: 40, after: 20 },
+                  children: [new TextRun({ text: 'RINGKASAN TOTAL PENERIMA MANFAAT', bold: true, size: 16, color: '065F46', font: 'Arial' })],
+                }),
+                new Paragraph({
+                  spacing: { before: 0, after: 40 },
+                  children: [
+                    new TextRun({
+                      text: `Jumlah keseluruhan porsi Sekolah (${schoolTotals.jumlah.toLocaleString('id-ID')}) dan Posyandu (${posyanduTotals.jumlah.toLocaleString('id-ID')}) dari data Admin MBG.`,
+                      size: 13,
+                      color: '047857',
+                      font: 'Arial',
+                    }),
+                  ],
+                }),
+              ],
+            }),
+            new TableCell({
+              width: { size: 4838, type: WidthType.DXA },
+              shading: { fill: '059669' },
+              margins: COMPACT_CELL_MARGINS,
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { before: 60, after: 60 },
+                  children: [
+                    new TextRun({
+                      text: `Total Keseluruhan: ${overallTotals.jumlah.toLocaleString('id-ID')} Porsi`,
+                      bold: true,
+                      size: 16,
+                      color: 'FFFFFF',
+                      font: 'Arial',
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
     })
   );
 

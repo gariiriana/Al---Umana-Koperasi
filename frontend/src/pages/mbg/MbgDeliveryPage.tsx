@@ -105,11 +105,12 @@ export function MbgDeliveryPage() {
     return unsub;
   }, []);
 
-  // Subscribe arsip dokumen
+  // Subscribe arsip dokumen only when archive tab is active
   useEffect(() => {
+    if (pageTab !== 'archive') return;
     const unsub = subscribeAllDeliveryDocuments(setArchiveDocs);
     return unsub;
-  }, []);
+  }, [pageTab]);
 
   // Role detection: Kurir vs Admin/Supervisor
   const isAdminOrSupervisor = useMemo(() => {

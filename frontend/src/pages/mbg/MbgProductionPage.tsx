@@ -32,6 +32,7 @@ import { exportProductionDocx } from '@/utils/mbgProductionDocxGenerator';
 import { parseProductionSheetRows, parsePenerimaManfaatSheet } from '@/utils/productionSheetParser';
 import { updateBatchStatus, updateBatch, updateBatchCookingStatus } from '@/services/mbgAdminService';
 import { getJakartaDate } from '@/utils/date';
+import { isSummaryOrCategoryRow } from '@/utils/mbgPmFilter';
 import {
   MBG_BATCH_STATUS_CONFIG,
   NUTRIENTS_LIST,
@@ -124,7 +125,7 @@ const standarPorsi: StandarPorsi[] = [];
 const standarResep: StandarResep[] = [];
 
 function getAutoRekapTotals(entries: MbgPmEntry[]) {
-  return entries.filter((entry) => !entry.isSekolahLibur).reduce(
+  return entries.filter((entry) => !entry.isSekolahLibur && !isSummaryOrCategoryRow(entry.institutionName)).reduce(
     (total, entry) => {
       const porsiKecilL = entry.qtPorsiKecilL || 0;
       const porsiKecilP = entry.qtPorsiKecilP || 0;
@@ -380,9 +381,10 @@ export function MbgProductionPage() {
     };
   }, [user]);
 
-  // Subscribe to all entries globally ONLY when archive tab is active
+  // Subscribe to all entries globally in archive ONLY when a search query is active
   useEffect(() => {
-    if (!user || activeTab !== 'archive') {
+    if (!user || activeTab !== 'archive' || !archiveSearchQuery.trim()) {
+      setAllEntries([]);
       setLoadingArchive(false);
       return;
     }
@@ -407,7 +409,7 @@ export function MbgProductionPage() {
       clearTimeout(timer);
       unsub();
     };
-  }, [user, activeTab]);
+  }, [user, activeTab, archiveSearchQuery]);
 
   // Subscribe entries + nutrition + recipe adjustments + daily report for selected batch
   useEffect(() => {
@@ -561,19 +563,23 @@ export function MbgProductionPage() {
 
   // Perhitungan totals format AUTO REKAP (Sekolah, Posyandu, Gabungan)
   const schoolAutoRekapTotals = useMemo(
-    () => getAutoRekapTotals(entries.filter((entry) => entry.institutionType !== 'posyandu')),
+    () => getAutoRekapTotals(entries.filter((entry) => entry.institutionType !== 'posyandu' && !isSummaryOrCategoryRow(entry.institutionName))),
     [entries]
   );
   const posyanduAutoRekapTotals = useMemo(
-    () => getAutoRekapTotals(entries.filter((entry) => entry.institutionType === 'posyandu')),
+    () => getAutoRekapTotals(entries.filter((entry) => entry.institutionType === 'posyandu' && !isSummaryOrCategoryRow(entry.institutionName))),
     [entries]
   );
-  const autoRekapTotals = useMemo(() => getAutoRekapTotals(entries), [entries]);
+  const autoRekapTotals = useMemo(
+    () => getAutoRekapTotals(entries.filter((entry) => !isSummaryOrCategoryRow(entry.institutionName))),
+    [entries]
+  );
 
   const filteredPmEntries = useMemo(() => {
-    if (!pmTableSearch.trim()) return entries;
+    const valid = entries.filter((e) => !isSummaryOrCategoryRow(e.institutionName));
+    if (!pmTableSearch.trim()) return valid;
     const q = pmTableSearch.toLowerCase();
-    return entries.filter(
+    return valid.filter(
       (e) =>
         (e.institutionName || '').toLowerCase().includes(q) ||
         (e.assignedPetugasName || '').toLowerCase().includes(q)
@@ -1382,10 +1388,7 @@ export function MbgProductionPage() {
       setExportingPdf(true);
       await export8PageDailyReportPdf(reportToUse, batchToUse, entriesToUse);
 
-      if (batchToUse.id && batchToUse.status === 'PM_SUBMITTED') {
-        await updateBatchStatus(batchToUse.id, 'PDF_EXPORTED');
-      }
-
+      // Status tetap Data PM Lengkap saat ekspor PDF
       showToast({ message: 'Laporan PDF resmi berhasil di-export!', variant: 'success' });
     } catch (err) {
       console.error('Export PDF error:', err);
@@ -1686,7 +1689,8 @@ export function MbgProductionPage() {
         }
       }
 
-      const pmEntries = parsePenerimaManfaatSheet(ws, targetBatchId, pmImportWeek, user?.uid || 'import_excel');
+      let pmEntries = parsePenerimaManfaatSheet(ws, targetBatchId, pmImportWeek, user?.uid || 'import_excel');
+      pmEntries = pmEntries.filter((e) => !isSummaryOrCategoryRow(e.institutionName));
       if (pmEntries.length === 0) {
         showToast({ message: 'Tidak ada data penerima manfaat yang dapat dibaca dari sheet ini.', variant: 'error' });
         return;
@@ -1752,7 +1756,12 @@ export function MbgProductionPage() {
         (parsedReport.porsiBalita?.pmCount || 0) +
         (parsedReport.porsiBumilBusui?.pmCount || 0);
 
-      if (totalPorsiFromReport > 0) {
+      // Check if target batch already has existing PM entries from Admin MBG
+      const batchAlreadyHasPmEntries =
+        entries.some((e) => e.batchId === targetBatchId && !isSummaryOrCategoryRow(e.institutionName)) ||
+        (existingBatch && existingBatch.totalJumlah != null && existingBatch.totalJumlah > 0);
+
+      if (totalPorsiFromReport > 0 && !batchAlreadyHasPmEntries) {
         await updateBatch(targetBatchId, {
           totalJumlah: totalPorsiFromReport,
           totalSiswaBalita: (parsedReport.porsiKecil?.pmCount || 0) + (parsedReport.porsiBesar?.pmCount || 0) + (parsedReport.porsiBalita?.pmCount || 0),
@@ -1777,56 +1786,61 @@ export function MbgProductionPage() {
         createdBy: user?.uid || '',
       });
 
-      // ALSO import schools from 'Penerima Manfaat' OR parsedReport.sekolahList into mbg_pm_entries
-      let importedPmEntries: Omit<MbgPmEntry, 'id'>[] = [];
-      const pmSheetName = Object.keys(sheetWorkbook.Sheets).find((name) =>
-        name.toLowerCase().includes('penerima manfaat')
-      );
-      if (pmSheetName) {
-        const pmWs = sheetWorkbook.Sheets[pmSheetName];
-        importedPmEntries = parsePenerimaManfaatSheet(pmWs, targetBatchId, pmImportWeek, user?.uid || 'import_excel');
-      }
+      // DO NOT overwrite PM entries if the batch already has entries from Admin MBG!
+      // Admin MBG is the single source of truth for Penerima Manfaat.
+      if (!batchAlreadyHasPmEntries) {
+        let importedPmEntries: Omit<MbgPmEntry, 'id'>[] = [];
+        const pmSheetName = Object.keys(sheetWorkbook.Sheets).find((name) =>
+          name.toLowerCase().includes('penerima manfaat')
+        );
+        if (pmSheetName) {
+          const pmWs = sheetWorkbook.Sheets[pmSheetName];
+          importedPmEntries = parsePenerimaManfaatSheet(pmWs, targetBatchId, pmImportWeek, user?.uid || 'import_excel');
+        }
 
-      // If no 'Penerima Manfaat' sheet or 0 entries, fallback to parsedReport.sekolahList (from cols BI-BK or daily sheet)
-      if (importedPmEntries.length === 0 && parsedReport.sekolahList && parsedReport.sekolahList.length > 0) {
-        importedPmEntries = parsedReport.sekolahList.map((s, idx) => {
-          const nameLower = s.nama.toLowerCase();
-          const isPosyandu = nameLower.includes('balita') || nameLower.includes('bumil') || nameLower.includes('busui') || nameLower.includes('posyandu') || nameLower.includes('3b');
-          const schoolLevel = nameLower.includes('tk') || nameLower.includes('paud') ? 'tk_paud' : (nameLower.includes('smp') || nameLower.includes('sma') ? 'sma' : 'sd');
-          const total = (s.murid || 0) + (s.guru || 0);
-          return {
-            batchId: targetBatchId,
-            institutionName: s.nama,
-            institutionType: isPosyandu ? 'posyandu' : 'sekolah',
-            schoolLevel: isPosyandu ? undefined : schoolLevel,
-            qtSiswaBalita: s.murid || 0,
-            qtBumil: 0,
-            qtBusui: 0,
-            qtBumilBusui: 0,
-            qtGuruKader: s.guru || 0,
-            qtPobiaNasi: 0,
-            qtPorsiBalita: isPosyandu && nameLower.includes('balita') ? s.murid : 0,
-            qtPorsiBumilBusui: isPosyandu && (nameLower.includes('bumil') || nameLower.includes('busui')) ? s.murid : 0,
-            jumlah: total,
-            jadwalPengantaran: '06.30-08.30',
-            assignedPetugasId: '',
-            assignedPetugasName: '',
-            menuItems: [],
-            menuKeringanItems: [],
-            isSekolahLibur: total === 0,
-            notes: '',
-            sortOrder: idx + 1,
-            createdBy: 'import_excel',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-        });
-      }
+        // If no 'Penerima Manfaat' sheet or 0 entries, fallback to parsedReport.sekolahList (from cols BI-BK or daily sheet)
+        if (importedPmEntries.length === 0 && parsedReport.sekolahList && parsedReport.sekolahList.length > 0) {
+          importedPmEntries = parsedReport.sekolahList
+            .filter((s) => !isSummaryOrCategoryRow(s.nama))
+            .map((s, idx) => {
+              const nameLower = s.nama.toLowerCase();
+              const isPosyandu = nameLower.includes('balita') || nameLower.includes('bumil') || nameLower.includes('busui') || nameLower.includes('posyandu') || nameLower.includes('3b');
+              const schoolLevel = nameLower.includes('tk') || nameLower.includes('paud') ? 'tk_paud' : (nameLower.includes('smp') || nameLower.includes('sma') ? 'sma' : 'sd');
+              const total = (s.murid || 0) + (s.guru || 0);
+              return {
+                batchId: targetBatchId,
+                institutionName: s.nama,
+                institutionType: isPosyandu ? 'posyandu' : 'sekolah',
+                schoolLevel: isPosyandu ? undefined : schoolLevel,
+                qtSiswaBalita: s.murid || 0,
+                qtBumil: 0,
+                qtBusui: 0,
+                qtBumilBusui: 0,
+                qtGuruKader: s.guru || 0,
+                qtPobiaNasi: 0,
+                qtPorsiBalita: isPosyandu && nameLower.includes('balita') ? s.murid : 0,
+                qtPorsiBumilBusui: isPosyandu && (nameLower.includes('bumil') || nameLower.includes('busui')) ? s.murid : 0,
+                jumlah: total,
+                jadwalPengantaran: '06.30-08.30',
+                assignedPetugasId: '',
+                assignedPetugasName: '',
+                menuItems: [],
+                menuKeringanItems: [],
+                isSekolahLibur: total === 0,
+                notes: '',
+                sortOrder: idx + 1,
+                createdBy: 'import_excel',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+            });
+        }
 
-      // The selected workbook is authoritative for an import. Replace the
-      // target batch atomically so no rows from a prior workbook remain.
-      if (importedPmEntries.length > 0) {
-        await replaceBatchEntries(targetBatchId, importedPmEntries, { preserveBatchStatus: true });
+        importedPmEntries = importedPmEntries.filter((e) => !isSummaryOrCategoryRow(e.institutionName));
+
+        if (importedPmEntries.length > 0) {
+          await replaceBatchEntries(targetBatchId, importedPmEntries, { preserveBatchStatus: true });
+        }
       }
 
       setSelectedBatchId(targetBatchId);
@@ -2102,7 +2116,7 @@ export function MbgProductionPage() {
                         <div>
                           <span className="text-gray-400 block font-medium">Sekolah/PM</span>
                           <span className="font-extrabold text-gray-800 text-xs">
-                            {batchEntries.length}
+                            {b.totalInstitusi || (batchEntries.length > 0 ? batchEntries.length : "-")}
                           </span>
                         </div>
                       </div>

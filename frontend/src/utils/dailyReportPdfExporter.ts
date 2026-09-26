@@ -11,13 +11,9 @@ import type {
   MbgPmEntry,
   MbgPortionDailyData,
 } from '@/types/mbg';
-import {
-  buildMbgPmRecipientTable,
-  formatMbgPmRecipientName,
-  formatMbgPmRecipientPetugas,
-  formatMbgPmRecipientValue,
-  MBG_PM_RECIPIENT_TABLE_COLUMNS,
-} from '@/utils/mbgPmRecipientTable';
+import { buildMbgPmRecipientTable } from '@/utils/mbgPmRecipientTable';
+import { getAutoRekapTotals, isSummaryOrCategoryRow } from '@/utils/mbgPmFilter';
+
 
 const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
   try {
@@ -162,92 +158,305 @@ const renderRekapitulasiPmPage = (
 ) => {
   drawLandscapeHeader(doc, 'REKAPITULASI PENERIMA MANFAAT', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
 
-  const recipientTable = buildMbgPmRecipientTable(entries, report.sekolahList);
-  const { rows: rowsData, totals } = recipientTable;
-  const bodyRows: RowInput[] = rowsData.map((row, index) => [
-    { content: String(index + 1), styles: { halign: 'center' } },
-    { content: formatMbgPmRecipientName(row), styles: { fontStyle: 'bold' } },
-    row.categoryLabel,
-    { content: formatMbgPmRecipientValue(row.porsiKecil), styles: { halign: 'center' } },
-    { content: formatMbgPmRecipientValue(row.porsiBesar), styles: { halign: 'center' } },
-    { content: formatMbgPmRecipientValue(row.porsiBalita), styles: { halign: 'center' } },
-    { content: formatMbgPmRecipientValue(row.porsiBumilBusui), styles: { halign: 'center' } },
-    { content: row.totalJumlah.toLocaleString('id-ID'), styles: { halign: 'center', fontStyle: 'bold', textColor: [146, 64, 14], fillColor: [255, 251, 235] } },
-    row.rincian || '-',
-    formatMbgPmRecipientPetugas(row),
-    { content: row.jadwal, styles: { halign: 'center' } },
-    {
-      content: row.isLibur ? 'Libur' : 'Aktif',
-      styles: row.isLibur
-        ? { halign: 'center', fontStyle: 'bold', textColor: [185, 28, 28], fillColor: [254, 226, 226] }
-        : { halign: 'center', fontStyle: 'bold', textColor: [6, 95, 70], fillColor: [209, 250, 229] },
-    },
-  ]);
+  // Filter out summary/category rows
+  const validEntries = (entries || []).filter((e) => !isSummaryOrCategoryRow(e.institutionName));
 
-  const footRows: RowInput[] = [[
-    {
-      content: `TOTAL (${rowsData.length} LEMBAGA):`,
-      colSpan: 3,
-      styles: { fontStyle: 'bold', halign: 'right', fillColor: [15, 23, 42], textColor: [255, 255, 255] },
-    },
-    { content: totals.porsiKecil.toLocaleString('id-ID'), styles: { fontStyle: 'bold', halign: 'center', fillColor: [30, 41, 59], textColor: [252, 211, 77] } },
-    { content: totals.porsiBesar.toLocaleString('id-ID'), styles: { fontStyle: 'bold', halign: 'center', fillColor: [30, 41, 59], textColor: [255, 255, 255] } },
-    { content: totals.porsiBalita.toLocaleString('id-ID'), styles: { fontStyle: 'bold', halign: 'center', fillColor: [30, 41, 59], textColor: [255, 255, 255] } },
-    { content: totals.porsiBumilBusui.toLocaleString('id-ID'), styles: { fontStyle: 'bold', halign: 'center', fillColor: [30, 41, 59], textColor: [255, 255, 255] } },
-    { content: totals.totalPorsi.toLocaleString('id-ID'), styles: { fontStyle: 'bold', halign: 'center', fillColor: [2, 6, 23], textColor: [252, 211, 77] } },
-    {
-      content: 'Data otomatis terhubung dengan inputan Administrasi PM MBG.',
-      colSpan: 4,
-      styles: { fontStyle: 'italic', fillColor: [15, 23, 42], textColor: [148, 163, 184] },
-    },
-  ]];
+  const effectiveEntries: MbgPmEntry[] = validEntries.length > 0 ? validEntries : (report.sekolahList || [])
+    .filter((s) => !isSummaryOrCategoryRow(s.nama))
+    .map((s, idx) => {
+      const isPos = s.nama.toLowerCase().includes('posyandu');
+      const isTk = s.nama.toLowerCase().includes('tk') || s.nama.toLowerCase().includes('paud');
+      const pKecilL = isPos ? Math.ceil(s.murid / 2) : (isTk ? Math.ceil(s.murid / 2) : 0);
+      const pKecilP = isPos ? Math.floor(s.murid / 2) : (isTk ? Math.floor(s.murid / 2) : 0);
+      const pBesarL = !isPos && !isTk ? Math.ceil(s.murid / 2) : 0;
+      const pBesarP = !isPos && !isTk ? Math.floor(s.murid / 2) : 0;
+      const bumil = isPos ? s.guru : 0;
+      return {
+        id: `fallback-${idx}`,
+        batchId: '',
+        institutionName: s.nama,
+        institutionType: isPos ? ('posyandu' as const) : ('sekolah' as const),
+        qtPorsiKecilL: pKecilL,
+        qtPorsiKecilP: pKecilP,
+        qtPorsiBesarL: pBesarL,
+        qtPorsiBesarP: pBesarP,
+        qtSiswaBalita: s.murid,
+        qtBumil: bumil,
+        qtBusui: 0,
+        qtBumilBusui: bumil,
+        qtGuruL: isPos ? 0 : Math.ceil(s.guru / 2),
+        qtGuruP: isPos ? 0 : Math.floor(s.guru / 2),
+        qtGuruKader: s.guru,
+        qtTendikL: 0,
+        qtTendikP: 0,
+        qtPobiaNasi: 0,
+        jumlah: s.murid + s.guru,
+        jadwalPengantaran: '06.00-08.30',
+        assignedPetugasId: '',
+        assignedPetugasName: '-',
+        isSekolahLibur: false,
+        menuItems: [],
+        menuKeringanItems: [],
+        notes: '',
+        sortOrder: idx,
+        createdBy: 'system',
+        createdAt: '',
+        updatedAt: '',
+      } as unknown as MbgPmEntry;
+    });
 
+  const schoolEntries = effectiveEntries.filter((e) => e.institutionType !== 'posyandu');
+  const posyanduEntries = effectiveEntries.filter((e) => e.institutionType === 'posyandu');
+
+  const schoolTotals = getAutoRekapTotals(schoolEntries);
+  const posyanduTotals = getAutoRekapTotals(posyanduEntries);
+  const overallTotals = getAutoRekapTotals(effectiveEntries);
+
+  const columnWidths: { [key: number]: { cellWidth: number; halign?: 'left' | 'center' | 'right' } } = {
+    0: { cellWidth: 44, halign: 'left' },
+    1: { cellWidth: 10, halign: 'center' },
+    2: { cellWidth: 10, halign: 'center' },
+    3: { cellWidth: 10, halign: 'center' },
+    4: { cellWidth: 10, halign: 'center' },
+    5: { cellWidth: 11, halign: 'center' },
+    6: { cellWidth: 11, halign: 'center' },
+    7: { cellWidth: 13, halign: 'center' },
+    8: { cellWidth: 10, halign: 'center' },
+    9: { cellWidth: 10, halign: 'center' },
+    10: { cellWidth: 10, halign: 'center' },
+    11: { cellWidth: 10, halign: 'center' },
+    12: { cellWidth: 13, halign: 'center' },
+    13: { cellWidth: 20, halign: 'center' },
+    14: { cellWidth: 43, halign: 'left' },
+    15: { cellWidth: 32, halign: 'center' },
+  };
+
+  const buildTableConfig = (
+    list: MbgPmEntry[],
+    totals: ReturnType<typeof getAutoRekapTotals>,
+    isPosyandu: boolean
+  ) => {
+    const head: RowInput[] = [
+      [
+        { content: isPosyandu ? 'POSYANDU' : 'SEKOLAH', rowSpan: 2, styles: { halign: 'left', valign: 'middle' } },
+        { content: 'PORSI KECIL', colSpan: 2, styles: { halign: 'center' } },
+        { content: 'PORSI BESAR', colSpan: 2, styles: { halign: 'center' } },
+        { content: 'TOTAL', colSpan: 2, styles: { halign: 'center', fillColor: [226, 232, 240] } },
+        { content: 'JML', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [226, 232, 240] } },
+        { content: 'GURU', colSpan: 2, styles: { halign: 'center' } },
+        { content: 'TENDIK', colSpan: 2, styles: { halign: 'center' } },
+        { content: 'JML', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [241, 245, 249] } },
+        { content: 'TOTAL KESELURUHAN', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [254, 243, 199], textColor: [120, 53, 15] } },
+        { content: 'PETUGAS KURIR', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } },
+        { content: 'JADWAL', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } },
+      ],
+      [
+        { content: 'L', styles: { halign: 'center' } },
+        { content: 'P', styles: { halign: 'center' } },
+        { content: 'L', styles: { halign: 'center' } },
+        { content: 'P', styles: { halign: 'center' } },
+        { content: 'L', styles: { halign: 'center', fillColor: [241, 245, 249] } },
+        { content: 'P', styles: { halign: 'center', fillColor: [241, 245, 249] } },
+        { content: 'L', styles: { halign: 'center' } },
+        { content: 'P', styles: { halign: 'center' } },
+        { content: 'L', styles: { halign: 'center' } },
+        { content: 'P', styles: { halign: 'center' } },
+      ],
+    ];
+
+    const body: RowInput[] = list.length === 0
+      ? [[{ content: `Belum ada data ${isPosyandu ? 'Posyandu' : 'Sekolah'}`, colSpan: 16, styles: { halign: 'center', fontStyle: 'italic', textColor: [148, 163, 184] } }]]
+      : list.map((entry) => {
+          if (entry.isSekolahLibur) {
+            return [
+              { content: `${entry.institutionName} (LIBUR)`, styles: { fontStyle: 'bold', textColor: [185, 28, 28] } },
+              { content: 'TIDAK ADA PENGIRIMAN (LIBUR)', colSpan: 12, styles: { halign: 'center', fontStyle: 'bold', textColor: [185, 28, 28] } },
+              { content: entry.assignedPetugasName || '—', styles: { halign: 'center', textColor: [148, 163, 184] } },
+              { content: entry.jadwalPengantaran || '—', styles: { halign: 'center', textColor: [148, 163, 184] } },
+            ];
+          }
+
+          const totalL = isPosyandu ? (entry.qtPorsiKecilL || 0) : ((entry.qtPorsiKecilL || 0) + (entry.qtPorsiBesarL || 0));
+          const bumil = entry.qtBumil ?? (isPosyandu ? entry.qtPorsiBesarL || 0 : 0);
+          const busui = entry.qtBusui ?? (isPosyandu ? entry.qtPorsiBesarP || 0 : 0);
+          const totalP = isPosyandu ? ((entry.qtPorsiKecilP || 0) + bumil + busui) : ((entry.qtPorsiKecilP || 0) + (entry.qtPorsiBesarP || 0));
+          const totalSiswa = totalL + totalP;
+          const totalStaf = (entry.qtGuruL || 0) + (entry.qtGuruP || 0) + (entry.qtTendikL || 0) + (entry.qtTendikP || 0);
+
+          return [
+            { content: entry.institutionName, styles: { fontStyle: 'bold' } },
+            { content: entry.qtPorsiKecilL ? String(entry.qtPorsiKecilL) : '—', styles: { halign: 'center' } },
+            { content: entry.qtPorsiKecilP ? String(entry.qtPorsiKecilP) : '—', styles: { halign: 'center' } },
+            { content: entry.qtPorsiBesarL ? String(entry.qtPorsiBesarL) : (isPosyandu && bumil ? String(bumil) : '—'), styles: { halign: 'center' } },
+            { content: entry.qtPorsiBesarP ? String(entry.qtPorsiBesarP) : (isPosyandu && busui ? String(busui) : '—'), styles: { halign: 'center' } },
+            { content: totalL ? String(totalL) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [248, 250, 252] } },
+            { content: totalP ? String(totalP) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [248, 250, 252] } },
+            { content: totalSiswa ? String(totalSiswa) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [241, 245, 249] } },
+            { content: entry.qtGuruL ? String(entry.qtGuruL) : '—', styles: { halign: 'center' } },
+            { content: entry.qtGuruP ? String(entry.qtGuruP) : '—', styles: { halign: 'center' } },
+            { content: entry.qtTendikL ? String(entry.qtTendikL) : '—', styles: { halign: 'center' } },
+            { content: entry.qtTendikP ? String(entry.qtTendikP) : '—', styles: { halign: 'center' } },
+            { content: totalStaf ? String(totalStaf) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [241, 245, 249] } },
+            { content: String(entry.jumlah), styles: { halign: 'center', fontStyle: 'bold', fillColor: [254, 243, 199], textColor: [146, 64, 14] } },
+            { content: entry.assignedPetugasName || '—', styles: { halign: 'left' } },
+            { content: entry.jadwalPengantaran || '—', styles: { halign: 'center' } },
+          ];
+        });
+
+    const foot: RowInput[] = [
+      [
+        { content: 'TOTAL', styles: { fontStyle: 'bold', halign: 'left', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+        { content: totals.porsiKecilL ? String(totals.porsiKecilL) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+        { content: totals.porsiKecilP ? String(totals.porsiKecilP) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+        { content: totals.porsiBesarL ? String(totals.porsiBesarL) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+        { content: totals.porsiBesarP ? String(totals.porsiBesarP) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+        { content: totals.totalL ? String(totals.totalL) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [30, 41, 59], textColor: [255, 255, 255] } },
+        { content: totals.totalP ? String(totals.totalP) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [30, 41, 59], textColor: [255, 255, 255] } },
+        { content: (totals.totalL + totals.totalP) ? String(totals.totalL + totals.totalP) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [51, 65, 85], textColor: [255, 255, 255] } },
+        { content: totals.guruL ? String(totals.guruL) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+        { content: totals.guruP ? String(totals.guruP) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+        { content: totals.tendikL ? String(totals.tendikL) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+        { content: totals.tendikP ? String(totals.tendikP) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+        { content: totals.totalStaf ? String(totals.totalStaf) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [30, 41, 59], textColor: [255, 255, 255] } },
+        { content: totals.jumlah ? String(totals.jumlah) : '—', styles: { halign: 'center', fontStyle: 'bold', fillColor: [245, 158, 11], textColor: [15, 23, 42] } },
+        { content: '', styles: { fillColor: [15, 23, 42] } },
+        { content: '', styles: { fillColor: [15, 23, 42] } },
+      ],
+    ];
+
+    return { head, body, foot };
+  };
+
+  let curY = 27;
+
+  // Header 1: DATA PM — FORMAT AUTO REKAP
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(15, 23, 42);
+  doc.text('DATA PM — FORMAT AUTO REKAP', 10, curY);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`${schoolEntries.length} Sekolah • ${schoolTotals.jumlah.toLocaleString('id-ID')} Porsi`, 287, curY, { align: 'right' });
+  curY += 2;
+
+  const schoolCfg = buildTableConfig(schoolEntries, schoolTotals, false);
   autoTable(doc, {
-    startY: 27,
-    head: [[...MBG_PM_RECIPIENT_TABLE_COLUMNS]],
-    body: bodyRows,
-    foot: footRows,
+    startY: curY,
+    head: schoolCfg.head,
+    body: schoolCfg.body,
+    foot: schoolCfg.foot,
     theme: 'grid',
     styles: {
-      fontSize: 5.4,
-      cellPadding: 0.8,
+      fontSize: 5.2,
+      cellPadding: 0.7,
       lineWidth: 0.15,
       lineColor: [203, 213, 225],
       textColor: [30, 41, 59],
       overflow: 'linebreak',
     },
-    columnStyles: {
-      0: { cellWidth: 10, halign: 'center' },
-      1: { cellWidth: 50 },
-      2: { cellWidth: 24 },
-      3: { cellWidth: 15, halign: 'center' },
-      4: { cellWidth: 15, halign: 'center' },
-      5: { cellWidth: 15, halign: 'center' },
-      6: { cellWidth: 17, halign: 'center' },
-      7: { cellWidth: 16, halign: 'center' },
-      8: { cellWidth: 40 },
-      9: { cellWidth: 26 },
-      10: { cellWidth: 24, halign: 'center' },
-      11: { cellWidth: 15, halign: 'center' },
-    },
-    margin: { top: 28, bottom: 12, left: 10, right: 10 },
+    columnStyles: columnWidths,
+    margin: { top: 27, bottom: 12, left: 10, right: 10 },
     didParseCell: (data) => {
       if (data.section === 'head') {
-        data.cell.styles.fillColor = [241, 245, 249];
-        data.cell.styles.textColor = [51, 65, 85];
+        data.cell.styles.fillColor = data.cell.styles.fillColor || [241, 245, 249];
+        data.cell.styles.textColor = data.cell.styles.textColor || [51, 65, 85];
         data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.halign = 'center';
-      }
-      if (data.section === 'body' && rowsData[data.row.index]?.isLibur) {
-        data.cell.styles.fillColor = [254, 242, 242];
-        if (data.column.index !== 11) data.cell.styles.textColor = [153, 27, 27];
       }
     },
     didDrawPage: () => {
       drawLandscapeHeader(doc, 'REKAPITULASI PENERIMA MANFAAT', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
     },
   });
+
+  curY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+
+  // Page break check if needed for Posyandu table
+  if (curY > 165) {
+    doc.addPage();
+    drawLandscapeHeader(doc, 'REKAPITULASI PENERIMA MANFAAT', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
+    curY = 27;
+  }
+
+  // Header 2: DATA POSYANDU
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(15, 23, 42);
+  doc.text('DATA POSYANDU', 10, curY);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`${posyanduEntries.length} Posyandu • ${posyanduTotals.jumlah.toLocaleString('id-ID')} Porsi`, 287, curY, { align: 'right' });
+  curY += 2;
+
+  const posyanduCfg = buildTableConfig(posyanduEntries, posyanduTotals, true);
+  autoTable(doc, {
+    startY: curY,
+    head: posyanduCfg.head,
+    body: posyanduCfg.body,
+    foot: posyanduCfg.foot,
+    theme: 'grid',
+    styles: {
+      fontSize: 5.2,
+      cellPadding: 0.7,
+      lineWidth: 0.15,
+      lineColor: [203, 213, 225],
+      textColor: [30, 41, 59],
+      overflow: 'linebreak',
+    },
+    columnStyles: columnWidths,
+    margin: { top: 27, bottom: 12, left: 10, right: 10 },
+    didParseCell: (data) => {
+      if (data.section === 'head') {
+        data.cell.styles.fillColor = data.cell.styles.fillColor || [241, 245, 249];
+        data.cell.styles.textColor = data.cell.styles.textColor || [51, 65, 85];
+        data.cell.styles.fontStyle = 'bold';
+      }
+    },
+    didDrawPage: () => {
+      drawLandscapeHeader(doc, 'REKAPITULASI PENERIMA MANFAAT', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
+    },
+  });
+
+  curY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 5;
+
+  // Grand Total Summary Box
+  if (curY > 185) {
+    doc.addPage();
+    drawLandscapeHeader(doc, 'REKAPITULASI PENERIMA MANFAAT', tanggalStr, totalPorsiBatch, logoAlUmanaa, logoBadanGizi);
+    curY = 27;
+  }
+
+  // Draw summary card
+  doc.setFillColor(236, 253, 245); // emerald-50
+  doc.setDrawColor(167, 243, 208); // emerald-200
+  doc.roundedRect(10, curY, 277, 12, 2, 2, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(6, 78, 59); // emerald 900
+  doc.text('RINGKASAN TOTAL PENERIMA MANFAAT', 14, curY + 4.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(4, 120, 87); // emerald 700
+  doc.text(
+    `Jumlah keseluruhan porsi Sekolah (${schoolTotals.jumlah.toLocaleString('id-ID')}) dan Posyandu (${posyanduTotals.jumlah.toLocaleString('id-ID')}) dari data Admin MBG.`,
+    14,
+    curY + 8.5
+  );
+
+  // Badge on the right
+  doc.setFillColor(5, 150, 105); // emerald 600
+  doc.roundedRect(215, curY + 2.5, 68, 7, 2, 2, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text(`Total Keseluruhan: ${overallTotals.jumlah.toLocaleString('id-ID')} Porsi`, 249, curY + 6.8, { align: 'center' });
 };
+
 
 // ─── HALAMAN 2+: INDIVIDUAL PORTION (3 TABEL VERTIKAL: FOTO 2, 3, 4) ──────────
 
@@ -737,12 +946,15 @@ export async function generate8PageDailyReportPdf(
   const logoBadanGizi = await getBase64ImageFromUrl('/logo_badan_gizi.png');
 
   const tanggalStr = report.tanggal || batch?.tanggal || new Date().toISOString().split('T')[0];
-  const totalDariEntries = buildMbgPmRecipientTable(entries, report.sekolahList).totals.totalPorsi;
+  const autoTotals = getAutoRekapTotals(entries);
+  const filteredSekolahList = (report.sekolahList || []).filter((s) => !isSummaryOrCategoryRow(s.nama));
+  const totalDariSekolahList = filteredSekolahList.reduce((s, sk) => s + (sk.murid || 0) + (sk.guru || 0), 0);
   const totalPorsiBatch =
-    totalDariEntries ||
+    (entries.length > 0 ? autoTotals.jumlah : 0) ||
     batch?.totalJumlah ||
-    (report.sekolahList || []).reduce((s, sk) => s + sk.murid + sk.guru, 0) ||
+    totalDariSekolahList ||
     0;
+
 
   // ─── HALAMAN 1: REKAPITULASI PENERIMA MANFAAT (FOTO 1) ────────────────────
   renderRekapitulasiPmPage(

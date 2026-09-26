@@ -45,7 +45,7 @@ import {
   type MbgKurirUser,
 } from '@/services/mbgDistributionService';
 import {
-  subscribeAllDeliveryDocuments,
+  subscribeBatchDeliveryDocuments,
   updateSchoolDeliveryProof,
   deleteSchoolDeliveryProof,
   type MbgDeliveryDocument,
@@ -498,11 +498,15 @@ export function MbgDistributionPage() {
     };
   }, [selectedBatchId]);
 
-  // Subscribe delivery documents (for reports tab)
+  // Subscribe delivery documents for the selected batch only (saving thousands of reads)
   useEffect(() => {
-    const unsub = subscribeAllDeliveryDocuments(setDeliveryDocs);
+    if (!selectedBatchId) {
+      setDeliveryDocs([]);
+      return;
+    }
+    const unsub = subscribeBatchDeliveryDocuments(selectedBatchId, setDeliveryDocs);
     return unsub;
-  }, []);
+  }, [selectedBatchId]);
 
   // Search & Filter state for Laporan Kurir in Distribusi MBG
   const [distribSearchQuery, setDistribSearchQuery] = useState('');
