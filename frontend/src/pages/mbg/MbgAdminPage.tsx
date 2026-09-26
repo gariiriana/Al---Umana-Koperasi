@@ -1810,6 +1810,15 @@ export function MbgAdminPage() {
     if (!user) return;
     try {
       setSaving(true);
+      const existing = batches.find((b) => b.tanggal === tanggal && !b.isBackup);
+      if (existing) {
+        setSelectedBatchId(existing.id);
+        showToast({
+          message: `Batch untuk tanggal ${tanggal} sudah ada! Mengalihkan ke batch tersebut.`,
+          variant: 'info',
+        });
+        return;
+      }
       const newId = await createBatch(tanggal, user.uid, autoPopulateMaster || false, weeklySchedule);
       if (copyFromId) {
         await copyFromBatch(copyFromId, newId, user.uid, tanggal, weeklySchedule);
@@ -1818,7 +1827,7 @@ export function MbgAdminPage() {
       const successMsg = copyFromId
         ? `Batch ${tanggal} berhasil dibuat dengan menyalin data dari batch sebelumnya!`
         : autoPopulateMaster
-        ? `Batch ${tanggal} berhasil dibuat dengan 27 Institusi Master otomatis!`
+        ? `Batch ${tanggal} berhasil dibuat dengan 30 Institusi Master resmi!`
         : `Batch ${tanggal} baru berhasil dibuat! Silakan klik "Import Excel / CSV PM" untuk mengisi data PM.`;
       showToast({ message: successMsg, variant: 'success' });
     } catch (err: unknown) {

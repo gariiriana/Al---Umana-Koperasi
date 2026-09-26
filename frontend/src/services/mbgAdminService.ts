@@ -153,6 +153,22 @@ export async function createBatch(
   autoPopulate = false,
   scheduleDays?: MbgDayMenu[]
 ): Promise<string> {
+  // Guard against duplicate active batches for the exact same operational date
+  try {
+    const qExisting = query(
+      collection(db, BATCHES_COLLECTION),
+      where('tanggal', '==', tanggal)
+    );
+    const snapExisting = await getDocs(qExisting);
+    const activeExisting = snapExisting.docs.find((d) => !(d.data() as MbgPmBatch).isBackup);
+    if (activeExisting) {
+      console.info(`[createBatch] Batch for date ${tanggal} already exists (ID: ${activeExisting.id}). Reusing existing batch.`);
+      return activeExisting.id;
+    }
+  } catch (err) {
+    console.warn('[createBatch] Error checking existing batch, proceeding with creation:', err);
+  }
+
   const batch: Omit<MbgPmBatch, 'id'> = {
     tanggal,
     status: 'DRAFT',
