@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft,
@@ -508,16 +508,17 @@ const getThisMonthYm = () => {
 };
 
 const formatIndoDate = (dateStr: string) => {
-  try {
-    const parts = dateStr.split("-");
-    if (parts.length === 3) {
-      const y = parts[0];
-      const mIdx = parseInt(parts[1], 10) - 1;
-      const d = parseInt(parts[2], 10);
-      const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
-      return `${d} ${months[mIdx] || parts[1]} ${y}`;
+  if (!dateStr || typeof dateStr !== "string") return dateStr || "";
+  const parts = dateStr.split("-");
+  if (parts.length === 3) {
+    const y = parts[0];
+    const mIdx = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+    if (!isNaN(mIdx) && months[mIdx] && !isNaN(d)) {
+      return `${d} ${months[mIdx]} ${y}`;
     }
-  } catch (_) {}
+  }
   return dateStr;
 };
 
@@ -526,7 +527,7 @@ const extractOrderDates = (order: Order): { dateYmd: string[]; year: string[]; m
   const yearSet = new Set<string>();
   const monthSet = new Set<string>();
 
-  const addDateStr = (raw?: string | any | null) => {
+  const addDateStr = (raw?: unknown) => {
     if (!raw) return;
     if (typeof raw === "string") {
       const match = raw.match(/(\d{4})-(\d{2})-(\d{2})/);
@@ -549,8 +550,8 @@ const extractOrderDates = (order: Order): { dateYmd: string[]; year: string[]; m
         yearSet.add(y);
         monthSet.add(`${y}-${m}`);
       }
-    } else if (typeof raw === "object" && typeof raw.toDate === "function") {
-      const dt = raw.toDate();
+    } else if (typeof raw === "object" && raw !== null && "toDate" in raw && typeof (raw as { toDate: () => Date }).toDate === "function") {
+      const dt = (raw as { toDate: () => Date }).toDate();
       const y = String(dt.getFullYear());
       const m = String(dt.getMonth() + 1).padStart(2, "0");
       const d = String(dt.getDate()).padStart(2, "0");
@@ -744,7 +745,7 @@ export function DeliveryPage() {
     return "";
   }, [dateFilterType, customDate, customMonth, customYear]);
 
-  const matchesDateFilter = (order: Order): boolean => {
+  const matchesDateFilter = useCallback((order: Order): boolean => {
     if (dateFilterType === "all") return true;
 
     const { dateYmd, monthYm, year } = extractOrderDates(order);
@@ -778,7 +779,7 @@ export function DeliveryPage() {
     }
 
     return true;
-  };
+  }, [dateFilterType, customDate, customMonth, customYear]);
 
   const handleSetFilterAll = () => {
     setDateFilterType("all");
@@ -822,7 +823,7 @@ export function DeliveryPage() {
         o.items.some((item) => item.itemName.toLowerCase().includes(q))
       );
     });
-  }, [myDeliveries, dateFilterType, customDate, customMonth, customYear, searchQuery]);
+  }, [myDeliveries, matchesDateFilter, searchQuery]);
 
   const filteredCompletedDeliveries = useMemo(() => {
     return myCompletedDeliveries.filter((o) => {
@@ -837,7 +838,7 @@ export function DeliveryPage() {
         o.items.some((item) => item.itemName.toLowerCase().includes(q))
       );
     });
-  }, [myCompletedDeliveries, dateFilterType, customDate, customMonth, customYear, searchQuery]);
+  }, [myCompletedDeliveries, matchesDateFilter, searchQuery]);
 
   const activeEnRouteOrderIds = useMemo(() => {
     return myDeliveries.filter((o) => o.status === "OUT_FOR_DELIVERY").map((o) => o.id);
