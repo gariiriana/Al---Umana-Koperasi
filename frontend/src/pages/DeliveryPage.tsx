@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft, AlertCircle, Loader2, Navigation, Phone, Search, X, FileDown, FolderOpen } from "lucide-react";
+import {
+  MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft,
+  AlertCircle, Loader2, Navigation, Phone, Search, X, FileDown,
+  FolderOpen, Calendar, CalendarDays, Filter, ChevronDown, RotateCcw,
+  Sparkles, HelpCircle
+} from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -472,6 +477,108 @@ const getCourierStatusMeta = (status: Order["status"]) => {
   };
 };
 
+const MONTHS_INDO = [
+  { value: "01", label: "Januari" },
+  { value: "02", label: "Februari" },
+  { value: "03", label: "Maret" },
+  { value: "04", label: "April" },
+  { value: "05", label: "Mei" },
+  { value: "06", label: "Juni" },
+  { value: "07", label: "Juli" },
+  { value: "08", label: "Agustus" },
+  { value: "09", label: "September" },
+  { value: "10", label: "Oktober" },
+  { value: "11", label: "November" },
+  { value: "12", label: "Desember" },
+];
+
+const getTodayYmd = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const getThisMonthYm = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+};
+
+const formatIndoDate = (dateStr: string) => {
+  try {
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      const y = parts[0];
+      const mIdx = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+      return `${d} ${months[mIdx] || parts[1]} ${y}`;
+    }
+  } catch (_) {}
+  return dateStr;
+};
+
+const extractOrderDates = (order: Order): { dateYmd: string[]; year: string[]; monthYm: string[] } => {
+  const ymdSet = new Set<string>();
+  const yearSet = new Set<string>();
+  const monthSet = new Set<string>();
+
+  const addDateStr = (raw?: string | any | null) => {
+    if (!raw) return;
+    if (typeof raw === "string") {
+      const match = raw.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        const y = match[1];
+        const m = match[2];
+        const d = match[3];
+        ymdSet.add(`${y}-${m}-${d}`);
+        yearSet.add(y);
+        monthSet.add(`${y}-${m}`);
+        return;
+      }
+      const ts = Date.parse(raw);
+      if (!isNaN(ts)) {
+        const dt = new Date(ts);
+        const y = String(dt.getFullYear());
+        const m = String(dt.getMonth() + 1).padStart(2, "0");
+        const d = String(dt.getDate()).padStart(2, "0");
+        ymdSet.add(`${y}-${m}-${d}`);
+        yearSet.add(y);
+        monthSet.add(`${y}-${m}`);
+      }
+    } else if (typeof raw === "object" && typeof raw.toDate === "function") {
+      const dt = raw.toDate();
+      const y = String(dt.getFullYear());
+      const m = String(dt.getMonth() + 1).padStart(2, "0");
+      const d = String(dt.getDate()).padStart(2, "0");
+      ymdSet.add(`${y}-${m}-${d}`);
+      yearSet.add(y);
+      monthSet.add(`${y}-${m}`);
+    } else if (raw instanceof Date) {
+      const y = String(raw.getFullYear());
+      const m = String(raw.getMonth() + 1).padStart(2, "0");
+      const d = String(raw.getDate()).padStart(2, "0");
+      ymdSet.add(`${y}-${m}-${d}`);
+      yearSet.add(y);
+      monthSet.add(`${y}-${m}`);
+    }
+  };
+
+  addDateStr(order.eventDate);
+  addDateStr(order.deliveryTime);
+  addDateStr(order.deliveredAt);
+  addDateStr(order.createdAt);
+
+  return {
+    dateYmd: Array.from(ymdSet),
+    year: Array.from(yearSet),
+    monthYm: Array.from(monthSet),
+  };
+};
+
 export function DeliveryPage() {
   const { user, profile } = useAuth();
   const { showToast } = useToast();
@@ -484,6 +591,14 @@ export function DeliveryPage() {
   const [selectedStartPhotoId, setSelectedStartPhotoId] = useState<string | undefined>(undefined);
   const [selectedKitchenSignatures, setSelectedKitchenSignatures] = useState<KitchenSignature[] | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Date, Month, Year Filter States
+  const [dateFilterType, setDateFilterType] = useState<"all" | "today" | "this_month" | "custom_date" | "custom_month" | "custom_year">("all");
+  const [customDate, setCustomDate] = useState<string>(""); // YYYY-MM-DD
+  const [customMonth, setCustomMonth] = useState<string>(""); // "01" - "12"
+  const [customYear, setCustomYear] = useState<string>(() => String(new Date().getFullYear()));
+  const [showCustomPicker, setShowCustomPicker] = useState<boolean>(false);
+  const [showFilterHelp, setShowFilterHelp] = useState<boolean>(false);
 
   const [reportingSick, setReportingSick] = useState(false);
   const [showSickConfirm, setShowSickConfirm] = useState(false);
@@ -589,31 +704,140 @@ export function DeliveryPage() {
     [orders, user, profile]
   );
 
+  const availableYears = useMemo(() => {
+    const currentY = new Date().getFullYear();
+    const yearSet = new Set<string>([
+      String(currentY - 1),
+      String(currentY),
+      String(currentY + 1),
+    ]);
+    [...myDeliveries, ...myCompletedDeliveries].forEach((o) => {
+      const { year } = extractOrderDates(o);
+      year.forEach((y) => yearSet.add(y));
+    });
+    return Array.from(yearSet).sort((a, b) => Number(b) - Number(a));
+  }, [myDeliveries, myCompletedDeliveries]);
+
+  const activeFilterDescription = useMemo(() => {
+    if (dateFilterType === "all") return "";
+    if (dateFilterType === "today") {
+      const today = getTodayYmd();
+      return `Hari Ini (${formatIndoDate(today)})`;
+    }
+    if (dateFilterType === "this_month") {
+      const d = new Date();
+      const mIdx = d.getMonth();
+      const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+      return `Bulan Ini (${months[mIdx]} ${d.getFullYear()})`;
+    }
+    if (dateFilterType === "custom_date") {
+      return customDate ? `Tanggal: ${formatIndoDate(customDate)}` : "Tanggal Tertentu";
+    }
+    if (dateFilterType === "custom_month") {
+      const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+      const mLabel = customMonth ? months[parseInt(customMonth, 10) - 1] : "Semua Bulan";
+      return `Bulan: ${mLabel} ${customYear}`;
+    }
+    if (dateFilterType === "custom_year") {
+      return `Tahun: ${customYear}`;
+    }
+    return "";
+  }, [dateFilterType, customDate, customMonth, customYear]);
+
+  const matchesDateFilter = (order: Order): boolean => {
+    if (dateFilterType === "all") return true;
+
+    const { dateYmd, monthYm, year } = extractOrderDates(order);
+
+    if (dateFilterType === "today") {
+      const today = getTodayYmd();
+      return dateYmd.includes(today);
+    }
+
+    if (dateFilterType === "this_month") {
+      const thisMonth = getThisMonthYm();
+      return monthYm.includes(thisMonth);
+    }
+
+    if (dateFilterType === "custom_date") {
+      if (!customDate) return true;
+      return dateYmd.includes(customDate);
+    }
+
+    if (dateFilterType === "custom_month") {
+      if (!customMonth) {
+        return year.includes(customYear);
+      }
+      const targetYm = `${customYear}-${customMonth.padStart(2, "0")}`;
+      return monthYm.includes(targetYm);
+    }
+
+    if (dateFilterType === "custom_year") {
+      if (!customYear) return true;
+      return year.includes(customYear);
+    }
+
+    return true;
+  };
+
+  const handleSetFilterAll = () => {
+    setDateFilterType("all");
+    setCustomDate("");
+    setCustomMonth("");
+    setShowCustomPicker(false);
+    setSearchQuery("");
+  };
+
+  const handleClearDateFilterOnly = () => {
+    setDateFilterType("all");
+    setCustomDate("");
+    setCustomMonth("");
+    setShowCustomPicker(false);
+  };
+
+  const handleSetFilterToday = () => {
+    setDateFilterType("today");
+    setCustomDate("");
+    setCustomMonth("");
+    setShowCustomPicker(false);
+  };
+
+  const handleSetFilterThisMonth = () => {
+    setDateFilterType("this_month");
+    setCustomDate("");
+    setCustomMonth("");
+    setShowCustomPicker(false);
+  };
+
   const filteredDeliveries = useMemo(() => {
-    if (!searchQuery.trim()) return myDeliveries;
-    const q = searchQuery.toLowerCase().trim();
-    return myDeliveries.filter(
-      (o) =>
+    return myDeliveries.filter((o) => {
+      if (!matchesDateFilter(o)) return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      return (
         o.institutionName?.toLowerCase().includes(q) ||
         o.recipientName?.toLowerCase().includes(q) ||
         o.customerName?.toLowerCase().includes(q) ||
         o.id.toLowerCase().includes(q) ||
         o.items.some((item) => item.itemName.toLowerCase().includes(q))
-    );
-  }, [myDeliveries, searchQuery]);
+      );
+    });
+  }, [myDeliveries, dateFilterType, customDate, customMonth, customYear, searchQuery]);
 
   const filteredCompletedDeliveries = useMemo(() => {
-    if (!searchQuery.trim()) return myCompletedDeliveries;
-    const q = searchQuery.toLowerCase().trim();
-    return myCompletedDeliveries.filter(
-      (o) =>
+    return myCompletedDeliveries.filter((o) => {
+      if (!matchesDateFilter(o)) return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      return (
         o.institutionName?.toLowerCase().includes(q) ||
         o.recipientName?.toLowerCase().includes(q) ||
         o.customerName?.toLowerCase().includes(q) ||
         o.id.toLowerCase().includes(q) ||
         o.items.some((item) => item.itemName.toLowerCase().includes(q))
-    );
-  }, [myCompletedDeliveries, searchQuery]);
+      );
+    });
+  }, [myCompletedDeliveries, dateFilterType, customDate, customMonth, customYear, searchQuery]);
 
   const activeEnRouteOrderIds = useMemo(() => {
     return myDeliveries.filter((o) => o.status === "OUT_FOR_DELIVERY").map((o) => o.id);
@@ -739,47 +963,374 @@ export function DeliveryPage() {
 
       {/* ── DELIVERY LIST ─────────────────────────────────────────────── */}
       {step === "list" && (
-        <>
-          {/* Tab selector */}
-          <div className="flex border-b border-[#E5E7EB] mb-4">
+        <div className="space-y-4">
+          {/* 1. Mobile-Responsive Tactile Tab Switcher (Looks & Feels Like Interactive Buttons) */}
+          <div className="bg-slate-100/95 p-1.5 rounded-2xl border border-slate-200/90 shadow-inner grid grid-cols-2 gap-2">
             <button
+              type="button"
               onClick={() => setActiveTab("active")}
-              className={`flex-1 py-2.5 text-center text-xs font-bold font-['Hanken_Grotesk',system-ui,sans-serif] transition-all border-b-2 flex items-center justify-center gap-1.5 ${
+              className={`w-full min-h-[48px] py-2 px-2 sm:px-3 rounded-xl text-xs sm:text-sm transition-all duration-200 flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer select-none ${
                 activeTab === "active"
-                  ? "border-[#FBBF24] text-[#111827]"
-                  : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
+                  ? "bg-white text-slate-900 shadow-md ring-1 ring-slate-900/5 font-extrabold scale-[1.01]"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/60 bg-transparent font-medium active:scale-[0.98]"
               }`}
             >
-              <Package className="h-3.5 w-3.5" />
-              <span>Tugas Aktif</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                activeTab === "active" ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-600"
-              }`}>
+              <div
+                className={`p-1.5 rounded-lg shrink-0 transition-colors ${
+                  activeTab === "active"
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-slate-200/70 text-slate-600"
+                }`}
+              >
+                <Package className="h-4 w-4" />
+              </div>
+              <span className="truncate">Tugas Aktif</span>
+              <span
+                className={`text-[11px] font-black px-2 py-0.5 rounded-full shrink-0 transition-all ${
+                  activeTab === "active"
+                    ? "bg-amber-500 text-white shadow-xs"
+                    : "bg-slate-200 text-slate-700"
+                }`}
+              >
                 {myDeliveries.length}
               </span>
             </button>
+
             <button
+              type="button"
               onClick={() => setActiveTab("history")}
-              className={`flex-1 py-2.5 text-center text-xs font-bold font-['Hanken_Grotesk',system-ui,sans-serif] transition-all border-b-2 flex items-center justify-center gap-1.5 ${
+              className={`w-full min-h-[48px] py-2 px-2 sm:px-3 rounded-xl text-xs sm:text-sm transition-all duration-200 flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer select-none ${
                 activeTab === "history"
-                  ? "border-[#FBBF24] text-[#111827]"
-                  : "border-transparent text-[#6B7280] hover:text-[#4B5563]"
+                  ? "bg-white text-slate-900 shadow-md ring-1 ring-slate-900/5 font-extrabold scale-[1.01]"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/60 bg-transparent font-medium active:scale-[0.98]"
               }`}
             >
-              <FolderOpen className="h-3.5 w-3.5 text-amber-500" />
-              <span>Arsip Dokumen Selesai</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                activeTab === "history" ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"
-              }`}>
+              <div
+                className={`p-1.5 rounded-lg shrink-0 transition-colors ${
+                  activeTab === "history"
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-slate-200/70 text-slate-600"
+                }`}
+              >
+                <FolderOpen className="h-4 w-4" />
+              </div>
+              <span className="truncate">
+                Arsip <span className="hidden sm:inline">Dokumen </span>Selesai
+              </span>
+              <span
+                className={`text-[11px] font-black px-2 py-0.5 rounded-full shrink-0 transition-all ${
+                  activeTab === "history"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "bg-slate-200 text-slate-700"
+                }`}
+              >
                 {myCompletedDeliveries.length}
               </span>
             </button>
           </div>
 
+          {/* 2. Filter Waktu (Tanggal, Bulan, Tahun) dengan UX Jelas & Ramah Kurir */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-3.5 sm:p-4 space-y-3">
+            {/* Header / Friendly Guidance */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-xl bg-amber-100 text-amber-800 shrink-0">
+                  <Calendar className="h-4 w-4" />
+                </div>
+                <div>
+                  <h2 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-tight">
+                    Saring Berdasarkan Waktu
+                  </h2>
+                  <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
+                    Pilih waktu agar mudah menemukan pesanan tanpa scroll panjang
+                  </p>
+                </div>
+              </div>
 
-          {/* Search bar */}
-          <div className="relative mb-4">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <button
+                type="button"
+                onClick={() => setShowFilterHelp(!showFilterHelp)}
+                className="shrink-0 text-[11px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+                <span>{showFilterHelp ? "Tutup" : "Bantuan"}</span>
+              </button>
+            </div>
+
+            {/* Expandable Help Explanation */}
+            <AnimatePresence>
+              {showFilterHelp && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="bg-amber-50/90 border border-amber-200/80 rounded-xl p-3 text-[11px] text-amber-950 space-y-1.5 leading-relaxed">
+                    <p className="font-extrabold flex items-center gap-1.5 text-amber-900">
+                      <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+                      Petunjuk Penggunaan Filter Waktu:
+                    </p>
+                    <ul className="list-disc pl-4 space-y-1 text-slate-700">
+                      <li>
+                        <strong className="text-slate-900">Semua:</strong> Menampilkan seluruh data pesanan tanpa batasan tanggal.
+                      </li>
+                      <li>
+                        <strong className="text-slate-900">Hari Ini:</strong> Hanya menampilkan pesanan yang diantar / dijadwalkan hari ini.
+                      </li>
+                      <li>
+                        <strong className="text-slate-900">Bulan Ini:</strong> Menampilkan seluruh pesanan di bulan berjalan.
+                      </li>
+                      <li>
+                        <strong className="text-slate-900">Pilih Waktu:</strong> Memilih satu tanggal tertentu atau bulan & tahun spesifik di masa lalu / depan.
+                      </li>
+                    </ul>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Quick Filter Buttons (Pill Bar) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar pt-1">
+              {/* Tombol Semua */}
+              <button
+                type="button"
+                onClick={handleClearDateFilterOnly}
+                className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs ${
+                  dateFilterType === "all"
+                    ? "bg-slate-900 text-white shadow-md font-extrabold scale-[1.02]"
+                    : "bg-slate-100 text-slate-700 border border-slate-200/80 hover:bg-slate-200/70"
+                }`}
+              >
+                <span>Semua</span>
+              </button>
+
+              {/* Tombol Hari Ini */}
+              <button
+                type="button"
+                onClick={handleSetFilterToday}
+                className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs ${
+                  dateFilterType === "today"
+                    ? "bg-amber-500 text-white shadow-md font-extrabold scale-[1.02]"
+                    : "bg-slate-100 text-slate-700 border border-slate-200/80 hover:bg-amber-50 hover:text-amber-900"
+                }`}
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                <span>Hari Ini</span>
+              </button>
+
+              {/* Tombol Bulan Ini */}
+              <button
+                type="button"
+                onClick={handleSetFilterThisMonth}
+                className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs ${
+                  dateFilterType === "this_month"
+                    ? "bg-amber-500 text-white shadow-md font-extrabold scale-[1.02]"
+                    : "bg-slate-100 text-slate-700 border border-slate-200/80 hover:bg-amber-50 hover:text-amber-900"
+                }`}
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                <span>Bulan Ini</span>
+              </button>
+
+              {/* Tombol Pilih Waktu Spesifik */}
+              <button
+                type="button"
+                onClick={() => setShowCustomPicker(!showCustomPicker)}
+                className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs ${
+                  dateFilterType === "custom_date" || dateFilterType === "custom_month" || dateFilterType === "custom_year"
+                    ? "bg-blue-600 text-white shadow-md font-extrabold scale-[1.02]"
+                    : showCustomPicker
+                    ? "bg-blue-50 text-blue-700 border border-blue-300"
+                    : "bg-slate-100 text-slate-700 border border-slate-200/80 hover:bg-slate-200/70"
+                }`}
+              >
+                <Filter className="h-3.5 w-3.5" />
+                <span>Pilih Waktu</span>
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${showCustomPicker ? "rotate-180" : ""}`} />
+              </button>
+            </div>
+
+            {/* Expandable Custom Date / Month / Year Picker Drawer */}
+            <AnimatePresence>
+              {showCustomPicker && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden pt-1"
+                >
+                  <div className="bg-slate-50 border-2 border-blue-100 rounded-2xl p-3.5 sm:p-4 space-y-3.5">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
+                      <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                        <Filter className="h-4 w-4 text-blue-600" />
+                        Cari Waktu Spesifik (Tanggal, Bulan, Tahun)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomPicker(false)}
+                        className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+                        title="Tutup pilihan"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {/* Opsi 1: 1 Tanggal Spesifik */}
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
+                      <label className="block text-xs font-bold text-slate-800">
+                        📅 Opsi 1: Pilih Satu Tanggal Spesifik
+                      </label>
+                      <p className="text-[11px] text-slate-500">
+                        Pilih tanggal di bawah untuk melihat pesanan di hari tersebut:
+                      </p>
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="date"
+                          value={customDate}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomDate(val);
+                            if (val) {
+                              setDateFilterType("custom_date");
+                              setCustomMonth("");
+                            }
+                          }}
+                          className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none min-h-[42px]"
+                        />
+                        {customDate && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomDate("");
+                              if (dateFilterType === "custom_date") setDateFilterType("all");
+                            }}
+                            className="min-h-[42px] px-3 text-slate-500 hover:text-red-600 rounded-xl bg-slate-100 hover:bg-red-50 border border-slate-200 transition-colors text-xs font-bold cursor-pointer"
+                            title="Hapus tanggal"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Opsi 2: Bulan & Tahun */}
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
+                      <label className="block text-xs font-bold text-slate-800">
+                        🗓️ Opsi 2: Saring Berdasarkan Bulan & Tahun
+                      </label>
+                      <p className="text-[11px] text-slate-500">
+                        Pilih bulan dan tahun untuk melihat seluruh dokumen pada periode tersebut:
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div>
+                          <span className="block text-[10px] font-extrabold text-slate-600 mb-1">
+                            PILIH BULAN:
+                          </span>
+                          <select
+                            value={customMonth}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCustomMonth(val);
+                              setCustomDate("");
+                              if (val) {
+                                setDateFilterType("custom_month");
+                              } else if (customYear) {
+                                setDateFilterType("custom_year");
+                              } else {
+                                setDateFilterType("all");
+                              }
+                            }}
+                            className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer min-h-[42px]"
+                          >
+                            <option value="">Semua Bulan</option>
+                            {MONTHS_INDO.map((m) => (
+                              <option key={m.value} value={m.value}>
+                                {m.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <span className="block text-[10px] font-extrabold text-slate-600 mb-1">
+                            PILIH TAHUN:
+                          </span>
+                          <select
+                            value={customYear}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCustomYear(val);
+                              setCustomDate("");
+                              if (customMonth) {
+                                setDateFilterType("custom_month");
+                              } else if (val) {
+                                setDateFilterType("custom_year");
+                              }
+                            }}
+                            className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer min-h-[42px]"
+                          >
+                            {availableYears.map((yr) => (
+                              <option key={yr} value={yr}>
+                                Tahun {yr}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Actions inside Picker */}
+                    <div className="flex items-center justify-between pt-1">
+                      <button
+                        type="button"
+                        onClick={handleClearDateFilterOnly}
+                        className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1.5 cursor-pointer py-1.5 px-2.5 rounded-lg hover:bg-red-50 transition-colors"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        <span>Reset Filter</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomPicker(false)}
+                        className="bg-slate-900 hover:bg-black text-white font-bold text-xs px-4 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
+                      >
+                        Selesai Memilih
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Active Filter Banner / Status Pill */}
+            {dateFilterType !== "all" && (
+              <div className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200/90 rounded-xl px-3 py-2 text-xs font-['Hanken_Grotesk',system-ui,sans-serif]">
+                <div className="flex items-center gap-2 text-amber-950 font-bold min-w-0">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 animate-pulse" />
+                  <span className="truncate">
+                    Menampilkan: <strong>{activeFilterDescription}</strong>
+                  </span>
+                  <span className="text-[11px] font-black bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full shrink-0">
+                    {activeTab === "active" ? filteredDeliveries.length : filteredCompletedDeliveries.length} pesanan
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearDateFilterOnly}
+                  className="shrink-0 text-[11px] font-bold text-amber-800 hover:text-amber-950 bg-white hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                  title="Hapus filter dan tampilkan semua pesanan"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span>Hapus Filter</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 3. Search Bar */}
+          <div className="relative">
+            <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-[#9CA3AF]" />
             </span>
             <input
@@ -787,7 +1338,7 @@ export function DeliveryPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari berdasarkan nama instansi, pemesan, produk, atau ID pesanan..."
-              className="w-full rounded-full border border-[#E5E7EB] bg-[#F9FAFB] pl-9 pr-10 py-2 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition font-['Hanken_Grotesk']"
+              className="w-full rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] pl-10 pr-10 py-2.5 text-xs text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] focus:border-transparent transition font-['Hanken_Grotesk'] shadow-2xs"
             />
             {searchQuery && (
               <button
@@ -804,16 +1355,34 @@ export function DeliveryPage() {
 
           {activeTab === "active" ? (
             filteredDeliveries.length === 0 ? (
-              <div className="bg-white rounded-lg border border-[#E5E7EB] p-12 text-center space-y-3">
-                <Package className="h-14 w-14 mx-auto text-[#D1D5DB] bg-[#F3F4F6] rounded-full p-3" />
-                <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">
-                  {searchQuery ? "Hasil Pencarian Kosong" : "Tidak Ada Pengantaran"}
+              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-8 sm:p-12 text-center space-y-3 shadow-xs">
+                <Package className="h-14 w-14 mx-auto text-[#D1D5DB] bg-[#F3F4F6] rounded-full p-3.5" />
+                <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827] text-base">
+                  {dateFilterType !== "all"
+                    ? "Tidak Ada Tugas Pada Waktu Ini"
+                    : searchQuery
+                    ? "Hasil Pencarian Kosong"
+                    : "Tidak Ada Pengantaran"}
                 </p>
-                <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-xs mx-auto">
-                  {searchQuery
+                <p className="text-xs sm:text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-sm mx-auto leading-relaxed">
+                  {dateFilterType !== "all"
+                    ? `Tidak ditemukan tugas aktif yang cocok dengan filter "${activeFilterDescription}". Pesanan Anda aman dan tidak hilang.`
+                    : searchQuery
                     ? "Tidak ada tugas aktif yang cocok dengan kata kunci pencarian Anda."
                     : "Belum ada pesanan yang ditugaskan ke Anda untuk diantarkan."}
                 </p>
+                {(dateFilterType !== "all" || searchQuery) && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleSetFilterAll}
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-black cursor-pointer shadow-sm active:scale-95 transition-all"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>Tampilkan Semua Pesanan</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
@@ -915,16 +1484,34 @@ export function DeliveryPage() {
             )
           ) : (
             filteredCompletedDeliveries.length === 0 ? (
-              <div className="bg-white rounded-lg border border-[#E5E7EB] p-12 text-center space-y-3">
-                <CheckCircle2 className="h-14 w-14 mx-auto text-[#D1D5DB] bg-[#F3F4F6] rounded-full p-3" />
-                <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827]">
-                  {searchQuery ? "Hasil Pencarian Kosong" : "Belum Ada Riwayat"}
+              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-8 sm:p-12 text-center space-y-3 shadow-xs">
+                <CheckCircle2 className="h-14 w-14 mx-auto text-[#D1D5DB] bg-[#F3F4F6] rounded-full p-3.5" />
+                <p className="font-['Manrope',system-ui,sans-serif] font-bold text-[#111827] text-base">
+                  {dateFilterType !== "all"
+                    ? "Tidak Ada Arsip Pada Waktu Ini"
+                    : searchQuery
+                    ? "Hasil Pencarian Kosong"
+                    : "Belum Ada Riwayat Selesai"}
                 </p>
-                <p className="text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-xs mx-auto">
-                  {searchQuery
-                    ? "Tidak ada riwayat selesai yang cocok dengan kata kunci pencarian Anda."
+                <p className="text-xs sm:text-sm text-[#6B7280] font-['Hanken_Grotesk',system-ui,sans-serif] max-w-sm mx-auto leading-relaxed">
+                  {dateFilterType !== "all"
+                    ? `Tidak ditemukan arsip dokumen selesai yang cocok dengan filter "${activeFilterDescription}".`
+                    : searchQuery
+                    ? "Tidak ada riwayat pengantaran selesai yang cocok dengan kata kunci pencarian Anda."
                     : "Anda belum menyelesaikan pengantaran pesanan apa pun."}
                 </p>
+                {(dateFilterType !== "all" || searchQuery) && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleSetFilterAll}
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-black cursor-pointer shadow-sm active:scale-95 transition-all"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>Tampilkan Semua Arsip</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
@@ -1063,7 +1650,7 @@ export function DeliveryPage() {
               </div>
             )
           )}
-        </>
+        </div>
       )}
 
       {/* ── START DELIVERY ────────────────────────────────────────────── */}
