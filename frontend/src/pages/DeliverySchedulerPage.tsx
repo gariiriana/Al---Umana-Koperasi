@@ -278,7 +278,15 @@ export function DeliverySchedulerPage() {
 
     setAssigning(true);
     try {
-      await assignMultipleOrders(selectedCourierId, selectedOrderIds);
+      const selectedSummaries = orders
+        .filter((o) => selectedOrderIds.includes(o.id))
+        .map((o) => ({
+          id: o.id,
+          customerId: o.customerId,
+          deliveryAddress: o.deliveryAddress,
+          recipientPhone: o.recipientPhone,
+        }));
+      await assignMultipleOrders(selectedCourierId, selectedOrderIds, selectedSummaries);
 
       showToast({ message: `Berhasil menugaskan ${selectedOrderIds.length} pesanan ke kurir`, variant: "success" });
       setSelectedOrderIds([]);

@@ -91,6 +91,7 @@ export function DailyReportExcelSections({
   const [internalSubTab, setInternalSubTab] = useState<MbgDailyReportSubTab>(defaultSubTab);
   const [pmSearchQuery, setPmSearchQuery] = useState('');
   const [showAuxTabs, setShowAuxTabs] = useState(false);
+  const [showAdminPmSection, setShowAdminPmSection] = useState(false);
 
   // EDIT MODE STATES
   const [editingTab, setEditingTab] = useState<MbgDailyReportSubTab | null>(null);
@@ -1195,8 +1196,28 @@ export function DailyReportExcelSections({
           </div>
         </div>
 
-        {/* ─── DATA INPUT ADMIN MBG SUPPRESSED (tidak ditampilkan agar tidak membingungkan hasil export) ─── */}
-        {false && (
+        {/* ─── DATA INPUT ADMIN MBG (COLLAPSIBLE / DEFAULT HIDDEN) ─── */}
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => setShowAdminPmSection(!showAdminPmSection)}
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 rounded-xl transition-all cursor-pointer"
+          >
+            <Building2 className="h-3.5 w-3.5 text-amber-500" />
+            <span>
+              {showAdminPmSection
+                ? 'Sembunyikan Data Penerima Manfaat (Input Admin MBG)'
+                : 'Tampilkan Data Penerima Manfaat (Input Admin MBG)'}
+            </span>
+            <ChevronDown
+              className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                showAdminPmSection ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+        </div>
+
+        {showAdminPmSection && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden font-['Hanken_Grotesk']">
           <div className="px-4 py-3 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>

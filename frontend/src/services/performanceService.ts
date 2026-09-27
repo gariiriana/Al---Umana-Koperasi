@@ -1,5 +1,5 @@
 import {
-  addDoc, collection, doc, onSnapshot, query, runTransaction,
+  addDoc, collection, doc, setDoc, onSnapshot, query, runTransaction,
   serverTimestamp, where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -75,11 +75,8 @@ export async function reviewAdHocTask(taskId: string, approved: boolean, reviewe
 
 /** Creates one immutable KPI record per approved routine Job Desk. */
 export async function recordApprovedJobDesk(input: Omit<PerformanceActivity, "id" | "status" | "occurredAt" | "xp">): Promise<void> {
-  await runTransaction(db, async (tx) => {
-    const ref = doc(db, "performance_activities", `jobdesk_${input.sourceId}`);
-    if ((await tx.get(ref)).exists()) return;
-    tx.set(ref, { ...input, status: "approved", xp: 10, occurredAt: serverTimestamp() });
-  });
+  const ref = doc(db, "performance_activities", `jobdesk_${input.sourceId}`);
+  await setDoc(ref, { ...input, status: "approved", xp: 10, occurredAt: serverTimestamp() }, { merge: true });
 }
 
 export async function changeUserRole(input: { userId: string; role: string; division: Division; changedBy: string; reason?: string }): Promise<void> {

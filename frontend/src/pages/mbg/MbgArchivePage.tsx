@@ -32,6 +32,8 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/firebase';
+import { doc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/contexts/ToastContext';
 import { ManageMenuModal } from './MbgAdminPage';
 import type { MbgPmBatch, MbgPmEntry, MbgInstitutionType, MbgClassBreakdown } from '@/types/mbg';
@@ -506,11 +508,24 @@ export function MbgArchivePage() {
   }, [batches, selectedBatchId]);
 
   const activeEntries = useMemo(() => {
-    if (selectedBatchId) {
-      return selectedBatchEntries;
+    if (!selectedBatchId) return [];
+    // Strictly deduplicate by institutionName so duplicated documents never show up or skew totals
+    const seen = new Set<string>();
+    const result: MbgPmEntry[] = [];
+    for (const e of selectedBatchEntries) {
+      const key = (e.institutionName || '').trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(e);
+      }
     }
-    return [];
+    return result;
   }, [selectedBatchId, selectedBatchEntries]);
+
+  const duplicateCount = useMemo(() => {
+    if (!selectedBatchId) return 0;
+    return Math.max(0, selectedBatchEntries.length - activeEntries.length);
+  }, [selectedBatchId, selectedBatchEntries.length, activeEntries.length]);
 
   // Filtered entries within the selected batch
   const filteredEntries = useMemo(() => {
@@ -598,6 +613,43 @@ export function MbgArchivePage() {
     },
     [showToast]
   );
+
+  const [cleaningDuplicates, setCleaningDuplicates] = useState(false);
+
+  const handleCleanDuplicates = useCallback(async () => {
+    if (!selectedBatchId) return;
+    const seen = new Set<string>();
+    const duplicateIds: string[] = [];
+    for (const entry of selectedBatchEntries) {
+      const key = (entry.institutionName || '').trim().toLowerCase();
+      if (seen.has(key)) {
+        duplicateIds.push(entry.id);
+      } else {
+        seen.add(key);
+      }
+    }
+    if (duplicateIds.length === 0) return;
+    setCleaningDuplicates(true);
+    try {
+      const batch = writeBatch(db);
+      for (const id of duplicateIds) {
+        batch.delete(doc(db, 'mbg_pm_entries', id));
+      }
+      await batch.commit();
+      await recalculateBatchTotals(selectedBatchId);
+      setSelectedBatchEntries((prev) => prev.filter((e) => !duplicateIds.includes(e.id)));
+      setEntries((prev) => prev.filter((e) => !duplicateIds.includes(e.id)));
+      showToast({
+        message: `Berhasil membersihkan ${duplicateIds.length} data duplikat dari database!`,
+        variant: 'success',
+      });
+    } catch (err) {
+      console.error('Failed to clean duplicates:', err);
+      showToast({ message: 'Gagal membersihkan data duplikat', variant: 'error' });
+    } finally {
+      setCleaningDuplicates(false);
+    }
+  }, [selectedBatchId, selectedBatchEntries, showToast]);
 
   const handleDeleteEntry = useCallback(
     async (entryId: string) => {
@@ -1510,6 +1562,26 @@ export function MbgArchivePage() {
               </button>
             </div>
           </div>
+
+          {/* Duplicate records cleanup banner */}
+          {duplicateCount > 0 && (
+            <div className="mb-4 p-3.5 rounded-xl bg-amber-50 border border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <Info className="h-4 w-4 text-amber-600 shrink-0" />
+                <span>
+                  Terdeteksi <strong>{duplicateCount} data duplikat</strong> pada batch ini di database. Tampilan dan total porsi saat ini telah otomatis dirapikan (1 baris per institusi).
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCleanDuplicates}
+                disabled={cleaningDuplicates}
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0 self-start sm:self-auto shadow-xs disabled:opacity-50"
+              >
+                {cleaningDuplicates ? 'Membersihkan...' : 'Bersihkan Duplikat dari Database'}
+              </button>
+            </div>
+          )}
 
           {/* Warning banner inside details view if it is a backup batch */}
           {selectedBatch?.isBackup && (

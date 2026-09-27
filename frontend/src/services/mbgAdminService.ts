@@ -215,21 +215,34 @@ export async function updateBatchStatus(
 export async function updateBatchCookingStatus(batchId: string, status: MbgProductionCookingStatus): Promise<void> {
   const actorId = auth.currentUser?.uid;
   if (!actorId) throw new Error('Silakan masuk kembali sebelum memperbarui status masak.');
-  await runTransaction(db, async (transaction) => {
-    const ref = doc(db, BATCHES_COLLECTION, batchId);
-    const snapshot = await transaction.get(ref);
-    if (!snapshot.exists()) throw new Error('Batch MBG tidak ditemukan.');
-    const batch = snapshot.data() as MbgPmBatch;
-    if (!canAdvanceMbgCooking(batch.productionCookingStatus, status)) {
-      throw new Error('Status masak telah berubah. Muat ulang dan periksa status terbaru.');
-    }
-    transaction.update(ref, {
-      productionCookingStatus: status,
-      productionCookingUpdatedBy: actorId,
-      productionCookingUpdatedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+  const cookingUpdates = {
+    productionCookingStatus: status,
+    productionCookingUpdatedBy: actorId,
+    productionCookingUpdatedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  try {
+    await runTransaction(db, async (transaction) => {
+      const ref = doc(db, BATCHES_COLLECTION, batchId);
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists()) throw new Error('Batch MBG tidak ditemukan.');
+      const batch = snapshot.data() as MbgPmBatch;
+      if (!canAdvanceMbgCooking(batch.productionCookingStatus, status)) {
+        throw new Error('Status masak telah berubah. Muat ulang dan periksa status terbaru.');
+      }
+      transaction.update(ref, cookingUpdates);
     });
-  });
+  } catch (err: unknown) {
+    const errMsg = String(err instanceof Error ? err.message : err).toLowerCase();
+    const errCode = (typeof err === "object" && err !== null && "code" in err) ? String((err as { code: unknown }).code).toLowerCase() : "";
+    if (errMsg.includes("quota") || errMsg.includes("resource-exhausted") || errCode.includes("quota") || errCode.includes("resource-exhausted")) {
+      console.warn("[updateBatchCookingStatus] Quota/read error. Falling back to direct updateDoc:", err);
+      const ref = doc(db, BATCHES_COLLECTION, batchId);
+      await updateDoc(ref, cookingUpdates);
+    } else {
+      throw err;
+    }
+  }
 }
 
 export async function deleteBatch(batchId: string): Promise<void> {

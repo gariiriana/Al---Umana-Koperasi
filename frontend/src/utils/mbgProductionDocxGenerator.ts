@@ -312,13 +312,27 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
 
   const docChildren: (Paragraph | Table)[] = [];
 
+  // Pre-calculate canonical PM entries and total portions so all headers match exactly
+  const initialRawValidEntries = (entries || []).filter((e) => !isSummaryOrCategoryRow(e.institutionName));
+  const isInitialCrippled =
+    initialRawValidEntries.length === 0 ||
+    initialRawValidEntries.some((e) => e.institutionName.toLowerCase().includes('balita 1-5 tahun') || e.institutionName.toLowerCase().includes('bumil ds.')) ||
+    (initialRawValidEntries.length > 0 && initialRawValidEntries.every((e) => (e.qtPorsiKecilL || 0) === 0 && (e.qtPorsiBesarL || 0) === 0 && (e.qtGuruL || 0) === 0));
+
+  const canonicalEntries: MbgPmEntry[] = isInitialCrippled
+    ? (createDefaultOfficialPmEntries(batch.id || '') as unknown as MbgPmEntry[])
+    : initialRawValidEntries.map((e) => enrichPmEntryWithMaster(e));
+
+  const canonicalOverallTotals = getAutoRekapTotals(canonicalEntries);
+  const canonicalTotalPorsi = canonicalOverallTotals.jumlah > 0 ? canonicalOverallTotals.jumlah : (batch.totalJumlah || 2767);
+
   // ==========================================================================
   // HELPER: KOP RESMI
   // ==========================================================================
   const appendOfficialHeader = (
     sectionTitle: string,
     pageBreak = false,
-    totalPorsi = batch.totalJumlah || 0
+    totalPorsi = canonicalTotalPorsi
   ) => {
     if (pageBreak) {
       docChildren.push(

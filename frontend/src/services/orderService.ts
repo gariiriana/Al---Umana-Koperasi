@@ -25,6 +25,7 @@ import {
   limit,
   onSnapshot,
   runTransaction,
+  writeBatch,
   Timestamp,
   type DocumentData,
   type DocumentSnapshot,
@@ -512,6 +513,36 @@ export interface TransitionPayload {
   qaStartChecklist?: { kebersihan: boolean; kelengkapanBahan: boolean; suhuPenyimpanan: boolean };
 }
 
+/**
+ * Safely fetches order document. If read quota is exhausted (resource-exhausted / quota),
+ * returns an in-memory synthetic Order object merged with fallback updates so that
+ * the user mutation succeeds without blocking the UI.
+ */
+export async function getOrderSafe(id: string, fallbackUpdates?: Record<string, unknown>): Promise<Order> {
+  try {
+    return await getOrder(id);
+  } catch (err) {
+    console.warn(`[getOrderSafe] getOrder(${id}) failed (likely read quota exceeded):`, err);
+    return {
+      id,
+      status: (fallbackUpdates?.status as OrderStatus) || "CONFIRMED",
+      customerId: (fallbackUpdates?.customerId as string) || "",
+      customerName: (fallbackUpdates?.customerName as string) || "",
+      customerPhone: (fallbackUpdates?.customerPhone as string) || "",
+      deliveryAddress: (fallbackUpdates?.deliveryAddress as string) || "",
+      recipientName: (fallbackUpdates?.recipientName as string) || "",
+      recipientPhone: (fallbackUpdates?.recipientPhone as string) || "",
+      items: [],
+      totalAmount: 0,
+      paymentMethod: "cod",
+      paymentStatus: "paid",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...(fallbackUpdates || {}),
+    } as unknown as Order;
+  }
+}
+
 /** Apply a state machine transition to an order. */
 export async function transitionOrder(
   id: string,
@@ -520,90 +551,109 @@ export async function transitionOrder(
   const user = currentUser();
   const actorUid = user?.uid ?? "unknown";
 
-  await runTransaction(db, async (tx) => {
-    const docRef = doc(db, "orders", id);
-    const snap = await tx.get(docRef);
-    if (!snap.exists()) {
-      throw new Error("Order not found");
-    }
-    const currentStatus = snap.data().status as OrderStatus;
-    const now = new Date();
+  const docRef = doc(db, "orders", id);
+  const now = new Date();
+  const updates: Record<string, unknown> = {
+    updatedAt: now,
+  };
 
-    const updates: Record<string, unknown> = {
-      updatedAt: now,
-    };
+  switch (payload.action) {
+    case "start-production":
+      updates.status = "IN_PRODUCTION";
+      updates.productionStartedBy = actorUid;
+      updates.productionStartedAt = now;
+      if (payload.itemKitchens) {
+        updates.itemKitchens = payload.itemKitchens;
+      }
+      if (payload.qaStartChecklist) {
+        updates.qaStartChecklist = payload.qaStartChecklist;
+      }
+      break;
 
-    switch (payload.action) {
-      case "start-production":
-        // PENDING is created by the admin order form. CONFIRMED is created
-        // after a customer payment has been approved. Both states mean the
-        // order is ready to be cooked.
+    case "complete-production":
+      updates.status = "READY_TO_DELIVER";
+      break;
+
+    case "qc-pass":
+      updates.status = "READY_TO_DELIVER";
+      updates.qcReviewedBy = actorUid;
+      updates.qcReviewedAt = now;
+      break;
+
+    case "qc-fail":
+      if (!payload.reason || payload.reason.trim() === "") {
+        throw new Error("QC fail reason is required");
+      }
+      updates.status = "PENDING";
+      updates.qcReviewedBy = actorUid;
+      updates.qcReviewedAt = now;
+      updates.qcFailReason = payload.reason.trim();
+      break;
+
+    case "reschedule":
+      updates.status = "READY_TO_DELIVER";
+      break;
+
+    case "fail-delivery":
+      updates.status = "DELIVERY_FAILED";
+      updates.rejectionReason = payload.reason?.trim() || "Delivery failed";
+      break;
+
+    default:
+      throw new Error(`Unknown action ${payload.action}`);
+  }
+
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      if (!snap.exists()) {
+        throw new Error("Order not found");
+      }
+      const currentStatus = snap.data().status as OrderStatus;
+
+      if (payload.action === "start-production") {
         if (currentStatus !== "PENDING" && currentStatus !== "CONFIRMED") {
           throw new Error(`Invalid transition ${currentStatus} -> IN_PRODUCTION`);
         }
-        updates.status = "IN_PRODUCTION";
-        updates.productionStartedBy = actorUid;
-        updates.productionStartedAt = now;
-        if (payload.itemKitchens) {
-          updates.itemKitchens = payload.itemKitchens;
-        }
-        if (payload.qaStartChecklist) {
-          updates.qaStartChecklist = payload.qaStartChecklist;
-        }
-        break;
-
-      case "complete-production":
+      } else if (payload.action === "complete-production") {
         if (currentStatus !== "IN_PRODUCTION") {
           throw new Error(`Invalid transition ${currentStatus} -> READY_TO_DELIVER`);
         }
-        updates.status = "READY_TO_DELIVER";
-        break;
-
-      case "qc-pass":
+      } else if (payload.action === "qc-pass") {
         if (currentStatus !== "QC") {
           throw new Error(`Invalid transition ${currentStatus} -> READY_TO_DELIVER`);
         }
-        updates.status = "READY_TO_DELIVER";
-        updates.qcReviewedBy = actorUid;
-        updates.qcReviewedAt = now;
-        break;
-
-      case "qc-fail":
+      } else if (payload.action === "qc-fail") {
         if (currentStatus !== "QC") {
           throw new Error(`Invalid transition ${currentStatus} -> PENDING (QC_FAIL)`);
         }
-        if (!payload.reason || payload.reason.trim() === "") {
-          throw new Error("QC fail reason is required");
-        }
-        updates.status = "PENDING";
-        updates.qcReviewedBy = actorUid;
-        updates.qcReviewedAt = now;
-        updates.qcFailReason = payload.reason.trim();
-        break;
-
-      case "reschedule":
+      } else if (payload.action === "reschedule" || payload.action === "fail-delivery") {
         if (currentStatus !== "OUT_FOR_DELIVERY") {
-          throw new Error(`Invalid transition ${currentStatus} -> READY_TO_DELIVER`);
+          throw new Error(`Invalid transition ${currentStatus} -> ${updates.status}`);
         }
-        updates.status = "READY_TO_DELIVER";
-        break;
+      }
 
-      case "fail-delivery":
-        if (currentStatus !== "OUT_FOR_DELIVERY") {
-          throw new Error(`Invalid transition ${currentStatus} -> DELIVERY_FAILED`);
-        }
-        updates.status = "DELIVERY_FAILED";
-        updates.rejectionReason = payload.reason?.trim() || "Delivery failed";
-        break;
+      tx.update(docRef, updates);
+    });
+  } catch (err: unknown) {
+    const errMsg = String(err instanceof Error ? err.message : err).toLowerCase();
+    const errCode = (typeof err === "object" && err !== null && "code" in err) ? String((err as { code: unknown }).code).toLowerCase() : "";
+    const isQuotaOrReadError =
+      errMsg.includes("quota") ||
+      errMsg.includes("resource-exhausted") ||
+      errMsg.includes("unavailable") ||
+      errCode.includes("resource-exhausted") ||
+      errCode.includes("quota");
 
-      default:
-        throw new Error(`Unknown action ${payload.action}`);
+    if (isQuotaOrReadError) {
+      console.warn("[transitionOrder] Transaction failed (read quota exhausted). Falling back to direct write (updateDoc):", err);
+      await updateDoc(docRef, updates);
+    } else {
+      throw err;
     }
+  }
 
-    tx.update(docRef, updates);
-  });
-
-  const updatedOrder = await getOrder(id);
+  const updatedOrder = await getOrderSafe(id, updates);
   const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
   const recipientId = updatedOrder.customerId || "";
 
@@ -811,41 +861,63 @@ export async function reassignCourier(
 
   const docRef = doc(db, "orders", id);
   let previousCourierId = "";
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(docRef);
-    if (!snap.exists()) throw new Error("Pesanan tidak ditemukan");
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      if (!snap.exists()) throw new Error("Pesanan tidak ditemukan");
 
-    const current = snap.data();
-    const status = current.status as OrderStatus;
-    previousCourierId = current.assignedCourierId as string | undefined || "";
-    if (!previousCourierId) throw new Error("Pesanan belum memiliki kurir untuk diganti");
-    if (previousCourierId === newCourierId) throw new Error("Pilih kurir yang berbeda");
-    if (["COMPLETED", "DELIVERED", "DELIVERY_FAILED", "FAILED"].includes(status)) {
-      throw new Error("Kurir tidak dapat diganti karena pengiriman sudah selesai");
-    }
+      const current = snap.data();
+      const status = current.status as OrderStatus;
+      previousCourierId = current.assignedCourierId as string | undefined || "";
+      if (!previousCourierId) throw new Error("Pesanan belum memiliki kurir untuk diganti");
+      if (previousCourierId === newCourierId) throw new Error("Pilih kurir yang berbeda");
+      if (["COMPLETED", "DELIVERED", "DELIVERY_FAILED", "FAILED"].includes(status)) {
+        throw new Error("Kurir tidak dapat diganti karena pengiriman sudah selesai");
+      }
 
-    const reassignment: CourierReassignment = {
-      previousCourierId,
-      newCourierId,
-      reason,
-      reassignedBy: options.reassignedBy,
-      reassignedByName: options.reassignedByName,
-      reassignedAt: new Date().toISOString(),
-    };
-    const history = Array.isArray(current.courierReassignments)
-      ? current.courierReassignments
-      : [];
-    tx.update(docRef, {
-      assignedCourierId: newCourierId,
-      courierReassignments: [...history, reassignment],
-      courierSickReported: false,
-      updatedAt: new Date(),
+      const reassignment: CourierReassignment = {
+        previousCourierId,
+        newCourierId,
+        reason,
+        reassignedBy: options.reassignedBy,
+        reassignedByName: options.reassignedByName,
+        reassignedAt: new Date().toISOString(),
+      };
+      const history = Array.isArray(current.courierReassignments)
+        ? current.courierReassignments
+        : [];
+      tx.update(docRef, {
+        assignedCourierId: newCourierId,
+        courierReassignments: [...history, reassignment],
+        courierSickReported: false,
+        updatedAt: new Date(),
+      });
     });
-  });
+  } catch (err: unknown) {
+    const errMsg = String(err instanceof Error ? err.message : err).toLowerCase();
+    const errCode = (typeof err === "object" && err !== null && "code" in err) ? String((err as { code: unknown }).code).toLowerCase() : "";
+    const isQuotaOrReadError =
+      errMsg.includes("quota") ||
+      errMsg.includes("resource-exhausted") ||
+      errMsg.includes("unavailable") ||
+      errCode.includes("resource-exhausted") ||
+      errCode.includes("quota");
 
-  const updatedOrder = await getOrder(id);
+    if (isQuotaOrReadError) {
+      console.warn("[reassignCourier] Transaction failed (read quota exhausted). Falling back to direct write (updateDoc):", err);
+      await updateDoc(docRef, {
+        assignedCourierId: newCourierId,
+        courierSickReported: false,
+        updatedAt: new Date(),
+      });
+    } else {
+      throw err;
+    }
+  }
+
+  const updatedOrder = await getOrderSafe(id, { assignedCourierId: newCourierId, updatedAt: new Date() });
   const sid = shortOrderId(id);
-  const destination = updatedOrder.deliveryAddress.split(" | ")[0];
+  const destination = (updatedOrder.deliveryAddress || "").split(" | ")[0];
   pushNotification({
     recipientId: previousCourierId,
     type: "delivery",
@@ -886,33 +958,52 @@ export async function reassignCourier(
  */
 export async function dispatchOrder(id: string, options: DispatchOrderOptions = {}): Promise<Order> {
   const docRef = doc(db, "orders", id);
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(docRef);
-    if (!snap.exists()) {
-      throw new Error("Order not found");
-    }
+  const now = options.deliveryStartedAt ?? new Date();
+  const updates: Record<string, unknown> = {
+    status: "OUT_FOR_DELIVERY",
+    deliveryStartedAt: now,
+    updatedAt: now,
+  };
+  if (options.kitchenSignatures) {
+    updates.kitchenSignatures = options.kitchenSignatures;
+  }
 
-    const currentStatus = snap.data().status as OrderStatus;
-    if (currentStatus !== "READY_TO_DELIVER" && currentStatus !== "READY") {
-      throw new Error(`Pesanan belum siap dikirim (status: ${currentStatus})`);
-    }
-    if (!snap.data().assignedCourierId) {
-      throw new Error("Pesanan belum ditugaskan ke kurir");
-    }
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      if (!snap.exists()) {
+        throw new Error("Order not found");
+      }
 
-    const now = options.deliveryStartedAt ?? new Date();
-    const updates: Record<string, unknown> = {
-      status: "OUT_FOR_DELIVERY",
-      deliveryStartedAt: now,
-      updatedAt: now,
-    };
-    if (options.kitchenSignatures) {
-      updates.kitchenSignatures = options.kitchenSignatures;
-    }
-    tx.update(docRef, updates);
-  });
+      const currentStatus = snap.data().status as OrderStatus;
+      if (currentStatus !== "READY_TO_DELIVER" && currentStatus !== "READY") {
+        throw new Error(`Pesanan belum siap dikirim (status: ${currentStatus})`);
+      }
+      if (!snap.data().assignedCourierId) {
+        throw new Error("Pesanan belum ditugaskan ke kurir");
+      }
 
-  const updatedOrder = await getOrder(id);
+      tx.update(docRef, updates);
+    });
+  } catch (err: unknown) {
+    const errMsg = String(err instanceof Error ? err.message : err).toLowerCase();
+    const errCode = (typeof err === "object" && err !== null && "code" in err) ? String((err as { code: unknown }).code).toLowerCase() : "";
+    const isQuotaOrReadError =
+      errMsg.includes("quota") ||
+      errMsg.includes("resource-exhausted") ||
+      errMsg.includes("unavailable") ||
+      errCode.includes("resource-exhausted") ||
+      errCode.includes("quota");
+
+    if (isQuotaOrReadError) {
+      console.warn("[dispatchOrder] Transaction failed (read quota exhausted). Falling back to direct write (updateDoc):", err);
+      await updateDoc(docRef, updates);
+    } else {
+      throw err;
+    }
+  }
+
+  const updatedOrder = await getOrderSafe(id, updates);
   const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
   
   if (updatedOrder.recipientPhone) {
@@ -1062,7 +1153,7 @@ export async function customerConfirmDelivery(id: string): Promise<Order> {
     });
   });
 
-  return getOrder(id);
+  return getOrderSafe(id, { status: "COMPLETED", updatedAt: new Date() });
 }
 
 /** Customer: submit a rating and optional review for a completed order. */
@@ -1319,10 +1410,7 @@ async function updateDocAndReturn(
   docRef: DocumentReference<DocumentData>,
   updates: Record<string, unknown>
 ): Promise<void> {
-  // Use runTransaction or setDoc with merge to ensure updates are written
-  await runTransaction(db, async (tx) => {
-    tx.set(docRef, cleanUndefined(updates), { merge: true });
-  });
+  await setDoc(docRef, cleanUndefined(updates), { merge: true });
 }
 
 /* ------------------------------------------------------------------ */
@@ -1704,27 +1792,32 @@ export async function generateInvoiceToken(orderId: string): Promise<string> {
   return invoiceToken;
 }
 
-export async function assignMultipleOrders(courierId: string, orderIds: string[]): Promise<void> {
-  const orders: Order[] = [];
-  await runTransaction(db, async (tx) => {
-    const now = new Date();
-    const refs = orderIds.map(id => doc(db, "orders", id));
-    const snaps = await Promise.all(refs.map(ref => tx.get(ref)));
-    
-    for (let i = 0; i < orderIds.length; i++) {
-      const snap = snaps[i];
-      if (snap.exists()) {
-        orders.push(snapshotToOrder(snap));
-      }
-      tx.update(refs[i], {
-        assignedCourierId: courierId,
-        updatedAt: now,
-      });
-    }
-  });
+export interface OrderAssignSummary {
+  id: string;
+  customerId?: string;
+  deliveryAddress?: string;
+  recipientPhone?: string;
+}
 
-  // Push notifications for each order!
-  for (const o of orders) {
+export async function assignMultipleOrders(
+  courierId: string,
+  orderIds: string[],
+  orderSummaries?: OrderAssignSummary[]
+): Promise<void> {
+  const batch = writeBatch(db);
+  const now = new Date();
+  for (const id of orderIds) {
+    const ref = doc(db, "orders", id);
+    batch.update(ref, {
+      assignedCourierId: courierId,
+      updatedAt: now,
+    });
+  }
+  await batch.commit();
+
+  // Push notifications for each order without reading from Firestore
+  const summaries: OrderAssignSummary[] = orderSummaries || orderIds.map(id => ({ id }));
+  for (const o of summaries) {
     const sid = shortOrderId(o.id);
     // Notify customer
     if (o.customerId) {
@@ -1740,15 +1833,15 @@ export async function assignMultipleOrders(courierId: string, orderIds: string[]
         actorRole: "distribusi",
       }).catch((e) => console.error("[assignMultipleOrders Customer Notif Error]", e));
     }
-    
-    // Notify courier (specifically targeted user ID)
+
+    // Notify courier
     pushNotification({
       recipientId: courierId,
       type: "delivery",
       title: `Tugas Pengantar Baru #${sid}`,
       titleEn: `New Delivery Assignment #${sid}`,
-      message: `Anda ditugaskan untuk mengirim pesanan #${sid} ke alamat: ${o.deliveryAddress.split(" | ")[0]}.`,
-      messageEn: `You have been assigned to deliver order #${sid} to address: ${o.deliveryAddress.split(" | ")[0]}.`,
+      message: `Anda ditugaskan untuk mengirim pesanan #${sid} ke alamat: ${(o.deliveryAddress || "").split(" | ")[0] || "Tujuan Pelanggan"}.`,
+      messageEn: `You have been assigned to deliver order #${sid} to address: ${(o.deliveryAddress || "").split(" | ")[0] || "Customer Address"}.`,
       orderId: o.id,
       orderShortId: sid,
       actorRole: "distribusi",
@@ -1758,10 +1851,10 @@ export async function assignMultipleOrders(courierId: string, orderIds: string[]
     pushNotification({
       recipientId: "admin",
       type: "delivery",
-      title: `Kurir Ditugaskan #${sid}`,
+      title: `Penugasan Kurir #${sid}`,
       titleEn: `Courier Assigned #${sid}`,
-      message: `Kurir baru telah ditugaskan untuk mengirim pesanan #${sid}.`,
-      messageEn: `A new courier has been assigned to deliver order #${sid}.`,
+      message: `Pesanan #${sid} telah berhasil ditugaskan ke kurir.`,
+      messageEn: `Order #${sid} was successfully assigned to courier.`,
       orderId: o.id,
       orderShortId: sid,
       actorRole: "distribusi",

@@ -129,15 +129,19 @@ export async function updateTaskStatus(
 /** Mark a task complete and promote the batch only after every task is complete. */
 export async function completeTaskAndBatch(task: MbgDeliveryTask): Promise<void> {
   await updateTaskStatus(task.id, 'delivered');
-  const taskSnapshot = await getDocs(query(collection(db, DELIVERY_COLLECTION), where('batchId', '==', task.batchId)));
-  const allDelivered = taskSnapshot.docs.every((item) =>
-    item.id === task.id || item.data().status === 'delivered'
-  );
-  if (allDelivered) {
-    await updateDoc(doc(db, 'mbg_pm_batches', task.batchId), {
-      status: 'DELIVERED',
-      updatedAt: new Date().toISOString(),
-    });
+  try {
+    const taskSnapshot = await getDocs(query(collection(db, DELIVERY_COLLECTION), where('batchId', '==', task.batchId)));
+    const allDelivered = taskSnapshot.docs.every((item) =>
+      item.id === task.id || item.data().status === 'delivered'
+    );
+    if (allDelivered) {
+      await updateDoc(doc(db, 'mbg_pm_batches', task.batchId), {
+        status: 'DELIVERED',
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  } catch (err) {
+    console.warn('[completeTaskAndBatch] Warning checking batch allDelivered (likely read quota):', err);
   }
 }
 

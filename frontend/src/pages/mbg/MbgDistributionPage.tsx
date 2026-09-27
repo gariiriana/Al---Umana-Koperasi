@@ -32,9 +32,6 @@ import {
   subscribeBatches,
   subscribeEntries,
   updateEntry,
-  addMultipleEntries,
-  recalculateBatchTotals,
-  updateBatchStatus,
 } from '@/services/mbgAdminService';
 import { subscribeAllDailyReports } from '@/services/mbgProductionService';
 import {
@@ -62,7 +59,6 @@ import {
   compareCouriers,
 } from '@/utils/mbgDeliveryReportPdfExporter';
 import { getJakartaDate } from '@/utils/date';
-import { createDefaultOfficialPmEntries } from '@/constants/mbgConstants';
 
 function getAutoRekapTotals(entries: MbgPmEntry[]) {
   return entries.filter((entry) => !entry.isSekolahLibur).reduce(
@@ -128,7 +124,6 @@ export function MbgDistributionPage() {
   const [isExportingDailyPdf, setIsExportingDailyPdf] = useState(false);
   const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
   const [batchFilterMode, setBatchFilterMode] = useState<'imported' | 'all'>('all');
-  const [isSyncingEntries, setIsSyncingEntries] = useState(false);
   const [pmSearch, setPmSearch] = useState('');
   const [selectedCourierFilter, setSelectedCourierFilter] = useState('all');
   const [isCourierSummaryOpen, setIsCourierSummaryOpen] = useState(false);
@@ -414,52 +409,7 @@ export function MbgDistributionPage() {
     }
   }, [displayBatches, selectedBatchId]);
 
-  // Helper to sync PM entries from official master if batch entries are empty in Firestore
-  const syncEntriesFromDailyReport = async (report: MbgProductionDailyReport, targetBatchId: string) => {
-    try {
-      const newEntries: Omit<MbgPmEntry, 'id'>[] = createDefaultOfficialPmEntries(
-        targetBatchId,
-        report.createdBy || 'distribusi-sync'
-      );
-
-      if (newEntries.length > 0) {
-        await addMultipleEntries(newEntries);
-        await recalculateBatchTotals(targetBatchId);
-        // An Excel report can be attached to a batch already moving through
-        // the workflow. Distribusi may only advance a fresh draft; it must
-        // preserve every later status (QC, cooking, delivery, etc.).
-        const targetBatch = batches.find((batch) => batch.id === targetBatchId);
-        if (targetBatch?.status === 'DRAFT') {
-          await updateBatchStatus(targetBatchId, 'PM_SUBMITTED');
-        }
-        showToast({
-          message: `Berhasil memuat ${newEntries.length} institusi resmi (Arsip PM) ke Distribusi MBG!`,
-          variant: 'success',
-        });
-      }
-    } catch (err) {
-      console.error('Failed to sync entries from official master:', err);
-      showToast({
-        message: 'Gagal memuat data PM ke Distribusi MBG',
-        variant: 'error',
-      });
-    }
-  };
-
-  // Auto-sync entries if current selected batch has Excel report with sekolahList but 0 entries in mbg_pm_entries
-  useEffect(() => {
-    if (!selectedBatchId || loading || isSyncingEntries) return;
-    if (entries.length === 0) {
-      const matchedReport = allDailyReports.find((r) => r.batchId === selectedBatchId);
-      if (matchedReport?.sekolahList && matchedReport.sekolahList.length > 0) {
-        setIsSyncingEntries(true);
-        syncEntriesFromDailyReport(matchedReport, selectedBatchId).finally(() => {
-          setIsSyncingEntries(false);
-        });
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBatchId, entries.length, allDailyReports, loading]);
+  // Auto-sync removed to prevent unexpected duplicate data additions
 
   // Subscribe relevant batch data
   useEffect(() => {
@@ -585,6 +535,20 @@ export function MbgDistributionPage() {
     return sortedGroups;
   }, [entries]);
 
+  // Deduplicate entries by institutionName so duplicated documents in DB don't distort display
+  const uniqueEntries = useMemo(() => {
+    const seen = new Set<string>();
+    const result: MbgPmEntry[] = [];
+    for (const e of entries) {
+      const key = (e.institutionName || '').trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(e);
+      }
+    }
+    return result;
+  }, [entries]);
+
   // Distribution status filter for Penugasan Kurir
   const [distributionStatusFilter, setDistributionStatusFilter] = useState<'all' | 'pending' | 'completed'>('all');
 
@@ -612,7 +576,7 @@ export function MbgDistributionPage() {
 
   const assignedCouriersList = useMemo(() => {
     const map = new Map<string, { count: number; porsi: number; kenekNames: Set<string> }>();
-    entries.forEach((e) => {
+    uniqueEntries.forEach((e) => {
       const name = (e.assignedPetugasName || '').trim();
       if (!name || name === 'Belum Ditugaskan') return;
       if (!map.has(name)) {
@@ -633,10 +597,10 @@ export function MbgDistributionPage() {
         kenekText: Array.from(info.kenekNames).join(', '),
       }))
       .sort((a, b) => compareCouriers(a.petugasName, undefined, b.petugasName, undefined));
-  }, [entries]);
+  }, [uniqueEntries]);
 
   const filteredPmEntries = useMemo(() => {
-    return entries.filter((e) => {
+    return uniqueEntries.filter((e) => {
       // Status filter
       if (distributionStatusFilter === 'pending') {
         const isCompleted =
@@ -678,7 +642,7 @@ export function MbgDistributionPage() {
 
       return true;
     });
-  }, [entries, distributionStatusFilter, selectedCourierFilter, pmSearch]);
+  }, [uniqueEntries, distributionStatusFilter, selectedCourierFilter, pmSearch]);
 
   const schoolPmEntries = useMemo(
     () => filteredPmEntries.filter((e) => e.institutionType !== 'posyandu'),
