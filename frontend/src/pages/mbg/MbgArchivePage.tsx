@@ -32,8 +32,6 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { db } from '@/lib/firebase';
-import { doc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/contexts/ToastContext';
 import { ManageMenuModal } from './MbgAdminPage';
 import type { MbgPmBatch, MbgPmEntry, MbgInstitutionType, MbgClassBreakdown } from '@/types/mbg';
@@ -44,6 +42,7 @@ import {
   updateEntry,
   deleteEntry,
   recalculateBatchTotals,
+  cleanDuplicateBatchEntries,
   deleteBatch,
   moveBatchToBackup,
   restoreBatchFromBackup,
@@ -618,29 +617,11 @@ export function MbgArchivePage() {
 
   const handleCleanDuplicates = useCallback(async () => {
     if (!selectedBatchId) return;
-    const seen = new Set<string>();
-    const duplicateIds: string[] = [];
-    for (const entry of selectedBatchEntries) {
-      const key = (entry.institutionName || '').trim().toLowerCase();
-      if (seen.has(key)) {
-        duplicateIds.push(entry.id);
-      } else {
-        seen.add(key);
-      }
-    }
-    if (duplicateIds.length === 0) return;
     setCleaningDuplicates(true);
     try {
-      const batch = writeBatch(db);
-      for (const id of duplicateIds) {
-        batch.delete(doc(db, 'mbg_pm_entries', id));
-      }
-      await batch.commit();
-      await recalculateBatchTotals(selectedBatchId);
-      setSelectedBatchEntries((prev) => prev.filter((e) => !duplicateIds.includes(e.id)));
-      setEntries((prev) => prev.filter((e) => !duplicateIds.includes(e.id)));
+      const deletedCount = await cleanDuplicateBatchEntries(selectedBatchId);
       showToast({
-        message: `Berhasil membersihkan ${duplicateIds.length} data duplikat dari database!`,
+        message: `Berhasil membersihkan ${deletedCount} data duplikat dari database!`,
         variant: 'success',
       });
     } catch (err) {
@@ -649,7 +630,7 @@ export function MbgArchivePage() {
     } finally {
       setCleaningDuplicates(false);
     }
-  }, [selectedBatchId, selectedBatchEntries, showToast]);
+  }, [selectedBatchId, showToast]);
 
   const handleDeleteEntry = useCallback(
     async (entryId: string) => {

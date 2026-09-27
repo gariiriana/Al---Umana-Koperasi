@@ -13,6 +13,7 @@ import {
   writeBatch,
   getDocs,
   deleteField,
+  deleteDoc,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { setDoc } from 'firebase/firestore';
@@ -479,24 +480,31 @@ export async function cleanDuplicateBatchEntries(batchId: string): Promise<numbe
   if (snapshot.empty) return 0;
 
   const seen = new Set<string>();
-  const toDelete: string[] = [];
+  const toDeleteDocs: typeof snapshot.docs = [];
 
   snapshot.docs.forEach((d) => {
     const data = d.data() as MbgPmEntry;
     const key = (data.institutionName || '').toLowerCase().trim();
     if (seen.has(key)) {
-      toDelete.push(d.id);
+      toDeleteDocs.push(d);
     } else {
       seen.add(key);
     }
   });
 
-  if (toDelete.length > 0) {
-    await archiveSnapshotsAndDelete(snapshot.docs.filter((item) => toDelete.includes(item.id)), 'Entri duplikat MBG dibersihkan');
+  if (toDeleteDocs.length > 0) {
+    try {
+      await archiveSnapshotsAndDelete(toDeleteDocs, 'Entri duplikat MBG dibersihkan');
+    } catch (archiveErr) {
+      console.warn('[cleanDuplicateBatchEntries] Archive failed, performing direct delete:', archiveErr);
+      for (const d of toDeleteDocs) {
+        await deleteDoc(d.ref);
+      }
+    }
     await recalculateBatchTotals(batchId);
   }
 
-  return toDelete.length;
+  return toDeleteDocs.length;
 }
 
 /**

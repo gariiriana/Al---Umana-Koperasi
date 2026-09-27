@@ -1798,6 +1798,16 @@ export function MbgProductionPage() {
         return;
       }
 
+      const existingEntries = await getBatchEntries(targetBatchId);
+      if (existingEntries.length > 0) {
+        showToast({
+          message: `Batch ini sudah memiliki data Penerima Manfaat resmi dari Admin MBG (${existingEntries.length} institusi). Import PM ditolak untuk mencegah data ganda.`,
+          variant: 'info',
+        });
+        setShowSheetsImportModal(false);
+        return;
+      }
+
       await replaceBatchEntries(targetBatchId, pmEntries, { preserveBatchStatus: true });
 
       setSelectedBatchId(targetBatchId);
@@ -1841,13 +1851,14 @@ export function MbgProductionPage() {
         targetBatchTanggal = parsedDateFromSheet || selectedBatch?.tanggal || getJakartaDate();
       }
 
-      let targetBatchId = importTargetOption === 'current_batch' ? (importTargetBatch?.id || '') : '';
-      const existingBatch = targetBatchId ? undefined : batches.find((b) => b.tanggal === targetBatchTanggal);
+      let targetBatchId = importTargetOption === 'current_batch' ? (importTargetBatch?.id || selectedBatchId || '') : '';
+      let targetBatch = targetBatchId ? batches.find((b) => b.id === targetBatchId) : batches.find((b) => b.tanggal === targetBatchTanggal);
 
-      if (existingBatch) {
-        targetBatchId = existingBatch.id;
+      if (targetBatch) {
+        targetBatchId = targetBatch.id;
       } else {
         targetBatchId = await createBatch(targetBatchTanggal, user?.uid || 'user', false, weeklySchedule);
+        targetBatch = batches.find((b) => b.id === targetBatchId);
       }
 
       const parsedReport = parseProductionSheetRows(rows, targetBatchId, targetBatchTanggal, sheetName, sheetWorkbook);
@@ -1859,9 +1870,11 @@ export function MbgProductionPage() {
         (parsedReport.porsiBumilBusui?.pmCount || 0);
 
       // Check if target batch already has existing PM entries from Admin MBG
+      // Admin MBG is the single source of truth for Penerima Manfaat.
+      const existingEntries = await getBatchEntries(targetBatchId);
       const batchAlreadyHasPmEntries =
-        entries.some((e) => e.batchId === targetBatchId && !isSummaryOrCategoryRow(e.institutionName)) ||
-        (existingBatch && existingBatch.totalJumlah != null && existingBatch.totalJumlah > 0);
+        existingEntries.length > 0 ||
+        (targetBatch && targetBatch.totalJumlah != null && targetBatch.totalJumlah > 0);
 
       if (totalPorsiFromReport > 0 && !batchAlreadyHasPmEntries) {
         await updateBatch(targetBatchId, {
