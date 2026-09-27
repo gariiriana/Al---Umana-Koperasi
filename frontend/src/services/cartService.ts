@@ -30,6 +30,8 @@ import {
   runTransaction,
   serverTimestamp,
   updateDoc,
+  setDoc,
+  increment,
   type DocumentData,
   type QueryDocumentSnapshot,
   type Unsubscribe,
@@ -237,42 +239,60 @@ export async function addToCart(
   const trimmedNotes =
     typeof notes === "string" ? clampNotes(notes) : undefined;
 
-  await runTransaction(db, async (tx) => {
-    const existing = await tx.get(ref);
-    const baseQty = existing.exists()
-      ? clampQuantity((existing.data().quantity as number) ?? 0)
-      : 0;
-    const nextQty = clampQuantity(baseQty + incomingQty);
+  try {
+    await runTransaction(db, async (tx) => {
+      const existing = await tx.get(ref);
+      const baseQty = existing.exists()
+        ? clampQuantity((existing.data().quantity as number) ?? 0)
+        : 0;
+      const nextQty = clampQuantity(baseQty + incomingQty);
 
-    // The data shape mirrors the design's CartLineItem schema exactly so
-    // any reader (including Property 6's round-trip test) sees the same
-    // fields written here.
-    const data: Record<string, unknown> = {
-      itemId: item.itemId,
-      itemName: item.itemName,
-      unitPrice: item.price,
-      quantity: nextQty,
-      updatedAt: serverTimestamp(),
-    };
-    // Only set createdAt on first insertion — never overwrite on subsequent adds.
-    // This preserves insertion order for cart sorting (like Shopee).
-    if (!existing.exists()) {
-      data.createdAt = serverTimestamp();
-    }
-    if (item.imageUrl !== undefined) {
-      data.imageUrl = item.imageUrl;
-    }
-    if (trimmedNotes !== undefined) {
-      data.notes = trimmedNotes;
-    } else if (!existing.exists()) {
-      // First write with no caller-supplied note → seed an empty string
-      // so the field is always present on freshly created lines (matches
-      // the schema in design.md).
-      data.notes = "";
-    }
+      // The data shape mirrors the design's CartLineItem schema exactly so
+      // any reader (including Property 6's round-trip test) sees the same
+      // fields written here.
+      const data: Record<string, unknown> = {
+        itemId: item.itemId,
+        itemName: item.itemName,
+        unitPrice: item.price,
+        quantity: nextQty,
+        updatedAt: serverTimestamp(),
+      };
+      // Only set createdAt on first insertion — never overwrite on subsequent adds.
+      // This preserves insertion order for cart sorting (like Shopee).
+      if (!existing.exists()) {
+        data.createdAt = serverTimestamp();
+      }
+      if (item.imageUrl !== undefined) {
+        data.imageUrl = item.imageUrl;
+      }
+      if (trimmedNotes !== undefined) {
+        data.notes = trimmedNotes;
+      } else if (!existing.exists()) {
+        // First write with no caller-supplied note → seed an empty string
+        // so the field is always present on freshly created lines (matches
+        // the schema in design.md).
+        data.notes = "";
+      }
 
-    tx.set(ref, data, { merge: true });
-  });
+      tx.set(ref, data, { merge: true });
+    });
+  } catch (err: unknown) {
+    const errMsg = String(err instanceof Error ? err.message : err).toLowerCase();
+    if (errMsg.includes("quota") || errMsg.includes("resource-exhausted")) {
+      console.warn("[cartService:addItem] Quota exceeded on transaction. Falling back to direct write:", err);
+      await setDoc(ref, {
+        itemId: item.itemId,
+        itemName: item.itemName,
+        unitPrice: item.price,
+        quantity: increment(incomingQty),
+        imageUrl: item.imageUrl ?? "",
+        notes: trimmedNotes ?? "",
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } else {
+      throw err;
+    }
+  }
 }
 
 /**

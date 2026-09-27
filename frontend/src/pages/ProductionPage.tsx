@@ -33,7 +33,7 @@ const formatFriendlyError = (err: unknown): string => {
   if (err instanceof ApiError) return err.message;
   const msg = err instanceof Error ? err.message : String(err);
   if (msg.includes("resource-exhausted") || msg.includes("Quota exceeded") || msg.includes("quota")) {
-    return "Batas kuota harian Firebase telah tercapai (Quota Exceeded). Operasi database sementara dibatasi oleh Google Cloud hingga reset kuota atau penambahan limit Firebase Console.";
+    return "Sinkronisasi realtime dibatasi kuota baca harian Firebase (Free Tier). Data saat ini diambil dari cache lokal. Seluruh tombol aksi (Mulai Masak, Selesai Masak) tetap berjalan normal (Pure Writes aktif).";
   }
   return msg;
 };
@@ -911,19 +911,31 @@ export function ProductionPage() {
         </div>
       </div>
 
-      {/* Error banner */}
+      {/* Error / Notice banner */}
       {error && (
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700 font-['Hanken_Grotesk',system-ui,sans-serif] shadow-xs">
+        <div className={`flex items-center justify-between gap-3 rounded-xl p-4 text-sm font-['Hanken_Grotesk',system-ui,sans-serif] shadow-xs ${
+          error.includes("kuota") || error.includes("Pure Writes")
+            ? "bg-amber-50 border border-amber-200 text-amber-900"
+            : "bg-red-50 border border-red-200 text-red-700"
+        }`}>
           <div className="flex items-center gap-2.5">
-            <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
+            <AlertCircle className={`h-5 w-5 shrink-0 ${
+              error.includes("kuota") || error.includes("Pure Writes")
+                ? "text-amber-600"
+                : "text-red-600"
+            }`} />
             <span>{error}</span>
           </div>
           <button
             type="button"
             onClick={() => setError(null)}
-            className="text-red-400 hover:text-red-700 font-extrabold text-lg leading-none cursor-pointer px-1.5 py-0.5"
-            title="Tutup pesan error"
-            aria-label="Tutup pesan error"
+            className={`${
+              error.includes("kuota") || error.includes("Pure Writes")
+                ? "text-amber-500 hover:text-amber-800"
+                : "text-red-400 hover:text-red-700"
+            } font-extrabold text-lg leading-none cursor-pointer px-1.5 py-0.5`}
+            title="Tutup pesan"
+            aria-label="Tutup pesan"
           >
             ×
           </button>

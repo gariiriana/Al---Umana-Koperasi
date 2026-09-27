@@ -9,6 +9,18 @@ window.addEventListener("vite:preloadError", (event) => {
   window.location.reload();
 });
 
+// Auto-reload when a new Service Worker takes control (PWA update)
+if ("serviceWorker" in navigator) {
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!refreshing) {
+      refreshing = true;
+      console.log("New Service Worker active! Reloading to load latest updates...");
+      window.location.reload();
+    }
+  });
+}
+
 window.addEventListener("error", (event) => {
   if (
     event?.message &&
