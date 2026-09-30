@@ -37,7 +37,9 @@ export function parseCategoryItems(input?: string | string[]): string[] {
 }
 
 export function getMenuForDate(dateStr: string, scheduleDays?: MbgDayMenu[]) {
-  const days = scheduleDays || DEFAULT_WEEKLY_SCHEDULE;
+  const days = (Array.isArray(scheduleDays) && scheduleDays.length > 0)
+    ? scheduleDays
+    : DEFAULT_WEEKLY_SCHEDULE;
   let dayOfWeek = 1;
   if (dateStr) {
     const parts = dateStr.split('-').map(Number);
@@ -47,19 +49,19 @@ export function getMenuForDate(dateStr: string, scheduleDays?: MbgDayMenu[]) {
     }
   }
 
-  const found = days.find((d) => d.dayOfWeek === dayOfWeek) || days[0];
+  const found = days?.find((d) => d.dayOfWeek === dayOfWeek) || days?.[0] || DEFAULT_WEEKLY_SCHEDULE[0];
 
-  const hewaniList = parseCategoryItems(found.hewaniItems || found.hewani);
-  const sayurList = parseCategoryItems(found.sayurItems || found.sayur);
-  const buahList = parseCategoryItems(found.buahItems || found.buah);
-  const nabatiList = parseCategoryItems(found.nabatiItems || found.nabati);
-  const karboList = parseCategoryItems(found.karbohidratItems || found.karbohidrat);
-  const keringanList = parseCategoryItems(found.menuKeringanItems || found.menuKeringan);
+  const hewaniList = parseCategoryItems(found?.hewaniItems || found?.hewani);
+  const sayurList = parseCategoryItems(found?.sayurItems || found?.sayur);
+  const buahList = parseCategoryItems(found?.buahItems || found?.buah);
+  const nabatiList = parseCategoryItems(found?.nabatiItems || found?.nabati);
+  const karboList = parseCategoryItems(found?.karbohidratItems || found?.karbohidrat);
+  const keringanList = parseCategoryItems(found?.menuKeringanItems || found?.menuKeringan);
 
   const menuItems = [...hewaniList, ...sayurList, ...buahList, ...nabatiList, ...karboList];
-  const menuKeringanItems = keringanList.length > 0 ? keringanList : (found.menuKeringan ? [found.menuKeringan] : []);
+  const menuKeringanItems = keringanList.length > 0 ? keringanList : (found?.menuKeringan ? [found.menuKeringan] : []);
 
-  return { dayMenu: found, menuItems, menuKeringanItems };
+  return { dayMenu: found || DEFAULT_WEEKLY_SCHEDULE[0], menuItems, menuKeringanItems };
 }
 
 export type MbgPortionClassification =

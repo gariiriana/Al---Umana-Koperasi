@@ -41,9 +41,11 @@ import { getJakartaDate } from "@/utils/date";
 import { subscribeOrders } from "@/services/realtimeService";
 import {
   subscribeBatches,
+  subscribeAllEntries,
   subscribeWeeklySchedule,
   getMenuForDate,
 } from "@/services/mbgAdminService";
+import { DEFAULT_WEEKLY_SCHEDULE } from "@/constants/mbgConstants";
 import {
   batchCreateJobDesks,
   deleteJobDesk,
@@ -74,7 +76,7 @@ import {
  * Helper to produce a comprehensive menu description from a Catering Order.
  * Combines order.items, custom foodDetails, drinkDetails, and recipient notes.
  */
-export function formatCateringOrderMenu(order: Order): string {
+function formatCateringOrderMenu(order: Order): string {
   const parts: string[] = [];
 
   if (order.items && order.items.length > 0) {
@@ -103,7 +105,7 @@ export function formatCateringOrderMenu(order: Order): string {
  * Helper to resolve the correct MBG menu name for a date/batch.
  * Prioritizes batch notes, then non-empty entry menu items, then Master Weekly Menu schedule.
  */
-export function resolveMbgMenuName(
+function resolveMbgMenuName(
   date: string,
   batch?: MbgPmBatch,
   entries?: MbgPmEntry[],
@@ -114,17 +116,22 @@ export function resolveMbgMenuName(
   }
 
   const entryMenus = (entries || [])
-    .flatMap((e) => e.menuItems || [])
-    .map((s) => s.trim())
+    .filter(Boolean)
+    .flatMap((e) => e?.menuItems || [])
+    .map((s) => s?.trim())
     .filter(Boolean);
   const uniqueEntryMenus = Array.from(new Set(entryMenus));
   if (uniqueEntryMenus.length > 0) {
     return uniqueEntryMenus.join(", ");
   }
 
-  const scheduleRes = getMenuForDate(date, weeklySchedule);
-  if (scheduleRes.menuItems && scheduleRes.menuItems.length > 0) {
-    return scheduleRes.menuItems.join(", ");
+  try {
+    const scheduleRes = getMenuForDate(date, weeklySchedule);
+    if (scheduleRes?.menuItems && scheduleRes.menuItems.length > 0) {
+      return scheduleRes.menuItems.join(", ");
+    }
+  } catch (err) {
+    console.error("resolveMbgMenuName error:", err);
   }
 
   return "Menu MBG";
@@ -184,8 +191,8 @@ export function MoJobDeskPage() {
   const [jobDesks, setJobDesks] = useState<CateringJobDesk[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [mbgBatches, setMbgBatches] = useState<MbgPmBatch[]>([]);
-  const [mbgEntries] = useState<MbgPmEntry[]>([]);
-  const [weeklySchedule, setWeeklySchedule] = useState<MbgDayMenu[]>([]);
+  const [mbgEntries, setMbgEntries] = useState<MbgPmEntry[]>([]);
+  const [weeklySchedule, setWeeklySchedule] = useState<MbgDayMenu[]>(DEFAULT_WEEKLY_SCHEDULE);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"dates" | "form" | "table">("dates");
 
@@ -277,6 +284,16 @@ export function MoJobDeskPage() {
       }
     );
 
+    const unsubEntries = subscribeAllEntries(
+      (entries) => {
+        if (!mounted) return;
+        setMbgEntries(entries);
+      },
+      (err) => {
+        console.error("MO: failed to load MBG entries:", err);
+      }
+    );
+
     const unsubSchedule = subscribeWeeklySchedule(
       (days) => {
         if (!mounted) return;
@@ -294,6 +311,7 @@ export function MoJobDeskPage() {
       unsubDesks();
       unsubOrders();
       unsubBatches();
+      unsubEntries();
       unsubSchedule();
     };
   }, []);
@@ -435,7 +453,9 @@ export function MoJobDeskPage() {
 
     for (const entry of mbgEntries) {
       const batch = batchMap.get(entry.batchId);
-      const d = batch?.tanggal ? extractDateOnly(batch.tanggal) : todayStr;
+      if (!batch) continue;
+      const d = extractDateOnly(batch.tanggal);
+      if (!d) continue;
       if (!map.has(d)) {
         map.set(d, { batch, entries: [entry] });
       } else {
@@ -1060,7 +1080,7 @@ export function MoJobDeskPage() {
       pendingReviewDesks,
       approvedDesks,
     };
-  }, [orders, mbgEntries, cateringDateGroups, mbgDateGroups, jobDesks]);
+  }, [orders, mbgEntries, mbgBatches, cateringDateGroups, mbgDateGroups, jobDesks]);
 
   if (loading) {
     return (
@@ -1502,7 +1522,12 @@ export function MoJobDeskPage() {
                         {/* Collapsible List of Schools on this Batch Date */}
                         {isExpanded && (
                           <div className="p-4 sm:p-5 bg-white space-y-3 divide-y divide-slate-100">
-                            {group.entries.map((entry, idx) => {
+                            {group.entries.length === 0 ? (
+                              <div className="py-6 text-center text-xs text-slate-500 bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
+                                Belum ada rincian sekolah yang diinput untuk batch tanggal ini.
+                              </div>
+                            ) : (
+                              group.entries.map((entry, idx) => {
                               const entryPortions =
                                 (entry.qtSiswaBalita || 0) +
                                 (entry.qtGuruKader || 0) +
@@ -1541,7 +1566,8 @@ export function MoJobDeskPage() {
                                   </button>
                                 </div>
                               );
-                            })}
+                            })
+                          )}
                           </div>
                         )}
                       </div>
@@ -2287,7 +2313,12 @@ export function MoJobDeskPage() {
                     Menu Terjadwal MBG:
                   </p>
                   <p className="text-xs font-bold text-slate-900">
-                    {resolveMbgMenuName(detailMbgModal.batch?.tanggal || todayStr, detailMbgModal.batch, [detailMbgModal.entry], weeklySchedule)}
+                    {resolveMbgMenuName(
+                      detailMbgModal.batch?.tanggal || todayStr,
+                      detailMbgModal.batch,
+                      detailMbgModal.entry ? [detailMbgModal.entry] : [],
+                      weeklySchedule
+                    )}
                   </p>
                 </div>
 
