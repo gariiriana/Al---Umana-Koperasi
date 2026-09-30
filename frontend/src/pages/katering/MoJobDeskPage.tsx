@@ -584,6 +584,12 @@ export function MoJobDeskPage() {
           `Pesanan #${order.id.slice(-6).toUpperCase()}`;
 
         const fullMenu = formatCateringOrderMenu(order);
+        const totalPax =
+          order.items && order.items.length > 0
+            ? order.items.reduce((acc, it) => acc + (it.quantity || 0), 0)
+            : 0;
+        const porsiStr = totalPax > 0 ? `Jumlah: ${totalPax} Porsi` : "";
+
         const orderNotes = order.recipientNotes
           ? ` | Note: ${order.recipientNotes}`
           : order.additionalNotes
@@ -599,6 +605,15 @@ export function MoJobDeskPage() {
           prodTime = `${String(prodHour).padStart(2, "0")}:${mStr || "00"}`;
         }
 
+        const prodKeteranganParts = [`Menu: ${fullMenu}`];
+        if (porsiStr) prodKeteranganParts.push(porsiStr);
+        if (orderNotes) prodKeteranganParts.push(orderNotes.replace(/^\s*\|\s*/, ""));
+
+        const deliveryKeteranganParts = [`Menu: ${fullMenu}`];
+        if (porsiStr) deliveryKeteranganParts.push(porsiStr);
+        deliveryKeteranganParts.push(`Alamat: ${order.deliveryAddress || "-"}`);
+        deliveryKeteranganParts.push(`Penerima: ${order.recipientName} (${order.recipientPhone || "-"})`);
+
         // Row 1: Produksi Katering (Default: Joko / Shifa)
         newRows.push({
           id: `row-${Date.now()}-${seqIndex++}`,
@@ -608,7 +623,7 @@ export function MoJobDeskPage() {
           startTime: prodTime,
           pic: "Joko",
           kegiatan: `Produksi: ${orderLabel}`,
-          keterangan: `Menu: ${fullMenu}${orderNotes}`,
+          keterangan: prodKeteranganParts.join(" | "),
           keyId: "",
           orderId: order.id,
           orderLabel,
@@ -623,7 +638,7 @@ export function MoJobDeskPage() {
           startTime: deliveryTime,
           pic: "Dwi",
           kegiatan: `Pengiriman: ${orderLabel}`,
-          keterangan: `Alamat: ${order.deliveryAddress || "-"} | Penerima: ${order.recipientName} (${order.recipientPhone || "-"})`,
+          keterangan: deliveryKeteranganParts.join(" | "),
           keyId: "",
           orderId: order.id,
           orderLabel,
@@ -689,7 +704,7 @@ export function MoJobDeskPage() {
         startTime: "05:30",
         pic: "Shifa",
         kegiatan: `Produksi MBG (${group.menuName || "Menu MBG"})`,
-        keterangan: `Menu: ${group.menuName || "Menu MBG"} | Persiapan & porsi total ${group.totalPortions} porsi (${entries.length} institusi/lembaga)`,
+        keterangan: `Menu: ${group.menuName || "Menu MBG"} | Jumlah: ${group.totalPortions} Porsi (${entries.length} institusi/lembaga)`,
         keyId: "",
         mbgBatchId: batch?.id,
         orderLabel: `Batch MBG ${formatIndoDate(targetDate)}`,
@@ -706,7 +721,7 @@ export function MoJobDeskPage() {
           startTime: "06:00",
           pic: "Joko",
           kegiatan: `Produksi MBG Dapur 2 - Masak & Porsi Nasi/Lauk`,
-          keterangan: `Menu: ${group.menuName || "Menu MBG"} | Dukungan porsi porsi besar batch ${formatIndoDate(targetDate)}`,
+          keterangan: `Menu: ${group.menuName || "Menu MBG"} | Jumlah: ${group.totalPortions} Porsi | Dukungan porsi besar batch ${formatIndoDate(targetDate)}`,
           keyId: "",
           mbgBatchId: batch?.id,
           orderLabel: `Batch MBG ${formatIndoDate(targetDate)}`,
@@ -732,7 +747,7 @@ export function MoJobDeskPage() {
           startTime: "08:30",
           pic: assignedPic,
           kegiatan: `Pengantaran MBG - ${entry.institutionName}`,
-          keterangan: `Antar ${entryPortions} porsi ke ${entry.institutionName} (${entry.address || "-"})`,
+          keterangan: `Menu: ${group.menuName || "Menu MBG"} | Jumlah: ${entryPortions} Porsi | Antar ke: ${entry.institutionName} (${entry.address || "-"})`,
           keyId: "",
           orderId: entry.id,
           orderLabel: `MBG: ${entry.institutionName}`,
@@ -958,34 +973,55 @@ export function MoJobDeskPage() {
 
   // Save all draft rows to Firestore in a single batch
   const handleSaveAll = useCallback(async () => {
-    const invalidRow = rows.find((r) => !r.kegiatan.trim());
-    if (invalidRow) {
-      alert("Harap isi nama kegiatan untuk seluruh baris job desk!");
+    // Validasi baris: izinkan kegiatan atau keterangan dikosongkan, asalkan tidak sepenuhnya kosong
+    const emptyRow = rows.find(
+      (r) =>
+        !r.kegiatan.trim() &&
+        !r.keterangan.trim() &&
+        !r.orderLabel?.trim() &&
+        !r.mbgInstitutionName?.trim()
+    );
+    if (emptyRow) {
+      alert("Harap isi kegiatan atau keterangan (menu/porsi) untuk seluruh baris job desk!");
       return;
     }
 
     setSaving(true);
     try {
-      const inputs: CreateJobDeskInput[] = rows.map((r) => ({
-        division: r.division || "katering",
-        hari: r.hari || getHariFromDate(r.tanggal),
-        tanggal: r.tanggal || todayStr,
-        startTime: r.startTime || "07:00",
-        pic: r.pic,
-        assignedRole: PIC_NAME_TO_ROLE[r.pic] || "produksi_1",
-        kegiatan: r.kegiatan.trim(),
-        keterangan: r.keterangan.trim(),
-        keyId: r.keyId,
-        orderId: r.orderId || undefined,
-        orderLabel: r.orderLabel || undefined,
-        mbgBatchId: r.mbgBatchId || undefined,
-        mbgInstitutionName: r.mbgInstitutionName || undefined,
-        mbgPortionCount: r.mbgPortionCount || undefined,
-        mbgMenuType: r.mbgMenuType || undefined,
-        title: r.kegiatan.trim(),
-        description: r.keterangan.trim(),
-        assignedByUid: user?.uid || "mo-user",
-      }));
+      const inputs: CreateJobDeskInput[] = rows.map((r) => {
+        const finalKegiatan = r.kegiatan.trim();
+        const finalKeterangan = r.keterangan.trim();
+        const fallbackTitle =
+          finalKegiatan ||
+          (finalKeterangan
+            ? finalKeterangan.length > 50
+              ? `${finalKeterangan.slice(0, 47)}...`
+              : finalKeterangan
+            : "") ||
+          r.orderLabel ||
+          (r.division === "mbg" ? "Tugas MBG" : "Tugas Katering");
+
+        return {
+          division: r.division || "katering",
+          hari: r.hari || getHariFromDate(r.tanggal),
+          tanggal: r.tanggal || todayStr,
+          startTime: r.startTime || "07:00",
+          pic: r.pic,
+          assignedRole: PIC_NAME_TO_ROLE[r.pic] || "produksi_1",
+          kegiatan: finalKegiatan,
+          keterangan: finalKeterangan,
+          keyId: r.keyId,
+          orderId: r.orderId || undefined,
+          orderLabel: r.orderLabel || undefined,
+          mbgBatchId: r.mbgBatchId || undefined,
+          mbgInstitutionName: r.mbgInstitutionName || undefined,
+          mbgPortionCount: r.mbgPortionCount || undefined,
+          mbgMenuType: r.mbgMenuType || undefined,
+          title: fallbackTitle,
+          description: finalKeterangan,
+          assignedByUid: user?.uid || "mo-user",
+        };
+      });
 
       await batchCreateJobDesks(inputs);
 
@@ -1673,8 +1709,12 @@ export function MoJobDeskPage() {
                   <th className="py-3 px-3 w-36 min-w-[130px]">Tanggal</th>
                   <th className="py-3 px-3 w-28 text-center">Start Time</th>
                   <th className="py-3 px-3 w-48 min-w-[150px]">PIC Penugasan</th>
-                  <th className="py-3 px-3 min-w-[220px]">Kegiatan</th>
-                  <th className="py-3 px-3 min-w-[240px]">Keterangan</th>
+                  <th className="py-3 px-3 min-w-[220px]">
+                    Kegiatan <span className="text-[9px] font-normal lowercase text-slate-400">(opsional)</span>
+                  </th>
+                  <th className="py-3 px-3 min-w-[240px]">
+                    Keterangan <span className="text-[9px] font-normal lowercase text-slate-400">(menu & porsi)</span>
+                  </th>
                   <th className="py-3 px-3 w-36 font-mono">Key ID</th>
                   <th className="py-3 px-3 w-40 min-w-[140px]">Link Pesanan / MBG</th>
                   <th className="py-3 px-3 w-28 min-w-[100px] text-center">Aksi</th>
@@ -1755,8 +1795,8 @@ export function MoJobDeskPage() {
                         rows={2}
                         placeholder={
                           row.division === "mbg"
-                            ? "Misal: Produksi MBG SDN 01"
-                            : "Misal: Produksi Pesanan PT SCG"
+                            ? "Opsional (boleh dikosongkan)"
+                            : "Opsional (boleh dikosongkan)"
                         }
                         value={row.kegiatan}
                         onChange={(e) => handleRowChange(row.id, "kegiatan", e.target.value)}
@@ -1768,11 +1808,7 @@ export function MoJobDeskPage() {
                     <td className="py-2.5 px-3 min-w-[240px] align-top">
                       <textarea
                         rows={2}
-                        placeholder={
-                          row.division === "mbg"
-                            ? "Misal: 120 porsi porsi kecil saji..."
-                            : "Misal: 50 box saji pukul 10.00..."
-                        }
+                        placeholder="Menu: ... | Jumlah: ... Porsi (info detail teknis)"
                         value={row.keterangan}
                         onChange={(e) => handleRowChange(row.id, "keterangan", e.target.value)}
                         className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:bg-white text-xs focus:ring-2 focus:ring-slate-900 resize-y leading-relaxed min-h-[52px]"
@@ -2022,7 +2058,7 @@ export function MoJobDeskPage() {
                             onClick={() => setDetailJobDeskModal(jd)}
                             className="cursor-pointer hover:text-amber-600 transition-colors"
                           >
-                            {jd.kegiatan || jd.title}
+                            {jd.kegiatan || jd.title || <span className="text-slate-400 font-normal italic text-xs">-</span>}
                           </span>
                           {(jd.orderLabel || jd.mbgInstitutionName) && (
                             <p className="text-[10px] text-slate-400 font-normal mt-0.5">
@@ -2031,7 +2067,35 @@ export function MoJobDeskPage() {
                           )}
                         </td>
                         <td className="py-3 px-3.5 text-slate-600">
-                          {jd.keterangan || jd.description || "-"}
+                          {jd.keterangan || jd.description ? (
+                            <div className="text-xs leading-relaxed text-slate-800 space-y-1">
+                              {(jd.keterangan || jd.description || "").split(" | ").map((part, pIdx) => {
+                                const trimmed = part.trim();
+                                if (!trimmed) return null;
+                                if (trimmed.toLowerCase().startsWith("menu:")) {
+                                  return (
+                                    <span key={pIdx} className="inline-block font-semibold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mr-1.5 mb-1">
+                                      {trimmed}
+                                    </span>
+                                  );
+                                }
+                                if (trimmed.toLowerCase().startsWith("jumlah:") || trimmed.toLowerCase().startsWith("porsi:")) {
+                                  return (
+                                    <span key={pIdx} className="inline-block font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 mr-1.5 mb-1">
+                                      {trimmed}
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <div key={pIdx} className="text-slate-600 text-xs">
+                                    {trimmed}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic text-xs">-</span>
+                          )}
                           {jd.incompleteReason && (
                             <p className="text-[10px] text-rose-600 font-semibold mt-1">
                               Alasan: {jd.incompleteReason}

@@ -459,7 +459,7 @@ export function OperationalJobDeskPage() {
                       </td>
                       {/* Kegiatan */}
                       <td className="py-3 px-3.5 font-bold text-gray-900">
-                        {jd.kegiatan || jd.title}
+                        {jd.kegiatan || jd.title || <span className="text-gray-400 font-normal italic text-xs">-</span>}
                         {(jd.orderLabel || jd.mbgInstitutionName) && (
                           <p className="text-[10px] text-gray-400 font-normal mt-0.5">
                             {jd.division === "mbg" ? `Lembaga: ${jd.mbgInstitutionName || jd.orderLabel}` : `Pesanan: ${jd.orderLabel}`}
@@ -468,7 +468,35 @@ export function OperationalJobDeskPage() {
                       </td>
                       {/* Keterangan */}
                       <td className="py-3 px-3.5 text-gray-600">
-                        {jd.keterangan || jd.description || "-"}
+                        {jd.keterangan || jd.description ? (
+                          <div className="text-xs leading-relaxed text-gray-800 space-y-1">
+                            {(jd.keterangan || jd.description || "").split(" | ").map((part, pIdx) => {
+                              const trimmed = part.trim();
+                              if (!trimmed) return null;
+                              if (trimmed.toLowerCase().startsWith("menu:")) {
+                                return (
+                                  <span key={pIdx} className="inline-block font-semibold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mr-1.5 mb-1">
+                                    {trimmed}
+                                  </span>
+                                );
+                              }
+                              if (trimmed.toLowerCase().startsWith("jumlah:") || trimmed.toLowerCase().startsWith("porsi:")) {
+                                return (
+                                  <span key={pIdx} className="inline-block font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 mr-1.5 mb-1">
+                                    {trimmed}
+                                  </span>
+                                );
+                              }
+                              return (
+                                <div key={pIdx} className="text-gray-600 text-xs">
+                                  {trimmed}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 italic text-xs">-</span>
+                        )}
                         {isRejected && jd.rejectionRemark && (
                           <div className="mt-1.5 p-2 bg-red-100/70 border border-red-200 rounded-lg text-red-800 text-[11px] font-medium">
                             <span className="font-bold">Catatan Penolakan CO_MO:</span>{" "}
