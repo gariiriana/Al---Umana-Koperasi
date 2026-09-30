@@ -622,7 +622,7 @@ export function MoJobDeskPage() {
           tanggal: targetDate,
           startTime: prodTime,
           pic: "Joko",
-          kegiatan: `Produksi: ${orderLabel}`,
+          kegiatan: "",
           keterangan: prodKeteranganParts.join(" | "),
           keyId: "",
           orderId: order.id,
@@ -637,7 +637,7 @@ export function MoJobDeskPage() {
           tanggal: targetDate,
           startTime: deliveryTime,
           pic: "Dwi",
-          kegiatan: `Pengiriman: ${orderLabel}`,
+          kegiatan: "",
           keterangan: deliveryKeteranganParts.join(" | "),
           keyId: "",
           orderId: order.id,
@@ -647,14 +647,7 @@ export function MoJobDeskPage() {
 
       // Sort ALL generated rows chronologically by startTime (paling pagi posisi paling atas)
       newRows.sort((a, b) => {
-        const timeDiff = compareJobDeskTime(a.startTime, b.startTime);
-        if (timeDiff !== 0) return timeDiff;
-        // Prioritize Produksi before Pengiriman if startTime is the same
-        const aIsProd = a.kegiatan.toLowerCase().includes("produksi");
-        const bIsProd = b.kegiatan.toLowerCase().includes("produksi");
-        if (aIsProd && !bIsProd) return -1;
-        if (!aIsProd && bIsProd) return 1;
-        return 0;
+        return compareJobDeskTime(a.startTime, b.startTime);
       });
 
       // Re-index sequential keyId after sorting so CAT-YYYYMMDD-001 corresponds to earliest task
@@ -703,7 +696,7 @@ export function MoJobDeskPage() {
         tanggal: targetDate,
         startTime: "05:30",
         pic: "Shifa",
-        kegiatan: `Produksi MBG (${group.menuName || "Menu MBG"})`,
+        kegiatan: "",
         keterangan: `Menu: ${group.menuName || "Menu MBG"} | Jumlah: ${group.totalPortions} Porsi (${entries.length} institusi/lembaga)`,
         keyId: "",
         mbgBatchId: batch?.id,
@@ -720,7 +713,7 @@ export function MoJobDeskPage() {
           tanggal: targetDate,
           startTime: "06:00",
           pic: "Joko",
-          kegiatan: `Produksi MBG Dapur 2 - Masak & Porsi Nasi/Lauk`,
+          kegiatan: "",
           keterangan: `Menu: ${group.menuName || "Menu MBG"} | Jumlah: ${group.totalPortions} Porsi | Dukungan porsi besar batch ${formatIndoDate(targetDate)}`,
           keyId: "",
           mbgBatchId: batch?.id,
@@ -746,7 +739,7 @@ export function MoJobDeskPage() {
           tanggal: targetDate,
           startTime: "08:30",
           pic: assignedPic,
-          kegiatan: `Pengantaran MBG - ${entry.institutionName}`,
+          kegiatan: "",
           keterangan: `Menu: ${group.menuName || "Menu MBG"} | Jumlah: ${entryPortions} Porsi | Antar ke: ${entry.institutionName} (${entry.address || "-"})`,
           keyId: "",
           orderId: entry.id,
@@ -759,13 +752,7 @@ export function MoJobDeskPage() {
 
       // Sort MBG rows chronologically by startTime
       newRows.sort((a, b) => {
-        const timeDiff = compareJobDeskTime(a.startTime, b.startTime);
-        if (timeDiff !== 0) return timeDiff;
-        const aIsProd = a.kegiatan.toLowerCase().includes("produksi");
-        const bIsProd = b.kegiatan.toLowerCase().includes("produksi");
-        if (aIsProd && !bIsProd) return -1;
-        if (!aIsProd && bIsProd) return 1;
-        return 0;
+        return compareJobDeskTime(a.startTime, b.startTime);
       });
 
       // Re-index sequential keyId after sorting
@@ -782,7 +769,7 @@ export function MoJobDeskPage() {
           tanggal: targetDate,
           startTime: "06:00",
           pic: "Shifa",
-          kegiatan: "Produksi MBG",
+          kegiatan: "",
           keterangan: "",
           keyId: computeKeyId(targetDate, 0, "mbg"),
         });
@@ -1161,6 +1148,8 @@ export function MoJobDeskPage() {
         )}
       </AnimatePresence>
 
+      {activeTab !== "form" && (
+        <div className="space-y-6">
       {/* ========================================================================= */}
       {/* HERO HEADER */}
       {/* ========================================================================= */}
@@ -1213,45 +1202,30 @@ export function MoJobDeskPage() {
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* 3-TAB SWITCHER */}
-      {/* ========================================================================= */}
+
       <div className="flex border-b border-slate-200 gap-2 sm:gap-4 overflow-x-auto">
         <button
           type="button"
           onClick={() => setActiveTab("dates")}
+          aria-current={activeTab !== "table" ? "page" : undefined}
           className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "dates"
-              ? "border-amber-500 text-slate-950 font-extrabold"
-              : "border-transparent text-slate-500 hover:text-slate-900"
-          }`}
-        >
-          <CalendarDays className="h-4 w-4 text-amber-600" />
-          <span>1. Jadwal & Pesanan Per Tanggal</span>
-          <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 font-bold">
-            {stats.totalCateringDates + stats.totalMbgDates} Hari
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("form")}
-          className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "form"
+            activeTab !== "table"
               ? "border-amber-500 text-slate-950 font-extrabold"
               : "border-transparent text-slate-500 hover:text-slate-900"
           }`}
         >
           <ListTodo className="h-4 w-4 text-amber-600" />
-          <span>2. Draft & Bagikan Job Desk</span>
-          <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-amber-100 text-amber-900 font-bold">
-            {rows.length} Baris
+          <span>Susun Job Desk</span>
+          <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 font-bold">
+            {stats.totalCateringDates + stats.totalMbgDates} Tanggal
           </span>
+          <span className="hidden md:inline text-[11px] font-medium text-slate-400">Pilih tanggal → cek draft → simpan</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab("table")}
+          aria-current={activeTab === "table" ? "page" : undefined}
           className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "table"
               ? "border-amber-500 text-slate-950 font-extrabold"
@@ -1259,7 +1233,7 @@ export function MoJobDeskPage() {
           }`}
         >
           <FileSpreadsheet className="h-4 w-4 text-amber-600" />
-          <span>3. Rekap Semua Job Desk & Status CO_MO</span>
+          <span>Rekap & Status</span>
           <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 font-bold">
             {stats.totalDesks}
           </span>
@@ -1631,11 +1605,25 @@ export function MoJobDeskPage() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* TAB 2: DRAFT & BAGIKAN JOB DESK (EXCEL SPREADSHEET FORM) */}
-      {/* ========================================================================= */}
-      {activeTab === "form" && (
+      </div>
+      )}
+
+      {/* Halaman form terpisah, dibuka setelah pengguna memilih Susun Job Desk. */}
+      {activeTab === "form" && rows.length > 0 && (
         <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <div>
+              <p className="text-sm font-extrabold text-emerald-950">Draft job desk siap ditinjau</p>
+              <p className="text-xs text-emerald-800">{rows.length} baris · {formatIndoDate(selectedOperationalDate)} · cek PIC lalu simpan.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab("dates")}
+              className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-100"
+            >
+              ← Kembali ke daftar tanggal
+            </button>
+          </div>
           {/* Header Context Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs">
             <div className="space-y-1">
@@ -1713,7 +1701,7 @@ export function MoJobDeskPage() {
                     Kegiatan <span className="text-[9px] font-normal lowercase text-slate-400">(opsional)</span>
                   </th>
                   <th className="py-3 px-3 min-w-[240px]">
-                    Keterangan <span className="text-[9px] font-normal lowercase text-slate-400">(menu & porsi)</span>
+                    Keterangan <span className="text-[9px] font-normal lowercase text-slate-400">(opsional; menu & porsi)</span>
                   </th>
                   <th className="py-3 px-3 w-36 font-mono">Key ID</th>
                   <th className="py-3 px-3 w-40 min-w-[140px]">Link Pesanan / MBG</th>
@@ -1808,7 +1796,7 @@ export function MoJobDeskPage() {
                     <td className="py-2.5 px-3 min-w-[240px] align-top">
                       <textarea
                         rows={2}
-                        placeholder="Menu: ... | Jumlah: ... Porsi (info detail teknis)"
+                        placeholder="Opsional; menu & jumlah porsi terisi dari pesanan"
                         value={row.keterangan}
                         onChange={(e) => handleRowChange(row.id, "keterangan", e.target.value)}
                         className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:bg-white text-xs focus:ring-2 focus:ring-slate-900 resize-y leading-relaxed min-h-[52px]"
