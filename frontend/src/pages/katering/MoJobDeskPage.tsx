@@ -44,7 +44,6 @@ import {
   subscribeAllEntries,
   subscribeWeeklySchedule,
   getMenuForDate,
-  getBatchEntries,
 } from "@/services/mbgAdminService";
 import { DEFAULT_WEEKLY_SCHEDULE } from "@/constants/mbgConstants";
 import {
@@ -194,8 +193,6 @@ export function MoJobDeskPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [mbgBatches, setMbgBatches] = useState<MbgPmBatch[]>([]);
   const [mbgEntries, setMbgEntries] = useState<MbgPmEntry[]>([]);
-  const [batchEntriesMap, setBatchEntriesMap] = useState<Record<string, MbgPmEntry[]>>({});
-  const [loadingBatchMap, setLoadingBatchMap] = useState<Record<string, boolean>>({});
   const [weeklySchedule, setWeeklySchedule] = useState<MbgDayMenu[]>(DEFAULT_WEEKLY_SCHEDULE);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"dates" | "form" | "table">("dates");
@@ -320,29 +317,6 @@ export function MoJobDeskPage() {
     };
   }, []);
 
-  // Pre-load institutions entered by admin_mbg for all visible batches
-  useEffect(() => {
-    if (mbgBatches.length === 0) return;
-    let isCancelled = false;
-
-    mbgBatches.forEach(async (b) => {
-      if (!b.id) return;
-      try {
-        const entries = await getBatchEntries(b.id);
-        if (isCancelled) return;
-        if (entries && entries.length > 0) {
-          setBatchEntriesMap((prev) => ({ ...prev, [b.id]: entries }));
-        }
-      } catch (err) {
-        console.error(`Gagal memuat data institusi batch ${b.id}:`, err);
-      }
-    });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [mbgBatches]);
-
   // Map of orderId / entryId -> array of existing job desks
   const jobDesksByOrderId = useMemo(() => {
     const map = new Map<string, CateringJobDesk[]>();
@@ -404,30 +378,14 @@ export function MoJobDeskPage() {
     }));
   }, []);
 
-  // Toggle expand and fetch batch institutions on-demand
-  const toggleMbgDateExpanded = useCallback(
-    async (group: MbgDateGroup) => {
-      const dateKey = `mbg-${group.date}`;
-      const nextState = !expandedDates[dateKey];
-      setExpandedDates((prev) => ({ ...prev, [dateKey]: nextState }));
-
-      const batchId = group.batch?.id;
-      if (nextState && batchId && (!batchEntriesMap[batchId] || batchEntriesMap[batchId].length === 0)) {
-        try {
-          setLoadingBatchMap((prev) => ({ ...prev, [batchId]: true }));
-          const entries = await getBatchEntries(batchId);
-          if (entries && entries.length > 0) {
-            setBatchEntriesMap((prev) => ({ ...prev, [batchId]: entries }));
-          }
-        } catch (err) {
-          console.error(`Gagal memuat institusi untuk batch ${batchId}:`, err);
-        } finally {
-          setLoadingBatchMap((prev) => ({ ...prev, [batchId]: false }));
-        }
-      }
-    },
-    [expandedDates, batchEntriesMap]
-  );
+  // Toggle expand MBG batch date card
+  const toggleMbgDateExpanded = useCallback((group: MbgDateGroup) => {
+    const dateKey = `mbg-${group.date}`;
+    setExpandedDates((prev) => ({
+      ...prev,
+      [dateKey]: !prev[dateKey],
+    }));
+  }, []);
 
   // =========================================================================
   // GROUPING 1: KATERING ORDERS GROUPED BY DATE (Tanggal Acara)
@@ -505,8 +463,9 @@ export function MoJobDeskPage() {
 
     for (const entry of mbgEntries) {
       const batch = batchMap.get(entry.batchId);
-      if (!batch) continue;
-      const d = extractDateOnly(batch.tanggal);
+      const d = batch?.tanggal
+        ? extractDateOnly(batch.tanggal)
+        : (extractDateOnly((entry as any).tanggal) || extractDateOnly(entry.batchId));
       if (!d) continue;
       if (!map.has(d)) {
         map.set(d, { batch, entries: [entry] });
@@ -517,12 +476,8 @@ export function MoJobDeskPage() {
 
     const groups: MbgDateGroup[] = [];
     map.forEach((item, date) => {
-      const batchId = item.batch?.id;
-      const cached = (batchId && batchEntriesMap[batchId]) ? batchEntriesMap[batchId] : [];
-      const effectiveEntries = cached.length > 0 ? cached : item.entries;
-
       let totalPortions = 0;
-      for (const entry of effectiveEntries) {
+      for (const entry of item.entries) {
         totalPortions +=
           (entry.qtSiswaBalita || 0) +
           (entry.qtGuruKader || 0) +
@@ -537,24 +492,24 @@ export function MoJobDeskPage() {
         .filter((jd) => jd.tanggal === date && jd.division === "mbg")
         .sort((a, b) => compareJobDeskTime(a.startTime, b.startTime));
 
-      const totalInstitusiCount = effectiveEntries.length || item.batch?.totalInstitusi || 0;
+      const totalInstitusiCount = item.entries.length || item.batch?.totalInstitusi || 0;
 
       groups.push({
         date,
         hari: getHariFromDate(date),
         batch: item.batch,
-        entries: effectiveEntries,
+        entries: item.entries,
         totalPortions: totalPortions || item.batch?.totalJumlah || 0,
         totalInstitusi: totalInstitusiCount,
         totalSchools: totalInstitusiCount,
-        menuName: resolveMbgMenuName(date, item.batch, effectiveEntries, weeklySchedule),
+        menuName: resolveMbgMenuName(date, item.batch, item.entries, weeklySchedule),
         jobDesks: dateJobDesks,
         isAssigned: dateJobDesks.length > 0,
       });
     });
 
     return groups.sort((a, b) => b.date.localeCompare(a.date));
-  }, [mbgBatches, mbgEntries, batchMap, batchEntriesMap, todayStr, jobDesks, weeklySchedule]);
+  }, [mbgBatches, mbgEntries, batchMap, todayStr, jobDesks, weeklySchedule]);
 
   // Filtered Catering Date Groups
   const filteredCateringDateGroups = useMemo(() => {
@@ -719,9 +674,7 @@ export function MoJobDeskPage() {
       const targetDate = group.date;
       const targetHari = group.hari || getHariFromDate(targetDate);
       const batch = group.batch;
-      const batchId = batch?.id;
-      const cached = (batchId && batchEntriesMap[batchId]) ? batchEntriesMap[batchId] : [];
-      const entries = cached.length > 0 ? cached : group.entries;
+      const entries = group.entries;
 
       const newRows: DraftRow[] = [];
       let seqIndex = 0;
@@ -822,7 +775,7 @@ export function MoJobDeskPage() {
       setRows(finalRows);
       setActiveTab("form");
     },
-    [computeKeyId, batchEntriesMap]
+    [computeKeyId]
   );
 
   // Manually sort draft rows in Tab 2 by date and start time (earliest morning first)
@@ -1583,12 +1536,7 @@ export function MoJobDeskPage() {
                         {/* Collapsible List of Institutions on this Batch Date */}
                         {isExpanded && (
                           <div className="p-4 sm:p-5 bg-white space-y-3 divide-y divide-slate-100">
-                            {loadingBatchMap[group.batch?.id || ""] ? (
-                              <div className="py-6 flex items-center justify-center gap-2 text-xs text-slate-500">
-                                <div className="h-4 w-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-                                <span>Memuat data institusi dari Admin MBG...</span>
-                              </div>
-                            ) : group.entries.length === 0 ? (
+                            {group.entries.length === 0 ? (
                               <div className="py-6 text-center text-xs text-slate-500 bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
                                 Belum ada rincian institusi yang diinput oleh Admin MBG untuk batch tanggal ini.
                               </div>
