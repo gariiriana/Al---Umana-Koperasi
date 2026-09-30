@@ -44,6 +44,7 @@ import {
   subscribeAllEntries,
   subscribeWeeklySchedule,
   getMenuForDate,
+  getBatchEntries,
 } from "@/services/mbgAdminService";
 import { DEFAULT_WEEKLY_SCHEDULE } from "@/constants/mbgConstants";
 import {
@@ -180,6 +181,7 @@ interface MbgDateGroup {
   batch?: MbgPmBatch;
   entries: MbgPmEntry[];
   totalPortions: number;
+  totalInstitusi: number;
   totalSchools: number;
   menuName?: string;
   jobDesks: CateringJobDesk[];
@@ -192,6 +194,8 @@ export function MoJobDeskPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [mbgBatches, setMbgBatches] = useState<MbgPmBatch[]>([]);
   const [mbgEntries, setMbgEntries] = useState<MbgPmEntry[]>([]);
+  const [batchEntriesMap, setBatchEntriesMap] = useState<Record<string, MbgPmEntry[]>>({});
+  const [loadingBatchMap, setLoadingBatchMap] = useState<Record<string, boolean>>({});
   const [weeklySchedule, setWeeklySchedule] = useState<MbgDayMenu[]>(DEFAULT_WEEKLY_SCHEDULE);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"dates" | "form" | "table">("dates");
@@ -316,6 +320,29 @@ export function MoJobDeskPage() {
     };
   }, []);
 
+  // Pre-load institutions entered by admin_mbg for all visible batches
+  useEffect(() => {
+    if (mbgBatches.length === 0) return;
+    let isCancelled = false;
+
+    mbgBatches.forEach(async (b) => {
+      if (!b.id) return;
+      try {
+        const entries = await getBatchEntries(b.id);
+        if (isCancelled) return;
+        if (entries && entries.length > 0) {
+          setBatchEntriesMap((prev) => ({ ...prev, [b.id]: entries }));
+        }
+      } catch (err) {
+        console.error(`Gagal memuat data institusi batch ${b.id}:`, err);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [mbgBatches]);
+
   // Map of orderId / entryId -> array of existing job desks
   const jobDesksByOrderId = useMemo(() => {
     const map = new Map<string, CateringJobDesk[]>();
@@ -376,6 +403,31 @@ export function MoJobDeskPage() {
       [dateKey]: !prev[dateKey],
     }));
   }, []);
+
+  // Toggle expand and fetch batch institutions on-demand
+  const toggleMbgDateExpanded = useCallback(
+    async (group: MbgDateGroup) => {
+      const dateKey = `mbg-${group.date}`;
+      const nextState = !expandedDates[dateKey];
+      setExpandedDates((prev) => ({ ...prev, [dateKey]: nextState }));
+
+      const batchId = group.batch?.id;
+      if (nextState && batchId && (!batchEntriesMap[batchId] || batchEntriesMap[batchId].length === 0)) {
+        try {
+          setLoadingBatchMap((prev) => ({ ...prev, [batchId]: true }));
+          const entries = await getBatchEntries(batchId);
+          if (entries && entries.length > 0) {
+            setBatchEntriesMap((prev) => ({ ...prev, [batchId]: entries }));
+          }
+        } catch (err) {
+          console.error(`Gagal memuat institusi untuk batch ${batchId}:`, err);
+        } finally {
+          setLoadingBatchMap((prev) => ({ ...prev, [batchId]: false }));
+        }
+      }
+    },
+    [expandedDates, batchEntriesMap]
+  );
 
   // =========================================================================
   // GROUPING 1: KATERING ORDERS GROUPED BY DATE (Tanggal Acara)
@@ -465,8 +517,12 @@ export function MoJobDeskPage() {
 
     const groups: MbgDateGroup[] = [];
     map.forEach((item, date) => {
+      const batchId = item.batch?.id;
+      const cached = (batchId && batchEntriesMap[batchId]) ? batchEntriesMap[batchId] : [];
+      const effectiveEntries = cached.length > 0 ? cached : item.entries;
+
       let totalPortions = 0;
-      for (const entry of item.entries) {
+      for (const entry of effectiveEntries) {
         totalPortions +=
           (entry.qtSiswaBalita || 0) +
           (entry.qtGuruKader || 0) +
@@ -481,21 +537,24 @@ export function MoJobDeskPage() {
         .filter((jd) => jd.tanggal === date && jd.division === "mbg")
         .sort((a, b) => compareJobDeskTime(a.startTime, b.startTime));
 
+      const totalInstitusiCount = effectiveEntries.length || item.batch?.totalInstitusi || 0;
+
       groups.push({
         date,
         hari: getHariFromDate(date),
         batch: item.batch,
-        entries: item.entries,
+        entries: effectiveEntries,
         totalPortions: totalPortions || item.batch?.totalJumlah || 0,
-        totalSchools: item.entries.length || item.batch?.totalInstitusi || 0,
-        menuName: resolveMbgMenuName(date, item.batch, item.entries, weeklySchedule),
+        totalInstitusi: totalInstitusiCount,
+        totalSchools: totalInstitusiCount,
+        menuName: resolveMbgMenuName(date, item.batch, effectiveEntries, weeklySchedule),
         jobDesks: dateJobDesks,
         isAssigned: dateJobDesks.length > 0,
       });
     });
 
     return groups.sort((a, b) => b.date.localeCompare(a.date));
-  }, [mbgBatches, mbgEntries, batchMap, todayStr, jobDesks, weeklySchedule]);
+  }, [mbgBatches, mbgEntries, batchMap, batchEntriesMap, todayStr, jobDesks, weeklySchedule]);
 
   // Filtered Catering Date Groups
   const filteredCateringDateGroups = useMemo(() => {
@@ -660,7 +719,9 @@ export function MoJobDeskPage() {
       const targetDate = group.date;
       const targetHari = group.hari || getHariFromDate(targetDate);
       const batch = group.batch;
-      const entries = group.entries;
+      const batchId = batch?.id;
+      const cached = (batchId && batchEntriesMap[batchId]) ? batchEntriesMap[batchId] : [];
+      const entries = cached.length > 0 ? cached : group.entries;
 
       const newRows: DraftRow[] = [];
       let seqIndex = 0;
@@ -674,7 +735,7 @@ export function MoJobDeskPage() {
         startTime: "05:30",
         pic: "Shifa",
         kegiatan: `Produksi MBG (${group.menuName || "Menu MBG"})`,
-        keterangan: `Menu: ${group.menuName || "Menu MBG"} | Persiapan & porsi total ${group.totalPortions} porsi (${entries.length} sekolah/lembaga)`,
+        keterangan: `Menu: ${group.menuName || "Menu MBG"} | Persiapan & porsi total ${group.totalPortions} porsi (${entries.length} institusi/lembaga)`,
         keyId: "",
         mbgBatchId: batch?.id,
         orderLabel: `Batch MBG ${formatIndoDate(targetDate)}`,
@@ -699,7 +760,7 @@ export function MoJobDeskPage() {
         });
       }
 
-      // Row 3+: Pengantaran MBG per Sekolah (Default bergantian: Dwi & Wandi)
+      // Row 3+: Pengantaran MBG per Institusi (Default bergantian: Dwi & Wandi)
       entries.forEach((entry, idx) => {
         const entryPortions =
           (entry.qtSiswaBalita || 0) +
@@ -761,7 +822,7 @@ export function MoJobDeskPage() {
       setRows(finalRows);
       setActiveTab("form");
     },
-    [computeKeyId]
+    [computeKeyId, batchEntriesMap]
   );
 
   // Manually sort draft rows in Tab 2 by date and start time (earliest morning first)
@@ -1488,7 +1549,7 @@ export function MoJobDeskPage() {
                               <p className="text-xs text-slate-600 mt-0.5">
                                 Menu: <strong className="text-slate-900">{group.menuName}</strong> • Total:{" "}
                                 <strong className="text-emerald-700">{group.totalPortions} Porsi Makanan</strong> •{" "}
-                                <span>{group.totalSchools} Sekolah/Lembaga</span>
+                                <span>{group.totalInstitusi || group.totalSchools} Institusi / Lembaga</span>
                               </p>
                             </div>
                           </div>
@@ -1497,10 +1558,10 @@ export function MoJobDeskPage() {
                           <div className="flex items-center gap-2 self-start sm:self-center">
                             <button
                               type="button"
-                              onClick={() => toggleDateExpanded(`mbg-${group.date}`)}
+                              onClick={() => toggleMbgDateExpanded(group)}
                               className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors"
                             >
-                              <span>{isExpanded ? "Sembunyikan Sekolah" : "Lihat Daftar Sekolah"}</span>
+                              <span>{isExpanded ? "Sembunyikan Institusi" : "Lihat Daftar Institusi"}</span>
                               {isExpanded ? (
                                 <ChevronDown className="h-3.5 w-3.5" />
                               ) : (
@@ -1519,12 +1580,17 @@ export function MoJobDeskPage() {
                           </div>
                         </div>
 
-                        {/* Collapsible List of Schools on this Batch Date */}
+                        {/* Collapsible List of Institutions on this Batch Date */}
                         {isExpanded && (
                           <div className="p-4 sm:p-5 bg-white space-y-3 divide-y divide-slate-100">
-                            {group.entries.length === 0 ? (
+                            {loadingBatchMap[group.batch?.id || ""] ? (
+                              <div className="py-6 flex items-center justify-center gap-2 text-xs text-slate-500">
+                                <div className="h-4 w-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                                <span>Memuat data institusi dari Admin MBG...</span>
+                              </div>
+                            ) : group.entries.length === 0 ? (
                               <div className="py-6 text-center text-xs text-slate-500 bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
-                                Belum ada rincian sekolah yang diinput untuk batch tanggal ini.
+                                Belum ada rincian institusi yang diinput oleh Admin MBG untuk batch tanggal ini.
                               </div>
                             ) : (
                               group.entries.map((entry, idx) => {
@@ -1536,7 +1602,7 @@ export function MoJobDeskPage() {
 
                               return (
                                 <div
-                                  key={entry.id}
+                                  key={entry.id || `inst-${idx}`}
                                   className="pt-3 first:pt-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl bg-slate-50"
                                 >
                                   <div className="space-y-1">
@@ -1546,11 +1612,11 @@ export function MoJobDeskPage() {
                                       </span>
                                       <h4 className="text-xs font-bold text-slate-900">{entry.institutionName}</h4>
                                       <span className="text-[10px] font-bold bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full uppercase">
-                                        {entry.schoolLevel || entry.institutionType || "Sekolah"}
+                                        {entry.schoolLevel || entry.institutionType || "Institusi"}
                                       </span>
                                     </div>
                                     <p className="text-[11px] text-slate-600">
-                                      Porsi: <strong className="text-emerald-700">{entryPortions} Porsi</strong> (Siswa: {entry.qtSiswaBalita || 0}, Guru: {entry.qtGuruKader || 0}, Bumil: {entry.qtBumilBusui || 0})
+                                      Porsi: <strong className="text-emerald-700">{entryPortions} Porsi</strong> (Siswa/Balita: {entry.qtSiswaBalita || 0}, Guru/Kader: {entry.qtGuruKader || 0}, Bumil/Busui: {entry.qtBumilBusui || 0})
                                     </p>
                                     <p className="text-[10px] text-slate-500">
                                       Alamat: <span>{entry.address || "-"}</span>
@@ -1562,7 +1628,7 @@ export function MoJobDeskPage() {
                                     onClick={() => setDetailMbgModal({ batch: group.batch, entry })}
                                     className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 cursor-pointer self-start sm:self-center"
                                   >
-                                    Detail Sekolah
+                                    Detail Institusi
                                   </button>
                                 </div>
                               );
