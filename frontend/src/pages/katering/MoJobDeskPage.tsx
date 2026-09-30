@@ -1322,7 +1322,7 @@ export function MoJobDeskPage() {
                   placeholder={
                     handoverDivision === "katering"
                       ? "Cari tanggal, nama pemesan, alamat..."
-                      : "Cari tanggal batch, nama sekolah..."
+                      : "Cari tanggal batch, nama institusi/lembaga..."
                   }
                   className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-900"
                 />
@@ -2329,7 +2329,7 @@ export function MoJobDeskPage() {
                   </div>
                   <div>
                     <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-300">
-                      Lembaga Program MBG • {detailMbgModal.entry.institutionType === "posyandu" ? "Posyandu" : "Sekolah"}
+                      Institusi Program MBG • {detailMbgModal.entry.institutionType === "posyandu" ? "Posyandu" : (detailMbgModal.entry.schoolLevel ? `Sekolah (${detailMbgModal.entry.schoolLevel})` : "Institusi / Lembaga")}
                     </span>
                     <h3 className="text-base font-bold text-white">
                       {detailMbgModal.entry.institutionName}

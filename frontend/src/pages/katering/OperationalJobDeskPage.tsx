@@ -312,7 +312,7 @@ export function OperationalJobDeskPage() {
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari tugas, sekolah, keterangan..."
+              placeholder="Cari tugas, institusi, keterangan..."
               className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs focus:ring-2 focus:ring-amber-400 focus:bg-white"
             />
           </div>

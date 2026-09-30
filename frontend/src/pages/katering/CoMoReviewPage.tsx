@@ -444,7 +444,7 @@ export function CoMoReviewPage() {
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari kegiatan, Key ID, sekolah..."
+                placeholder="Cari kegiatan, Key ID, institusi..."
                 className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs text-gray-800 placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-400"
               />
             </div>
