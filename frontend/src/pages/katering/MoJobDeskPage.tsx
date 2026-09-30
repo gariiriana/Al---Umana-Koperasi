@@ -463,9 +463,10 @@ export function MoJobDeskPage() {
 
     for (const entry of mbgEntries) {
       const batch = batchMap.get(entry.batchId);
+      const rawEntry = entry as unknown as { tanggal?: string };
       const d = batch?.tanggal
         ? extractDateOnly(batch.tanggal)
-        : (extractDateOnly((entry as any).tanggal) || extractDateOnly(entry.batchId));
+        : (extractDateOnly(rawEntry.tanggal) || extractDateOnly(entry.batchId));
       if (!d) continue;
       if (!map.has(d)) {
         map.set(d, { batch, entries: [entry] });
