@@ -473,18 +473,52 @@ export function OperationalJobDeskPage() {
                             {(jd.keterangan || jd.description || "").split(" | ").map((part, pIdx) => {
                               const trimmed = part.trim();
                               if (!trimmed) return null;
-                              if (trimmed.toLowerCase().startsWith("menu:")) {
+                              const lower = trimmed.toLowerCase();
+                              if (lower.startsWith("menu:")) {
                                 return (
                                   <span key={pIdx} className="inline-block font-semibold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mr-1.5 mb-1">
                                     {trimmed}
                                   </span>
                                 );
                               }
-                              if (trimmed.toLowerCase().startsWith("jumlah:") || trimmed.toLowerCase().startsWith("porsi:")) {
+                              if (lower.startsWith("jumlah:") || lower.startsWith("porsi:")) {
                                 return (
                                   <span key={pIdx} className="inline-block font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 mr-1.5 mb-1">
                                     {trimmed}
                                   </span>
+                                );
+                              }
+                              if (lower.startsWith("porsi kecil:")) {
+                                return (
+                                  <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-950 text-xs">
+                                    <strong className="font-extrabold text-sky-800">Porsi Kecil:</strong>{" "}
+                                    <span className="text-slate-700">{trimmed.slice("porsi kecil:".length).trim()}</span>
+                                  </div>
+                                );
+                              }
+                              if (lower.startsWith("porsi besar:")) {
+                                return (
+                                  <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-950 text-xs">
+                                    <strong className="font-extrabold text-indigo-800">Porsi Besar:</strong>{" "}
+                                    <span className="text-slate-700">{trimmed.slice("porsi besar:".length).trim()}</span>
+                                  </div>
+                                );
+                              }
+                              if (lower.startsWith("porsi balita:")) {
+                                return (
+                                  <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-950 text-xs">
+                                    <strong className="font-extrabold text-rose-800">Porsi Balita:</strong>{" "}
+                                    <span className="text-slate-700">{trimmed.slice("porsi balita:".length).trim()}</span>
+                                  </div>
+                                );
+                              }
+                              if (lower.startsWith("porsi bumil/busui:") || lower.startsWith("porsi bumil:")) {
+                                const labelLen = lower.startsWith("porsi bumil/busui:") ? "porsi bumil/busui:".length : "porsi bumil:".length;
+                                return (
+                                  <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-950 text-xs">
+                                    <strong className="font-extrabold text-amber-800">Porsi Bumil/Busui:</strong>{" "}
+                                    <span className="text-slate-700">{trimmed.slice(labelLen).trim()}</span>
+                                  </div>
                                 );
                               }
                               return (

@@ -22,6 +22,7 @@ import type {
   MbgBahanChecklistForm,
   MbgInspectionFormRow,
   MbgProductionDailyReport,
+  MbgPortionDailyData,
 } from '@/types/mbg';
 
 export const BAHAN_DOCS_COLLECTION = 'mbg_bahan_documentation';
@@ -290,16 +291,54 @@ export async function deleteBahanChecklist(id: string): Promise<void> {
 }
 
 /**
- * Helper to extract ingredients list from a Daily Report or Batch data.
- * Sesuai aturan operasional: Data di fitur Cek List Bahan HANYA diambil dari
- * "Daftar Pesanan Bahan" (Tab 5 Produksi MBG: poRows ke Mitra Supplier).
+ * Helper to extract ingredients list from a Daily Report in Produksi MBG.
+ * Mengambil rincian bahan per porsi langsung dari Produksi MBG:
+ * - Porsi Kecil
+ * - Porsi Besar
+ * - Porsi Balita
+ * - Porsi Bumil/Busui
+ * (Dengan fallback ke Daftar Pesanan Bahan / poRows jika rincian bahan per porsi belum diinput)
  */
 export function extractIngredientsFromDailyReport(
   report?: MbgProductionDailyReport | null
 ): MbgInspectionFormRow[] {
   if (!report) return [];
 
-  // HANYA diambil dari data Daftar Pesanan Bahan (Tab 5: poRows ke Mitra Supplier)
+  const rows: MbgInspectionFormRow[] = [];
+
+  // 1. Ekstraksi rincian bahan per porsi dari Produksi MBG
+  const portionConfigs: Array<{
+    name: string;
+    portionData?: MbgPortionDailyData;
+  }> = [
+    { name: 'Porsi Kecil', portionData: report.porsiKecil },
+    { name: 'Porsi Besar', portionData: report.porsiBesar },
+    { name: 'Porsi Balita', portionData: report.porsiBalita },
+    { name: 'Porsi Bumil/Busui', portionData: report.porsiBumilBusui },
+  ];
+
+  for (const { name, portionData } of portionConfigs) {
+    if (portionData && portionData.bahanItems && portionData.bahanItems.length > 0) {
+      for (const item of portionData.bahanItems) {
+        if (!item.rincianBahan || !item.rincianBahan.trim()) continue;
+        rows.push({
+          jenisBahan: item.rincianBahan.trim(),
+          banyaknya: Number(item.kebutuhan) || 0,
+          satuan: item.satuan || 'kg',
+          isSesuai: null,
+          isBaik: null,
+          notes: name,
+        });
+      }
+    }
+  }
+
+  // Jika ada rincian bahan per porsi dari Produksi MBG, kembalikan data tersebut
+  if (rows.length > 0) {
+    return rows;
+  }
+
+  // 2. Fallback ke Daftar Pesanan Bahan (Tab 5: poRows) jika rincian bahan per porsi kosong
   if (report.poRows && report.poRows.length > 0) {
     return report.poRows.map((po) => ({
       jenisBahan: po.item || '',

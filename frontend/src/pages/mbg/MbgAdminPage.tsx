@@ -16,7 +16,6 @@ import {
   ChefHat,
   FileSpreadsheet,
   Archive,
-  Sparkles,
   BookOpen,
   Save,
 } from 'lucide-react';
@@ -25,7 +24,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import * as XLSX from 'xlsx';
 import type { MbgPmBatch, MbgPmEntry, MbgInstitutionType, MbgClassBreakdown, MbgDayMenu } from '@/types/mbg';
-import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
 import { SpreadsheetImportModal } from '@/components/mbg/SpreadsheetImportModal';
 import { parsePmRowsToEntries, detectPreferredSheet } from '@/utils/mbgSpreadsheetParser';
 import {
@@ -41,13 +39,10 @@ import {
   copyFromBatch,
   moveBatchToBackup,
   subscribeWeeklySchedule,
-  saveWeeklySchedule,
   getMenuForDate,
-  bulkAddEntriesFromMaster,
   deleteAllMbgData,
   cleanDuplicateBatchEntries,
   replaceBatchEntries,
-  type MbgPortionClassification,
 } from '@/services/mbgAdminService';
 import { getJakartaDate } from '@/utils/date';
 import { subscribeCustomRecipes } from '@/services/mbgProductionService';
@@ -1182,7 +1177,6 @@ export function MbgAdminPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [weeklySchedule, setWeeklySchedule] = useState<MbgDayMenu[]>(DEFAULT_WEEKLY_SCHEDULE);
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
   const [confirmState, setConfirmState] = useState<{
@@ -1194,8 +1188,6 @@ export function MbgAdminPage() {
 
   const csvFileInputRef = useRef<HTMLInputElement>(null);
   const [showSpreadsheetModal, setShowSpreadsheetModal] = useState(false);
-
-  const [selectedPortionClassification, setSelectedPortionClassification] = useState<MbgPortionClassification>('porsi_besar');
 
   const handleImportExcelPm = (file: File) => {
     if (!selectedBatchId) {
@@ -1412,9 +1404,9 @@ export function MbgAdminPage() {
 
   // Subscribe to weekly menu schedule
   useEffect(() => {
-    const unsub = subscribeWeeklySchedule(setWeeklySchedule, selectedPortionClassification);
+    const unsub = subscribeWeeklySchedule(setWeeklySchedule, 'porsi_besar');
     return unsub;
-  }, [selectedPortionClassification]);
+  }, []);
 
   // Subscribe to batches and auto-create today's batch
   useEffect(() => {
@@ -1764,46 +1756,7 @@ export function MbgAdminPage() {
     }
   };
 
-  // ---- Handlers ----
-  const handleApplyScheduleMenuToBatch = async () => {
-    if (!selectedBatchId || !selectedBatch) return;
-    const { menuItems, menuKeringanItems } = getMenuForDate(selectedBatch.tanggal, weeklySchedule);
 
-    try {
-      if (entries.length === 0) {
-        await bulkAddEntriesFromMaster(selectedBatchId, user?.uid || '', selectedBatch.tanggal, weeklySchedule);
-        await recalculateBatchTotals(selectedBatchId);
-      } else {
-        const batchOps = entries.map((e) =>
-          updateEntry(e.id, {
-            menuItems: [...menuItems],
-            menuKeringanItems: [...menuKeringanItems],
-          })
-        );
-        await Promise.all(batchOps);
-      }
-      showToast({
-        message: `Berhasil menerapkan menu jadwal (${menuItems.join(', ')}) ke seluruh institusi!`,
-        variant: 'success',
-      });
-    } catch (err) {
-      console.error(err);
-      showToast({ message: 'Gagal mengupdate menu jadwal ke institusi', variant: 'error' });
-    }
-  };
-
-  const handleSaveWeeklySchedule = async (updatedDays: MbgDayMenu[], portion?: MbgPortionClassification) => {
-    if (!user) return;
-    const targetPortion = portion || selectedPortionClassification;
-    try {
-      await saveWeeklySchedule(updatedDays, user.uid, targetPortion);
-      setWeeklySchedule(updatedDays);
-      showToast({ message: `Master Jadwal Menu Mingguan (${targetPortion}) berhasil disimpan!`, variant: 'success' });
-    } catch (err) {
-      console.error(err);
-      showToast({ message: 'Gagal menyimpan jadwal menu mingguan', variant: 'error' });
-    }
-  };
 
   const handleCreateBatch = async (tanggal: string, copyFromId?: string, autoPopulateMaster?: boolean) => {
     if (!user) return;
@@ -2211,26 +2164,6 @@ export function MbgAdminPage() {
 
 
               <button
-                onClick={() => setShowScheduleModal(true)}
-                title="Master Jadwal Menu Mingguan MBG"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors cursor-pointer whitespace-nowrap"
-              >
-                <ChefHat className="h-3.5 w-3.5 text-slate-600" />
-                Jadwal Menu
-              </button>
-
-              <button
-                type="button"
-                onClick={handleApplyScheduleMenuToBatch}
-                disabled={!selectedBatchId || saving}
-                title="Terapkan / sinkronisasi menu dari jadwal hari ini ke semua institusi"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap shadow-2xs"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
-                Sync Menu
-              </button>
-
-              <button
                 onClick={() => setShowNewBatchModal(true)}
                 title="Buat batch pengiriman baru"
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#FBBF24] hover:bg-[#F59E0B] text-slate-900 text-xs font-extrabold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
@@ -2570,17 +2503,6 @@ export function MbgAdminPage() {
         </>
       )}
 
-      {/* Weekly Schedule Modal */}
-      <AnimatePresence>
-        <WeeklyScheduleModal
-          isOpen={showScheduleModal}
-          onClose={() => setShowScheduleModal(false)}
-          scheduleDays={weeklySchedule}
-          selectedPortion={selectedPortionClassification}
-          onPortionChange={(p) => setSelectedPortionClassification(p)}
-          onSave={handleSaveWeeklySchedule}
-        />
-      </AnimatePresence>
 
       {/* Delete All MBG Data Modal */}
       {showDeleteAllModal && (

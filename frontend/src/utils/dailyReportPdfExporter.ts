@@ -783,14 +783,18 @@ const renderSupplierPage = (
     report.totalPengeluaran ||
     0;
 
-  const poTableBody: RowInput[] = poList.map((row, idx) => [
-    idx + 1,
-    row.supplier || 'Koperasi Al Umanaa Sejahtera Mandiri',
-    row.item,
-    formatNum(Math.round(row.jumlah), 0),
-    row.satuan || 'kg',
-    formatRp(row.totalHarga || (Math.round(row.jumlah) * (row.hargaSatuan || 0))),
-  ]);
+  const poTableBody: RowInput[] = poList.map((row, idx) => {
+    const j = Number(String(row.jumlah).replace(',', '.')) || 0;
+    const h = Number(row.hargaSatuan) || 0;
+    return [
+      idx + 1,
+      row.supplier || 'Koperasi Al Umanaa Sejahtera Mandiri',
+      row.item,
+      Number.isInteger(j) ? j.toString() : j.toLocaleString('id-ID', { maximumFractionDigits: 3 }),
+      row.satuan || 'kg',
+      formatRp(row.totalHarga || (j > 0 && h ? Math.round(j * h) : 0)),
+    ];
+  });
 
   if (poTableBody.length === 0) {
     poTableBody.push(['1', 'Koperasi Al Umanaa Sejahtera Mandiri', 'Bahan Baku & Bumbu Masak Terintegrasi', '1', 'paket', formatRp(poGrandTotal)]);

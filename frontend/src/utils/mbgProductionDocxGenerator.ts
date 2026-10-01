@@ -1139,7 +1139,10 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
     poList.forEach((r, idx) => {
       const isEven = idx % 2 === 0;
       const rowBg = isEven ? 'FFFFFF' : 'F8FAFC';
-      const totalHargaItem = r.totalHarga || (r.jumlah > 0 && r.hargaSatuan ? Math.round(r.jumlah) * r.hargaSatuan : 0);
+      const totalHargaItem = r.totalHarga || (r.jumlah > 0 && r.hargaSatuan ? Math.round(r.jumlah * r.hargaSatuan) : 0);
+      const qtyStr = Number.isInteger(r.jumlah)
+        ? (r.jumlah || 0).toString()
+        : (r.jumlah || 0).toLocaleString('id-ID', { maximumFractionDigits: 3 });
 
       poDocxRows.push(
         new TableRow({
@@ -1147,7 +1150,7 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
             new TableCell({ width: { size: 5, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${idx + 1}`, size: 13, font: 'Arial' })] })] }),
             new TableCell({ width: { size: 28, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.supplier || 'Koperasi Al Umanaa Sejahtera Mandiri', bold: true, size: 13, font: 'Arial' })] })] }),
             new TableCell({ width: { size: 38, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ children: [new TextRun({ text: r.item, size: 13, font: 'Arial' })] })] }),
-            new TableCell({ width: { size: 8, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: Math.round(r.jumlah || 0).toString(), bold: true, size: 13, font: 'Arial' })] })] }),
+            new TableCell({ width: { size: 8, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: qtyStr, bold: true, size: 13, font: 'Arial' })] })] }),
             new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: rowBg }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: r.satuan || 'kg', size: 13, font: 'Arial' })] })] }),
             new TableCell({ width: { size: 14, type: WidthType.PERCENTAGE }, shading: { fill: 'DCFCE7' }, margins: COMPACT_CELL_MARGINS, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: formatRp(totalHargaItem), bold: true, color: '166534', size: 13, font: 'Arial' })] })] }),
           ],

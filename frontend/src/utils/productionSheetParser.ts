@@ -43,8 +43,8 @@ export function num(v: unknown): number {
     const dotCount = (s.match(/\./g) || []).length;
     if (dotCount > 1) {
       s = s.replace(/\./g, '');
-    } else if (hasRp || /^\d{1,3}\.\d{3}$/.test(s)) {
-      // Indonesian single-dot thousands separator e.g. 15.000 or 525.000
+    } else if (hasRp || /^[1-9]\d{0,2}\.\d{3}$/.test(s)) {
+      // Indonesian single-dot thousands separator e.g. 15.000 or 525.000 (never starts with 0 e.g. 0.100 or 0.500)
       s = s.replace(/\./g, '');
     }
   }
@@ -1290,7 +1290,7 @@ export function parseProductionSheetRows(
         supplier: currentSupplier,
         item,
         jamKedatangan: jamKedatangan || '06:00',
-        jumlah: Math.round(jumlah * 100) / 100,
+        jumlah: Math.round(jumlah * 10000) / 10000,
         satuan,
         keterangan: keterangan || 'Sesuai Spesifikasi',
         hargaSatuan: hargaSatuan > 0 ? hargaSatuan : 0,
@@ -1374,7 +1374,7 @@ export function parseProductionSheetRows(
         supplier: entry.supplier,
         item: entry.item,
         jamKedatangan: '06:00',
-        jumlah: Math.round(entry.jumlah * 100) / 100,
+        jumlah: Math.round(entry.jumlah * 10000) / 10000,
         satuan: entry.satuan,
         keterangan: 'Sesuai Spesifikasi',
         hargaSatuan: entry.hargaSatuan > 0 ? entry.hargaSatuan : 0,
@@ -1382,7 +1382,7 @@ export function parseProductionSheetRows(
       });
     } else {
       const exist = poMap.get(key)!;
-      exist.jumlah = Math.round((exist.jumlah + entry.jumlah) * 100) / 100;
+      exist.jumlah = Math.round((exist.jumlah + entry.jumlah) * 10000) / 10000;
       if (entry.harga > 0) {
         exist.totalHarga = (exist.totalHarga || 0) + entry.harga;
       }

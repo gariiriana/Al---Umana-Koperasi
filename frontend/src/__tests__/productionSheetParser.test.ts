@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as XLSX from 'xlsx';
-import { parsePenerimaManfaatSheet, parseProductionSheetRows } from '../utils/productionSheetParser';
+import { parsePenerimaManfaatSheet, parseProductionSheetRows, num } from '../utils/productionSheetParser';
 
 describe('productionSheetParser - Dynamic Menu & Fruit Parsing', () => {
   it('correctly detects fruit as "Jeruk" and does not overwrite it with "Nasi"', () => {
@@ -392,3 +392,49 @@ describe('productionSheetParser - Penerima Manfaat import fidelity', () => {
     expect(entry).toMatchObject({ qtSiswaBalita: 100, qtGuruKader: 5, jumlah: 0 });
   });
 });
+
+describe('productionSheetParser - Decimal quantity handling', () => {
+  it('correctly parses decimals with comma, dot, and leading zero in num() helper', () => {
+    expect(num('0.1')).toBe(0.1);
+    expect(num('0,1')).toBe(0.1);
+    expect(num(0.1)).toBe(0.1);
+    expect(num('0.500')).toBe(0.5);
+    expect(num('0,25')).toBe(0.25);
+    expect(num('15.000')).toBe(15000);
+    expect(num('Rp 250.000')).toBe(250000);
+  });
+
+  it('correctly parses decimal quantity like Kapulaga 0.1 kg in poRows', () => {
+    const rows: unknown[][] = [];
+    for (let i = 0; i < 10; i++) rows.push(new Array(60).fill(''));
+
+    rows[0][41] = 'Supplier';
+    rows[0][42] = 'List Pesanan Bahan';
+    rows[0][43] = 'Jam Kedatangan';
+    rows[0][44] = 'Jumlah';
+    rows[0][45] = 'Item';
+    rows[0][46] = 'Keterangan';
+    rows[0][47] = 'Harga Satuan';
+    rows[0][48] = 'Total Harga';
+
+    // Kapulaga 0.1 kg @ 250,000 = 25,000
+    rows[1][41] = 'Koperasi Al Umanaa Sejahtera Mandiri';
+    rows[1][42] = 'Kapulaga';
+    rows[1][43] = '06:00';
+    rows[1][44] = 0.1;
+    rows[1][45] = 'kg';
+    rows[1][46] = 'Sesuai Spesifikasi';
+    rows[1][47] = 250000;
+    rows[1][48] = 25000;
+
+    const report = parseProductionSheetRows(rows, 'batch-dec', '2026-10-01', 'HARI 1');
+    expect(report.poRows).toHaveLength(1);
+    expect(report.poRows[0].item).toBe('Kapulaga');
+    expect(report.poRows[0].jumlah).toBe(0.1);
+    expect(report.poRows[0].satuan).toBe('kg');
+    expect(report.poRows[0].hargaSatuan).toBe(250000);
+    expect(report.poRows[0].totalHarga).toBe(25000);
+    expect(report.realisasiPembelianRows[0].kuantitas).toBe(0.1);
+  });
+});
+

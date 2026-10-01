@@ -200,9 +200,26 @@ export function DailyReportExcelSections({
     if (!draftReport) return;
     try {
       setIsSaving(true);
+      const cleanedReport: MbgProductionDailyReport = {
+        ...draftReport,
+        poRows: (draftReport.poRows || []).map((r) => {
+          const parsedJumlah = Number(String(r.jumlah).replace(',', '.')) || 0;
+          const hargaSatuan = Number(String(r.hargaSatuan || 0).replace(',', '.')) || 0;
+          const totalHarga =
+            r.totalHarga ||
+            (parsedJumlah > 0 && hargaSatuan ? Math.round(parsedJumlah * hargaSatuan) : 0);
+          return {
+            ...r,
+            jumlah: parsedJumlah,
+            hargaSatuan,
+            totalHarga,
+          };
+        }),
+      };
       if (onSaveReport) {
-        await onSaveReport(draftReport);
+        await onSaveReport(cleanedReport);
       }
+      setDraftReport(cleanedReport);
       setEditingTab(null);
       setSaveSuccessNotice(true);
       setTimeout(() => setSaveSuccessNotice(false), 4000);
@@ -265,20 +282,22 @@ export function DailyReportExcelSections({
       if (!pData.nutritionItems[idx]) {
         pData.nutritionItems[idx] = { menuName: '', rincianBahan: '', beratBersih: 0, energi: 0, protein: 0, lemak: 0, karbohidrat: 0, serat: 0 };
       }
+      const normVal = typeof val === 'string' ? val.replace(',', '.') : val;
       pData.nutritionItems[idx] = {
         ...pData.nutritionItems[idx],
-        [field]: typeof val === 'number' || !isNaN(Number(val)) ? Number(val) : val,
+        [field]: typeof normVal === 'number' || (!isNaN(Number(normVal)) && normVal !== '') ? Number(normVal) : val,
       };
     } else if (section === 'bahan') {
       pData.bahanItems = pData.bahanItems || [];
       if (!pData.bahanItems[idx]) {
         pData.bahanItems[idx] = { rincianBahan: '', hargaBahan: 0, bddPercent: 100, beratKotor: 0, totalGml: 0, sparePercent: 0, kebutuhan: 0, satuan: 'kg', harga: 0 };
       }
-      const bItem = { ...pData.bahanItems[idx], [field]: typeof val === 'number' || !isNaN(Number(val)) ? Number(val) : val };
+      const normVal = typeof val === 'string' ? val.replace(',', '.') : val;
+      const bItem = { ...pData.bahanItems[idx], [field]: typeof normVal === 'number' || (!isNaN(Number(normVal)) && normVal !== '') ? Number(normVal) : val };
       // Auto compute harga if kebutuhan or hargaBahan changes
       if (field === 'kebutuhan' || field === 'hargaBahan') {
-        const keb = field === 'kebutuhan' ? Number(val) : bItem.kebutuhan;
-        const hb = field === 'hargaBahan' ? Number(val) : bItem.hargaBahan;
+        const keb = field === 'kebutuhan' ? (Number(normVal) || 0) : bItem.kebutuhan;
+        const hb = field === 'hargaBahan' ? (Number(normVal) || 0) : bItem.hargaBahan;
         if (keb > 0 && hb > 0) {
           bItem.harga = Math.round(keb * hb);
         }
@@ -289,10 +308,11 @@ export function DailyReportExcelSections({
       if (!pData.bumbuItems[idx]) {
         pData.bumbuItems[idx] = { namaMenu: '', namaBumbu: '', hargaBumbu: 0, kebutuhan: 0, satuan: 'kg', harga: 0 };
       }
-      const bmItem = { ...pData.bumbuItems[idx], [field]: typeof val === 'number' || !isNaN(Number(val)) ? Number(val) : val };
+      const normVal = typeof val === 'string' ? val.replace(',', '.') : val;
+      const bmItem = { ...pData.bumbuItems[idx], [field]: typeof normVal === 'number' || (!isNaN(Number(normVal)) && normVal !== '') ? Number(normVal) : val };
       if (field === 'kebutuhan' || field === 'hargaBumbu') {
-        const keb = field === 'kebutuhan' ? Number(val) : bmItem.kebutuhan;
-        const hb = field === 'hargaBumbu' ? Number(val) : bmItem.hargaBumbu;
+        const keb = field === 'kebutuhan' ? (Number(normVal) || 0) : bmItem.kebutuhan;
+        const hb = field === 'hargaBumbu' ? (Number(normVal) || 0) : bmItem.hargaBumbu;
         if (keb > 0 && hb > 0) {
           bmItem.harga = Math.round(keb * hb);
         }
@@ -384,15 +404,22 @@ export function DailyReportExcelSections({
 
     const row = { ...rows[idx], [field]: val };
     if (field === 'jumlah' || field === 'hargaSatuan') {
-      const j = field === 'jumlah' ? Number(val) : row.jumlah;
-      const h = field === 'hargaSatuan' ? Number(val) : row.hargaSatuan || 0;
+      const rawJ = field === 'jumlah' ? val : row.jumlah;
+      const strJ = typeof rawJ === 'string' ? rawJ.replace(',', '.') : String(rawJ ?? '');
+      const j = strJ !== '' && !isNaN(Number(strJ)) ? Number(strJ) : 0;
+      const h = field === 'hargaSatuan' ? (typeof val === 'string' ? Number(val.replace(',', '.')) : Number(val)) : (row.hargaSatuan || 0);
       if (j > 0 && h > 0) {
         row.totalHarga = Math.round(j * h);
       }
     }
     rows[idx] = row;
 
-    const totalPengeluaran = rows.reduce((s, r) => s + (r.totalHarga || (r.jumlah && r.hargaSatuan ? r.jumlah * r.hargaSatuan : 0)), 0);
+    const totalPengeluaran = rows.reduce((s, r) => {
+      const rJ = Number(String(r.jumlah).replace(',', '.')) || 0;
+      const rH = Number(r.hargaSatuan) || 0;
+      const rT = Number(r.totalHarga) || (rJ > 0 && rH > 0 ? Math.round(rJ * rH) : 0);
+      return s + rT;
+    }, 0);
 
     setDraftReport({
       ...draftReport,
@@ -955,6 +982,7 @@ export function DailyReportExcelSections({
                       <td className="px-1 py-1 border-r border-sky-200">
                         <input
                           type="number"
+                          step="any"
                           value={bah?.kebutuhan || ''}
                           onChange={(e) => updatePortionCell(portionType, 'bahan', idx, 'kebutuhan', e.target.value)}
                           className="w-14 px-1 py-1 text-center bg-sky-50 border border-sky-300 rounded text-[11px] font-black text-sky-950 focus:outline-none"
@@ -1008,7 +1036,7 @@ export function DailyReportExcelSections({
                       <td className="px-1 py-1 border-r border-amber-200">
                         <input
                           type="number"
-                          step="0.01"
+                          step="any"
                           value={bum?.kebutuhan || ''}
                           onChange={(e) => updatePortionCell(portionType, 'bumbu', idx, 'kebutuhan', e.target.value)}
                           className="w-14 px-1 py-1 text-center bg-amber-50 border border-amber-300 rounded text-[11px] font-black text-amber-950 focus:outline-none"
@@ -1451,7 +1479,11 @@ export function DailyReportExcelSections({
     const isEditing = editingTab === 'po';
     const poList = curReport.poRows || [];
     const grandTotal =
-      poList.reduce((s, p) => s + (p.totalHarga || (p.jumlah > 0 && p.hargaSatuan ? p.jumlah * p.hargaSatuan : 0)), 0) ||
+      poList.reduce((s, p) => {
+        const j = Number(String(p.jumlah).replace(',', '.')) || 0;
+        const h = Number(p.hargaSatuan) || 0;
+        return s + (p.totalHarga || (j > 0 && h ? j * h : 0));
+      }, 0) ||
       curReport.totalPengeluaran ||
       0;
 
@@ -1464,7 +1496,9 @@ export function DailyReportExcelSections({
           totalSpend: 0,
         };
       }
-      const itemTotal = row.totalHarga || (row.jumlah > 0 && row.hargaSatuan ? row.jumlah * row.hargaSatuan : 0);
+      const j = Number(String(row.jumlah).replace(',', '.')) || 0;
+      const h = Number(row.hargaSatuan) || 0;
+      const itemTotal = row.totalHarga || (j > 0 && h ? j * h : 0);
       acc[sup].items.push(row);
       acc[sup].totalSpend += itemTotal;
       return acc;
@@ -1595,7 +1629,9 @@ export function DailyReportExcelSections({
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-[11px]">
                   {poList.map((po, idx) => {
-                    const rowTotal = po.totalHarga || (po.jumlah > 0 && po.hargaSatuan ? po.jumlah * po.hargaSatuan : 0);
+                    const j = Number(String(po.jumlah).replace(',', '.')) || 0;
+                    const h = Number(po.hargaSatuan) || 0;
+                    const rowTotal = po.totalHarga || (j > 0 && h ? j * h : 0);
 
                     if (!isEditing) {
                       return (
@@ -1630,7 +1666,11 @@ export function DailyReportExcelSections({
                             {po.item}
                           </td>
                           <td className="px-3 py-2 text-center font-black text-slate-900 bg-amber-50/30 border-r border-slate-100">
-                            {po.jumlah > 0 ? Math.round(po.jumlah).toLocaleString('id-ID') : '-'}
+                            {j > 0
+                              ? Number.isInteger(j)
+                                ? j.toLocaleString('id-ID')
+                                : j.toLocaleString('id-ID', { maximumFractionDigits: 3 })
+                              : '-'}
                           </td>
                           <td className="px-3 py-2 text-center font-bold text-slate-600 border-r border-slate-100">
                             {po.satuan || 'kg'}
@@ -1678,11 +1718,17 @@ export function DailyReportExcelSections({
                         </td>
                         <td className="px-2 py-1.5 text-center">
                           <input
-                            type="number"
-                            step="1"
-                            value={po.jumlah ? Math.round(po.jumlah) : ''}
-                            onChange={(e) => updateSupplierCell(idx, 'jumlah', Math.round(Number(e.target.value)))}
-                            className="w-16 px-1 py-1 text-center bg-white border border-amber-300 rounded text-[11px] font-black focus:outline-none"
+                            type="text"
+                            inputMode="decimal"
+                            value={po.jumlah !== undefined && po.jumlah !== null ? po.jumlah : ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '' || /^[0-9]+[.,]?[0-9]*$/.test(val) || /^[.,][0-9]*$/.test(val)) {
+                                updateSupplierCell(idx, 'jumlah', val);
+                              }
+                            }}
+                            placeholder="0"
+                            className="w-16 px-1 py-1 text-center bg-white border border-amber-300 rounded text-[11px] font-black focus:outline-none focus:ring-1 focus:ring-amber-400"
                           />
                         </td>
                         <td className="px-2 py-1.5 text-center">
@@ -1769,7 +1815,7 @@ export function DailyReportExcelSections({
                     <div key={itIdx} className="flex items-center justify-between text-[10px]">
                       <span className="truncate pr-2 font-medium">• {it.item}</span>
                       <span className="font-bold text-slate-800 shrink-0">
-                        {it.jumlah > 0 ? `${formatNum(it.jumlah, 1)} ${it.satuan}` : ''}
+                        {Number(it.jumlah) > 0 ? `${formatNum(Number(String(it.jumlah).replace(',', '.')), 2)} ${it.satuan}` : ''}
                       </span>
                     </div>
                   ))}

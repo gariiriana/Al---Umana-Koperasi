@@ -42,10 +42,7 @@ import { subscribeOrders } from "@/services/realtimeService";
 import {
   subscribeBatches,
   subscribeAllEntries,
-  subscribeWeeklySchedule,
-  getMenuForDate,
 } from "@/services/mbgAdminService";
-import { DEFAULT_WEEKLY_SCHEDULE } from "@/constants/mbgConstants";
 import {
   batchCreateJobDesks,
   deleteJobDesk,
@@ -53,7 +50,9 @@ import {
   type CreateJobDeskInput,
 } from "@/services/cateringJobDeskService";
 import type { Order } from "@/types/order";
-import type { MbgPmBatch, MbgPmEntry, MbgDayMenu } from "@/types/mbg";
+import type { MbgPmBatch, MbgPmEntry, MbgProductionDailyReport, MbgPortionBahanItem } from "@/types/mbg";
+import { subscribeAllDailyReports } from "@/services/mbgProductionService";
+import { isPosyanduName } from "@/utils/mbgDeliveryReportPdfExporter";
 import type {
   CateringJobDesk,
   JobDeskDivision,
@@ -102,19 +101,101 @@ function formatCateringOrderMenu(order: Order): string {
 }
 
 /**
+ * Helper to extract formatted ingredients list from portion items
+ */
+function extractPortionBahanText(items?: MbgPortionBahanItem[]): string {
+  if (!items || items.length === 0) return "";
+  return items
+    .filter((it) => it && it.rincianBahan && it.rincianBahan.trim())
+    .map((it) => {
+      const name = it.rincianBahan.trim();
+      const qty = it.kebutuhan ? `${it.kebutuhan} ${it.satuan || "kg"}` : "";
+      return qty ? `${name} (${qty})` : name;
+    })
+    .join(", ");
+}
+
+/**
+ * Helper to resolve MBG daily report and per-portion bahan data from Produksi MBG.
+ */
+function resolveMbgDataFromProduction(
+  targetDate: string,
+  batchId?: string,
+  allDailyReports: MbgProductionDailyReport[] = []
+): {
+  report: MbgProductionDailyReport | null;
+  combinedMenu: string;
+  bahanKecil: string;
+  bahanBesar: string;
+  bahanBalita: string;
+  bahanBumilBusui: string;
+} {
+  const cleanDate = extractDateOnly(targetDate);
+  const report =
+    allDailyReports.find((r) => r.batchId && batchId && r.batchId === batchId) ||
+    allDailyReports.find((r) => extractDateOnly(r.tanggal) === cleanDate) ||
+    null;
+
+  if (!report) {
+    return {
+      report: null,
+      combinedMenu: "",
+      bahanKecil: "",
+      bahanBesar: "",
+      bahanBalita: "",
+      bahanBumilBusui: "",
+    };
+  }
+
+  // Gabungkan menu dari per porsi yang ada di Produksi MBG
+  const menuSet = new Set<string>();
+  const addMenus = (list?: string[]) => {
+    (list || []).forEach((m) => {
+      if (m && m.trim()) menuSet.add(m.trim());
+    });
+  };
+  addMenus(report.porsiKecil?.menuList);
+  addMenus(report.porsiBesar?.menuList);
+  addMenus(report.porsiBalita?.menuList);
+  addMenus(report.porsiBumilBusui?.menuList);
+
+  const combinedMenu = Array.from(menuSet).join(", ");
+  const bahanKecil = extractPortionBahanText(report.porsiKecil?.bahanItems);
+  const bahanBesar = extractPortionBahanText(report.porsiBesar?.bahanItems);
+  const bahanBalita = extractPortionBahanText(report.porsiBalita?.bahanItems);
+  const bahanBumilBusui = extractPortionBahanText(report.porsiBumilBusui?.bahanItems);
+
+  return {
+    report,
+    combinedMenu,
+    bahanKecil,
+    bahanBesar,
+    bahanBalita,
+    bahanBumilBusui,
+  };
+}
+
+/**
  * Helper to resolve the correct MBG menu name for a date/batch.
- * Prioritizes batch notes, then non-empty entry menu items, then Master Weekly Menu schedule.
+ * Prioritas utama: Laporan Harian dari Produksi MBG, lalu batch notes atau entry menus.
  */
 function resolveMbgMenuName(
-  date: string,
+  _date: string,
   batch?: MbgPmBatch,
   entries?: MbgPmEntry[],
-  weeklySchedule?: MbgDayMenu[]
+  productionMenu?: string
 ): string {
+  // 1. UTAMA: Dari data Produksi MBG
+  if (productionMenu && productionMenu.trim()) {
+    return productionMenu.trim();
+  }
+
+  // 2. Batch notes
   if (batch?.batchNotes && batch.batchNotes.trim()) {
     return batch.batchNotes.trim();
   }
 
+  // 3. Entry menu items
   const entryMenus = (entries || [])
     .filter(Boolean)
     .flatMap((e) => e?.menuItems || [])
@@ -123,15 +204,6 @@ function resolveMbgMenuName(
   const uniqueEntryMenus = Array.from(new Set(entryMenus));
   if (uniqueEntryMenus.length > 0) {
     return uniqueEntryMenus.join(", ");
-  }
-
-  try {
-    const scheduleRes = getMenuForDate(date, weeklySchedule);
-    if (scheduleRes?.menuItems && scheduleRes.menuItems.length > 0) {
-      return scheduleRes.menuItems.join(", ");
-    }
-  } catch (err) {
-    console.error("resolveMbgMenuName error:", err);
   }
 
   return "Menu MBG";
@@ -183,6 +255,11 @@ interface MbgDateGroup {
   totalInstitusi: number;
   totalSchools: number;
   menuName?: string;
+  dailyReport?: MbgProductionDailyReport | null;
+  bahanKecil?: string;
+  bahanBesar?: string;
+  bahanBalita?: string;
+  bahanBumilBusui?: string;
   jobDesks: CateringJobDesk[];
   isAssigned: boolean;
 }
@@ -193,7 +270,7 @@ export function MoJobDeskPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [mbgBatches, setMbgBatches] = useState<MbgPmBatch[]>([]);
   const [mbgEntries, setMbgEntries] = useState<MbgPmEntry[]>([]);
-  const [weeklySchedule, setWeeklySchedule] = useState<MbgDayMenu[]>(DEFAULT_WEEKLY_SCHEDULE);
+  const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"dates" | "form" | "table">("dates");
 
@@ -295,14 +372,13 @@ export function MoJobDeskPage() {
       }
     );
 
-    const unsubSchedule = subscribeWeeklySchedule(
-      (days) => {
+    const unsubDailyReports = subscribeAllDailyReports(
+      (reports) => {
         if (!mounted) return;
-        setWeeklySchedule(days);
+        setAllDailyReports(reports);
       },
-      "porsi_besar",
       (err) => {
-        console.error("MO: failed to load weekly schedule:", err);
+        console.error("MO: failed to load daily reports from Produksi MBG:", err);
       }
     );
 
@@ -313,7 +389,7 @@ export function MoJobDeskPage() {
       unsubOrders();
       unsubBatches();
       unsubEntries();
-      unsubSchedule();
+      unsubDailyReports();
     };
   }, []);
 
@@ -495,6 +571,9 @@ export function MoJobDeskPage() {
 
       const totalInstitusiCount = item.entries.length || item.batch?.totalInstitusi || 0;
 
+      // Ambil data bahan & menu langsung dari Produksi MBG
+      const prodData = resolveMbgDataFromProduction(date, item.batch?.id, allDailyReports);
+
       groups.push({
         date,
         hari: getHariFromDate(date),
@@ -503,14 +582,19 @@ export function MoJobDeskPage() {
         totalPortions: totalPortions || item.batch?.totalJumlah || 0,
         totalInstitusi: totalInstitusiCount,
         totalSchools: totalInstitusiCount,
-        menuName: resolveMbgMenuName(date, item.batch, item.entries, weeklySchedule),
+        menuName: resolveMbgMenuName(date, item.batch, item.entries, prodData.combinedMenu),
+        dailyReport: prodData.report,
+        bahanKecil: prodData.bahanKecil,
+        bahanBesar: prodData.bahanBesar,
+        bahanBalita: prodData.bahanBalita,
+        bahanBumilBusui: prodData.bahanBumilBusui,
         jobDesks: dateJobDesks,
         isAssigned: dateJobDesks.length > 0,
       });
     });
 
     return groups.sort((a, b) => b.date.localeCompare(a.date));
-  }, [mbgBatches, mbgEntries, batchMap, todayStr, jobDesks, weeklySchedule]);
+  }, [mbgBatches, mbgEntries, batchMap, todayStr, jobDesks, allDailyReports]);
 
   // Filtered Catering Date Groups
   const filteredCateringDateGroups = useMemo(() => {
@@ -685,10 +769,25 @@ export function MoJobDeskPage() {
       const batch = group.batch;
       const entries = group.entries;
 
+      // Kumpulkan rincian bahan per porsi dari Produksi MBG
+      const portionBahanParts: string[] = [];
+      if (group.bahanKecil) portionBahanParts.push(`Porsi Kecil: ${group.bahanKecil}`);
+      if (group.bahanBesar) portionBahanParts.push(`Porsi Besar: ${group.bahanBesar}`);
+      if (group.bahanBalita) portionBahanParts.push(`Porsi Balita: ${group.bahanBalita}`);
+      if (group.bahanBumilBusui) portionBahanParts.push(`Porsi Bumil/Busui: ${group.bahanBumilBusui}`);
+
       const newRows: DraftRow[] = [];
       let seqIndex = 0;
 
       // Row 1: Produksi MBG Dapur Utama (Default: Shifa - ProduksiMBG@alumana.id)
+      const row1Parts = [
+        `Menu: ${group.menuName || "Menu MBG"}`,
+        `Jumlah: ${group.totalPortions} Porsi (${entries.length} institusi/lembaga)`,
+      ];
+      if (portionBahanParts.length > 0) {
+        row1Parts.push(...portionBahanParts);
+      }
+
       newRows.push({
         id: `row-${Date.now()}-${seqIndex++}`,
         division: "mbg",
@@ -697,7 +796,7 @@ export function MoJobDeskPage() {
         startTime: "05:30",
         pic: "Shifa",
         kegiatan: "",
-        keterangan: `Menu: ${group.menuName || "Menu MBG"} | Jumlah: ${group.totalPortions} Porsi (${entries.length} institusi/lembaga)`,
+        keterangan: row1Parts.join(" | "),
         keyId: "",
         mbgBatchId: batch?.id,
         orderLabel: `Batch MBG ${formatIndoDate(targetDate)}`,
@@ -706,6 +805,15 @@ export function MoJobDeskPage() {
 
       // Row 2: Produksi MBG Dapur 2 (Jika porsi besar > 500 porsi, default: Joko)
       if (group.totalPortions > 500) {
+        const row2Parts = [
+          `Menu: ${group.menuName || "Menu MBG"}`,
+          `Jumlah: ${group.totalPortions} Porsi`,
+          `Dukungan porsi besar batch ${formatIndoDate(targetDate)}`,
+        ];
+        if (portionBahanParts.length > 0) {
+          row2Parts.push(...portionBahanParts);
+        }
+
         newRows.push({
           id: `row-${Date.now()}-${seqIndex++}`,
           division: "mbg",
@@ -714,7 +822,7 @@ export function MoJobDeskPage() {
           startTime: "06:00",
           pic: "Joko",
           kegiatan: "",
-          keterangan: `Menu: ${group.menuName || "Menu MBG"} | Jumlah: ${group.totalPortions} Porsi | Dukungan porsi besar batch ${formatIndoDate(targetDate)}`,
+          keterangan: row2Parts.join(" | "),
           keyId: "",
           mbgBatchId: batch?.id,
           orderLabel: `Batch MBG ${formatIndoDate(targetDate)}`,
@@ -732,6 +840,26 @@ export function MoJobDeskPage() {
 
         const assignedPic: PicShortName = idx % 2 === 0 ? "Dwi" : "Wandi";
 
+        const isPosyandu = isPosyanduName(entry.institutionName) || (entry.qtBumilBusui || 0) > 0;
+        const instParts = [
+          `Menu: ${group.menuName || "Menu MBG"}`,
+          `Jumlah: ${entryPortions} Porsi`,
+          `Antar ke: ${entry.institutionName} (${entry.address || "-"})`,
+        ];
+
+        // Cantumkan rincian bahan porsi yang relevan bagi institusi
+        if (isPosyandu) {
+          if (group.bahanBalita) instParts.push(`Porsi Balita: ${group.bahanBalita}`);
+          if (group.bahanBumilBusui) instParts.push(`Porsi Bumil/Busui: ${group.bahanBumilBusui}`);
+        } else {
+          if (group.bahanKecil && (entry.qtSiswaBalita || 0) > 0) {
+            instParts.push(`Porsi Kecil: ${group.bahanKecil}`);
+          }
+          if (group.bahanBesar && (entry.qtGuruKader || 0) > 0) {
+            instParts.push(`Porsi Besar: ${group.bahanBesar}`);
+          }
+        }
+
         newRows.push({
           id: `row-${Date.now()}-${seqIndex++}`,
           division: "mbg",
@@ -740,7 +868,7 @@ export function MoJobDeskPage() {
           startTime: "08:30",
           pic: assignedPic,
           kegiatan: "",
-          keterangan: `Menu: ${group.menuName || "Menu MBG"} | Jumlah: ${entryPortions} Porsi | Antar ke: ${entry.institutionName} (${entry.address || "-"})`,
+          keterangan: instParts.join(" | "),
           keyId: "",
           orderId: entry.id,
           orderLabel: `MBG: ${entry.institutionName}`,
@@ -1468,7 +1596,7 @@ export function MoJobDeskPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between px-1">
                 <p className="text-xs font-semibold text-slate-500">
-                  Menampilkan <span className="font-bold text-slate-900">{filteredMbgDateGroups.length}</span> tanggal batch MBG yang diinput Admin MBG
+                  Menampilkan <span className="font-bold text-slate-900">{filteredMbgDateGroups.length}</span> tanggal batch MBG (Data bahan bersumber dari Produksi MBG)
                 </p>
               </div>
 
@@ -1515,6 +1643,46 @@ export function MoJobDeskPage() {
                                 <strong className="text-emerald-700">{group.totalPortions} Porsi Makanan</strong> •{" "}
                                 <span>{group.totalInstitusi || group.totalSchools} Institusi / Lembaga</span>
                               </p>
+
+                              {/* Rincian Bahan per Porsi dari Produksi MBG */}
+                              {group.dailyReport ? (
+                                <div className="mt-2.5 pt-2 border-t border-emerald-100 space-y-1.5">
+                                  <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-emerald-800 uppercase tracking-wide">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                                    <span>Rincian Bahan dari Produksi MBG:</span>
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
+                                    <div className="p-2 rounded-lg bg-sky-50 border border-sky-200">
+                                      <span className="font-bold text-sky-900 block text-[11px]">Porsi Kecil:</span>
+                                      <span className="text-slate-700 text-[11px] leading-relaxed">
+                                        {group.bahanKecil || "Tidak ada rincian bahan"}
+                                      </span>
+                                    </div>
+                                    <div className="p-2 rounded-lg bg-indigo-50 border border-indigo-200">
+                                      <span className="font-bold text-indigo-900 block text-[11px]">Porsi Besar:</span>
+                                      <span className="text-slate-700 text-[11px] leading-relaxed">
+                                        {group.bahanBesar || "Tidak ada rincian bahan"}
+                                      </span>
+                                    </div>
+                                    <div className="p-2 rounded-lg bg-rose-50 border border-rose-200">
+                                      <span className="font-bold text-rose-900 block text-[11px]">Porsi Balita:</span>
+                                      <span className="text-slate-700 text-[11px] leading-relaxed">
+                                        {group.bahanBalita || "Tidak ada rincian bahan"}
+                                      </span>
+                                    </div>
+                                    <div className="p-2 rounded-lg bg-amber-50 border border-amber-200">
+                                      <span className="font-bold text-amber-900 block text-[11px]">Porsi Bumil/Busui:</span>
+                                      <span className="text-slate-700 text-[11px] leading-relaxed">
+                                        {group.bahanBumilBusui || "Tidak ada rincian bahan"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-[11px] text-slate-400 italic mt-1">
+                                  ℹ️ Menunggu input laporan harian bahan di Produksi MBG untuk tanggal ini
+                                </p>
+                              )}
                             </div>
                           </div>
 
@@ -2060,18 +2228,52 @@ export function MoJobDeskPage() {
                               {(jd.keterangan || jd.description || "").split(" | ").map((part, pIdx) => {
                                 const trimmed = part.trim();
                                 if (!trimmed) return null;
-                                if (trimmed.toLowerCase().startsWith("menu:")) {
+                                const lower = trimmed.toLowerCase();
+                                if (lower.startsWith("menu:")) {
                                   return (
                                     <span key={pIdx} className="inline-block font-semibold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mr-1.5 mb-1">
                                       {trimmed}
                                     </span>
                                   );
                                 }
-                                if (trimmed.toLowerCase().startsWith("jumlah:") || trimmed.toLowerCase().startsWith("porsi:")) {
+                                if (lower.startsWith("jumlah:") || lower.startsWith("porsi:")) {
                                   return (
                                     <span key={pIdx} className="inline-block font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 mr-1.5 mb-1">
                                       {trimmed}
                                     </span>
+                                  );
+                                }
+                                if (lower.startsWith("porsi kecil:")) {
+                                  return (
+                                    <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-950 text-xs">
+                                      <strong className="font-extrabold text-sky-800">Porsi Kecil:</strong>{" "}
+                                      <span className="text-slate-700">{trimmed.slice("porsi kecil:".length).trim()}</span>
+                                    </div>
+                                  );
+                                }
+                                if (lower.startsWith("porsi besar:")) {
+                                  return (
+                                    <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-950 text-xs">
+                                      <strong className="font-extrabold text-indigo-800">Porsi Besar:</strong>{" "}
+                                      <span className="text-slate-700">{trimmed.slice("porsi besar:".length).trim()}</span>
+                                    </div>
+                                  );
+                                }
+                                if (lower.startsWith("porsi balita:")) {
+                                  return (
+                                    <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-950 text-xs">
+                                      <strong className="font-extrabold text-rose-800">Porsi Balita:</strong>{" "}
+                                      <span className="text-slate-700">{trimmed.slice("porsi balita:".length).trim()}</span>
+                                    </div>
+                                  );
+                                }
+                                if (lower.startsWith("porsi bumil/busui:") || lower.startsWith("porsi bumil:")) {
+                                  const labelLen = lower.startsWith("porsi bumil/busui:") ? "porsi bumil/busui:".length : "porsi bumil:".length;
+                                  return (
+                                    <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-950 text-xs">
+                                      <strong className="font-extrabold text-amber-800">Porsi Bumil/Busui:</strong>{" "}
+                                      <span className="text-slate-700">{trimmed.slice(labelLen).trim()}</span>
+                                    </div>
                                   );
                                 }
                                 return (
@@ -2384,7 +2586,7 @@ export function MoJobDeskPage() {
                       detailMbgModal.batch?.tanggal || todayStr,
                       detailMbgModal.batch,
                       detailMbgModal.entry ? [detailMbgModal.entry] : [],
-                      weeklySchedule
+                      resolveMbgDataFromProduction(detailMbgModal.batch?.tanggal || todayStr, detailMbgModal.batch?.id, allDailyReports).combinedMenu
                     )}
                   </p>
                 </div>
