@@ -258,29 +258,21 @@ export async function saveBahanChecklist(
     formId = primary.id;
   }
 
-  // Bidirectional synchronization: update mbg_daily_reports if it exists for this batch
-  try {
-    const dailySnap = await getDocs(query(
-      collection(db, DAILY_REPORTS_COLLECTION),
-      where('batchId', '==', formData.batchId)
-    ));
-    if (!dailySnap.empty) {
-      const dailyDoc = dailySnap.docs[0];
-      await updateDoc(dailyDoc.ref, {
-        inspectionForm: {
-          dari: formData.dari,
-          kepada: formData.kepada,
-          waktu: formData.waktu,
-          noForm: formData.noForm,
-          rows: formData.rows,
-          officerName: formData.officerName,
-          officerTitle: formData.officerTitle,
-        },
-        updatedAt: now,
-      });
-    }
-  } catch (err) {
-    console.warn('[mbgBahanService] Sync to dailyReport inspectionForm warning:', err);
+  // A sync failure must reach the caller so the UI never claims synchronization succeeded.
+  const dailySnap = await getDocs(query(
+    collection(db, DAILY_REPORTS_COLLECTION),
+    where('batchId', '==', formData.batchId)
+  ));
+  if (!dailySnap.empty) {
+    const dailyDoc = dailySnap.docs[0];
+    await updateDoc(dailyDoc.ref, {
+      inspectionForm: {
+        dari: formData.dari, kepada: formData.kepada, waktu: formData.waktu,
+        noForm: formData.noForm, rows: formData.rows,
+        officerName: formData.officerName, officerTitle: formData.officerTitle,
+      },
+      updatedAt: now,
+    });
   }
 
   return formId;

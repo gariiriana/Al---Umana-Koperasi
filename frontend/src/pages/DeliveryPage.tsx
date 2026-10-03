@@ -8,7 +8,7 @@ import {
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import { subscribeOrders } from "@/services/realtimeService";
+import { subscribeCourierOrders } from "@/services/realtimeService";
 import type { Order, KitchenSignature } from "@/types/order";
 import { ProofCapture } from "@/components/delivery/ProofCapture";
 import { ProofModal } from "@/components/delivery/ProofModal";
@@ -18,7 +18,8 @@ import { Camera, Trash2 } from "lucide-react";
 import { exportCateringDeliveryProofPdf } from "@/utils/cateringDeliveryReceiptPdfExporter";
 
 import { db } from "@/lib/firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, runTransaction } from "firebase/firestore";
+import { startTracker } from '@/services/gpsService';
 import { dispatchOrder } from "@/services/orderService";
 import { pushNotification } from "@/services/notificationWriter";
 import { uploadFileInChunks } from "@/services/chunkUploadService";
@@ -627,7 +628,13 @@ export function DeliveryPage() {
         updates.status = "READY_TO_DELIVER";
       }
 
-      await updateDoc(orderRef, updates);
+      await runTransaction(db, async (transaction) => {
+        const snapshot = await transaction.get(orderRef);
+        if (!snapshot.exists() || snapshot.data().assignedCourierId !== user?.uid || snapshot.data().status !== currentActiveOrder.status) {
+          throw new Error('Penugasan telah berubah. Muat ulang daftar tugas.');
+        }
+        transaction.update(orderRef, updates);
+      });
       showToast({ message: "Laporan sakit berhasil dikirim. Penugasan batal.", variant: "success" });
 
       const sid = activeId.length > 6 ? activeId.slice(-6).toUpperCase() : activeId.toUpperCase();
@@ -669,11 +676,17 @@ export function DeliveryPage() {
 
   const active = activeId ? orders.find((o) => o.id === activeId) ?? null : null;
 
-  useEffect(() => subscribeOrders(setOrders, console.error), []);
+  useEffect(() => {
+    setOrders([]);
+    setActiveId(null);
+    setStep('list');
+    if (!user?.uid) return;
+    return subscribeCourierOrders(user.uid, setOrders, (error) => showToast({ message: error.message, variant: 'error' }));
+  }, [user?.uid, showToast]);
 
   const myDeliveries = useMemo(
     () => {
-      const courierIdentities = [user?.uid, profile?.uid, profile?.displayName, user?.email?.split("@")[0]];
+      const courierIdentities = [user?.uid];
       return orders.filter(
         (o) => isActiveCourierAssignment(o.status) && isAssignedToCourier(o, courierIdentities),
       ).sort((a, b) => {
@@ -685,12 +698,12 @@ export function DeliveryPage() {
         return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       });
     },
-    [orders, user, profile]
+    [orders, user]
   );
 
   const myCompletedDeliveries = useMemo(
     () => {
-      const courierIdentities = [user?.uid, profile?.uid, profile?.displayName, user?.email?.split("@")[0]];
+      const courierIdentities = [user?.uid];
       return orders.filter(
         (o) =>
           (o.status === "DELIVERED" || o.status === "COMPLETED") &&
@@ -701,7 +714,7 @@ export function DeliveryPage() {
         return timeB - timeA;
       });
     },
-    [orders, user, profile]
+    [orders, user]
   );
 
   const availableYears = useMemo(() => {
@@ -878,42 +891,24 @@ export function DeliveryPage() {
     }
   }, [myDeliveries, activeId]);
 
+  const trackingOrderIds = activeEnRouteOrderIds.join(',');
   useEffect(() => {
-    if (activeEnRouteOrderIds.length === 0) return;
+    if (!user?.uid || !trackingOrderIds) return;
+    const trackers = trackingOrderIds.split(',').map((orderId) => startTracker({
+      orderId,
+      courierId: user.uid,
+      onError: (error) => console.error('Gagal mengupdate lokasi kurir:', error),
+    }));
+    return () => trackers.forEach((tracker) => tracker.stop());
+  }, [trackingOrderIds, user?.uid]);
 
-    if (!navigator.geolocation) {
-      console.warn("Geolocation is not supported by this browser.");
-      return;
+  // Remove forms immediately when distribution revokes or reassigns an active task.
+  useEffect(() => {
+    if (activeId && !myDeliveries.some((order) => order.id === activeId)) {
+      setActiveId(null);
+      setStep('list');
     }
-
-    const watchId = navigator.geolocation.watchPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        try {
-          await Promise.all(
-            activeEnRouteOrderIds.map((id) =>
-              updateDoc(doc(db, "orders", id), {
-                courierLat: latitude,
-                courierLng: longitude,
-              })
-            )
-          );
-        } catch (err) {
-          console.error("Gagal mengupdate lokasi kurir:", err);
-        }
-      },
-      (error) => {
-        console.error("Error watching geolocation:", error);
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 10000,
-      }
-    );
-
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, [activeEnRouteOrderIds]);
+  }, [activeId, myDeliveries]);
 
   const handleExportProofPdf = async (order: Order) => {
     try {
@@ -1737,6 +1732,7 @@ export function DeliveryPage() {
           transition={{ duration: 0.2 }}
         >
           <ProofCapture
+            key={active.id}
             orderId={active.id}
             customerName={(active.customerName || active.recipientName || "") as string}
             recipientName={active.recipientName}

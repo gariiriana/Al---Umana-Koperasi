@@ -23,6 +23,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { hasCompleteMbgProof, isMbgTaskAssignedTo } from '@/lib/mbgCourierAssignment';
 import { useToast } from '@/contexts/ToastContext';
 import type { MbgPmBatch, MbgDeliveryTask, MbgPmEntry } from '@/types/mbg';
 import { subscribeBatches, subscribeEntries } from '@/services/mbgAdminService';
@@ -65,14 +66,14 @@ export function MbgDeliveryPage() {
   const [pageTab, setPageTab] = useState<'active' | 'archive'>('active');
   const [archiveDocs, setArchiveDocs] = useState<MbgDeliveryDocument[]>([]);
 
-  // Fallback selector for testing when user profile is admin or doesn't match a specific kurir
+  // Select one of the user's assigned teams, or a team to preview as supervisor.
   const [selectedPetugasName, setSelectedPetugasName] = useState<string>('');
-  const [detectedPetugasId, setDetectedPetugasId] = useState<string>('');
 
   // Camera states
   const [showCamera, setShowCamera] = useState(false);
   const [cameraMode, setCameraMode] = useState<'handover' | 'delivery'>('handover');
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [completingDelivery, setCompletingDelivery] = useState(false);
   const [selectedEntryForDeliveryPhoto, setSelectedEntryForDeliveryPhoto] = useState<MbgPmEntry | null>(null);
 
   // 4-Proof Modal state
@@ -125,38 +126,39 @@ export function MbgDeliveryPage() {
 
   // Role detection: Kurir vs Admin/Supervisor
   const isAdminOrSupervisor = useMemo(() => {
-    return ['admin', 'admin_mbg', 'superadmin', 'manager'].includes(profile?.role || '');
+    return ['admin', 'admin_mbg', 'produksi_mbg', 'distribusi_mbg', 'distribusi_mbg_2', 'super_admin', 'developer'].includes(profile?.role || '');
   }, [profile?.role]);
 
-  // Determine petugasId/name based on logged in user profile
+  // Initialize the courier's team selector using the logged-in profile.
   useEffect(() => {
     if (profile) {
-      setDetectedPetugasId(user?.uid || '');
       if (!isAdminOrSupervisor) {
         const myName = profile.displayName || (user?.email ? user.email.split('@')[0] : '');
         setSelectedPetugasName((prev) => prev || myName);
-      } else if (!selectedPetugasName) {
-        setSelectedPetugasName(profile.displayName || (user?.email ? user.email.split('@')[0] : ''));
       }
     }
   }, [profile, user, isAdminOrSupervisor, selectedPetugasName]);
 
   // Subscribe to tasks for the selected batch & petugas
   useEffect(() => {
-    if (!selectedBatchId) return;
+    setTasks([]);
+    setEntries([]);
+    setProofModalEntry(null);
+    if (!selectedBatchId || !user) return;
 
     const uUid = user?.uid || '';
     const uEmail = user?.email || '';
-    const uName = selectedPetugasName || profile?.displayName || '';
+    const uName = selectedPetugasName;
 
     const unsubTasks = subscribeKurirTasks(
       selectedBatchId,
-      isAdminOrSupervisor && selectedPetugasName ? '' : uUid,
-      isAdminOrSupervisor && selectedPetugasName ? '' : uEmail,
-      uName,
+      isAdminOrSupervisor ? '' : uUid,
+      isAdminOrSupervisor ? '' : uEmail,
+      isAdminOrSupervisor ? uName : '',
       (data) => {
         setTasks(data);
-      }
+      },
+      (error) => showToast({ message: error.message, variant: 'error' })
     );
 
     const unsubEntries = subscribeEntries(selectedBatchId, setEntries);
@@ -165,7 +167,7 @@ export function MbgDeliveryPage() {
       unsubTasks();
       unsubEntries();
     };
-  }, [selectedBatchId, selectedPetugasName, profile?.displayName, user, isAdminOrSupervisor]);
+  }, [selectedBatchId, selectedPetugasName, profile?.displayName, user, isAdminOrSupervisor, showToast]);
 
   // Keep proofModalEntry in sync with live entries snapshot
   useEffect(() => {
@@ -178,107 +180,26 @@ export function MbgDeliveryPage() {
   }, [entries, proofModalEntry]);
 
   const uniqueKurirNames = useMemo<string[]>(() => {
-    const fromEntries = entries.map((e) => e.assignedPetugasName).filter((n): n is string => Boolean(n));
-    const fromKeneks = entries.map((e) => e.assignedKenekName).filter((n): n is string => Boolean(n));
+    const visibleEntries = isAdminOrSupervisor ? entries : entries.filter((e) => e.assignedPetugasId === user?.uid || e.assignedKenekId === user?.uid);
+    const fromEntries = visibleEntries.map((e) => e.assignedPetugasName).filter((n): n is string => Boolean(n));
+    const fromKeneks = visibleEntries.map((e) => e.assignedKenekName).filter((n): n is string => Boolean(n));
     const fromTasks = tasks.map((t) => t.petugasName).filter((n): n is string => Boolean(n));
     const fromTaskKeneks = tasks.map((t) => t.kenekName).filter((n): n is string => Boolean(n));
     return Array.from(new Set([...fromEntries, ...fromKeneks, ...fromTasks, ...fromTaskKeneks]));
-  }, [entries, tasks]);
+  }, [entries, tasks, isAdminOrSupervisor, user?.uid]);
 
-  // Current active task (with auto-fallback synthesis from entries if admin hasn't submitted delivery tasks yet)
   const activeTask = useMemo<MbgDeliveryTask | null>(() => {
-    const myDisplayName = profile?.displayName || '';
-    const myEmailHandle = user?.email ? user.email.split('@')[0] : '';
-    const targetPetugas = selectedPetugasName || myDisplayName || myEmailHandle;
-    const tLower = targetPetugas.toLowerCase().trim();
-    const uUid = (user?.uid || '').toLowerCase().trim();
-    const userTokens: string[] = Array.from(
-      new Set([
-        ...myDisplayName.toLowerCase().split(/[\s,+/&|()_\-.]+/).filter((t: string) => t.length >= 2),
-        ...myEmailHandle.toLowerCase().split(/[\s,+/&|()_\-.]+/).filter((t: string) => t.length >= 2),
-        ...tLower.split(/[\s,+/&|()_\-.]+/).filter((t: string) => t.length >= 2),
-      ])
-    );
-
-    // Helper matcher function
-    const isMatchingPetugas = (name?: string, id?: string, kenekName?: string, kenekId?: string): boolean => {
-      const nLower = (name || '').toLowerCase().trim();
-      const iLower = (id || '').toLowerCase().trim();
-      const kLower = (kenekName || '').toLowerCase().trim();
-      const kiLower = (kenekId || '').toLowerCase().trim();
-
-      // 1. Direct UID match
-      if (uUid && (iLower === uUid || kiLower === uUid || iLower.includes(uUid))) return true;
-
-      // 2. Selected petugas exact / partial match
-      if (selectedPetugasName) {
-        if (nLower === tLower || kLower === tLower || nLower.includes(tLower) || tLower.includes(nLower)) return true;
-        const targetTokens = tLower.split(/[\s,+/&|()_\-.]+/).filter((t: string) => t.length >= 2);
-        if (targetTokens.some((tok: string) => nLower.includes(tok) || kLower.includes(tok))) return true;
-      }
-
-      // 3. User name / email match
-      if (tLower && (nLower === tLower || kLower === tLower || nLower.includes(tLower) || tLower.includes(nLower))) return true;
-
-      // 4. Token-level matching (e.g. "Dwi" in "Dwi & Wandi", "Andi" in "Andi & Dede")
-      const allText = `${nLower} ${iLower} ${kLower} ${kiLower}`;
-      if (userTokens.some((tok: string) => tok.length >= 3 && allText.includes(tok))) return true;
-
-      return false;
-    };
-
-    // 1. Try finding from real tasks collection first
-    if (tasks.length > 0) {
-      const match = tasks.find((t) => isMatchingPetugas(t.petugasName, t.petugasId, t.kenekName, t.kenekId));
-      if (match) return match;
-    }
-
-    // Tasks must be real Firestore documents. A synthetic task cannot be
-    // updated and leaves the courier permanently stuck at "waiting".
-    // Fallback: If user explicitly selected a petugas name, find best task.
-    if (selectedPetugasName && tasks.length > 0) {
-      const direct = tasks.find((t) => t.petugasName.toLowerCase().includes(tLower) || tLower.includes(t.petugasName.toLowerCase()));
-      if (direct) return direct;
-    }
-
-    return tasks[0] || null;
-  }, [tasks, selectedPetugasName, profile?.displayName, user]);
+    const visibleTasks = isAdminOrSupervisor ? tasks : tasks.filter((task) => isMbgTaskAssignedTo(task, user?.uid || ''));
+    const selected = selectedPetugasName.trim().toLocaleLowerCase();
+    return visibleTasks.find((task) => task.petugasName.trim().toLocaleLowerCase() === selected ||
+      task.kenekName?.trim().toLocaleLowerCase() === selected) || visibleTasks[0] || null;
+  }, [tasks, selectedPetugasName, user?.uid, isAdminOrSupervisor]);
 
   // Get full entries detail for the current task
   const taskEntries = useMemo(() => {
     if (!activeTask) return [];
-    let rawList: MbgPmEntry[] = [];
-    // 1. Direct match by task.entryIds if present
-    if (activeTask.entryIds && activeTask.entryIds.length > 0) {
-      rawList = entries.filter((e) => activeTask.entryIds.includes(e.id));
-    }
-    if (rawList.length === 0) {
-      // 2. Match by assignedPetugasName or assignedKenekName or tokens
-      const tNameLower = (activeTask.petugasName || '').toLowerCase().trim();
-      const kNameLower = (activeTask.kenekName || '').toLowerCase().trim();
-      const tTokens = Array.from(
-        new Set([
-          ...tNameLower.split(/[\s,+/&|()_\-.]+/).filter((t) => t.length >= 2),
-          ...kNameLower.split(/[\s,+/&|()_\-.]+/).filter((t) => t.length >= 2),
-        ])
-      );
-
-      rawList = entries.filter((e) => {
-        const eNameLower = (e.assignedPetugasName || '').toLowerCase().trim();
-        const eKenekLower = (e.assignedKenekName || '').toLowerCase().trim();
-        if (!eNameLower && !eKenekLower) return false;
-        if (
-          eNameLower === tNameLower ||
-          eNameLower.includes(tNameLower) ||
-          tNameLower.includes(eNameLower) ||
-          (kNameLower && (eKenekLower === kNameLower || eKenekLower.includes(kNameLower)))
-        ) {
-          return true;
-        }
-        const entryText = `${eNameLower} ${eKenekLower}`;
-        return tTokens.some((tok) => tok.length >= 3 && entryText.includes(tok));
-      });
-    }
+    const rawList = entries.filter((entry) => activeTask.entryIds.includes(entry.id) &&
+      entry.assignedPetugasId === activeTask.petugasId);
 
     // Merge proofs from activeTask.schoolProofs to ensure all photos appear seamlessly
     return rawList.map((entry) => {
@@ -307,7 +228,7 @@ export function MbgDeliveryPage() {
 
   const completedInstitutionsCount = useMemo(() => {
     return activeNonLiburEntries.filter(
-      (e) => e.photoMenuUrl && e.photoPenerimaUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl
+      hasCompleteMbgProof
     ).length;
   }, [activeNonLiburEntries]);
 
@@ -339,13 +260,17 @@ export function MbgDeliveryPage() {
 
 
   // Real-time GPS tracking when activeTask is in 'delivering' status
+  const trackingTaskId = activeTask?.id;
+  const trackingBatchId = activeTask?.batchId;
+  const trackingCourierId = user?.uid;
+  const shouldTrack = Boolean(activeTask && activeTask.status === 'delivering' && isMbgTaskAssignedTo(activeTask, trackingCourierId || ''));
   useEffect(() => {
-    if (!activeTask || activeTask.status !== 'delivering' || !user) return;
+    if (!shouldTrack || !trackingTaskId || !trackingBatchId || !trackingCourierId) return;
 
-    console.log('Starting GPS tracking for task:', activeTask.id);
+    console.log('Starting GPS tracking for task:', trackingTaskId);
     const tracker = startTracker({
-      orderId: activeTask.batchId, // Using batchId as the orderId group for MBG
-      courierId: activeTask.petugasId,
+      orderId: trackingBatchId,
+      courierId: trackingCourierId,
       intervalSeconds: 30,
       onWrite: (lat, lng) => {
         console.log('GPS written:', lat, lng);
@@ -356,10 +281,10 @@ export function MbgDeliveryPage() {
     });
 
     return () => {
-      console.log('Stopping GPS tracking for task:', activeTask.id);
+      console.log('Stopping GPS tracking for task:', trackingTaskId);
       tracker.stop();
     };
-  }, [activeTask, user]);
+  }, [trackingTaskId, trackingBatchId, trackingCourierId, shouldTrack]);
 
   const handleStartHandover = () => {
     if (!activeTask) return;
@@ -609,7 +534,7 @@ export function MbgDeliveryPage() {
       const activeEntries = taskEntries.filter((e) => !e.isSekolahLibur);
       const totalPorsi = activeEntries.reduce((s, e) => s + (e.jumlah || 0), 0);
       const completedCount = activeEntries.filter(
-        (e) => e.photoMenuUrl && e.photoSerahTerimaUrl && e.photoSuratJalanUrl
+        hasCompleteMbgProof
       ).length;
 
       const fileName = `Laporan_Distribusi_MBG_${activeTask.petugasName.replace(/\s+/g, '_')}_${batch?.tanggal || 'undated'}.pdf`;
@@ -621,41 +546,38 @@ export function MbgDeliveryPage() {
         fileName,
       });
 
-      // Save document metadata to Firestore for arsip
-      try {
-        const pName = selectedPetugasName || profile?.displayName || '';
-        const pId = detectedPetugasId || pName.toLowerCase().replace(/\s+/g, '-');
-        await saveDeliveryDocument({
-          batchId: selectedBatchId || '',
-          tanggalBatch: batch?.tanggal || '',
-          petugasName: activeTask.petugasName,
-          petugasId: pId,
-          documentType: 'delivery_report',
-          fileName,
-          totalInstitusi: activeEntries.length,
-          totalPorsi,
-          completedCount,
-          createdAt: new Date().toISOString(),
-          createdBy: user?.uid || '',
-        });
-      } catch (archiveErr) {
-        console.warn('Failed to save document archive:', archiveErr);
-      }
-
-      // Automatically update task status to 'delivered' and mark completed
-      if (activeTask && !activeTask.id.startsWith('virt-task-')) {
-        try {
-            await completeTaskAndBatch(activeTask);
-        } catch (taskErr) {
-          console.warn('Failed to update task status to delivered:', taskErr);
-        }
-      }
-
+      // A PDF download does not change delivery status.
+      await saveDeliveryDocument({
+        batchId: activeTask.batchId,
+        tanggalBatch: batch?.tanggal || '',
+        petugasName: activeTask.petugasName,
+        petugasId: activeTask.petugasId,
+        documentType: 'delivery_report',
+        fileName,
+        totalInstitusi: activeEntries.length,
+        totalPorsi,
+        completedCount,
+        createdAt: new Date().toISOString(),
+        createdBy: user?.uid || '',
+      });
       showToast({ message: 'PDF Laporan Distribusi berhasil diunduh & diarsipkan!', variant: 'success' });
 
     } catch (err) {
       console.error('Failed to export delivery PDF:', err);
-      showToast({ message: 'Gagal mengekspor PDF Laporan', variant: 'error' });
+      showToast({ message: 'PDF atau pengarsipan laporan gagal. Silakan coba lagi.', variant: 'error' });
+    }
+  };
+
+  const handleCompleteDelivery = async () => {
+    if (!activeTask || completingDelivery) return;
+    setCompletingDelivery(true);
+    try {
+      await completeTaskAndBatch(activeTask);
+      showToast({ message: 'Pengiriman selesai. Seluruh bukti telah diverifikasi.', variant: 'success' });
+    } catch (error) {
+      showToast({ message: error instanceof Error ? error.message : 'Gagal menyelesaikan pengiriman.', variant: 'error' });
+    } finally {
+      setCompletingDelivery(false);
     }
   };
 
@@ -1187,6 +1109,13 @@ export function MbgDeliveryPage() {
                           title="Export PDF Laporan"
                         >
                           <FileDown className="h-4 w-4 text-[#FBBF24]" /> Export PDF
+                        </button>
+                        <button
+                          onClick={handleCompleteDelivery}
+                          disabled={completingDelivery || !isAllInstitutionsComplete || batches.find((b) => b.id === selectedBatchId)?.productionCookingStatus !== 'cooked'}
+                          className="flex items-center gap-2 bg-green-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <CheckCircle2 className="h-4 w-4" /> {completingDelivery ? 'Memverifikasi...' : 'Selesaikan Pengiriman'}
                         </button>
                       </>
                     )}

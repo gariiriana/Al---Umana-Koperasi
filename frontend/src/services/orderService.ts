@@ -21,6 +21,7 @@ import {
   updateDoc,
   increment,
   arrayUnion,
+  runTransaction,
   query,
   where,
   limit,
@@ -735,22 +736,27 @@ export async function reassignCourier(
   if (!newCourierId || !reason) throw new Error("Kurir pengganti dan alasan wajib diisi");
 
   const docRef = doc(db, "orders", id);
-  const previousCourierId = "";
-  const reassignment: CourierReassignment = {
-    previousCourierId,
-    newCourierId,
-    reason,
-    reassignedBy: options.reassignedBy,
-    reassignedByName: options.reassignedByName,
-    reassignedAt: new Date().toISOString(),
-  };
-
-  // Pure direct write: INSTANT (< 100ms), 0 reads, no 429 quota delays
-  await updateDoc(docRef, {
-    assignedCourierId: newCourierId,
-    courierReassignments: arrayUnion(reassignment),
-    courierSickReported: false,
-    updatedAt: new Date(),
+  let previousCourierId = "";
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists()) throw new Error('Pesanan tidak ditemukan');
+    const order = snapshot.data();
+    if (!['PENDING', 'IN_PRODUCTION', 'QC', 'READY', 'READY_TO_DELIVER', 'OUT_FOR_DELIVERY'].includes(order.status)) {
+      throw new Error('Pesanan yang sudah selesai tidak dapat dialihkan');
+    }
+    previousCourierId = order.assignedCourierId || '';
+    if (previousCourierId === newCourierId) throw new Error('Pilih kurir pengganti yang berbeda');
+    const reassignment: CourierReassignment = {
+      previousCourierId, newCourierId, reason,
+      reassignedBy: options.reassignedBy, reassignedByName: options.reassignedByName,
+      reassignedAt: new Date().toISOString(),
+    };
+    transaction.update(docRef, {
+      assignedCourierId: newCourierId,
+      courierReassignments: arrayUnion(reassignment),
+      courierSickReported: false,
+      updatedAt: new Date(),
+    });
   });
 
   const updatedOrder = await getOrderSafe(id, { assignedCourierId: newCourierId, updatedAt: new Date() });
@@ -808,8 +814,20 @@ export async function dispatchOrder(id: string, options: DispatchOrderOptions = 
     updates.kitchenSignatures = options.kitchenSignatures;
   }
 
-  // Pure direct write: INSTANT (< 100ms), 0 reads, no 429 quota delays
-  await updateDoc(docRef, cleanUndefined(updates));
+  const uid = currentUser()?.uid;
+  if (!uid) throw new Error('Masuk terlebih dahulu untuk memulai pengantaran');
+  if (!options.kitchenSignatures?.length || options.kitchenSignatures.some((handover) =>
+    !handover.staffName?.trim() || (handover.photoFileIds?.length || 0) < 2)) {
+    throw new Error('Lengkapi foto dan nama petugas serah terima sebelum berangkat');
+  }
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists()) throw new Error('Pesanan tidak ditemukan');
+    const order = snapshot.data();
+    if (order.assignedCourierId !== uid) throw new Error('Pesanan tidak ditugaskan ke akun Anda');
+    if (!['READY', 'READY_TO_DELIVER'].includes(order.status)) throw new Error('Pesanan belum siap dikirim');
+    transaction.update(docRef, cleanUndefined(updates));
+  });
 
   const updatedOrder = await getOrderSafe(id, updates);
   const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
@@ -883,9 +901,21 @@ export async function confirmDelivery(
   if (photos && photos.length > 0) {
     updates.deliveryProofPhotos = photos;
   }
-  await updateDocAndReturn(docRef, updates);
+  const uid = currentUser()?.uid;
+  if (!uid) throw new Error('Masuk terlebih dahulu untuk menyelesaikan pengantaran');
+  if (proofFileIds.length < 2 || !photos?.length || photos.some((photo) => !proofFileIds.includes(photo.fileId))) {
+    throw new Error('Foto bukti dan tanda tangan penerima wajib diisi');
+  }
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists()) throw new Error('Pesanan tidak ditemukan');
+    const order = snapshot.data();
+    if (order.assignedCourierId !== uid) throw new Error('Pesanan tidak ditugaskan ke akun Anda');
+    if (order.status !== 'OUT_FOR_DELIVERY') throw new Error('Pesanan tidak sedang dalam pengantaran');
+    transaction.update(docRef, updates);
+  });
 
-  const updatedOrder = await getOrder(id);
+  const updatedOrder = await getOrderSafe(id, updates);
   const shortId = updatedOrder.id.length > 6 ? updatedOrder.id.slice(-6).toUpperCase() : updatedOrder.id.toUpperCase();
   
   if (updatedOrder.recipientPhone) {

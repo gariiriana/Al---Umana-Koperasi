@@ -1,75 +1,47 @@
 import { describe, it, expect } from 'vitest';
+import { hasCompleteMbgProof, isMbgTaskAssignedTo, resolveCourierAccount, resolveMbgAssignment } from '@/lib/mbgCourierAssignment';
 
-describe('MBG Courier Task Matching Algorithm', () => {
-  const isMatchingPetugas = (
-    userDisplayName: string,
-    userEmailHandle: string,
-    userUid: string,
-    selectedPetugasName: string,
-    taskPetugasName?: string,
-    taskPetugasId?: string,
-    taskKenekName?: string,
-    taskKenekId?: string
-  ): boolean => {
-    const targetPetugas = selectedPetugasName || userDisplayName || userEmailHandle;
-    const tLower = targetPetugas.toLowerCase().trim();
-    const uUid = (userUid || '').toLowerCase().trim();
+const accounts = [
+  { uid: 'UID-Andi', name: 'Andi', email: 'andi@example.test' },
+  { uid: 'UID-Wandi', name: 'Wandi', email: 'wandi@example.test' },
+];
 
-    const userTokens: string[] = Array.from(
-      new Set([
-        ...userDisplayName.toLowerCase().split(/[\s,+/&|()_\-.]+/).filter((t: string) => t.length >= 2),
-        ...userEmailHandle.toLowerCase().split(/[\s,+/&|()_\-.]+/).filter((t: string) => t.length >= 2),
-        ...tLower.split(/[\s,+/&|()_\-.]+/).filter((t: string) => t.length >= 2),
-      ])
-    );
-
-    const nLower = (taskPetugasName || '').toLowerCase().trim();
-    const iLower = (taskPetugasId || '').toLowerCase().trim();
-    const kLower = (taskKenekName || '').toLowerCase().trim();
-    const kiLower = (taskKenekId || '').toLowerCase().trim();
-
-    // 1. Direct UID match
-    if (uUid && (iLower === uUid || kiLower === uUid || iLower.includes(uUid))) return true;
-
-    // 2. Selected petugas exact / partial match
-    if (selectedPetugasName) {
-      if (nLower === tLower || kLower === tLower || nLower.includes(tLower) || tLower.includes(nLower)) return true;
-      const targetTokens = tLower.split(/[\s,+/&|()_\-.]+/).filter((t: string) => t.length >= 2);
-      if (targetTokens.some((tok: string) => nLower.includes(tok) || kLower.includes(tok))) return true;
+describe('MBG courier identity and evidence', () => {
+  it('does not confuse Andi and Wandi or fall back to names for a different UID', () => {
+    expect(isMbgTaskAssignedTo({ petugasId: 'UID-Wandi', kenekId: '' }, 'UID-Andi')).toBe(false);
+    expect(isMbgTaskAssignedTo({ petugasId: 'UID-Andi' }, 'uid-andi')).toBe(false);
+  });
+  it('lets an assigned assistant access the same task', () => {
+    expect(isMbgTaskAssignedTo({ petugasId: 'UID-Andi', kenekId: 'UID-Wandi' }, 'UID-Wandi')).toBe(true);
+  });
+  it('keeps blank assistant fields empty instead of selecting the first account', () => {
+    expect(resolveMbgAssignment(accounts, 'Andi', '  ')).toEqual({
+      assignedPetugasId: 'UID-Andi', assignedPetugasName: 'Andi', assignedKenekId: '', assignedKenekName: '',
+    });
+  });
+  it('resolves exact UID, name, email and handle to registered account UIDs', () => {
+    for (const selection of ['UID-Wandi', ' Wandi ', 'wandi@example.test', 'wandi']) {
+      expect(resolveCourierAccount(accounts, selection).uid).toBe('UID-Wandi');
     }
-
-    // 3. User name / email match
-    if (tLower && (nLower === tLower || kLower === tLower || nLower.includes(tLower) || tLower.includes(nLower))) return true;
-
-    // 4. Token-level matching (e.g. "Dwi" in "Dwi & Wandi", "Andi" in "Andi & Dede")
-    const allText = `${nLower} ${iLower} ${kLower} ${kiLower}`;
-    if (userTokens.some((tok: string) => tok.length >= 3 && allText.includes(tok))) return true;
-
-    return false;
-  };
-
-  it('matches exact name and email handle', () => {
-    expect(isMatchingPetugas('Andi', 'andi', 'uid-andi', '', 'Andi', 'uid-andi')).toBe(true);
-    expect(isMatchingPetugas('', 'andi', 'uid-andi', '', 'Andi Kurir', 'uid-andi')).toBe(true);
   });
-
-  it('matches paired team names like "Andi & Dede" for courier Andi', () => {
-    expect(isMatchingPetugas('Andi', 'andi', 'uid-andi', '', 'Andi & Dede')).toBe(true);
-    expect(isMatchingPetugas('Dede', 'dede', 'uid-dede', '', 'Andi & Dede')).toBe(true);
+  it('repairs explicit legacy team labels using two registered account UIDs', () => {
+    expect(resolveMbgAssignment(accounts, 'Andi & Wandi')).toEqual({
+      assignedPetugasId: 'UID-Andi', assignedPetugasName: 'Andi', assignedKenekId: 'UID-Wandi', assignedKenekName: 'Wandi',
+    });
+    expect(() => resolveMbgAssignment(accounts, 'Andi & Tidak Ada')).toThrow('belum ditemukan');
   });
-
-  it('matches paired team names like "Yusep & Erik" for courier Yusep and Kenek Erik', () => {
-    expect(isMatchingPetugas('Yusep', 'yusep', 'uid-yusep', '', 'Yusep & Erik')).toBe(true);
-    expect(isMatchingPetugas('Erik', 'erik', 'uid-erik', '', 'Yusep & Erik')).toBe(true);
-    expect(isMatchingPetugas('Erik', 'erik', 'uid-erik', '', 'Yusep', 'uid-yusep', 'Erik', 'uid-erik')).toBe(true);
+  it('rejects missing or partial names instead of inventing UIDs', () => {
+    expect(() => resolveMbgAssignment(accounts, 'And')).toThrow('belum ditemukan');
+    expect(() => resolveMbgAssignment(accounts, 'Andi', 'Tidak Ada')).toThrow('belum ditemukan');
   });
-
-  it('matches when admin explicit switcher is selected', () => {
-    expect(isMatchingPetugas('Admin MBG', 'admin', 'uid-admin', 'Agus & Firdi', 'Agus & Firdi')).toBe(true);
-    expect(isMatchingPetugas('Admin MBG', 'admin', 'uid-admin', 'Agus & Firdi', 'Agus', 'uid-agus', 'Firdi')).toBe(true);
+  it('rejects ambiguous names but allows an explicit email', () => {
+    const duplicates = [...accounts, { uid: 'UID-Andi2', name: 'Andi', email: 'andi2@example.test' }];
+    expect(() => resolveCourierAccount(duplicates, 'Andi')).toThrow('beberapa akun');
+    expect(resolveCourierAccount(duplicates, 'andi2@example.test').uid).toBe('UID-Andi2');
   });
-
-  it('does not match unrelated couriers', () => {
-    expect(isMatchingPetugas('Budi', 'budi', 'uid-budi', '', 'Andi & Dede')).toBe(false);
+  it('requires all four evidence photos, including the empty container photo', () => {
+    const proof = { photoMenuUrl: 'menu', photoSerahTerimaUrl: 'handover', photoSuratJalanUrl: 'letter', photoPenerimaUrl: '' };
+    expect(hasCompleteMbgProof(proof)).toBe(false);
+    expect(hasCompleteMbgProof({ ...proof, photoPenerimaUrl: 'container' })).toBe(true);
   });
 });

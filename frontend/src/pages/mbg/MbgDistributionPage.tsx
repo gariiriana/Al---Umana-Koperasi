@@ -1,3 +1,4 @@
+import { resolveMbgAssignment } from '@/lib/mbgCourierAssignment';
 import { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -291,41 +292,32 @@ export function MbgDistributionPage() {
     const cleanKurir = bulkKurirName.trim();
     const cleanKenek = bulkKenekName.trim();
 
-    const matched = kurirUsers.find(
-      (u) =>
-        u.name.toLowerCase() === cleanKurir.toLowerCase() ||
-        u.email.toLowerCase().includes(cleanKurir.toLowerCase()) ||
-        u.name.toLowerCase().includes(cleanKurir.toLowerCase()) ||
-        cleanKurir.toLowerCase().includes(u.name.toLowerCase())
-    );
-    const kurirId = matched ? matched.uid : cleanKurir.toLowerCase().replace(/\s+/g, '-');
-    const finalKurirName = matched ? matched.name : cleanKurir;
-
-    const matchedKenek = cleanKenek ? kurirUsers.find(
-      (u) =>
-        u.name.toLowerCase() === cleanKenek.toLowerCase() ||
-        u.email.toLowerCase().includes(cleanKenek.toLowerCase()) ||
-        u.name.toLowerCase().includes(cleanKenek.toLowerCase()) ||
-        cleanKenek.toLowerCase().includes(u.name.toLowerCase())
-    ) : undefined;
-    const kenekId = matchedKenek ? matchedKenek.uid : cleanKenek ? cleanKenek.toLowerCase().replace(/\s+/g, '-') : undefined;
-    const finalKenekName = matchedKenek ? matchedKenek.name : cleanKenek;
+    let assignment;
+    try {
+      assignment = resolveMbgAssignment(kurirUsers, cleanKurir, cleanKenek);
+    } catch (error) {
+      showToast({ message: error instanceof Error ? error.message : 'Pilih akun kurir yang terdaftar.', variant: 'error' });
+      setIsSubmittingBulk(false);
+      return;
+    }
+    const { assignedPetugasId: kurirId, assignedPetugasName: finalKurirName,
+      assignedKenekId: kenekId, assignedKenekName: finalKenekName } = assignment;
 
     try {
       const updatedEntries = entries.map((entry) => selectedEntryIds.includes(entry.id) ? {
         ...entry,
         assignedPetugasName: finalKurirName,
         assignedPetugasId: kurirId,
-        assignedKenekName: finalKenekName || undefined,
-        assignedKenekId: kenekId || undefined,
+        assignedKenekName: finalKenekName,
+        assignedKenekId: kenekId,
       } : entry);
       await Promise.all(
         selectedEntryIds.map((id) =>
           updateEntry(id, {
             assignedPetugasName: finalKurirName,
             assignedPetugasId: kurirId,
-            assignedKenekName: finalKenekName || undefined,
-            assignedKenekId: kenekId || undefined,
+            assignedKenekName: finalKenekName,
+            assignedKenekId: kenekId,
           })
         )
       );
@@ -668,39 +660,29 @@ export function MbgDistributionPage() {
     const cleanKurir = assignKurirName.trim();
     const cleanKenek = assignKenekName.trim();
 
-    const matched = kurirUsers.find(
-      (u) =>
-        u.name.toLowerCase() === cleanKurir.toLowerCase() ||
-        u.email.toLowerCase().includes(cleanKurir.toLowerCase()) ||
-        u.name.toLowerCase().includes(cleanKurir.toLowerCase()) ||
-        cleanKurir.toLowerCase().includes(u.name.toLowerCase())
-    );
-    const kurirId = matched ? matched.uid : cleanKurir.toLowerCase().replace(/\s+/g, '-');
-    const finalKurirName = matched ? matched.name : cleanKurir;
-
-    const matchedKenek = cleanKenek ? kurirUsers.find(
-      (u) =>
-        u.name.toLowerCase() === cleanKenek.toLowerCase() ||
-        u.email.toLowerCase().includes(cleanKenek.toLowerCase()) ||
-        u.name.toLowerCase().includes(cleanKenek.toLowerCase()) ||
-        cleanKenek.toLowerCase().includes(u.name.toLowerCase())
-    ) : undefined;
-    const kenekId = matchedKenek ? matchedKenek.uid : cleanKenek ? cleanKenek.toLowerCase().replace(/\s+/g, '-') : undefined;
-    const finalKenekName = matchedKenek ? matchedKenek.name : cleanKenek;
+    let assignment;
+    try {
+      assignment = resolveMbgAssignment(kurirUsers, cleanKurir, cleanKenek);
+    } catch (error) {
+      showToast({ message: error instanceof Error ? error.message : 'Pilih akun kurir yang terdaftar.', variant: 'error' });
+      return;
+    }
+    const { assignedPetugasId: kurirId, assignedPetugasName: finalKurirName,
+      assignedKenekId: kenekId, assignedKenekName: finalKenekName } = assignment;
 
     try {
       const updatedEntries = entries.map((entry) => entry.id === assignModalEntry.id ? {
         ...entry,
         assignedPetugasName: finalKurirName,
         assignedPetugasId: kurirId,
-        assignedKenekName: finalKenekName || undefined,
-        assignedKenekId: kenekId || undefined,
+        assignedKenekName: finalKenekName,
+        assignedKenekId: kenekId,
       } : entry);
       await updateEntry(assignModalEntry.id, {
         assignedPetugasName: finalKurirName,
         assignedPetugasId: kurirId,
-        assignedKenekName: finalKenekName || undefined,
-        assignedKenekId: kenekId || undefined,
+        assignedKenekName: finalKenekName,
+        assignedKenekId: kenekId,
       });
       showToast({
         message: `${assignModalEntry.institutionName} ditugaskan ke ${finalKurirName}${finalKenekName ? ` + ${finalKenekName}` : ''}`,
@@ -734,33 +716,24 @@ export function MbgDistributionPage() {
         const totalPorsi = kEntries.reduce((sum, e) => sum + (e.jumlah || 0), 0);
         const entryIds = kEntries.map((e) => e.id);
 
-        // Find matching kurir user profile from kurirUsers list for accurate UID
-        const matchedKurir = kurirUsers.find(
-          (u) =>
-            u.name.toLowerCase() === kName.toLowerCase() ||
-            u.email.toLowerCase().includes(kName.toLowerCase()) ||
-            u.email.split('@')[0].toLowerCase() === kName.toLowerCase()
-        );
-
-        const kId = matchedKurir ? matchedKurir.uid : kName.toLowerCase().replace(/\s+/g, '-');
-        const finalPetugasName = matchedKurir ? matchedKurir.name : kName;
-
-        // Collect kenek info from entries (use the first non-empty kenek name)
-        const kenekName = kEntries.find((e) => e.assignedKenekName)?.assignedKenekName || '';
-        const matchedKenek = kurirUsers.find(
-          (u) =>
-            u.name.toLowerCase() === kenekName.toLowerCase() ||
-            u.email.toLowerCase().includes(kenekName.toLowerCase()) ||
-            u.email.split('@')[0].toLowerCase() === kenekName.toLowerCase()
-        );
-        const kenekId = matchedKenek ? matchedKenek.uid : (kenekName ? kenekName.toLowerCase().replace(/\s+/g, '-') : '');
-        const finalKenekName = matchedKenek ? matchedKenek.name : kenekName;
+        if (!kEntries.length) continue;
+        // Preserve existing UIDs; resolve legacy names only against a unique registered account.
+        const courierSelection = kEntries[0].assignedPetugasId && kurirUsers.some((u) => u.uid === kEntries[0].assignedPetugasId)
+          ? kEntries[0].assignedPetugasId : kName;
+        const kenekEntry = kEntries.find((e) => e.assignedKenekName || e.assignedKenekId);
+        const assistantSelection = kenekEntry?.assignedKenekId && kurirUsers.some((u) => u.uid === kenekEntry.assignedKenekId)
+          ? kenekEntry.assignedKenekId : kenekEntry?.assignedKenekName || '';
+        const assignment = resolveMbgAssignment(kurirUsers, courierSelection, assistantSelection);
+        const { assignedPetugasId: kId, assignedPetugasName: finalPetugasName,
+          assignedKenekId: kenekId, assignedKenekName: finalKenekName } = assignment;
+        // Repair legacy name-based assignments in the PM rows as well as the task.
+        await Promise.all(kEntries.map((entry) => updateEntry(entry.id, assignment)));
 
         const existingTask = deliveryTasks.find(
           (t) => t.petugasName === kName || t.petugasId === kId || t.petugasName.toLowerCase() === kName.toLowerCase()
         );
 
-        const taskDeadline = deadlines[kName] || existingTask?.deadlineAt || (selectedBatch ? `${selectedBatch.tanggal}T15:00` : undefined);
+        const taskDeadline = deadlines[kName] || existingTask?.deadlineAt || (selectedBatch ? `${selectedBatch.tanggal}T15:00` : '');
 
         if (existingTask) {
           await updateDeliveryTask(existingTask.id, {
@@ -768,8 +741,8 @@ export function MbgDistributionPage() {
             petugasName: finalPetugasName,
             entryIds,
             totalPorsi,
-            kenekName: finalKenekName || undefined,
-            kenekId: kenekId || undefined,
+            kenekName: finalKenekName,
+            kenekId,
             deadlineAt: taskDeadline,
           });
           updated++;
@@ -778,8 +751,8 @@ export function MbgDistributionPage() {
             batchId: selectedBatchId,
             petugasId: kId,
             petugasName: finalPetugasName,
-            kenekId: kenekId || undefined,
-            kenekName: finalKenekName || undefined,
+            kenekId,
+            kenekName: finalKenekName,
             entryIds,
             totalPorsi,
             deadlineAt: taskDeadline,
@@ -811,7 +784,7 @@ export function MbgDistributionPage() {
       });
     } catch (err) {
       console.error('Sync error:', err);
-      showToast({ message: 'Gagal mengirim tugas ke akun kurir', variant: 'error' });
+      showToast({ message: err instanceof Error ? err.message : 'Gagal mengirim tugas ke akun kurir', variant: 'error' });
     }
   };
 
@@ -1158,6 +1131,8 @@ export function MbgDistributionPage() {
                               deadlines[petugasName] ||
                               deliveryTasks.find((t) => t.petugasName === petugasName)?.deadlineAt ||
                               (selectedBatch ? `${selectedBatch.tanggal}T15:00` : '');
+                            // datetime-local only accepts YYYY-MM-DDTHH:mm; trim seconds/offset from older saved values.
+                            const deadlineInputValue = currentDeadline.slice(0, 16);
 
                             return (
                               <div
@@ -1185,7 +1160,7 @@ export function MbgDistributionPage() {
                                     <span className="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Deadline:</span>
                                     <input
                                       type="datetime-local"
-                                      value={currentDeadline}
+                                      value={deadlineInputValue}
                                       onChange={(e) => {
                                         const val = e.target.value;
                                         setDeadlines((prev) => ({ ...prev, [petugasName]: val }));

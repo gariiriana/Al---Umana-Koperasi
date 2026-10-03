@@ -7,7 +7,8 @@
     "dev:backend": "cd backend && go run ./cmd/server",
     "dev": "concurrently --kill-others --names \"FRONTEND,BACKEND\" --prefix-colors \"cyan,green\" \"npm run dev:frontend\" \"npm run dev:backend\"",
     "build:frontend": "cd frontend && npm run build",
-    "build": "cd frontend && npm run build"
+    "build": "cd frontend && npm run build",
+    "test:courier-rules": "firebase emulators:exec --only firestore --project demo-courier-fixes --config firebase.test.json \"npm --prefix frontend run test:rules\""
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

@@ -122,6 +122,7 @@ export function startTracker(opts: TrackerOptions): Tracker {
     if (stopped) return;
     try {
       const pos = await getCurrentPosition();
+      if (stopped) return;
       const { latitude, longitude } = pos.coords;
       const wrote = await writeCoordinate(
         opts.orderId,

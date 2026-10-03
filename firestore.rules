@@ -98,6 +98,7 @@ service cloud.firestore {
         && (
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kurir_mbg'
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kurir'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kurir_katering'
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi'
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi_mbg'
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distribusi_mbg_2'
@@ -181,6 +182,40 @@ service cloud.firestore {
     function isOrderStaff() {
       return isAdmin() || isSuperAdmin() || isTimProduksi() || isDistribusi() || isKurirMbg() || isMoKatering() || isCoMoKatering() || isAnyMbg();
     }
+    function isCateringCourier() {
+      return request.auth != null && getUserRole() in ['kurir', 'kurir_katering'];
+    }
+    function isOrderEditor() {
+      return isOrderStaff() && !(getUserRole() in ['kurir', 'kurir_katering', 'kurir_mbg']);
+    }
+    function isAssignedCateringCourier() {
+      return isCateringCourier() && resource.data.get('assignedCourierId', '') == request.auth.uid;
+    }
+    function isCourierOrderUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let sameCourier = request.resource.data.assignedCourierId == resource.data.assignedCourierId;
+      return isAssignedCateringCourier() && (
+        (sameCourier && request.resource.data.status == resource.data.status
+          && resource.data.status == 'OUT_FOR_DELIVERY'
+          && changed.hasOnly(['courierLat', 'courierLng', 'updatedAt']))
+        || (sameCourier && resource.data.status in ['READY', 'READY_TO_DELIVER']
+          && request.resource.data.status == 'OUT_FOR_DELIVERY'
+          && request.resource.data.kitchenSignatures.size() > 0
+          && changed.hasOnly(['status', 'deliveryStartedAt', 'kitchenSignatures', 'updatedAt']))
+        || (sameCourier && resource.data.status == 'OUT_FOR_DELIVERY'
+          && request.resource.data.status == 'COMPLETED'
+          && request.resource.data.proofFileIds.size() >= 2
+          && request.resource.data.deliveryProofPhotos.size() > 0
+          && changed.hasOnly(['status', 'deliveredAt', 'proofFileIds', 'deliveryProofPhotos', 'updatedAt']))
+        || (resource.data.status in ['PENDING', 'IN_PRODUCTION', 'QC', 'READY', 'READY_TO_DELIVER', 'OUT_FOR_DELIVERY']
+          && request.resource.data.assignedCourierId == ''
+          && request.resource.data.courierSickReported == true
+          && request.resource.data.courierSickRemark.size() > 0
+          && (request.resource.data.status == resource.data.status
+            || (resource.data.status == 'OUT_FOR_DELIVERY' && request.resource.data.status == 'READY_TO_DELIVER'))
+          && changed.hasOnly(['assignedCourierId', 'courierSickReported', 'courierSickRemark', 'status', 'updatedAt']))
+      );
+    }
     function isOwnDeliveryFile(fileId) {
       return get(/databases/$(database)/documents/delivery_files/$(fileId)).data.uploadedBy == request.auth.uid;
     }
@@ -230,7 +265,7 @@ service cloud.firestore {
     // Authenticated users can read, create, and update orders.
     // Only admins can delete.
     match /orders/{orderId} {
-      allow get, list: if isOrderStaff()
+      allow get, list: if isOrderEditor() || isAssignedCateringCourier()
         || (request.auth != null && resource.data.customerId == request.auth.uid);
       // Allow list for authenticated users OR unauthenticated (public invoice page).
       // The invoiceToken acts as a secret URL — knowing it grants read access.
@@ -238,9 +273,9 @@ service cloud.firestore {
       // so we allow unauthenticated list on this collection safely because:
       // 1. The invoiceToken is a random UUID (unguessable)
       // 2. Listing without a filter still requires knowing document structure
-      allow create: if isOrderStaff()
+      allow create: if isOrderEditor()
         || (request.auth != null && request.resource.data.customerId == request.auth.uid);
-      allow update: if isOrderStaff()
+      allow update: if isOrderEditor() || isCourierOrderUpdate()
         || (request.auth != null && resource.data.customerId == request.auth.uid
           && request.resource.data.customerId == resource.data.customerId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['customerName', 'recipientName', 'recipientPhone', 'recipientNotes', 'deliveryAddress', 'paymentProofId', 'updatedAt']));
@@ -516,7 +551,7 @@ service cloud.firestore {
       allow delete: if isMbgManager();
       allow update: if isMbgManager() || isDistribusiMbg()
         || (isKurirMbg()
-          && (resource.data.assignedPetugasId == request.auth.uid || resource.data.assignedKenekId == request.auth.uid)
+          && (resource.data.assignedPetugasId == request.auth.uid || resource.data.get('assignedKenekId', '') == request.auth.uid)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'photoMenuUrl', 'photoMenuDesc', 'photoPenerimaUrl', 'photoPenerimaDesc', 'photoPenerimaTimestamp', 'photoPenerimaLocation',
             'photoSerahTerimaUrl', 'photoSerahTerimaDesc', 'photoSerahTerimaTimestamp', 'photoSerahTerimaLocation',
@@ -551,6 +586,9 @@ service cloud.firestore {
     match /mbg_daily_reports/{reportId} {
       allow read: if isMbgStaff();
       allow write: if isMbgManager() || isDistribusiMbg();
+      // Couriers may sync the inspection checklist, never production or financial fields.
+      allow update: if isKurirMbg()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['inspectionForm', 'updatedAt']);
     }
 
     // -------------------------------------------------------------------
@@ -613,15 +651,21 @@ service cloud.firestore {
       allow read: if isMbgDeliveryTeam();
       allow create, delete: if isMbgManager() || isDistribusiMbg();
       allow update: if isMbgManager() || isDistribusiMbg()
-        || (isKurirMbg() && (resource.data.petugasId == request.auth.uid || resource.data.kenekId == request.auth.uid)
+        || (isKurirMbg() && (resource.data.petugasId == request.auth.uid || resource.data.get('kenekId', '') == request.auth.uid)
           && (
             // Handover & delivery progress updates can be made by courier even before cooking finishes
             (request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'status', 'handoverPhotoId', 'handoverAt', 'deliveryPhotos', 'schoolProofs', 'updatedAt'
-            ]) && request.resource.data.status != 'delivered')
+            ]) && request.resource.data.status != 'delivered'
+              && (request.resource.data.status == resource.data.status
+                || (resource.data.status == 'waiting' && request.resource.data.status == 'handover_done'
+                  && request.resource.data.handoverPhotoId.size() > 0)
+                || (resource.data.status == 'handover_done' && request.resource.data.status == 'delivering')))
             ||
             // Final execution of report ('delivered' / completedAt) requires cooking to be finished
-            (get(/databases/$(database)/documents/mbg_pm_batches/$(resource.data.batchId)).data.productionCookingStatus == 'cooked'
+            (resource.data.status in ['delivering', 'delivered']
+              && request.resource.data.status == 'delivered'
+              && get(/databases/$(database)/documents/mbg_pm_batches/$(resource.data.batchId)).data.productionCookingStatus == 'cooked'
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                 'status', 'handoverPhotoId', 'handoverAt', 'deliveryPhotos', 'schoolProofs', 'completedAt', 'updatedAt'
               ]))

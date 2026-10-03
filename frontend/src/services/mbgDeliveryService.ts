@@ -3,11 +3,12 @@
 // ============================================================================
 
 import {
-  collection, doc, updateDoc, addDoc, getDocs,
+  collection, doc, updateDoc, addDoc, getDocs, runTransaction, arrayUnion,
   query, where, orderBy, onSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { MbgDeliveryTask, MbgDeliveryStatus } from '@/types/mbg';
+import { hasCompleteMbgProof, isMbgTaskAssignedTo } from '@/lib/mbgCourierAssignment';
+import type { MbgDeliveryTask, MbgDeliveryStatus, MbgPmEntry } from '@/types/mbg';
 
 const DELIVERY_COLLECTION = 'mbg_delivery_tasks';
 const DOCUMENTS_COLLECTION = 'mbg_delivery_documents';
@@ -15,7 +16,7 @@ const DOCUMENTS_COLLECTION = 'mbg_delivery_documents';
 export function subscribeKurirTasks(
   batchId: string,
   userUid: string,
-  userEmail: string,
+  _userEmail: string,
   userDisplayName: string,
   callback: (tasks: MbgDeliveryTask[]) => void,
   onError?: (error: Error) => void
@@ -27,86 +28,13 @@ export function subscribeKurirTasks(
   return onSnapshot(q, (snap) => {
     const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryTask));
 
-    // If no user identity specified, return all batch tasks (for admin preview)
-    if (!userUid && !userEmail && !userDisplayName) {
-      callback(list);
-      return;
-    }
-
-    const uidLower = (userUid || '').toLowerCase().trim();
-    const emailLower = (userEmail || '').toLowerCase().trim();
-    const emailHandle = emailLower ? emailLower.split('@')[0] : '';
-    const nameLower = (userDisplayName || '').toLowerCase().trim();
-    const nameTokens = Array.from(
-      new Set([
-        ...nameLower.split(/[\s,+/&|()_\-.]+/).filter((t) => t.length >= 2),
-        ...emailHandle.split(/[\s,+/&|()_\-.]+/).filter((t) => t.length >= 2),
-      ])
-    );
-
-    // Scoring-based matching: higher score = better match
-    const matchScore = (tName: string, tId: string): number => {
-      if (!tName && !tId) return 0;
-      const targetName = (tName || '').toLowerCase().trim();
-      const targetId = (tId || '').toLowerCase().trim();
-
-      // Exact UID match = highest priority
-      if (uidLower && (targetId === uidLower || targetId.includes(uidLower))) return 100;
-
-      // Exact full name match
-      if (nameLower && targetName === nameLower) return 90;
-
-      // Name contains or is contained (partial match)
-      if (nameLower && (targetName.includes(nameLower) || nameLower.includes(targetName))) return 80;
-
-      // Email handle match
-      if (emailHandle && (targetName.includes(emailHandle) || targetId.includes(emailHandle) || emailHandle.includes(targetName))) return 75;
-
-      // Token-level match (individual name words e.g. "Dwi" in "Dwi & Wandi", "Andi" in "Andi & Dede")
-      const targetTokens = targetName.split(/[\s,+/&|()_\-.]+/).filter((t) => t.length >= 2);
-      const hasTokenMatch = nameTokens.some((tok) =>
-        targetTokens.some((tTok) => tTok === tok || (tok.length >= 3 && (tTok.includes(tok) || tok.includes(tTok))))
-      );
-      if (hasTokenMatch) return 70;
-
-      if (nameTokens.some((tok) => targetName.includes(tok) || targetId.includes(tok))) return 60;
-
-      return 0;
-    };
-
-    const scored = list.map((t) => {
-      const kurirScore = matchScore(t.petugasName, t.petugasId);
-      const kenekScore = matchScore(t.kenekName || '', t.kenekId || '');
-      return { task: t, score: Math.max(kurirScore, kenekScore) };
-    });
-
-    const filtered = scored
-      .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map((s) => s.task);
-
-    // If user specified identity but nothing matched, and there are tasks in batch
-    if (filtered.length === 0 && list.length > 0) {
-      console.warn(
-        `[subscribeKurirTasks] No direct match for user (uid=${uidLower}, name=${nameLower}, email=${emailHandle}) in ${list.length} tasks:`,
-        list.map((t) => ({ petugasName: t.petugasName, petugasId: t.petugasId, kenekName: t.kenekName }))
-      );
-
-      // Fallback: broad word-level / token matching
-      const fallbackMatches = list.filter((t) => {
-        const pName = (t.petugasName || '').toLowerCase();
-        const pId = (t.petugasId || '').toLowerCase();
-        const kName = (t.kenekName || '').toLowerCase();
-        const allText = `${pName} ${pId} ${kName}`;
-        return nameTokens.some((tok) => allText.includes(tok));
-      });
-
-      if (fallbackMatches.length > 0) {
-        console.log(`[subscribeKurirTasks] Fallback matched ${fallbackMatches.length} tasks`);
-        callback(fallbackMatches);
-        return;
-      }
-    }
+    // UIDs are case-sensitive and authoritative. Names are used only for supervisor previews.
+    const selectedName = userDisplayName.trim().toLocaleLowerCase();
+    const filtered = userUid
+      ? list.filter((task) => isMbgTaskAssignedTo(task, userUid))
+      : list.filter((task) => !selectedName ||
+          task.petugasName.trim().toLocaleLowerCase() === selectedName ||
+          task.kenekName?.trim().toLocaleLowerCase() === selectedName);
 
     callback(filtered);
   }, onError);
@@ -116,32 +44,51 @@ export async function updateTaskStatus(
   taskId: string,
   status: MbgDeliveryStatus
 ): Promise<void> {
+  if (status === 'delivered') throw new Error('Gunakan penyelesaian pengiriman untuk memvalidasi seluruh bukti.');
   const updates: Partial<MbgDeliveryTask> = {
     status,
     updatedAt: new Date().toISOString(),
   };
-  if (status === 'delivered') {
-    updates.completedAt = new Date().toISOString();
-  }
   await updateDoc(doc(db, DELIVERY_COLLECTION, taskId), updates);
 }
 
-/** Mark a task complete and promote the batch only after every task is complete. */
+/** Validate fresh task, batch and per-school evidence before committing completion. */
 export async function completeTaskAndBatch(task: MbgDeliveryTask): Promise<void> {
-  await updateTaskStatus(task.id, 'delivered');
-  try {
-    const taskSnapshot = await getDocs(query(collection(db, DELIVERY_COLLECTION), where('batchId', '==', task.batchId)));
-    const allDelivered = taskSnapshot.docs.every((item) =>
-      item.id === task.id || item.data().status === 'delivered'
-    );
-    if (allDelivered) {
-      await updateDoc(doc(db, 'mbg_pm_batches', task.batchId), {
-        status: 'DELIVERED',
-        updatedAt: new Date().toISOString(),
-      });
+  const taskRef = doc(db, DELIVERY_COLLECTION, task.id);
+  await runTransaction(db, async (transaction) => {
+    const taskSnapshot = await transaction.get(taskRef);
+    if (!taskSnapshot.exists()) throw new Error('Tugas pengiriman tidak ditemukan.');
+    const currentTask = taskSnapshot.data() as MbgDeliveryTask;
+    if (currentTask.status === 'delivered') return;
+    if (currentTask.status !== 'delivering') throw new Error('Mulai pengantaran sebelum menyelesaikan tugas.');
+    const batchSnapshot = await transaction.get(doc(db, 'mbg_pm_batches', currentTask.batchId));
+    if (!batchSnapshot.exists() || batchSnapshot.data().productionCookingStatus !== 'cooked') {
+      throw new Error('Produksi harus selesai sebelum pengiriman diselesaikan.');
     }
-  } catch (err) {
-    console.warn('[completeTaskAndBatch] Warning checking batch allDelivered (likely read quota):', err);
+    if (!currentTask.entryIds?.length) throw new Error('Tugas belum memiliki tujuan pengiriman.');
+    const entries = await Promise.all(currentTask.entryIds.map((id) =>
+      transaction.get(doc(db, 'mbg_pm_entries', id))));
+    let activeCount = 0;
+    for (const snapshot of entries) {
+      if (!snapshot.exists()) throw new Error('Tujuan pengiriman tidak ditemukan.');
+      const entry = snapshot.data() as MbgPmEntry;
+      if (entry.batchId !== currentTask.batchId || entry.assignedPetugasId !== currentTask.petugasId) {
+        throw new Error('Penugasan telah berubah. Muat ulang tugas pengiriman.');
+      }
+      if (!entry.isSekolahLibur) {
+        activeCount++;
+        if (!hasCompleteMbgProof(entry)) throw new Error('Lengkapi empat foto bukti di setiap tujuan sebelum menyelesaikan pengiriman.');
+      }
+    }
+    if (!activeCount) throw new Error('Tidak ada tujuan aktif untuk diselesaikan.');
+    transaction.update(taskRef, { status: 'delivered', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  });
+
+  // Read all tasks, including those of other couriers, before promoting the shared batch.
+  const taskSnapshot = await getDocs(query(collection(db, DELIVERY_COLLECTION), where('batchId', '==', task.batchId)));
+  const activeTasks = taskSnapshot.docs.filter((item) => item.data().entryIds?.length > 0);
+  if (activeTasks.length && activeTasks.every((item) => item.data().status === 'delivered')) {
+    await updateDoc(doc(db, 'mbg_pm_batches', task.batchId), { status: 'DELIVERED', updatedAt: new Date().toISOString() });
   }
 }
 
@@ -159,18 +106,14 @@ export async function setHandoverPhoto(
 
 export async function addDeliveryPhoto(
   taskId: string,
-  currentPhotos: MbgDeliveryTask['deliveryPhotos'],
+  _currentPhotos: MbgDeliveryTask['deliveryPhotos'],
   newPhoto: { fileId: string; description: string; institutionName: string }
 ): Promise<void> {
   if (!taskId || taskId.startsWith('virt-task-')) return;
-  try {
-    await updateDoc(doc(db, DELIVERY_COLLECTION, taskId), {
-      deliveryPhotos: [...(currentPhotos || []), newPhoto],
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.warn('Failed adding photo to delivery task:', err);
-  }
+  await updateDoc(doc(db, DELIVERY_COLLECTION, taskId), {
+    deliveryPhotos: arrayUnion(newPhoto),
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export async function compressImageBase64(

@@ -164,7 +164,7 @@ export function HandoverPage() {
     const fetchCouriers = async () => {
       try {
         const { collection, getDocs, query, where } = await import("firebase/firestore");
-        const q = query(collection(db, "users"), where("role", "==", "kurir"));
+        const q = query(collection(db, "users"), where("role", "in", ["kurir", "kurir_katering"]));
         const snap = await getDocs(q);
         const list = snap.docs.map(doc => {
           const data = doc.data();

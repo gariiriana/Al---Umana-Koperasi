@@ -137,7 +137,7 @@ export function DeliverySchedulerPage() {
     // 2. Fetch couriers
     async function fetchCouriers() {
       try {
-        const q = query(collection(db, "users"), where("role", "==", "kurir"));
+        const q = query(collection(db, "users"), where("role", "in", ["kurir", "kurir_katering"]));
         const snap = await getDocs(q);
         const list = snap.docs.map(doc => {
           const data = doc.data();

@@ -113,8 +113,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
           userDocRef,
           async (docSnap) => {
             if (docSnap.exists()) {
-              const data = docSnap.data() as UserProfile;
-              setProfile(data);
+              const data = docSnap.data();
+              // Support the descriptive catering alias without rewriting stored roles.
+              setProfile({ ...data, uid: nextUser.uid, role: data.role === 'kurir_katering' ? 'kurir' : data.role } as UserProfile);
               setLoading(false);
             } else {
               console.warn(`No user profile found for UID: ${nextUser.uid}. Auto-provisioning default profile...`);

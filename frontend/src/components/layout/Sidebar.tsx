@@ -3,8 +3,10 @@ import { NavLink, Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { ROLE_PERMISSIONS, ROLE_DEFAULT_REDIRECT } from "@/constants/roles";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { subscribeOrders } from "@/services/realtimeService";
+import { useAuth } from "@/contexts/AuthContext";
+import { subscribeCourierOrders, subscribeOrders } from "@/services/realtimeService";
 import { isOrderPastDeadline } from "@/lib/orderHelpers";
+import type { Order } from '@/types/order';
 import {
   Calendar,
   ChevronUp,
@@ -183,6 +185,7 @@ export function Sidebar({
   onClose,
 }: SidebarProps) {
   const { lang } = useLanguage();
+  const { user } = useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [hasPastDeadlineOrders, setHasPastDeadlineOrders] = useState(false);
 
@@ -191,18 +194,17 @@ export function Sidebar({
     const isRelevantRole = ["admin", "tim_produksi", "distribusi", "monitoring", "kurir", "produksi_1", "distribusi_1", "produksi_2", "distribusi_2", "mo_katering", "co_mo_katering"].includes(userRole);
     if (!isRelevantRole) return;
 
-    const unsubscribe = subscribeOrders(
-      (orders) => {
-        const anyPast = orders.some((o) => isOrderPastDeadline(o));
-        setHasPastDeadlineOrders(anyPast);
-      },
-      (err) => {
-        console.error("Sidebar orders subscription error:", err);
-      }
-    );
+    const listener = (orders: Order[]) =>
+      setHasPastDeadlineOrders(orders.some(isOrderPastDeadline));
+    const onError = (err: Error) => console.error("Sidebar orders subscription error:", err);
+    if (userRole === 'kurir') {
+      if (!user?.uid) return;
+      return subscribeCourierOrders(user.uid, listener, onError);
+    }
+    const unsubscribe = subscribeOrders(listener, onError);
 
     return () => unsubscribe();
-  }, [userRole]);
+  }, [userRole, user?.uid]);
 
   const allowedItems = SIDEBAR_NAV_ITEMS.filter((item) => {
     if (!userRole) return false;

@@ -93,7 +93,9 @@ export function subscribeKurirUsers(
   const allowedRoles = [
     'kurir_mbg',
     'kurir',
+    'kurir_katering',
     'distribusi_mbg',
+    'distribusi_mbg_2',
     'distribusi',
     'admin',
     'admin_mbg',

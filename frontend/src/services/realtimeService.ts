@@ -214,6 +214,16 @@ export function subscribeOrders(
   );
 }
 
+/** Courier queries carry the same UID ownership constraint as Firestore rules. */
+export function subscribeCourierOrders(
+  courierUid: string,
+  listener: (orders: Order[]) => void,
+  onError?: (err: Error) => void,
+): Unsubscribe {
+  const q = query(collection(db, "orders"), where("assignedCourierId", "==", courierUid));
+  return subscriptionManager.subscribe(q, (snap) => listener(snap.docs.map(snapshotToOrder)), onError);
+}
+
 /**
  * Subscribe to orders filtered by a single status.
  *
