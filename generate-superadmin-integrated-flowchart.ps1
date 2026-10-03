@@ -1,4 +1,4 @@
-Add-Type -AssemblyName System.Drawing
+ Add-Type -AssemblyName System.Drawing
 
 $W=3000;$H=3400
 $img=New-Object System.Drawing.Bitmap $W,$H
