@@ -648,6 +648,12 @@ export interface MbgRealisasiPembelianRow {
   totalHarga: number;
 }
 
+export interface MbgPesananBahanSource {
+  sheetName: string;
+  sourceUrl: string;
+  importedAt: string;
+}
+
 export interface MbgInspectionFormRow {
   jenisBahan: string;
   banyaknya: number;
@@ -680,6 +686,8 @@ export interface MbgProductionDailyReport {
   totalPengeluaran: number;
   totalAnggaran: number;
   selisih: number;
+  /** Asal data Daftar Pesanan Bahan (import spreadsheet pesanan bahan terpisah). */
+  pesananBahanSource?: MbgPesananBahanSource;
   inspectionForm: {
     dari: string;
     kepada: string;

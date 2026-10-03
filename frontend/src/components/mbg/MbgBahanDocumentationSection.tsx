@@ -27,6 +27,7 @@ import type {
   MbgPmBatch,
   MbgBahanDocumentation,
   MbgBahanPhotoItem,
+  MbgInspectionFormRow,
   MbgProductionDailyReport,
 } from '@/types/mbg';
 import {
@@ -94,6 +95,22 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
     return () => unsub();
   }, []);
 
+  // Daftar bahan dari Produksi MBG (utama: Daftar Pesanan Bahan hasil import).
+  // Dibandingkan per isi agar update laporan batch lain tidak mereset foto yang belum disimpan.
+  const extractedKey = JSON.stringify(extractIngredientsFromDailyReport(dailyReport));
+  const reportItems = useMemo<MbgBahanPhotoItem[]>(
+    () =>
+      (JSON.parse(extractedKey) as MbgInspectionFormRow[]).map((r, idx) => ({
+        id: `item-${idx}-${r.jenisBahan}`,
+        namaBahan: r.jenisBahan,
+        kuantitas: r.banyaknya,
+        satuan: r.satuan,
+        photoUrl: undefined,
+        catatan: r.notes || '',
+      })),
+    [extractedKey]
+  );
+
   // 3. Populate items when batch, savedDoc, or dailyReport changes
   useEffect(() => {
     if (savedDoc) {
@@ -103,33 +120,30 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
       return;
     }
 
-    if (selectedBatch) {
-      // Extract from daily report
-      const extracted = extractIngredientsFromDailyReport(dailyReport);
-      if (extracted.length > 0) {
-        const photoItems: MbgBahanPhotoItem[] = extracted.map((r, idx) => ({
-          id: `item-${idx}-${Date.now()}`,
-          namaBahan: r.jenisBahan,
-          kuantitas: r.banyaknya,
-          satuan: r.satuan,
-          photoUrl: undefined,
-          kondisi: r.isBaik ? 'baik' : 'rusak',
-          catatan: r.notes || '',
-        }));
-        setItems(photoItems);
-      } else {
-        // Fallback standard ingredients
-        setItems([
-          { id: '1', namaBahan: 'Beras Medium / Premium', kuantitas: 250, satuan: 'kg', kondisi: 'baik' },
-          { id: '2', namaBahan: 'Daging Ayam Broiler', kuantitas: 180, satuan: 'kg', kondisi: 'baik' },
-          { id: '3', namaBahan: 'Telur Ayam Ras', kuantitas: 220, satuan: 'butir', kondisi: 'baik' },
-          { id: '4', namaBahan: 'Wortel Segar', kuantitas: 35, satuan: 'kg', kondisi: 'baik' },
-          { id: '5', namaBahan: 'Buncis', kuantitas: 25, satuan: 'kg', kondisi: 'baik' },
-          { id: '6', namaBahan: 'Tempe Kedelai', kuantitas: 40, satuan: 'papan', kondisi: 'baik' },
-        ]);
-      }
+    setItems(selectedBatch ? reportItems : []);
+  }, [selectedBatch, savedDoc, reportItems, user?.displayName]);
+
+  // Muat ulang daftar bahan terbaru dari Produksi MBG. Foto, kondisi, dan catatan
+  // yang sudah diisi petugas tetap dipertahankan untuk bahan dengan nama yang sama.
+  const handleReloadFromReport = () => {
+    if (reportItems.length === 0) {
+      showToast({ message: 'Belum ada Daftar Pesanan Bahan untuk batch ini di Produksi MBG.', variant: 'info' });
+      return;
     }
-  }, [selectedBatch, savedDoc, dailyReport, user?.displayName]);
+    if (!window.confirm('Muat ulang daftar bahan dari Daftar Pesanan Bahan terbaru? Bahan yang tidak ada di daftar baru akan dihapus dari dokumentasi ini.')) {
+      return;
+    }
+    const existingByName = new Map(items.map((it) => [it.namaBahan.trim().toLowerCase(), it]));
+    setItems(
+      reportItems.map((it) => {
+        const prev = existingByName.get(it.namaBahan.trim().toLowerCase());
+        return prev
+          ? { ...it, photoUrl: prev.photoUrl, waktuFoto: prev.waktuFoto, kondisi: prev.kondisi, catatan: prev.catatan || it.catatan }
+          : it;
+      })
+    );
+    showToast({ message: `Daftar bahan dimuat ulang (${reportItems.length} bahan). Klik "Simpan ke Arsip" untuk menyimpan.`, variant: 'success' });
+  };
 
   // Update a single item
   const handleUpdateItem = (index: number, updates: Partial<MbgBahanPhotoItem>) => {
@@ -406,8 +420,28 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
                 className="bg-white/10 border border-white/20 rounded-lg px-2.5 py-1 text-white text-xs font-bold outline-hidden focus:bg-white/20"
                 placeholder="Nama Petugas"
               />
+              {savedDoc && (
+                <button
+                  type="button"
+                  onClick={handleReloadFromReport}
+                  className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 border border-white/25 text-white text-[11px] font-extrabold cursor-pointer transition-colors"
+                  title="Ambil daftar bahan terbaru dari Daftar Pesanan Bahan di Produksi MBG"
+                >
+                  <History className="h-3.5 w-3.5" />
+                  <span>Muat ulang dari Daftar Pesanan Bahan</span>
+                </button>
+              )}
             </div>
           </div>
+
+          {items.length === 0 && (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center">
+              <p className="text-sm font-bold text-slate-700">Belum ada daftar bahan untuk batch ini</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Import Daftar Pesanan Bahan dulu di Produksi MBG, atau tambahkan bahan secara manual.
+              </p>
+            </div>
+          )}
 
           {/* Cards Grid: Per Bahan */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

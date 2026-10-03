@@ -1498,7 +1498,7 @@ export function createEmptyPortionData(
   };
 }
 
-function createEmptyReport(
+export function createEmptyReport(
   batchId: string,
   tanggal: string,
   sheetDayName: string

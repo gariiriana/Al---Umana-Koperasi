@@ -26,10 +26,12 @@ import {
   subscribeCustomRecipes, addCustomRecipe, updateCustomRecipe, deleteCustomRecipe,
   subscribeRecipeAdjustments, saveRecipeAdjustment, deleteRecipeAdjustment,
   subscribeDailyReport, saveDailyReport, deleteDailyReport, subscribeAllDailyReports,
+  getDailyReportByBatch, saveDailyReportPesananBahan,
 } from '@/services/mbgProductionService';
 import { export8PageDailyReportPdf } from '@/utils/dailyReportPdfExporter';
 import { exportProductionDocx } from '@/utils/mbgProductionDocxGenerator';
-import { parseProductionSheetRows, parsePenerimaManfaatSheet } from '@/utils/productionSheetParser';
+import { parseProductionSheetRows, parsePenerimaManfaatSheet, createEmptyReport } from '@/utils/productionSheetParser';
+import { parsePesananBahanSheet } from '@/utils/pesananBahanSheetParser';
 import { updateBatchStatus, updateBatch, updateBatchCookingStatus } from '@/services/mbgAdminService';
 import { getJakartaDate } from '@/utils/date';
 import { isSummaryOrCategoryRow } from '@/utils/mbgPmFilter';
@@ -192,10 +194,15 @@ export function MbgProductionPage() {
 
   // Google Sheets & Excel Import States
   const [showSheetsImportModal, setShowSheetsImportModal] = useState(false);
-  const [sheetsUrlInput, setSheetsUrlInput] = useState('https://docs.google.com/spreadsheets/d/1uvsEHj7p11l0tZZqWB_t9khlzUpNZM5okGyVswH4_8U/edit?usp=sharing');
+  // Dua jenis import: laporan harian produksi (gizi/porsi) dan Daftar Pesanan Bahan (spreadsheet terpisah)
+  const [importMode, setImportMode] = useState<'produksi' | 'bahan'>('produksi');
+  const [sheetsUrlInput, setSheetsUrlInput] = useState('https://docs.google.com/spreadsheets/d/1_7PyJq9usjBjY50PHqQmz5gKjAlGoWK3HgH0Mu0hCyU/edit?usp=sharing');
+  const [bahanSheetsUrlInput, setBahanSheetsUrlInput] = useState('https://docs.google.com/spreadsheets/d/1zagyp5lyWKG9_74S3zkW8STzmlz1rd2cvO6CYvFeeco/edit?usp=sharing');
   const [importingSheets, setImportingSheets] = useState(false);
   const [availableSheetNames, setAvailableSheetNames] = useState<string[]>([]);
   const [sheetWorkbook, setSheetWorkbook] = useState<XLSX.WorkBook | null>(null);
+  // Sumber workbook yang sedang terbaca (link/file), ditampilkan agar user yakin tab berasal dari link yang benar
+  const [loadedWorkbookSource, setLoadedWorkbookSource] = useState<{ label: string; url: string } | null>(null);
   const [importTargetOption, setImportTargetOption] = useState<'current_batch' | 'sheet_date'>('current_batch');
   const [importTargetBatch, setImportTargetBatch] = useState<{ id: string; tanggal: string } | null>(null);
   const [pmImportWeek, setPmImportWeek] = useState<1 | 2 | 3 | 4>(1);
@@ -440,11 +447,21 @@ export function MbgProductionPage() {
   // Freeze the active batch when the import dialog opens. This prevents a
   // realtime batch refresh from redirecting an in-progress import to a
   // different date.
-  const openSheetsImportModal = () => {
+  const resetLoadedWorkbook = () => {
+    setSheetWorkbook(null);
+    setAvailableSheetNames([]);
+    setLoadedWorkbookSource(null);
+  };
+
+  const openSheetsImportModal = (mode: 'produksi' | 'bahan') => {
     setImportTargetBatch(
       selectedBatch ? { id: selectedBatch.id, tanggal: selectedBatch.tanggal } : null
     );
-    setImportTargetOption('current_batch');
+    // Tab pesanan bahan dinamai per tanggal, jadi default-nya ikut tanggal pada nama tab
+    setImportTargetOption(mode === 'bahan' ? 'sheet_date' : 'current_batch');
+    setImportMode(mode);
+    // Workbook selalu dibaca ulang dari link, jangan pakai hasil baca sebelumnya
+    resetLoadedWorkbook();
     setShowSheetsImportModal(true);
   };
 
@@ -1673,35 +1690,51 @@ export function MbgProductionPage() {
   }
 
   const handleFetchGoogleSheets = async () => {
-    if (!sheetsUrlInput.trim()) {
+    const inputUrl = (importMode === 'bahan' ? bahanSheetsUrlInput : sheetsUrlInput).trim();
+    if (!inputUrl) {
       showToast({ message: 'Masukkan URL Google Sheets terlebih dahulu!', variant: 'info' });
       return;
     }
 
     try {
       setImportingSheets(true);
-      let fetchUrl = sheetsUrlInput.trim();
+      resetLoadedWorkbook();
+      let fetchUrl = inputUrl;
+      let sourceLabel = inputUrl;
 
       // Check if Google Sheets URL
-      const match = fetchUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      const match = fetchUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
       if (match && match[1]) {
         const spreadsheetId = match[1];
-        fetchUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=xlsx`;
+        // Parameter waktu mencegah browser memakai salinan spreadsheet lama dari cache
+        fetchUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=xlsx&t=${Date.now()}`;
+        sourceLabel = `Google Sheets ID ${spreadsheetId}`;
+      } else if (inputUrl.includes('docs.google.com')) {
+        throw new Error('Link Google Sheets tidak valid. Gunakan link dengan format https://docs.google.com/spreadsheets/d/<ID>/edit');
       }
 
-      const res = await fetch(fetchUrl);
+      const res = await fetch(fetchUrl, { cache: 'no-store' });
       if (!res.ok) {
         throw new Error(`Gagal mengunduh Google Sheets. Status: ${res.status}. Pastikan link spreadsheet dapat diakses publik (Anyone with link).`);
+      }
+      // Spreadsheet privat dibalas halaman login (HTML), bukan file Excel
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('text/html')) {
+        throw new Error('Link tidak bisa dibaca sebagai spreadsheet. Pastikan akses link diatur "Anyone with the link" (siapa saja yang memiliki link).');
       }
 
       const arrayBuffer = await res.arrayBuffer();
       const wb = XLSX.read(arrayBuffer, { type: 'array' });
+      if (!wb.SheetNames.length) {
+        throw new Error('Spreadsheet terbaca tetapi tidak memiliki sheet/tab.');
+      }
       setSheetWorkbook(wb);
+      setLoadedWorkbookSource({ label: sourceLabel, url: inputUrl });
 
       const sheetNames = getVisibleSheetNames(wb);
       setAvailableSheetNames(sheetNames);
 
-      showToast({ message: `Spreadsheet berhasil dibaca! Ditemukan ${sheetNames.length} sheet/tab aktif. Silakan pilih sheet hari yang ingin di-import.`, variant: 'success' });
+      showToast({ message: `Spreadsheet berhasil dibaca! Ditemukan ${sheetNames.length} sheet/tab aktif. Silakan pilih sheet yang ingin di-import.`, variant: 'success' });
     } catch (err: unknown) {
       console.error(err);
       const errMsg = err instanceof Error ? err.message : 'Gagal membaca link Google Sheets';
@@ -1717,9 +1750,11 @@ export function MbgProductionPage() {
 
     try {
       setImportingSheets(true);
+      resetLoadedWorkbook();
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data, { type: 'array' });
       setSheetWorkbook(wb);
+      setLoadedWorkbookSource({ label: `File ${file.name}`, url: file.name });
 
       const sheetNames = getVisibleSheetNames(wb);
       setAvailableSheetNames(sheetNames);
@@ -1885,21 +1920,29 @@ export function MbgProductionPage() {
         });
       }
 
-      const existingReportId = dailyReport?.batchId === targetBatchId ? dailyReport.id : null;
-      const savedReportId = await saveDailyReport(existingReportId, {
+      // Daftar Pesanan Bahan (PO, realisasi, QC, total belanja) hanya diisi lewat
+      // Import Daftar Pesanan Bahan; pertahankan data yang sudah ada di batch ini.
+      const existingReport = await getDailyReportByBatch(targetBatchId);
+      const reportToSave: Omit<MbgProductionDailyReport, 'id'> = {
         ...parsedReport,
+        poRows: existingReport?.poRows || [],
+        realisasiPembelianRows: existingReport?.realisasiPembelianRows || [],
+        totalPengeluaran: existingReport?.totalPengeluaran || 0,
+        totalAnggaran: existingReport?.totalAnggaran || 0,
+        selisih: existingReport?.selisih || 0,
+        pesananBahanSource: existingReport?.pesananBahanSource,
+        inspectionForm: {
+          ...parsedReport.inspectionForm,
+          rows: existingReport?.inspectionForm?.rows || [],
+        },
         batchId: targetBatchId,
         tanggal: targetBatchTanggal,
         createdBy: user?.uid || '',
-      });
+      };
 
-      setDailyReport({
-        id: savedReportId,
-        ...parsedReport,
-        batchId: targetBatchId,
-        tanggal: targetBatchTanggal,
-        createdBy: user?.uid || '',
-      });
+      const savedReportId = await saveDailyReport(existingReport?.id || null, reportToSave);
+
+      setDailyReport({ id: savedReportId, ...reportToSave });
 
       // DO NOT overwrite PM entries if the batch already has entries from Admin MBG!
       // Admin MBG is the single source of truth for Penerima Manfaat.
@@ -1935,6 +1978,88 @@ export function MbgProductionPage() {
     } catch (err: unknown) {
       console.error('Parse Sheet error:', err);
       showToast({ message: 'Gagal memproses sheet ter-pilih', variant: 'error' });
+    } finally {
+      setImportingSheets(false);
+    }
+  };
+
+  const handleSelectBahanSheet = async (sheetName: string) => {
+    if (!sheetWorkbook || !loadedWorkbookSource) return;
+    const ws = sheetWorkbook.Sheets[sheetName];
+    if (!ws) {
+      showToast({ message: `Sheet '${sheetName}' tidak ditemukan di spreadsheet yang terbaca.`, variant: 'error' });
+      return;
+    }
+
+    try {
+      setImportingSheets(true);
+
+      // Tanggal batch mengikuti nama tab (mis. 02102026). Kolom TANGGAL pada sheet
+      // berisi tanggal belanja sehingga hanya dipakai bila nama tab bukan tanggal.
+      const sheetDate = parseSheetNameToDate(sheetName);
+      const useCurrentBatch = importTargetOption === 'current_batch' && !!(importTargetBatch?.tanggal || selectedBatch?.tanggal);
+      const activeBatchTanggal = importTargetBatch?.tanggal || selectedBatch?.tanggal || '';
+      if (
+        useCurrentBatch &&
+        sheetDate &&
+        sheetDate !== activeBatchTanggal &&
+        !window.confirm(
+          `Tab '${sheetName}' adalah data tanggal ${sheetDate}, tetapi target import adalah Batch Aktif ${activeBatchTanggal}.\n\nTetap import ke batch ${activeBatchTanggal}?`
+        )
+      ) {
+        return;
+      }
+      const fallbackTanggal = useCurrentBatch
+        ? (importTargetBatch?.tanggal || selectedBatch?.tanggal || getJakartaDate())
+        : (sheetDate || selectedBatch?.tanggal || getJakartaDate());
+
+      // Validasi isi sheet dulu sebelum membuat/memilih batch
+      const finalParsed = parsePesananBahanSheet(ws, { fallbackTanggal });
+      if (finalParsed.poRows.length === 0) {
+        showToast({ message: `Tidak ada baris bahan yang terbaca di sheet '${sheetName}'.`, variant: 'error' });
+        return;
+      }
+
+      const targetBatchTanggal = !useCurrentBatch && !sheetDate && finalParsed.tanggal ? finalParsed.tanggal : fallbackTanggal;
+      let targetBatchId = useCurrentBatch ? (importTargetBatch?.id || selectedBatchId || '') : '';
+      if (!targetBatchId) {
+        const existingBatch = batches.find((b) => b.tanggal === targetBatchTanggal);
+        targetBatchId = existingBatch
+          ? existingBatch.id
+          : await createBatch(targetBatchTanggal, user?.uid || 'user', false, weeklySchedule);
+      }
+
+      await saveDailyReportPesananBahan(
+        { ...createEmptyReport(targetBatchId, targetBatchTanggal, sheetName), createdBy: user?.uid || '' },
+        {
+          poRows: finalParsed.poRows,
+          realisasiPembelianRows: finalParsed.realisasiPembelianRows,
+          totalPengeluaran: finalParsed.totalPengeluaran,
+          totalAnggaran: finalParsed.totalAnggaran,
+          selisih: finalParsed.selisih,
+          inspectionRows: finalParsed.inspectionRows,
+          pesananBahanSource: {
+            sheetName,
+            sourceUrl: loadedWorkbookSource.url,
+            importedAt: new Date().toISOString(),
+          },
+        }
+      );
+
+      setSelectedBatchId(targetBatchId);
+      setShowImportedDetails(true);
+      setDailyReportSubTab('po');
+      setShowSheetsImportModal(false);
+      setActiveTab('pm-data');
+
+      showToast({
+        message: `Berhasil meng-import ${finalParsed.poRows.length} item Daftar Pesanan Bahan (${sheetName}) ke Batch ${targetBatchTanggal}. Total belanja Rp ${finalParsed.totalPengeluaran.toLocaleString('id-ID')}.`,
+        variant: 'success',
+      });
+    } catch (err: unknown) {
+      console.error('Import Daftar Pesanan Bahan error:', err);
+      const errMsg = err instanceof Error ? err.message : 'Gagal meng-import Daftar Pesanan Bahan';
+      showToast({ message: errMsg, variant: 'error' });
     } finally {
       setImportingSheets(false);
     }
@@ -2002,12 +2127,20 @@ export function MbgProductionPage() {
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={openSheetsImportModal}
+            onClick={() => openSheetsImportModal('produksi')}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#10B981] hover:bg-[#059669] text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap"
             title="Import data Laporan Harian via Google Sheets Link / File Excel"
           >
             <FileUp className="h-4 w-4 text-white" />
             <span>Import Google Sheets / Excel</span>
+          </button>
+          <button
+            onClick={() => openSheetsImportModal('bahan')}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold rounded-xl shadow transition-colors cursor-pointer whitespace-nowrap"
+            title="Import Daftar Pesanan Bahan dari spreadsheet pesanan bahan"
+          >
+            <Truck className="h-4 w-4 text-white" />
+            <span>Import Daftar Pesanan Bahan</span>
           </button>
           {activeTab === 'nutrition' && selectedBatchId && (
             <>
@@ -2513,7 +2646,7 @@ export function MbgProductionPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={openSheetsImportModal}
+                    onClick={() => openSheetsImportModal('produksi')}
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                   >
                     <FileUp className="h-4 w-4" />
@@ -2586,7 +2719,7 @@ export function MbgProductionPage() {
                         </div>
 
                         {/* Metric Overview Grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs font-['Hanken_Grotesk']">
+                        <div className={`grid grid-cols-2 sm:grid-cols-3 ${curReport.pesananBahanSource ? 'lg:grid-cols-4' : 'lg:grid-cols-6'} gap-2.5 text-xs font-['Hanken_Grotesk']`}>
                           <div className="bg-white/90 rounded-xl p-2.5 border border-emerald-100 shadow-xs">
                             <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Porsi</span>
                             <span className="text-sm font-black text-slate-900">
@@ -2623,6 +2756,23 @@ export function MbgProductionPage() {
                               Rp {(curReport.totalPengeluaran || 0).toLocaleString('id-ID')}
                             </span>
                           </div>
+                          {/* Dari tabel Daftar Pesanan Bahan yang di-import */}
+                          {curReport.pesananBahanSource && (
+                            <>
+                              <div className="bg-white/90 rounded-xl p-2.5 border border-emerald-100 shadow-xs">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Anggaran</span>
+                                <span className="text-xs font-black text-slate-900">
+                                  Rp {(curReport.totalAnggaran || 0).toLocaleString('id-ID')}
+                                </span>
+                              </div>
+                              <div className="bg-white/90 rounded-xl p-2.5 border border-emerald-100 shadow-xs">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase block">Selisih</span>
+                                <span className={`text-xs font-black ${(curReport.selisih || 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                                  Rp {(curReport.selisih || 0).toLocaleString('id-ID')}
+                                </span>
+                              </div>
+                            </>
+                          )}
                         </div>
 
                         {/* Menu List Badges */}
@@ -2669,7 +2819,7 @@ export function MbgProductionPage() {
                           </div>
                           <button
                             type="button"
-                            onClick={openSheetsImportModal}
+                            onClick={() => openSheetsImportModal('produksi')}
                             className="inline-flex shrink-0 items-center gap-2 px-3.5 py-2 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-extrabold transition-all shadow-xs cursor-pointer"
                           >
                             <FileUp className="h-4 w-4" />
@@ -3806,10 +3956,16 @@ export function MbgProductionPage() {
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white">
               <div>
                 <h3 className="text-base font-extrabold flex items-center gap-2">
-                  <span>📥 Import Google Sheets / Excel Laporan Harian</span>
+                  <span>
+                    {importMode === 'bahan'
+                      ? '🚚 Import Daftar Pesanan Bahan'
+                      : '📥 Import Google Sheets / Excel Laporan Harian'}
+                  </span>
                 </h3>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  Paste Link Google Sheets atau upload file Excel (.xlsx) untuk men-generate Laporan Harian Produksi
+                  {importMode === 'bahan'
+                    ? 'Paste link spreadsheet pesanan bahan, lalu pilih tab tanggal yang ingin diterapkan ke tabel Daftar Pesanan Bahan'
+                    : 'Paste Link Google Sheets atau upload file Excel (.xlsx) untuk men-generate Laporan Harian Produksi (gizi & porsi)'}
                 </p>
               </div>
               <button
@@ -3829,8 +3985,13 @@ export function MbgProductionPage() {
                 <div className="flex gap-2">
                   <input
                     type="url"
-                    value={sheetsUrlInput}
-                    onChange={(e) => setSheetsUrlInput(e.target.value)}
+                    value={importMode === 'bahan' ? bahanSheetsUrlInput : sheetsUrlInput}
+                    onChange={(e) => {
+                      if (importMode === 'bahan') setBahanSheetsUrlInput(e.target.value);
+                      else setSheetsUrlInput(e.target.value);
+                      // Link berubah: daftar tab lama tidak boleh dipakai lagi
+                      resetLoadedWorkbook();
+                    }}
                     placeholder="https://docs.google.com/spreadsheets/d/1kKXUKYZ.../edit"
                     className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
@@ -3867,8 +4028,82 @@ export function MbgProductionPage() {
                 />
               </div>
 
+              {/* Sumber workbook yang benar-benar terbaca */}
+              {loadedWorkbookSource && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-900">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="font-extrabold">Terbaca dari: {loadedWorkbookSource.label}</p>
+                    <p className="text-emerald-700 break-all">{loadedWorkbookSource.url}</p>
+                    <p className="text-emerald-700">{availableSheetNames.length} tab aktif ditemukan.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Import Daftar Pesanan Bahan: pilih tab tanggal */}
+              {importMode === 'bahan' && availableSheetNames.length > 0 && (
+                <div className="space-y-4 pt-1">
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block">
+                      🎯 Target Batch Tanggal:
+                    </span>
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-5">
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="importTargetOptionBahan"
+                          checked={importTargetOption === 'current_batch'}
+                          onChange={() => setImportTargetOption('current_batch')}
+                          className="text-amber-600 focus:ring-amber-500"
+                        />
+                        <span>Batch Aktif ({importTargetBatch?.tanggal || selectedBatch?.tanggal || 'Hari Ini'})</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="importTargetOptionBahan"
+                          checked={importTargetOption === 'sheet_date'}
+                          onChange={() => setImportTargetOption('sheet_date')}
+                          className="text-amber-600 focus:ring-amber-500"
+                        />
+                        <span>Sesuai Tanggal pada Nama Tab</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+                    <div>
+                      <h4 className="text-xs font-black text-amber-950">
+                        🚚 Daftar Pesanan Bahan ({availableSheetNames.length} Tab):
+                      </h4>
+                      <p className="text-[11px] text-amber-800 mt-0.5">
+                        Pilih tab yang ingin diterapkan. Data gizi & porsi tidak berubah; hanya tabel Daftar Pesanan Bahan, QC penerimaan, dan total belanja yang diganti.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto p-1">
+                      {availableSheetNames.map((sheetName) => {
+                        const parsedDate = parseSheetNameToDate(sheetName);
+                        return (
+                          <button
+                            key={sheetName}
+                            onClick={() => handleSelectBahanSheet(sheetName)}
+                            disabled={importingSheets}
+                            className="py-2.5 px-3 bg-white border border-amber-300 hover:bg-amber-500 hover:text-white text-amber-900 text-xs font-black rounded-xl shadow-xs transition-all text-center cursor-pointer disabled:opacity-50 flex flex-col items-center justify-center gap-0.5"
+                          >
+                            <span>{sheetName}</span>
+                            {parsedDate && (
+                              <span className="text-[10px] font-semibold opacity-75">{parsedDate}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Available Sheet Selection with Smart Categorization */}
-              {availableSheetNames.length > 0 && (() => {
+              {importMode === 'produksi' && availableSheetNames.length > 0 && (() => {
                 const pmSheetNames = availableSheetNames.filter((name) =>
                   name.toLowerCase().includes('penerima manfaat')
                 );
@@ -3971,7 +4206,7 @@ export function MbgProductionPage() {
                             <span>📅 Laporan Harian Operasional ({dailySheetNames.length} Sheet):</span>
                           </h4>
                           <p className="text-[11px] text-emerald-800 mt-0.5">
-                            Pilih sheet tanggal produksi harian untuk meng-import Kandungan Gizi, Pesanan Bahan, Bumbu, PO, & QC:
+                            Pilih sheet tanggal produksi harian untuk meng-import Kandungan Gizi serta rincian bahan & bumbu per porsi. Daftar Pesanan Bahan di-import terpisah lewat tombol &quot;Import Daftar Pesanan Bahan&quot;.
                           </p>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto p-1">

@@ -321,6 +321,57 @@ export async function saveDailyReport(
   return primary.id;
 }
 
+/** Laporan harian terbaru untuk satu batch (null bila belum ada). */
+export async function getDailyReportByBatch(batchId: string): Promise<MbgProductionDailyReport | null> {
+  const snap = await getDocs(query(
+    collection(db, DAILY_REPORTS_COLLECTION),
+    where('batchId', '==', batchId)
+  ));
+  if (snap.empty) return null;
+  const latest = [...snap.docs].sort((a, b) => {
+    const aTime = String(a.data().updatedAt || a.data().createdAt || '');
+    const bTime = String(b.data().updatedAt || b.data().createdAt || '');
+    return bTime.localeCompare(aTime);
+  })[0];
+  return { id: latest.id, ...latest.data() } as MbgProductionDailyReport;
+}
+
+export type DailyReportPesananBahanFields = Pick<
+  MbgProductionDailyReport,
+  'poRows' | 'realisasiPembelianRows' | 'totalPengeluaran' | 'totalAnggaran' | 'selisih' | 'pesananBahanSource'
+> & { inspectionRows: MbgProductionDailyReport['inspectionForm']['rows'] };
+
+/**
+ * Simpan hasil Import Daftar Pesanan Bahan tanpa menyentuh data gizi/porsi.
+ * Bila batch belum punya laporan harian, `emptyReport` dipakai sebagai kerangka.
+ */
+export async function saveDailyReportPesananBahan(
+  emptyReport: Omit<MbgProductionDailyReport, 'id'>,
+  fields: DailyReportPesananBahanFields
+): Promise<string> {
+  const { inspectionRows, ...rest } = fields;
+  const existing = await getDailyReportByBatch(emptyReport.batchId);
+  const now = new Date().toISOString();
+
+  if (existing) {
+    await updateDoc(doc(db, DAILY_REPORTS_COLLECTION, existing.id), cleanUndefinedDeep({
+      ...rest,
+      inspectionForm: { ...(existing.inspectionForm || emptyReport.inspectionForm), rows: inspectionRows },
+      updatedAt: now,
+    }));
+    return existing.id;
+  }
+
+  const ref = await addDoc(collection(db, DAILY_REPORTS_COLLECTION), cleanUndefinedDeep({
+    ...emptyReport,
+    ...rest,
+    inspectionForm: { ...emptyReport.inspectionForm, rows: inspectionRows },
+    createdAt: now,
+    updatedAt: now,
+  }));
+  return ref.id;
+}
+
 export async function deleteDailyReport(id: string): Promise<void> {
   await archiveAndDelete(doc(db, DAILY_REPORTS_COLLECTION, id), 'Laporan produksi harian dihapus');
 }

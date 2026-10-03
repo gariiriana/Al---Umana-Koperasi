@@ -1489,7 +1489,7 @@ export function DailyReportExcelSections({
 
     // Grouping by supplier for recap cards underneath
     const supplierGroups = poList.reduce((acc, row) => {
-      const sup = row.supplier || 'Koperasi Al Umanaa Sejahtera Mandiri';
+      const sup = row.supplier || 'Supplier belum diatur';
       if (!acc[sup]) {
         acc[sup] = {
           items: [],
@@ -1533,6 +1533,22 @@ export function DailyReportExcelSections({
             <span className="px-3 py-1 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-black">
               Total Belanja: {formatRp(grandTotal)}
             </span>
+            {curReport.pesananBahanSource && (
+              <>
+                <span className="px-3 py-1 bg-slate-100 text-slate-900 border border-slate-300 rounded-xl text-xs font-black">
+                  Total Anggaran: {formatRp(curReport.totalAnggaran || 0)}
+                </span>
+                <span
+                  className={`px-3 py-1 rounded-xl text-xs font-black border ${
+                    (curReport.selisih || 0) < 0
+                      ? 'bg-red-100 text-red-900 border-red-300'
+                      : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                  }`}
+                >
+                  Selisih: {formatRp(curReport.selisih || 0)}
+                </span>
+              </>
+            )}
 
             {/* BUTTON 1-CLICK: SET ALL SUPPLIER TO KOPERASI AL UMANAA SEJAHTERA MANDIRI */}
             <button
@@ -1639,9 +1655,15 @@ export function DailyReportExcelSections({
                           <td className="px-3 py-2 text-center text-slate-400">{idx + 1}</td>
                           <td className="px-4 py-2 font-black text-slate-900 border-r border-slate-100">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-300 font-extrabold text-[11px] inline-flex items-center gap-1 shadow-2xs">
-                                {po.supplier || 'Koperasi Al Umanaa Sejahtera Mandiri'}
-                              </span>
+                              {po.supplier ? (
+                                <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-300 font-extrabold text-[11px] inline-flex items-center gap-1 shadow-2xs">
+                                  {po.supplier}
+                                </span>
+                              ) : (
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-slate-400 border border-dashed border-slate-300 font-bold italic text-[11px]">
+                                  Belum diatur
+                                </span>
+                              )}
                               {po.supplier !== 'Koperasi Al Umanaa Sejahtera Mandiri' && (
                                 <button
                                   type="button"
@@ -1771,6 +1793,29 @@ export function DailyReportExcelSections({
                     </td>
                     {isEditing && <td></td>}
                   </tr>
+                  {/* Total Anggaran & Selisih diambil apa adanya dari tabel pesanan bahan yang di-import */}
+                  {curReport.pesananBahanSource && (
+                    <>
+                      <tr className="bg-slate-800 text-white font-black text-xs">
+                        <td colSpan={5} className="px-4 py-2.5 uppercase tracking-wider text-right">
+                          Total Anggaran:
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-extrabold text-sm whitespace-nowrap">
+                          {formatRp(curReport.totalAnggaran || 0)}
+                        </td>
+                        {isEditing && <td></td>}
+                      </tr>
+                      <tr className="bg-slate-800 text-white font-black text-xs border-t border-slate-700">
+                        <td colSpan={5} className="px-4 py-2.5 uppercase tracking-wider text-right">
+                          Selisih:
+                        </td>
+                        <td className={`px-4 py-2.5 text-right font-extrabold text-sm whitespace-nowrap ${(curReport.selisih || 0) < 0 ? 'text-red-400' : 'text-emerald-300'}`}>
+                          {formatRp(curReport.selisih || 0)}
+                        </td>
+                        {isEditing && <td></td>}
+                      </tr>
+                    </>
+                  )}
                 </tfoot>
               </table>
             </div>

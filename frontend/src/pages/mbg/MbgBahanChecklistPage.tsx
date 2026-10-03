@@ -231,6 +231,27 @@ export function MbgBahanChecklistPage() {
     });
   };
 
+  // Muat ulang daftar bahan terbaru dari Produksi MBG (Daftar Pesanan Bahan).
+  // Ceklis Sesuai/Baik dan catatan yang sudah diisi tetap dipertahankan untuk bahan yang sama.
+  const handleReloadFromReport = () => {
+    const extracted = extractIngredientsFromDailyReport(dailyReport);
+    if (extracted.length === 0) {
+      showToast({ message: 'Belum ada Daftar Pesanan Bahan untuk batch ini di Produksi MBG.', variant: 'info' });
+      return;
+    }
+    if (!window.confirm('Muat ulang daftar bahan dari Daftar Pesanan Bahan terbaru? Bahan yang tidak ada di daftar baru akan dihapus dari form ini.')) {
+      return;
+    }
+    const existingByName = new Map(rows.map((r) => [r.jenisBahan.trim().toLowerCase(), r]));
+    setRows(
+      extracted.map((r) => {
+        const prev = existingByName.get(r.jenisBahan.trim().toLowerCase());
+        return prev ? { ...r, isSesuai: prev.isSesuai, isBaik: prev.isBaik, notes: prev.notes || r.notes } : r;
+      })
+    );
+    showToast({ message: `Daftar bahan dimuat ulang (${extracted.length} bahan). Klik Simpan untuk menyimpan form.`, variant: 'success' });
+  };
+
   const handleAddRow = () => {
     setRows((prev) => [
       ...prev,
@@ -591,7 +612,7 @@ export function MbgBahanChecklistPage() {
                 {rows.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="p-3 sm:p-4 text-center text-slate-400 italic font-sans text-[10px] sm:text-xs">
-                      Belum ada data pesanan bahan pada batch ini (data otomatis disinkronkan dari Tab 5: "Daftar Pesanan Bahan" di Produksi MBG). Anda juga dapat menambah manual lewat tombol di bawah.
+                      Belum ada data pesanan bahan pada batch ini. Import Daftar Pesanan Bahan dulu di Produksi MBG (data otomatis muncul di sini), atau tambah manual lewat tombol di bawah.
                     </td>
                   </tr>
                 ) : (
@@ -727,6 +748,17 @@ export function MbgBahanChecklistPage() {
               <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-600" />
               <span>Tambah Baris Bahan</span>
             </button>
+            {savedForm && (
+              <button
+                type="button"
+                onClick={handleReloadFromReport}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 sm:px-3 sm:py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 font-bold transition-all cursor-pointer text-[8px] sm:text-xs"
+                title="Ambil daftar bahan terbaru dari Daftar Pesanan Bahan di Produksi MBG"
+              >
+                <History className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <span>Muat ulang dari Daftar Pesanan Bahan</span>
+              </button>
+            )}
             <div className="flex items-center gap-1.5 sm:gap-2">
               <span className="sm:hidden text-[7px] text-slate-400">
                 S=Sesuai T=Tidak B=Baik R=Rusak
