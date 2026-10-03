@@ -11,6 +11,7 @@ import {
   where,
   onSnapshot,
   writeBatch,
+  getDoc,
   getDocs,
   deleteField,
   deleteDoc,
@@ -628,6 +629,22 @@ export async function deleteMultipleBatches(
 }
 
 /**
+ * Data PM yang boleh disalin dari sebuah batch: batch sumber harus aktif (bukan
+ * Arsip Backup) dan entri yang ditandai backup dilewati. Melempar error bila kosong.
+ */
+export async function getCopyableEntries(sourceBatchId: string): Promise<MbgPmEntry[]> {
+  const sourceBatch = await getDoc(doc(db, BATCHES_COLLECTION, sourceBatchId));
+  if (!sourceBatch.exists() || (sourceBatch.data() as MbgPmBatch).isBackup) {
+    throw new Error('Batch sumber sudah dihapus atau dipindah ke Arsip Backup. Pilih batch aktif lain.');
+  }
+  const entries = (await getBatchEntries(sourceBatchId)).filter((entry) => !entry.isBackup);
+  if (entries.length === 0) {
+    throw new Error('Batch sumber tidak memiliki data penerima manfaat (0 porsi). Silakan gunakan opsi "Isi Otomatis 27 Institusi Master" atau pilih batch lain.');
+  }
+  return entries;
+}
+
+/**
  * Copy entries from a previous batch (for "salin data kemarin" feature).
  */
 export async function copyFromBatch(
@@ -637,14 +654,7 @@ export async function copyFromBatch(
   targetDate?: string,
   scheduleDays?: MbgDayMenu[]
 ): Promise<void> {
-  const q = query(
-    collection(db, ENTRIES_COLLECTION),
-    where('batchId', '==', sourceBatchId)
-  );
-  const snapshot = await getDocs(q);
-  if (snapshot.empty) {
-    throw new Error('Batch sumber tidak memiliki data penerima manfaat (0 porsi). Silakan gunakan opsi "Isi Otomatis 27 Institusi Master" atau pilih batch lain.');
-  }
+  const sourceEntries = await getCopyableEntries(sourceBatchId);
 
   // Calculate new menu for targetDate if provided
   let newMenuItems: string[] | undefined;
@@ -658,19 +668,28 @@ export async function copyFromBatch(
   const now = new Date().toISOString();
   const batch = writeBatch(db);
 
-  snapshot.docs.forEach((d) => {
-    const data = d.data() as MbgPmEntry;
+  sourceEntries.forEach((data) => {
     const ref = doc(collection(db, ENTRIES_COLLECTION));
+    // `id` milik dokumen sumber tidak ikut disimpan
+    const { id: _sourceId, ...rest } = data;
+    void _sourceId;
     batch.set(ref, cleanUndefined({
-      ...data,
+      ...rest,
       batchId: targetBatchId,
       menuItems: (newMenuItems && newMenuItems.length > 0) ? [...newMenuItems] : (data.menuItems || []),
       menuKeringanItems: (newMenuKeringanItems && newMenuKeringanItems.length > 0) ? [...newMenuKeringanItems] : (data.menuKeringanItems || []),
       isSekolahLibur: false,
+      // Status arsip dan bukti pengiriman tanggal sumber tidak ikut ke batch baru
+      isBackup: undefined,
+      backedUpAt: undefined,
       photoMenuUrl: undefined,
+      photoMenuDesc: undefined,
       photoSerahTerimaUrl: undefined,
+      photoSerahTerimaDesc: undefined,
       photoPenerimaUrl: undefined,
+      photoPenerimaDesc: undefined,
       photoSuratJalanUrl: undefined,
+      photoSuratJalanDesc: undefined,
       photoMenuTimestamp: undefined,
       photoSerahTerimaTimestamp: undefined,
       photoPenerimaTimestamp: undefined,

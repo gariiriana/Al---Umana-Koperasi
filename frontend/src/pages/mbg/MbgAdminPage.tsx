@@ -37,6 +37,7 @@ import {
   deleteEntry,
   recalculateBatchTotals,
   copyFromBatch,
+  getCopyableEntries,
   moveBatchToBackup,
   subscribeWeeklySchedule,
   getMenuForDate,
@@ -150,9 +151,11 @@ function NewBatchModal({
   const [creationMode, setCreationMode] = useState<'copy' | 'master' | 'blank'>('copy');
   const [copyFrom, setCopyFrom] = useState('');
 
-  // Sort batches descending by date
+  // Sumber salinan hanya batch aktif; batch yang sudah dihapus/dipindah ke Arsip Backup tidak ditawarkan
   const sortedBatches = useMemo(() => {
-    return [...batches].sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
+    return batches
+      .filter((b) => !b.isBackup)
+      .sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
   }, [batches]);
 
   // Find first batch with > 0 portions as default copy candidate if available
@@ -1767,6 +1770,10 @@ export function MbgAdminPage() {
           variant: 'info',
         });
         return;
+      }
+      // Validasi sumber salinan dulu agar batch kosong tidak tertinggal bila sumber tidak valid
+      if (copyFromId) {
+        await getCopyableEntries(copyFromId);
       }
       const newId = await createBatch(tanggal, user.uid, autoPopulateMaster || false, weeklySchedule);
       if (copyFromId) {
