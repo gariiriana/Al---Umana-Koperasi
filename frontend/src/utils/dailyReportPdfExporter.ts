@@ -314,6 +314,7 @@ const renderRekapitulasiPmPage = (
     head: schoolCfg.head,
     body: schoolCfg.body,
     foot: schoolCfg.foot,
+    showFoot: 'lastPage',
     theme: 'grid',
     styles: {
       fontSize: 5.2,
@@ -364,6 +365,7 @@ const renderRekapitulasiPmPage = (
     head: posyanduCfg.head,
     body: posyanduCfg.body,
     foot: posyanduCfg.foot,
+    showFoot: 'lastPage',
     theme: 'grid',
     styles: {
       fontSize: 5.2,
@@ -551,6 +553,7 @@ const renderPortionStackedPage = (
     ],
     body: giziRows,
     foot: giziFootRows,
+    showFoot: 'lastPage',
     theme: 'grid',
     headStyles: {
       fillColor: [254, 240, 138], // Yellow #FEF08A
@@ -641,6 +644,8 @@ const renderPortionStackedPage = (
     ],
     body: bahanRows,
     foot: bahanFootRows,
+    // Baris total hanya sekali di akhir tabel, bukan diulang di tiap halaman
+    showFoot: 'lastPage',
     theme: 'grid',
     headStyles: {
       fillColor: [254, 240, 138], // Yellow #FEF08A
@@ -733,6 +738,7 @@ const renderPortionStackedPage = (
     ],
     body: bumbuRows,
     foot: bumbuFootRows,
+    showFoot: 'lastPage',
     theme: 'grid',
     headStyles: {
       fillColor: [254, 240, 138], // Yellow #FEF08A
@@ -828,6 +834,7 @@ const renderSupplierPage = (
       ],
     ],
     body: poTableBody,
+    showFoot: 'lastPage',
     foot: [
       [
         { content: `TOTAL BELANJA (${poList.length || 1} ITEM):`, colSpan: 5, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },

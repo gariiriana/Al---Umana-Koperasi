@@ -781,6 +781,8 @@ export async function exportMbgDailyDistributionReportPdf({
     startY: 27,
     head: [['NO', 'NAMA KURIR', 'KENEK', 'INSTITUSI', 'TOTAL PORSI', 'STATUS DOKUMENTASI']],
     body: rekapRows,
+    // Baris total hanya sekali di akhir tabel, bukan diulang di tiap halaman
+    showFoot: 'lastPage',
     foot: [
       [
         {
