@@ -25,6 +25,8 @@ import {
 import { auth, db } from "@/lib/firebase";
 
 export const DEVELOPER_RECYCLE_BIN_COLLECTION = "developer_recycle_bin";
+/** Jumlah arsip terbaru yang dimuat di layar Developer. */
+export const RECYCLE_BIN_WINDOW = 1000;
 
 // Older recycle-bin records were created before `deletedByRole` was added.
 // Keep a small session cache so the Developer screen can resolve those
@@ -111,7 +113,7 @@ export function subscribeRecycleBin(
   onError?: (error: Error) => void,
 ): Unsubscribe {
   return onSnapshot(
-    query(collection(db, DEVELOPER_RECYCLE_BIN_COLLECTION), orderBy("deletedAt", "desc"), limit(250)),
+    query(collection(db, DEVELOPER_RECYCLE_BIN_COLLECTION), orderBy("deletedAt", "desc"), limit(RECYCLE_BIN_WINDOW)),
     (snapshot) => {
       const records = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as RecycleBinRecord));
       void hydrateMissingActorRoles(records, callback);

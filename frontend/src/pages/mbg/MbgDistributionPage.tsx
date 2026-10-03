@@ -123,7 +123,9 @@ export function MbgDistributionPage() {
   const [activeTab, setActiveTab] = useState<'assignment' | 'reports' | 'bahan'>('assignment');
   const [isExportingDailyPdf, setIsExportingDailyPdf] = useState(false);
   const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
-  const [batchFilterMode, setBatchFilterMode] = useState<'imported' | 'all'>('all');
+  // Tanggal batch yang masih Draft di Admin MBG (belum Submit Data PM)
+  const [draftBatchDates, setDraftBatchDates] = useState<string[]>([]);
+  const [batchLoadError, setBatchLoadError] = useState<string | null>(null);
   const [pmSearch, setPmSearch] = useState('');
   const [selectedCourierFilter, setSelectedCourierFilter] = useState('all');
   const [isCourierSummaryOpen, setIsCourierSummaryOpen] = useState(false);
@@ -360,41 +362,33 @@ export function MbgDistributionPage() {
     return ['Andi Kurir', 'Dede Kurir', 'Yusep Kurir', 'Erik Kurir', 'Agus Kurir', 'Firdi Kurir'];
   }, [kurirUsers]);
 
-  // Subscribe batches: mengikuti data yang ada di Arsip PM Aktif (!b.isBackup && b.status !== 'DRAFT')
+  // Subscribe batches: cukup data PM yang sudah disubmit Admin MBG (!b.isBackup && b.status !== 'DRAFT').
+  // Kurir hanya butuh data PM, jadi batch tidak menunggu import Produksi MBG.
   useEffect(() => {
-    const unsub = subscribeBatches((data) => {
-      const activeBatches = data.filter((b) => !b.isBackup && b.status !== 'DRAFT');
-      setBatches(activeBatches);
-      setLoading(false);
-    });
+    const unsub = subscribeBatches(
+      (data) => {
+        const activeBatches = data.filter((b) => !b.isBackup && b.status !== 'DRAFT');
+        setBatches(activeBatches);
+        setDraftBatchDates(data.filter((b) => !b.isBackup && b.status === 'DRAFT').map((b) => b.tanggal));
+        setBatchLoadError(null);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Error loading batches for Distribusi MBG:', err);
+        setBatchLoadError(err.message || 'Gagal memuat batch');
+        setLoading(false);
+      }
+    );
     return unsub;
   }, []);
 
-  // Subscribe all daily reports to know which batches have imported Excel data
+  // Laporan Produksi MBG hanya dipakai untuk tab Dokumentasi Bahan, bukan syarat batch tampil
   useEffect(() => {
     const unsub = subscribeAllDailyReports(setAllDailyReports);
     return unsub;
   }, []);
 
-  const savedReportBatchIds = useMemo(() => {
-    const set = new Set<string>();
-    allDailyReports.forEach((r) => {
-      if (r.batchId) set.add(r.batchId);
-    });
-    return set;
-  }, [allDailyReports]);
-
-  // Filter batches: only batches that have imported data from Produksi MBG
-  const importedBatches = useMemo(() => {
-    return batches.filter((b) => savedReportBatchIds.has(b.id));
-  }, [batches, savedReportBatchIds]);
-
-  const displayBatches = useMemo(() => {
-    if (batchFilterMode === 'imported' && importedBatches.length > 0) {
-      return importedBatches;
-    }
-    return batches;
-  }, [batchFilterMode, importedBatches, batches]);
+  const displayBatches = batches;
 
   // Keep selectedBatchId synced with displayBatches (auto-select today's batch or latest active batch)
   useEffect(() => {
@@ -1031,42 +1025,14 @@ export function MbgDistributionPage() {
                   PILIH TANGGAL BATCH / PENGIRIMAN:
                 </span>
                 <span className="text-[11px] font-black text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                  {batches.length} Batch Arsip PM Aktif
+                  {batches.length} Batch PM Disubmit
                 </span>
-                {importedBatches.length > 0 && (
-                  <span className="text-[11px] font-bold text-gray-500 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-200">
-                    {importedBatches.length} Ada Laporan Excel
+                {draftBatchDates.length > 0 && (
+                  <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                    {draftBatchDates.length} Masih Draft di Admin MBG
                   </span>
                 )}
               </div>
-
-              {/* Mode Filter: Hanya tampil jika ada sebagian batch dengan laporan Excel */}
-              {importedBatches.length > 0 && importedBatches.length < batches.length && (
-                <div className="inline-flex items-center bg-gray-100 p-1 rounded-xl text-xs font-bold shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setBatchFilterMode('imported')}
-                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                      batchFilterMode === 'imported'
-                        ? 'bg-white text-emerald-800 shadow-xs font-black'
-                        : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                  >
-                    ✓ Hanya Ada Excel ({importedBatches.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBatchFilterMode('all')}
-                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                      batchFilterMode === 'all'
-                        ? 'bg-white text-gray-900 shadow-xs font-black'
-                        : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                  >
-                    Semua Batch ({batches.length})
-                  </button>
-                </div>
-              )}
             </div>
 
             <div>
@@ -1074,14 +1040,24 @@ export function MbgDistributionPage() {
                 batches={displayBatches}
                 selectedBatchId={selectedBatchId}
                 onSelectBatch={setSelectedBatchId}
-                importedBatchIds={savedReportBatchIds}
               />
             </div>
 
-            {displayBatches.length === 0 && (
-              <div className="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-800 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-                <span>Belum ada data batch yang di-import oleh Produksi MBG. Silakan import Excel di halaman Produksi MBG terlebih dahulu.</span>
+            {batchLoadError && (
+              <div className="mt-3 p-4 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-800 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
+                <span>Gagal memuat data batch: {batchLoadError}</span>
+              </div>
+            )}
+
+            {!batchLoadError && displayBatches.length === 0 && (
+              <div className="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-800 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  {draftBatchDates.length > 0
+                    ? `Data PM belum disubmit Admin MBG. Batch masih Draft: ${draftBatchDates.slice(0, 5).join(', ')}${draftBatchDates.length > 5 ? ', …' : ''}. Minta Admin MBG menekan "Submit Data PM" agar batch muncul di sini (tidak perlu menunggu Produksi MBG).`
+                    : 'Belum ada batch PM dari Admin MBG. Batch muncul di sini setelah Admin MBG membuat batch dan menekan "Submit Data PM" (tidak perlu menunggu Produksi MBG).'}
+                </span>
               </div>
             )}
           </div>

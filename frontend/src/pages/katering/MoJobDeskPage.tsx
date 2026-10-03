@@ -527,8 +527,11 @@ export function MoJobDeskPage() {
   const mbgDateGroups = useMemo<MbgDateGroup[]>(() => {
     const map = new Map<string, { batch?: MbgPmBatch; entries: MbgPmEntry[] }>();
 
+    const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+
     for (const batch of mbgBatches) {
-      const d = extractDateOnly(batch.tanggal) || todayStr;
+      const d = extractDateOnly(batch.tanggal);
+      if (!isIsoDate(d)) continue;
       if (!map.has(d)) {
         map.set(d, { batch, entries: [] });
       } else {
@@ -537,12 +540,12 @@ export function MoJobDeskPage() {
     }
 
     for (const entry of mbgEntries) {
+      // Data PM milik batch yang sudah diarsip/dihapus (atau belum dipulihkan) tidak ditampilkan;
+      // tanpa batch aktif, tanggalnya tidak diketahui.
       const batch = batchMap.get(entry.batchId);
-      const rawEntry = entry as unknown as { tanggal?: string };
-      const d = batch?.tanggal
-        ? extractDateOnly(batch.tanggal)
-        : (extractDateOnly(rawEntry.tanggal) || extractDateOnly(entry.batchId));
-      if (!d) continue;
+      if (!batch) continue;
+      const d = extractDateOnly(batch.tanggal);
+      if (!isIsoDate(d)) continue;
       if (!map.has(d)) {
         map.set(d, { batch, entries: [entry] });
       } else {
@@ -593,7 +596,7 @@ export function MoJobDeskPage() {
     });
 
     return groups.sort((a, b) => b.date.localeCompare(a.date));
-  }, [mbgBatches, mbgEntries, batchMap, todayStr, jobDesks, allDailyReports]);
+  }, [mbgBatches, mbgEntries, batchMap, jobDesks, allDailyReports]);
 
   // Ringkasan menu & porsi MBG untuk tanggal yang sedang disusun di formulir
   const activeMbgFormSummary = useMemo(() => {

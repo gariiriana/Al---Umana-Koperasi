@@ -40,7 +40,6 @@ import {
   moveBatchToBackup,
   subscribeWeeklySchedule,
   getMenuForDate,
-  deleteAllMbgData,
   cleanDuplicateBatchEntries,
   replaceBatchEntries,
 } from '@/services/mbgAdminService';
@@ -1177,8 +1176,6 @@ export function MbgAdminPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [weeklySchedule, setWeeklySchedule] = useState<MbgDayMenu[]>(DEFAULT_WEEKLY_SCHEDULE);
-  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
-  const [deletingAll, setDeletingAll] = useState(false);
   const [confirmState, setConfirmState] = useState<{
     title: string;
     message: string;
@@ -1969,24 +1966,6 @@ export function MbgAdminPage() {
     }
   };
 
-  const handleDeleteAllMbgData = async () => {
-    try {
-      setDeletingAll(true);
-      await deleteAllMbgData();
-      showToast({
-        message: 'Seluruh data MBG (Admin, Produksi, Distribusi, Purchasing, Kurir) berhasil dihapus!',
-        variant: 'success',
-      });
-      setSelectedBatchId(null);
-      setEntries([]);
-      setShowDeleteAllModal(false);
-    } catch (err) {
-      console.error('Failed to delete all MBG data:', err);
-      showToast({ message: 'Gagal menghapus data MBG', variant: 'error' });
-    } finally {
-      setDeletingAll(false);
-    }
-  };
 
   const handleSaveMenu = async (
     entryId: string,
@@ -2182,15 +2161,6 @@ export function MbgAdminPage() {
                   Backup Batch
                 </button>
               )}
-
-              <button
-                onClick={() => setShowDeleteAllModal(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
-                title="Hapus seluruh data operasional MBG (Admin, Produksi, Distribusi, Purchasing, Kurir)"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Hapus Semua Data
-              </button>
             </div>
           </div>
 
@@ -2504,60 +2474,6 @@ export function MbgAdminPage() {
       )}
 
 
-      {/* Delete All MBG Data Modal */}
-      {showDeleteAllModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-red-100 space-y-4">
-            <div className="flex items-center gap-3 text-red-600">
-              <div className="p-3 bg-red-100 rounded-full shrink-0">
-                <AlertTriangle className="h-6 w-6 text-red-600" />
-              </div>
-              <div>
-                <h3 className="font-extrabold text-base text-slate-900">Konfirmasi Hapus Semua Data MBG</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Tindakan ini tidak dapat dibatalkan!</p>
-              </div>
-            </div>
-
-            <div className="text-xs text-slate-600 leading-relaxed bg-red-50 p-3.5 rounded-xl border border-red-200 space-y-2">
-              <p className="font-extrabold text-red-800">
-                ⚠️ Anda akan menghapus permanen seluruh data operasional MBG:
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-slate-700 font-medium">
-                <li><strong>Admin MBG</strong>: Batch Pengiriman & Data Institusi</li>
-                <li><strong>Produksi MBG</strong>: Sesi Masak, Resep & Kadar Gizi</li>
-                <li><strong>Distribusi & QC</strong>: Checklist QC & Penugasan Kurir</li>
-                <li><strong>Purchasing</strong>: Purchase Order (PO) Belanja</li>
-                <li><strong>Kurir MBG</strong>: Bukti Foto Pengantaran & Arsip Laporan</li>
-              </ul>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setShowDeleteAllModal(false)}
-                disabled={deletingAll}
-                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleDeleteAllMbgData}
-                disabled={deletingAll}
-                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold cursor-pointer transition-colors flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
-              >
-                {deletingAll ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Menghapus...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="h-4 w-4" /> Ya, Hapus Semua
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* New Batch Modal */}
       <AnimatePresence>

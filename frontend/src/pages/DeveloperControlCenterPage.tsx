@@ -15,6 +15,7 @@ import {
 import { ALL_ROLES } from "@/constants/roles";
 import {
   permanentlyDeleteArchivedDocuments,
+  RECYCLE_BIN_WINDOW,
   restoreArchivedDocuments,
   subscribeRecycleBin,
   type RecycleBinRecord,
@@ -160,6 +161,10 @@ export function DeveloperControlCenterPage() {
   const [yearFilter, setYearFilter] = useState("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  // Pilihan untuk pemulihan massal (id grup)
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
   useEffect(() => subscribeRecycleBin(setRecords, (err) => setError(err.message)), []);
 
@@ -254,6 +259,67 @@ export function DeveloperControlCenterPage() {
     }
   };
 
+  // Hanya grup yang masih tampil (sesuai filter) yang ikut dipulihkan
+  const checkedGroups = useMemo(
+    () => visibleGroups.filter((group) => checkedIds.has(group.id)),
+    [visibleGroups, checkedIds],
+  );
+  const allVisibleChecked = visibleGroups.length > 0 && checkedGroups.length === visibleGroups.length;
+  const countDocuments = (list: ArchiveGroup[]) => list.reduce((sum, group) => sum + group.records.length, 0);
+
+  const toggleChecked = (groupId: string) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  };
+
+  const toggleAllVisible = () => {
+    setCheckedIds(allVisibleChecked ? new Set() : new Set(visibleGroups.map((group) => group.id)));
+  };
+
+  // Pulihkan banyak batch/aksi sekaligus. Setiap grup dipulihkan utuh secara berurutan;
+  // grup yang lokasi aslinya sudah berisi data dilewati (tidak pernah ditimpa).
+  const restoreMany = async (targets: ArchiveGroup[]) => {
+    if (!targets.length || bulkProgress) return;
+    const totalDocs = countDocuments(targets);
+    if (!window.confirm(
+      "Pulihkan " + targets.length + " aksi (" + totalDocs + " dokumen) ke lokasi aslinya?\n\n" +
+      "Data yang lokasi aslinya sudah terisi akan dilewati, tidak ditimpa.",
+    )) return;
+
+    let restored = 0;
+    let skipped = 0;
+    const failures: string[] = [];
+    setError("");
+    setNotice("");
+    setBulkProgress({ done: 0, total: targets.length });
+
+    for (const group of targets) {
+      try {
+        await restoreArchivedDocuments(group.records.map((record) => record.id), false);
+        restored++;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Pemulihan gagal.";
+        if (message.includes("sudah berisi data")) skipped++;
+        else failures.push(group.title + ": " + message);
+      }
+      setBulkProgress({ done: restored + skipped + failures.length, total: targets.length });
+    }
+
+    setBulkProgress(null);
+    setCheckedIds(new Set());
+    if (selected && targets.some((group) => group.id === selected.id)) setSelected(null);
+    setNotice(
+      restored + " aksi berhasil dipulihkan" +
+      (skipped ? " · " + skipped + " dilewati karena lokasi aslinya sudah berisi data" : "") +
+      (failures.length ? " · " + failures.length + " gagal" : "") + ".",
+    );
+    if (failures.length) setError(failures.slice(0, 3).join(" | ") + (failures.length > 3 ? " | …" : ""));
+  };
+
   const hasFilters = Boolean(keyword || exactDate || roleFilter !== "all" || monthFilter !== "all" || yearFilter !== "all");
 
   return (
@@ -274,6 +340,7 @@ export function DeveloperControlCenterPage() {
       </section>
 
       {error && <div role="alert" className="flex gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800"><ShieldAlert className="h-5 w-5 shrink-0" />{error}</div>}
+      {notice && <div role="status" className="flex gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800"><ArchiveRestore className="h-5 w-5 shrink-0" />{notice}</div>}
 
       <section className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><Database className="h-5 w-5 text-cyan-700" /><p className="mt-3 text-xs font-bold uppercase tracking-wider text-slate-400">Batch / aksi terarsip</p><p className="mt-1 text-2xl font-black text-slate-900">{stats.actions}</p></div>
@@ -300,14 +367,44 @@ export function DeveloperControlCenterPage() {
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
-          <div><h2 className="text-xl font-black text-slate-900">Tabel audit penghapusan</h2><p className="mt-1 text-sm text-slate-500">{visibleGroups.length} aksi tampil · {records.length} dokumen di jendela arsip</p></div>
-          <button onClick={() => window.location.reload()} className="inline-flex items-center gap-2 self-start rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"><RefreshCw className="h-4 w-4" /> Sinkronkan</button>
+          <div>
+            <h2 className="text-xl font-black text-slate-900">Tabel audit penghapusan</h2>
+            <p className="mt-1 text-sm text-slate-500">{visibleGroups.length} aksi tampil · {records.length} dokumen di jendela arsip</p>
+            {records.length >= RECYCLE_BIN_WINDOW && (
+              <p className="mt-1 text-xs font-semibold text-amber-700">
+                Menampilkan {RECYCLE_BIN_WINDOW} arsip terbaru. Setelah dipulihkan, arsip yang lebih lama otomatis muncul; ulangi pemulihan bila masih ada.
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 self-start">
+            {checkedGroups.length > 0 && (
+              <button
+                disabled={!!bulkProgress}
+                onClick={() => void restoreMany(checkedGroups)}
+                className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-3 py-2 text-xs font-black text-white hover:bg-cyan-700 disabled:opacity-50"
+              >
+                <ArchiveRestore className="h-4 w-4" /> Pulihkan terpilih ({checkedGroups.length} aksi · {countDocuments(checkedGroups)} dokumen)
+              </button>
+            )}
+            <button
+              disabled={!visibleGroups.length || !!bulkProgress}
+              onClick={() => void restoreMany(visibleGroups)}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <ArchiveRestore className="h-4 w-4" />
+              {bulkProgress
+                ? "Memulihkan " + bulkProgress.done + "/" + bulkProgress.total + "…"
+                : "Pulihkan semua hasil filter (" + visibleGroups.length + " aksi · " + countDocuments(visibleGroups) + " dokumen)"}
+            </button>
+            <button onClick={() => window.location.reload()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"><RefreshCw className="h-4 w-4" /> Sinkronkan</button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-[980px] w-full text-left">
-            <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3 font-black">Tanggal hapus</th><th className="px-5 py-3 font-black">Role</th><th className="px-5 py-3 font-black">Batch / sumber</th><th className="px-5 py-3 font-black">Dokumen</th><th className="px-5 py-3 font-black">Penghapus</th><th className="px-5 py-3 text-right font-black">Aksi</th></tr></thead>
+            <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500"><tr><th className="w-10 py-3 pl-5"><input type="checkbox" checked={allVisibleChecked} onChange={toggleAllVisible} disabled={!visibleGroups.length || !!bulkProgress} aria-label="Pilih semua hasil filter" title="Pilih semua hasil filter" className="h-4 w-4 cursor-pointer accent-cyan-600" /></th><th className="px-5 py-3 font-black">Tanggal hapus</th><th className="px-5 py-3 font-black">Role</th><th className="px-5 py-3 font-black">Batch / sumber</th><th className="px-5 py-3 font-black">Dokumen</th><th className="px-5 py-3 font-black">Penghapus</th><th className="px-5 py-3 text-right font-black">Aksi</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {visibleGroups.map((group) => <tr key={group.id} onClick={() => setSelected(group)} className={"cursor-pointer align-top transition hover:bg-cyan-50/50 " + (selected?.id === group.id ? "bg-cyan-50" : "")}>
+                <td className="py-4 pl-5" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={checkedIds.has(group.id)} onChange={() => toggleChecked(group.id)} disabled={!!bulkProgress} aria-label={"Pilih " + group.title} className="h-4 w-4 cursor-pointer accent-cyan-600" /></td>
                 <td className="whitespace-nowrap px-5 py-4 text-sm font-semibold text-slate-700"><span className="block">{formatDate(group.deletedAt)}</span><span className="mt-1 block text-xs font-normal text-slate-400">{group.subtitle}</span></td>
                 <td className="px-5 py-4"><span className={"inline-flex max-w-48 rounded-full px-2.5 py-1 text-xs font-bold " + (group.deletedByRole === LEGACY_ROLE || !group.deletedByRole ? "bg-amber-100 text-amber-800" : group.deletedByRole === "mixed" ? "bg-violet-100 text-violet-800" : "bg-cyan-100 text-cyan-800")}>{deletedRoleLabel(group.deletedByRole)}</span></td>
                 <td className="max-w-[290px] px-5 py-4"><p className="font-semibold text-slate-900">{group.title}</p>{group.batchId && <p className="mt-1 break-all font-mono text-xs text-slate-400">{group.batchId}</p>}</td>
@@ -315,7 +412,7 @@ export function DeveloperControlCenterPage() {
                 <td className="max-w-52 break-all px-5 py-4 text-sm text-slate-600">{group.deletedByEmail || "Tidak tercatat"}</td>
                 <td className="px-5 py-4" onClick={(event) => event.stopPropagation()}><div className="flex justify-end gap-2"><button onClick={() => setSelected(group)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"><Eye className="h-3.5 w-3.5" /> Detail</button><button disabled={busyId === group.id} onClick={() => void restoreGroup(group)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"><ArchiveRestore className="h-3.5 w-3.5" /> Pulihkan</button><button disabled={busyId === group.id} onClick={() => void destroyGroup(group)} className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /> Permanen</button></div></td>
               </tr>)}
-              {!visibleGroups.length && <tr><td colSpan={6} className="px-5 py-16 text-center text-sm font-semibold text-slate-400">Tidak ada arsip yang cocok dengan filter ini.</td></tr>}
+              {!visibleGroups.length && <tr><td colSpan={7}className="px-5 py-16 text-center text-sm font-semibold text-slate-400">Tidak ada arsip yang cocok dengan filter ini.</td></tr>}
             </tbody>
           </table>
         </div>
