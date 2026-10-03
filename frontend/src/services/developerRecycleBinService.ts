@@ -21,6 +21,7 @@ import {
   type DocumentReference,
   type DocumentSnapshot,
   type Unsubscribe,
+  type WriteBatch,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
@@ -62,6 +63,33 @@ function recordFor(snapshot: DocumentSnapshot, reason?: string, deletedByRole?: 
   };
 }
 
+async function currentActorRole(): Promise<string | null> {
+  const actor = auth.currentUser?.uid ? await getDoc(doc(db, "users", auth.currentUser.uid)) : null;
+  return actor?.exists() ? (actor.data().role as string | undefined) ?? null : null;
+}
+
+/**
+ * Add archive + delete operations for loaded snapshots to a caller-owned
+ * write batch, so they commit together with the caller's other writes.
+ * Uses two batch operations per snapshot; the caller commits.
+ */
+export async function stageArchiveAndDelete(
+  batch: WriteBatch,
+  snapshots: readonly DocumentSnapshot[],
+  reason?: string,
+): Promise<number> {
+  const actorRole = await currentActorRole();
+  let staged = 0;
+  for (const snapshot of snapshots) {
+    const record = recordFor(snapshot, reason, actorRole);
+    if (!record) continue;
+    batch.set(doc(collection(db, DEVELOPER_RECYCLE_BIN_COLLECTION)), record);
+    batch.delete(snapshot.ref);
+    staged++;
+  }
+  return staged;
+}
+
 /** Archive one document and remove it from its original location atomically. */
 export async function archiveAndDelete(
   source: DocumentReference,
@@ -71,9 +99,7 @@ export async function archiveAndDelete(
     throw new Error("Arsip recycle bin tidak dapat diarsipkan kembali.");
   }
   const snapshot = await getDoc(source);
-  const actor = auth.currentUser?.uid ? await getDoc(doc(db, "users", auth.currentUser.uid)) : null;
-  const actorRole = actor?.exists() ? (actor.data().role as string | undefined) ?? null : null;
-  const record = recordFor(snapshot, reason, actorRole);
+  const record = recordFor(snapshot, reason, await currentActorRole());
   if (!record) return false;
 
   const batch = writeBatch(db);
@@ -91,8 +117,7 @@ export async function archiveSnapshotsAndDelete(
   snapshots: readonly DocumentSnapshot[],
   reason?: string,
 ): Promise<number> {
-  const actor = auth.currentUser?.uid ? await getDoc(doc(db, "users", auth.currentUser.uid)) : null;
-  const actorRole = actor?.exists() ? (actor.data().role as string | undefined) ?? null : null;
+  const actorRole = await currentActorRole();
   const records = snapshots
     .map((snapshot) => ({ snapshot, record: recordFor(snapshot, reason, actorRole) }))
     .filter((item): item is { snapshot: DocumentSnapshot; record: NonNullable<ReturnType<typeof recordFor>> } => item.record !== null);

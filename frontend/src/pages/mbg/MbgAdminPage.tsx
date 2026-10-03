@@ -1189,6 +1189,10 @@ export function MbgAdminPage() {
   const csvFileInputRef = useRef<HTMLInputElement>(null);
   const [showSpreadsheetModal, setShowSpreadsheetModal] = useState(false);
 
+  // Batch di Arsip Backup tersembunyi dari divisi lain, jadi pemilihan per tanggal hanya ke batch aktif
+  const findActiveBatchByDate = (tanggal: string) =>
+    allBatches.find((b) => b.tanggal === tanggal && !b.isBackup);
+
   const handleImportExcelPm = (file: File) => {
     if (!selectedBatchId) {
       showToast({ message: 'Pilih atau buat Batch Pengiriman terlebih dahulu sebelum import!', variant: 'error' });
@@ -1237,7 +1241,6 @@ export function MbgAdminPage() {
 
         if (parsedEntries.length === 0) {
           showToast({ message: 'Tidak ditemukan data institusi yang valid di dalam file Excel / CSV ini.', variant: 'error' });
-          setSaving(false);
           return;
         }
 
@@ -1255,7 +1258,7 @@ export function MbgAdminPage() {
 
           if (!targetBatchId || !targetDate) {
             const todayStr = getJakartaDate();
-            const existing = allBatches.find((b) => b.tanggal === todayStr) || batches.find((b) => b.tanggal === todayStr);
+            const existing = findActiveBatchByDate(todayStr);
             if (existing) {
               targetBatchId = existing.id;
               targetDate = existing.tanggal;
@@ -1316,6 +1319,8 @@ export function MbgAdminPage() {
       } catch (err) {
         console.error('Excel / CSV import error:', err);
         showToast({ message: 'Gagal membaca atau memproses file Excel / CSV', variant: 'error' });
+      } finally {
+        // Setiap jalur keluar (file kosong, tanpa data valid, batch gagal ditentukan) harus melepas status simpan
         setSaving(false);
       }
     };
@@ -1343,7 +1348,7 @@ export function MbgAdminPage() {
 
     if (!targetBatchId || !targetDate) {
       const todayStr = getJakartaDate();
-      const existing = allBatches.find((b) => b.tanggal === todayStr) || batches.find((b) => b.tanggal === todayStr);
+      const existing = findActiveBatchByDate(todayStr);
       if (existing) {
         targetBatchId = existing.id;
         targetDate = existing.tanggal;
@@ -1498,7 +1503,7 @@ export function MbgAdminPage() {
   const handleSelectOrPickDate = async (newDateStr: string) => {
     if (!newDateStr || !user) return;
 
-    const existing = allBatches.find((b) => b.tanggal === newDateStr) || batches.find((b) => b.tanggal === newDateStr);
+    const existing = findActiveBatchByDate(newDateStr);
     if (existing) {
       setSelectedBatchId(existing.id);
       setSearchParams({ batchId: existing.id }, { replace: true });

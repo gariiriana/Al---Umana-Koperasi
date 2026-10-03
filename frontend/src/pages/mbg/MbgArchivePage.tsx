@@ -779,7 +779,11 @@ export function MbgArchivePage() {
           showToast({ message: `Batch ${tanggal} berhasil dipulihkan ke Arsip Aktif!`, variant: 'success' });
         } catch (err) {
           console.error(err);
-          showToast({ message: 'Gagal memulihkan batch dari backup', variant: 'error' });
+          setBatches((prev) => prev.map((b) => (b.id === batchId ? { ...b, isBackup: true } : b)));
+          showToast({
+            message: err instanceof Error ? err.message : 'Gagal memulihkan batch dari backup',
+            variant: 'error',
+          });
         } finally {
           setSaving(false);
         }
@@ -860,11 +864,20 @@ export function MbgArchivePage() {
 
         setSaving(true);
         try {
-          await restoreMultipleBatchesFromBackup(Array.from(idsToRestore));
-          showToast({
-            message: `Berhasil memulihkan ${count} batch ke Arsip Aktif!`,
-            variant: 'success',
-          });
+          const failed = await restoreMultipleBatchesFromBackup(Array.from(idsToRestore));
+          if (failed.length === 0) {
+            showToast({
+              message: `Berhasil memulihkan ${count} batch ke Arsip Aktif!`,
+              variant: 'success',
+            });
+          } else {
+            const failedIds = new Set(failed.map((f) => f.batchId));
+            setBatches((prev) => prev.map((b) => (failedIds.has(b.id) ? { ...b, isBackup: true } : b)));
+            showToast({
+              message: `${count - failed.length} dari ${count} batch dipulihkan. Gagal: ${failed.map((f) => f.message).join(' ')}`,
+              variant: 'error',
+            });
+          }
         } catch (err) {
           console.error(err);
           showToast({ message: 'Gagal memulihkan batch dari backup', variant: 'error' });

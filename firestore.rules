@@ -498,6 +498,13 @@ service cloud.firestore {
           && resource.data.productionCookingStatus == 'cooked');
     }
 
+    // Kunci per tanggal: menunjuk batch aktif tanggal itu agar pembuatan
+    // batch serentak (beberapa tab/user) tidak menghasilkan batch dobel.
+    match /mbg_pm_batch_date_locks/{tanggal} {
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isMbgManager();
+    }
+
     // -------------------------------------------------------------------
     // MBG PM Entries (data per institusi dalam batch)
     // -------------------------------------------------------------------

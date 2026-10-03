@@ -11,6 +11,7 @@ import {
   where,
   onSnapshot,
   writeBatch,
+  runTransaction,
   getDoc,
   getDocs,
   deleteField,
@@ -22,10 +23,12 @@ import { auth, db } from '@/lib/firebase';
 import { subscriptionManager } from './subscriptionManager';
 import type { MbgPmBatch, MbgPmEntry, MbgBatchStatus, MbgDayMenu, MbgProductionCookingStatus } from '@/types/mbg';
 import { MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
-import { archiveAndDelete, archiveSnapshotsAndDelete } from '@/services/developerRecycleBinService';
+import { archiveAndDelete, archiveSnapshotsAndDelete, stageArchiveAndDelete } from '@/services/developerRecycleBinService';
 
 const BATCHES_COLLECTION = 'mbg_pm_batches';
 const ENTRIES_COLLECTION = 'mbg_pm_entries';
+/** One document per date pointing at that date's active batch; serializes batch creation. */
+const BATCH_DATE_LOCKS_COLLECTION = 'mbg_pm_batch_date_locks';
 
 export function parseCategoryItems(input?: string | string[]): string[] {
   if (Array.isArray(input)) {
@@ -149,27 +152,44 @@ export function subscribeBatches(
   );
 }
 
-export async function createBatch(
+async function findActiveBatchIdByDate(tanggal: string, excludeBatchId?: string): Promise<string | null> {
+  const snap = await getDocs(query(collection(db, BATCHES_COLLECTION), where('tanggal', '==', tanggal)));
+  const active = snap.docs.find((d) => d.id !== excludeBatchId && !(d.data() as MbgPmBatch).isBackup);
+  return active ? active.id : null;
+}
+
+// Creations in flight in this tab, keyed by date. The Admin page re-subscribes
+// (and re-runs its auto-create) several times while loading; those calls must
+// share one creation instead of each adding a batch.
+const pendingBatchCreations = new Map<string, Promise<string>>();
+
+/**
+ * Returns the active batch for `tanggal`, creating it if none exists. There is
+ * at most one active (non-backup) batch per date, also across users and tabs.
+ */
+export function createBatch(
   tanggal: string,
   createdBy: string,
   autoPopulate = false,
   scheduleDays?: MbgDayMenu[]
 ): Promise<string> {
-  // Guard against duplicate active batches for the exact same operational date
-  try {
-    const qExisting = query(
-      collection(db, BATCHES_COLLECTION),
-      where('tanggal', '==', tanggal)
-    );
-    const snapExisting = await getDocs(qExisting);
-    const activeExisting = snapExisting.docs.find((d) => !(d.data() as MbgPmBatch).isBackup);
-    if (activeExisting) {
-      console.info(`[createBatch] Batch for date ${tanggal} already exists (ID: ${activeExisting.id}). Reusing existing batch.`);
-      return activeExisting.id;
-    }
-  } catch (err) {
-    console.warn('[createBatch] Error checking existing batch, proceeding with creation:', err);
-  }
+  const pending = pendingBatchCreations.get(tanggal);
+  if (pending) return pending;
+  const creation = createBatchOnce(tanggal, createdBy, autoPopulate, scheduleDays).finally(() => {
+    pendingBatchCreations.delete(tanggal);
+  });
+  pendingBatchCreations.set(tanggal, creation);
+  return creation;
+}
+
+async function createBatchOnce(
+  tanggal: string,
+  createdBy: string,
+  autoPopulate: boolean,
+  scheduleDays?: MbgDayMenu[]
+): Promise<string> {
+  const existingId = await findActiveBatchIdByDate(tanggal);
+  if (existingId) return existingId;
 
   const batch: Omit<MbgPmBatch, 'id'> = {
     tanggal,
@@ -185,14 +205,32 @@ export async function createBatch(
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  const docRef = await addDoc(collection(db, BATCHES_COLLECTION), batch);
 
-  if (autoPopulate) {
-    await bulkAddEntriesFromMaster(docRef.id, createdBy, tanggal, scheduleDays);
-    await recalculateBatchTotals(docRef.id);
+  // Another user/tab may be creating the same date right now. Both sides go
+  // through the date's lock document in a transaction, so the loser re-reads
+  // the lock and gets the winner's batch instead of adding a second one.
+  const lockRef = doc(db, BATCH_DATE_LOCKS_COLLECTION, tanggal.replace(/\//g, '-'));
+  const { batchId, created } = await runTransaction(db, async (tx) => {
+    const lock = await tx.get(lockRef);
+    const lockedBatchId = lock.exists() ? (lock.data().batchId as string | undefined) : undefined;
+    if (lockedBatchId) {
+      const locked = await tx.get(doc(db, BATCHES_COLLECTION, lockedBatchId));
+      if (locked.exists() && !(locked.data() as MbgPmBatch).isBackup) {
+        return { batchId: lockedBatchId, created: false };
+      }
+    }
+    const newRef = doc(collection(db, BATCHES_COLLECTION));
+    tx.set(newRef, batch);
+    tx.set(lockRef, { tanggal, batchId: newRef.id, updatedAt: batch.createdAt });
+    return { batchId: newRef.id, created: true };
+  });
+
+  if (created && autoPopulate) {
+    await bulkAddEntriesFromMaster(batchId, createdBy, tanggal, scheduleDays);
+    await recalculateBatchTotals(batchId);
   }
 
-  return docRef.id;
+  return batchId;
 }
 
 export async function updateBatch(
@@ -419,19 +457,20 @@ export async function replaceBatchEntries(
     where('batchId', '==', batchId)
   ));
 
-  // Firestore allows at most 500 writes in a batch.  Refuse before changing
-  // anything instead of performing a partial replacement.
-  const writeCount = existingSnapshot.size + entries.length + 1;
+  // Firestore allows at most 500 writes in a batch: each old row costs an
+  // archive write plus a delete, each new row one write, plus the batch doc.
+  // Refuse before changing anything instead of performing a partial replacement.
+  const writeCount = existingSnapshot.size * 2 + entries.length + 1;
   if (writeCount > 500) {
-    throw new Error(`Import terlalu besar (${entries.length} baris). Maksimal 500 perubahan per batch.`);
+    throw new Error(`Import terlalu besar (${entries.length} baris baru, ${existingSnapshot.size} baris lama). Maksimal 500 perubahan per batch.`);
   }
-
-  // Archive the old rows before writing replacements. If archiving fails, the
-  // old data stays intact; a later failed import can never destroy it.
-  await archiveSnapshotsAndDelete(existingSnapshot.docs, `Entri batch ${batchId} diganti dari impor`);
 
   const now = new Date().toISOString();
   const writes = writeBatch(db);
+
+  // Archiving the old rows and writing the new ones share one commit, so a
+  // failure leaves the old rows untouched instead of an empty batch.
+  await stageArchiveAndDelete(writes, existingSnapshot.docs, `Entri batch ${batchId} diganti dari impor`);
 
   let totalSiswaBalita = 0;
   let totalBumilBusui = 0;
@@ -583,6 +622,25 @@ export async function moveBatchToBackup(batchId: string, backedUpBy?: string): P
  */
 export async function restoreBatchFromBackup(batchId: string): Promise<void> {
   const batchRef = doc(db, BATCHES_COLLECTION, batchId);
+  const batchSnap = await getDoc(batchRef);
+  if (!batchSnap.exists()) {
+    throw new Error('Batch sudah tidak ada.');
+  }
+  const { tanggal } = batchSnap.data() as MbgPmBatch;
+
+  // Satu tanggal hanya boleh punya satu batch aktif. Batch aktif yang masih
+  // kosong (biasanya dibuat otomatis setelah batch ini dipindah ke backup)
+  // digantikan; batch aktif yang sudah berisi data tidak disentuh.
+  const activeId = await findActiveBatchIdByDate(tanggal, batchId);
+  if (activeId) {
+    const activeSnap = await getDoc(doc(db, BATCHES_COLLECTION, activeId));
+    const activeEntries = await getBatchEntries(activeId);
+    if ((activeSnap.data() as MbgPmBatch | undefined)?.status !== 'DRAFT' || activeEntries.length > 0) {
+      throw new Error(`Tanggal ${tanggal} sudah punya batch aktif berisi data. Pindahkan batch tersebut ke Arsip Backup dulu sebelum memulihkan.`);
+    }
+    await deleteBatch(activeId);
+  }
+
   await updateDoc(batchRef, {
     isBackup: false,
     restoredAt: new Date().toISOString(),
@@ -611,12 +669,22 @@ export async function moveMultipleBatchesToBackup(
 }
 
 /**
- * Pulihkan beberapa batch sekaligus dari Arsip Backup.
+ * Pulihkan beberapa batch sekaligus dari Arsip Backup. Dijalankan berurutan agar
+ * dua batch backup bertanggal sama tidak sama-sama lolos menjadi batch aktif.
+ * Mengembalikan batch yang gagal dipulihkan beserta alasannya.
  */
 export async function restoreMultipleBatchesFromBackup(
   batchIds: string[]
-): Promise<void> {
-  await Promise.all(batchIds.map((id) => restoreBatchFromBackup(id)));
+): Promise<{ batchId: string; message: string }[]> {
+  const failed: { batchId: string; message: string }[] = [];
+  for (const batchId of batchIds) {
+    try {
+      await restoreBatchFromBackup(batchId);
+    } catch (err) {
+      failed.push({ batchId, message: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return failed;
 }
 
 /**
@@ -655,6 +723,11 @@ export async function copyFromBatch(
   scheduleDays?: MbgDayMenu[]
 ): Promise<void> {
   const sourceEntries = await getCopyableEntries(sourceBatchId);
+  // createBatch mengembalikan batch yang sudah ada bila tanggalnya sudah terisi;
+  // menyalin ke batch berisi akan membuat data institusi dobel.
+  if ((await getBatchEntries(targetBatchId)).length > 0) {
+    throw new Error('Batch tujuan sudah berisi data PM. Penyalinan dibatalkan agar data tidak dobel.');
+  }
 
   // Calculate new menu for targetDate if provided
   let newMenuItems: string[] | undefined;
