@@ -28,6 +28,7 @@ import type { MbgPmBatch, MbgDeliveryTask, MbgPmEntry } from '@/types/mbg';
 import { subscribeBatches, subscribeEntries } from '@/services/mbgAdminService';
 import { getJakartaDate } from '@/utils/date';
 import { startTracker } from '@/services/gpsService';
+import { SearchableBatchSelector } from '@/components/mbg/SearchableBatchSelector';
 import {
   subscribeKurirTasks,
   updateTaskStatus,
@@ -104,6 +105,16 @@ export function MbgDeliveryPage() {
     });
     return unsub;
   }, []);
+
+  const handleSelectBatch = (batchId: string) => {
+    setSelectedBatchId(batchId);
+    sessionStorage.setItem('mbg_delivery_selected_batch', batchId);
+  };
+
+  const todayBatchId = useMemo(() => {
+    const todayStr = getJakartaDate();
+    return batches.find((b) => b.tanggal === todayStr)?.id || null;
+  }, [batches]);
 
   // Subscribe arsip dokumen only when archive tab is active
   useEffect(() => {
@@ -1082,45 +1093,24 @@ export function MbgDeliveryPage() {
         </div>
       ) : (
         <div className="mb-6">
-          {/* Mobile: dropdown select */}
-          <div className="md:hidden">
-            <select
-              title="Pilih Tanggal Batch"
-              value={selectedBatchId || ''}
-              onChange={(e) => {
-                setSelectedBatchId(e.target.value);
-                sessionStorage.setItem('mbg_delivery_selected_batch', e.target.value);
-              }}
-              className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24] cursor-pointer"
-            >
-              {batches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  📅 {b.tanggal} {b.status === 'DRAFT' ? '(Draft)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          {/* Desktop: horizontal pills */}
-          <div className="hidden md:flex gap-2 overflow-x-auto pb-3 scrollbar-hide">
-            {batches.map((b) => (
+          {/* Pilih tanggal batch: dropdown dengan pencarian (sama seperti Distribusi MBG) */}
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2">
+            <SearchableBatchSelector
+              batches={batches}
+              selectedBatchId={selectedBatchId}
+              onSelectBatch={handleSelectBatch}
+            />
+            {todayBatchId && (
               <button
-                key={b.id}
-                onClick={() => {
-                  setSelectedBatchId(b.id);
-                  sessionStorage.setItem('mbg_delivery_selected_batch', b.id);
-                }}
-                className={`shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all ${
-                  selectedBatchId === b.id
-                    ? 'bg-[#111827] text-white shadow-lg'
-                    : 'bg-white text-[#374151] border border-[#E5E7EB] hover:border-[#FBBF24]'
-                }`}
+                type="button"
+                onClick={() => handleSelectBatch(todayBatchId)}
+                disabled={selectedBatchId === todayBatchId}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl text-xs font-extrabold border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-default cursor-pointer transition-colors"
               >
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-3.5 w-3.5" />
-                  <span>{b.tanggal}</span>
-                </div>
+                <Calendar className="h-4 w-4" />
+                <span>Hari Ini</span>
               </button>
-            ))}
+            )}
           </div>
           {selectedBatchId && activeTask ? (
             <div className="space-y-6">

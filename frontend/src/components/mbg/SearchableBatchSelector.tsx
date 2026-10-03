@@ -33,6 +33,11 @@ export function SearchableBatchSelector({
 
   const selectedBatch = batches.find((b) => b.id === selectedBatchId);
 
+  // Tanggal yang dipakai lebih dari satu batch aktif, supaya bisa dibedakan di daftar
+  const dateCounts = new Map<string, number>();
+  batches.forEach((b) => dateCounts.set(b.tanggal, (dateCounts.get(b.tanggal) || 0) + 1));
+  const isDuplicateDate = (b: MbgPmBatch) => (dateCounts.get(b.tanggal) || 0) > 1;
+
   const filteredBatches = batches.filter((b) => {
     const dateMatch = b.tanggal.toLowerCase().includes(searchQuery.toLowerCase());
     const statusLabel = MBG_BATCH_STATUS_CONFIG[b.status]?.label || b.status;
@@ -128,6 +133,14 @@ export function SearchableBatchSelector({
                       <span className={`text-[9px] font-extrabold rounded-full px-2 py-0.5 ${cfg.textClass} ${cfg.bgClass}`}>
                         {cfg.label}
                       </span>
+                      {isDuplicateDate(b) && (
+                        <span
+                          className="text-[9px] font-extrabold rounded-full px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200"
+                          title={`ID batch: ${b.id}`}
+                        >
+                          Tanggal ganda · {b.totalInstitusi || 0} institusi
+                        </span>
+                      )}
                       {importedBatchIds && isImported && (
                         <span className="text-[9px] font-black rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200">
                           ✓ Excel Ada
