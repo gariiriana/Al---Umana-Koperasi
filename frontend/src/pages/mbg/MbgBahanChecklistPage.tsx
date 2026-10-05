@@ -659,12 +659,7 @@ export function MbgBahanChecklistPage() {
                         className="border-r border-black p-0 sm:p-1 text-center cursor-pointer hover:bg-emerald-50 select-none"
                         title={row.isSesuai === true ? 'Klik untuk membatalkan (kosongkan)' : 'Klik untuk ceklis Sesuai'}
                       >
-                        <input
-                          type="checkbox"
-                          checked={row.isSesuai === true}
-                          readOnly
-                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-emerald-600 cursor-pointer align-middle pointer-events-none"
-                        />
+                        {row.isSesuai === true && <span className="font-bold text-[9px] sm:text-sm text-emerald-700">✓</span>}
                       </td>
 
                       {/* 6. Jumlah: Tidak Sesuai */}
@@ -673,12 +668,7 @@ export function MbgBahanChecklistPage() {
                         className="border-r border-black p-0 sm:p-1 text-center cursor-pointer hover:bg-red-50 select-none"
                         title={row.isSesuai === false ? 'Klik untuk membatalkan (kosongkan)' : 'Klik untuk ceklis Tidak Sesuai'}
                       >
-                        <input
-                          type="checkbox"
-                          checked={row.isSesuai === false}
-                          readOnly
-                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-red-600 cursor-pointer align-middle pointer-events-none"
-                        />
+                        {row.isSesuai === false && <span className="font-bold text-[9px] sm:text-sm text-red-700">✓</span>}
                       </td>
 
                       {/* 7. Kondisi: Baik */}
@@ -687,12 +677,7 @@ export function MbgBahanChecklistPage() {
                         className="border-r border-black p-0 sm:p-1 text-center cursor-pointer hover:bg-emerald-50 select-none"
                         title={row.isBaik === true ? 'Klik untuk membatalkan (kosongkan)' : 'Klik untuk ceklis Baik'}
                       >
-                        <input
-                          type="checkbox"
-                          checked={row.isBaik === true}
-                          readOnly
-                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-emerald-600 cursor-pointer align-middle pointer-events-none"
-                        />
+                        {row.isBaik === true && <span className="font-bold text-[9px] sm:text-sm text-emerald-700">✓</span>}
                       </td>
 
                       {/* 8. Kondisi: Rusak */}
@@ -701,12 +686,7 @@ export function MbgBahanChecklistPage() {
                         className="border-r border-black p-0 sm:p-1 text-center cursor-pointer hover:bg-red-50 select-none"
                         title={row.isBaik === false ? 'Klik untuk membatalkan (kosongkan)' : 'Klik untuk ceklis Rusak'}
                       >
-                        <input
-                          type="checkbox"
-                          checked={row.isBaik === false}
-                          readOnly
-                          className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 accent-red-600 cursor-pointer align-middle pointer-events-none"
-                        />
+                        {row.isBaik === false && <span className="font-bold text-[9px] sm:text-sm text-red-700">✓</span>}
                       </td>
 
                       {/* 9. Keterangan */}
