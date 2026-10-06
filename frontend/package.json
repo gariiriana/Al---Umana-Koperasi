@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:rules": "vitest run src/__tests__/courierRules.test.ts"
+    "test:rules": "vitest run src/__tests__/courierRules.test.ts src/__tests__/jobDeskRules.test.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.13.3",

@@ -175,8 +175,23 @@ service cloud.firestore {
         && getUserRole() in [
           'produksi_1', 'distribusi_1', 'produksi_2', 'distribusi_2',
           'tim_produksi', 'distribusi', 'MBG2', 'mbg2',
-          'produksi_mbg_2', 'distribusi_mbg_2'
+          'produksi_mbg', 'produksi_mbg_2', 'distribusi_mbg', 'distribusi_mbg_2'
         ];
+    }
+
+    // Normalize legacy/MBG role aliases to the canonical job desk role.
+    // Mirrors mapToAssignableRole() in OperationalJobDeskPage.tsx.
+    function canonicalJobDeskRole(role) {
+      return {
+        'tim_produksi': 'produksi_1',
+        'MBG2': 'produksi_1',
+        'mbg2': 'produksi_1',
+        'produksi_mbg_2': 'produksi_1',
+        'distribusi': 'distribusi_1',
+        'distribusi_mbg': 'distribusi_1',
+        'produksi_mbg': 'produksi_2',
+        'distribusi_mbg_2': 'distribusi_2'
+      }.get(role, role);
     }
 
     function isOrderStaff() {
@@ -250,7 +265,8 @@ service cloud.firestore {
       allow read: if isAdmin() || isSuperAdmin() || isMoKatering() || isCoMoKatering() || isKateringOperational();
       allow create: if isAdmin() || isSuperAdmin() || isMoKatering();
       allow update: if isAdmin() || isSuperAdmin() || isMoKatering()
-        || (isKateringOperational() && resource.data.assignedRole == getUserRole()
+        || (isKateringOperational()
+          && canonicalJobDeskRole(resource.data.assignedRole) == canonicalJobDeskRole(getUserRole())
           && request.resource.data.submittedBy == request.auth.uid
           && request.resource.data.reviewStatus == 'pending_review'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'incompleteReason', 'completionNote', 'completionPhotoUrl', 'reviewStatus', 'submittedAt', 'submittedBy', 'updatedAt']))
