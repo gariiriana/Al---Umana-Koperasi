@@ -26,8 +26,10 @@ import {
   Milk,
   UtensilsCrossed,
   Sparkles,
+  FileDown,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { exportJobDesksPdf, formatJobDeskDate } from "@/utils/jobDeskPdfExporter";
 import {
   subscribeJobDesksByRole,
   submitJobDeskStatus,
@@ -74,6 +76,7 @@ export function OperationalJobDeskPage() {
   const [rowStatus, setRowStatus] = useState<Record<string, JobDeskStatus>>({});
   const [rowReason, setRowReason] = useState<Record<string, string>>({});
   const [submittingRowId, setSubmittingRowId] = useState<string | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const assignableRole = mapToAssignableRole(profile?.role);
   const picShortName: PicShortName = assignableRole ? ROLE_TO_PIC_NAME[assignableRole] : "Joko";
@@ -177,6 +180,27 @@ export function OperationalJobDeskPage() {
       return compareJobDeskTime(a.startTime, b.startTime);
     });
   }, [jobDesks, divisionFilter, selectedDate, statusFilter, searchQuery]);
+
+  const handleExportPdf = async () => {
+    const statusLabels: Record<string, string> = { pending: "Pending", complete: "Complete", incomplete: "Incomplete" };
+    setExportingPdf(true);
+    try {
+      await exportJobDesksPdf(filteredJobDesks, {
+        filterSummary: [
+          `PIC: ${picShortName}`,
+          divisionFilter !== "all" ? `Divisi: ${divisionFilter === "mbg" ? "MBG" : "Katering"}` : "",
+          selectedDate ? `Tanggal: ${formatJobDeskDate(selectedDate)}` : "",
+          statusFilter !== "all" ? `Status: ${statusLabels[statusFilter] || statusFilter}` : "",
+          searchQuery.trim() ? `Kata kunci: "${searchQuery.trim()}"` : "",
+        ],
+      });
+    } catch (err) {
+      console.error("Failed to export job desk PDF:", err);
+      alert("Gagal membuat PDF job desk.");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   // Stats
   const stats = useMemo(() => {
@@ -354,27 +378,38 @@ export function OperationalJobDeskPage() {
 
       {/* Main Table: Excel-Style Spreadsheet View */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+        <div className="px-5 py-3.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <TableIcon className="h-4 w-4 text-amber-600" />
             <p className="text-xs font-bold text-gray-800">
               Daftar Job Desk ({filteredJobDesks.length} Tugas)
             </p>
           </div>
-          {(selectedDate || searchQuery || statusFilter !== "all" || divisionFilter !== "all") && (
+          <div className="flex items-center gap-3 shrink-0">
+            {(selectedDate || searchQuery || statusFilter !== "all" || divisionFilter !== "all") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDate("");
+                  setSearchQuery("");
+                  setStatusFilter("all");
+                  setDivisionFilter("all");
+                }}
+                className="text-xs font-bold text-amber-600 hover:text-amber-800 cursor-pointer underline"
+              >
+                Reset Filter
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => {
-                setSelectedDate("");
-                setSearchQuery("");
-                setStatusFilter("all");
-                setDivisionFilter("all");
-              }}
-              className="text-xs font-bold text-amber-600 hover:text-amber-800 cursor-pointer underline"
+              onClick={handleExportPdf}
+              disabled={exportingPdf || filteredJobDesks.length === 0}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
             >
-              Reset Filter
+              <FileDown className="h-3.5 w-3.5" />
+              {exportingPdf ? "Membuat PDF..." : "Download PDF"}
             </button>
-          )}
+          </div>
         </div>
 
         {filteredJobDesks.length === 0 ? (

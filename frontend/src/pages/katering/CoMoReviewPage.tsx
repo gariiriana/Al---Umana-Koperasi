@@ -28,8 +28,10 @@ import {
   Table as TableIcon,
   Milk,
   UtensilsCrossed,
+  FileDown,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { exportJobDesksPdf, formatJobDeskDate } from "@/utils/jobDeskPdfExporter";
 import {
   subscribeAllJobDesks,
   approveJobDesk,
@@ -70,6 +72,7 @@ export function CoMoReviewPage() {
   const [rejectRemark, setRejectRemark] = useState("");
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [approvingJobDesk, setApprovingJobDesk] = useState<CateringJobDesk | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeAllJobDesks(
@@ -234,6 +237,35 @@ export function CoMoReviewPage() {
     (selectedDate ? 1 : 0) +
     (reviewFilter !== "all" ? 1 : 0) +
     (searchQuery.trim() ? 1 : 0);
+
+  const handleExportPdf = async () => {
+    const reviewLabels: Record<ReviewFilter, string> = {
+      all: "",
+      pending_review: "Perlu Review",
+      approved: "Approved",
+      rejected: "Rejected",
+      not_submitted: "Belum Submit",
+    };
+    const orderLabel = orderOptions.find(([id]) => id === selectedOrder)?.[1].replace(/^\S+\s/, "");
+    setExportingPdf(true);
+    try {
+      await exportJobDesksPdf(filteredJobDesks, {
+        filterSummary: [
+          divisionFilter !== "all" ? `Divisi: ${divisionFilter === "mbg" ? "MBG" : "Katering"}` : "",
+          selectedPic !== "all" ? `PIC: ${selectedPic}` : "",
+          orderLabel ? orderLabel : "",
+          selectedDate ? `Tanggal: ${formatJobDeskDate(selectedDate)}` : "",
+          reviewFilter !== "all" ? `Status Review: ${reviewLabels[reviewFilter]}` : "",
+          searchQuery.trim() ? `Kata kunci: "${searchQuery.trim()}"` : "",
+        ],
+      });
+    } catch (err) {
+      console.error("Failed to export job desk PDF:", err);
+      alert("Gagal membuat PDF job desk.");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   const resetAllFilters = () => {
     setDivisionFilter("all");
@@ -484,7 +516,7 @@ export function CoMoReviewPage() {
 
       {/* Main Table: Excel-Style Spreadsheet View for CO_MO */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+        <div className="px-5 py-3.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <TableIcon className="h-4 w-4 text-indigo-600" />
             <p className="text-xs font-bold text-gray-800">
@@ -494,6 +526,15 @@ export function CoMoReviewPage() {
               )}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={exportingPdf || filteredJobDesks.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition-colors disabled:opacity-50 cursor-pointer shrink-0"
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            {exportingPdf ? "Membuat PDF..." : "Download PDF"}
+          </button>
         </div>
 
         {filteredJobDesks.length === 0 ? (
