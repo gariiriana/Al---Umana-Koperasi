@@ -10,7 +10,7 @@
 //
 // Shows assigned job desks with exact Excel columns:
 // Divisi | Hari | Tanggal | Start Time | PIC | Kegiatan | Keterangan | Key ID
-// Plus interactive Complete (✅) / Incomplete (❌ + Alasan) and Submit to CO_MO
+// Plus interactive Complete (✅, sent to CO_MO on click) / Incomplete (❌ + Alasan, then Kirim)
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
@@ -92,14 +92,19 @@ export function OperationalJobDeskPage() {
       assignableRole,
       (data) => {
         setJobDesks(data);
-        // Initialize draft states
-        const initialStatus: Record<string, JobDeskStatus> = {};
+        // Saved status always wins (e.g. a rejection resets it to pending); the
+        // only local draft kept is an unsent "incomplete" still awaiting its reason.
         const initialReason: Record<string, string> = {};
         data.forEach((jd) => {
-          initialStatus[jd.id] = jd.status;
           if (jd.incompleteReason) initialReason[jd.id] = jd.incompleteReason;
         });
-        setRowStatus((prev) => ({ ...initialStatus, ...prev }));
+        setRowStatus((prev) => {
+          const next: Record<string, JobDeskStatus> = {};
+          data.forEach((jd) => {
+            next[jd.id] = jd.status === "pending" && prev[jd.id] === "incomplete" ? "incomplete" : jd.status;
+          });
+          return next;
+        });
         setRowReason((prev) => ({ ...initialReason, ...prev }));
         setLoading(false);
       },
@@ -111,28 +116,23 @@ export function OperationalJobDeskPage() {
     return () => unsub();
   }, [assignableRole]);
 
-  // Handle submit single row to CO_MO
+  // Send a row's status straight to CO_MO / MO review. Complete is sent on
+  // click; incomplete is sent once a reason has been written.
   const handleSubmitRow = useCallback(
-    async (jdId: string) => {
-      const currentStatus = rowStatus[jdId] || "pending";
-      const currentReason = rowReason[jdId] || "";
-
-      if (currentStatus === "pending") {
-        alert("Pilih status Complete atau Incomplete terlebih dahulu!");
-        return;
-      }
-      if (currentStatus === "incomplete" && !currentReason.trim()) {
+    async (jdId: string, status: JobDeskStatus, reason = "") => {
+      if (status === "incomplete" && !reason.trim()) {
         alert("Harap isi alasan kenapa tugas incomplete!");
         return;
       }
 
+      setRowStatus((prev) => ({ ...prev, [jdId]: status }));
       setSubmittingRowId(jdId);
       try {
         await submitJobDeskStatus(
           jdId,
-          currentStatus,
+          status,
           user?.uid || "",
-          currentStatus === "incomplete" ? currentReason.trim() : undefined
+          status === "incomplete" ? reason.trim() : undefined
         );
       } catch (err) {
         console.error("Failed submitting job desk:", err);
@@ -141,7 +141,7 @@ export function OperationalJobDeskPage() {
         setSubmittingRowId(null);
       }
     },
-    [rowStatus, rowReason, user?.uid]
+    [user?.uid]
   );
 
   // Filtered job desks
@@ -255,7 +255,7 @@ export function OperationalJobDeskPage() {
             Job Desk Saya — {JOBDESK_ROLE_LABELS[assignableRole]}
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 mt-1">
-            Centang status tugas (✅ Complete / ❌ Incomplete) lalu klik tombol Submit ke CO_MO.
+            Klik ✅ Complete untuk langsung mengirim ke CO_MO. Untuk ❌ Incomplete, isi alasan lalu klik Kirim.
           </p>
         </div>
 
@@ -434,7 +434,7 @@ export function OperationalJobDeskPage() {
                   <th className="py-3 px-3.5 w-36 font-mono">Key ID</th>
                   <th className="py-3 px-3.5 min-w-[180px]">Status Pengerjaan (PIC)</th>
                   <th className="py-3 px-3.5 w-32 text-center">Status Review CO_MO</th>
-                  <th className="py-3 px-3.5 w-28 text-center">Aksi Submit</th>
+                  <th className="py-3 px-3.5 w-28 text-center">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -588,20 +588,16 @@ export function OperationalJobDeskPage() {
                               {/* Complete Button */}
                               <button
                                 type="button"
-                                onClick={() =>
-                                  setRowStatus((prev) => ({
-                                    ...prev,
-                                    [jd.id]: "complete",
-                                  }))
-                                }
-                                className={`flex-1 flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                                onClick={() => handleSubmitRow(jd.id, "complete")}
+                                disabled={submittingRowId === jd.id}
+                                className={`flex-1 flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all disabled:opacity-50 cursor-pointer ${
                                   currentStatus === "complete"
                                     ? "bg-emerald-500 text-white shadow-xs"
                                     : "bg-gray-100 text-gray-600 hover:bg-emerald-50 hover:text-emerald-700"
                                 }`}
                               >
                                 <CheckCircle2 className="h-3.5 w-3.5" />
-                                Complete
+                                {submittingRowId === jd.id && currentStatus === "complete" ? "..." : "Complete"}
                               </button>
 
                               {/* Incomplete Button */}
@@ -613,7 +609,8 @@ export function OperationalJobDeskPage() {
                                     [jd.id]: "incomplete",
                                   }))
                                 }
-                                className={`flex-1 flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                                disabled={submittingRowId === jd.id}
+                                className={`flex-1 flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all disabled:opacity-50 cursor-pointer ${
                                   currentStatus === "incomplete"
                                     ? "bg-red-500 text-white shadow-xs"
                                     : "bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-700"
@@ -685,22 +682,22 @@ export function OperationalJobDeskPage() {
                       )}
                     </td>
 
-                    {/* Aksi Submit */}
+                    {/* Aksi: only an incomplete status needs an explicit send (with reason) */}
                     <td className="py-3 px-3.5 text-center">
                       {canEdit ? (
-                        <button
-                          type="button"
-                          onClick={() => handleSubmitRow(jd.id)}
-                          disabled={
-                            submittingRowId === jd.id ||
-                            currentStatus === "pending" ||
-                            (currentStatus === "incomplete" && !currentReason.trim())
-                          }
-                          className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                        >
-                          <Send className="h-3 w-3" />
-                          {submittingRowId === jd.id ? "..." : isRejected ? "Submit Ulang" : "Submit"}
-                        </button>
+                        currentStatus === "incomplete" ? (
+                          <button
+                            type="button"
+                            onClick={() => handleSubmitRow(jd.id, "incomplete", currentReason)}
+                            disabled={submittingRowId === jd.id || !currentReason.trim()}
+                            className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            <Send className="h-3 w-3" />
+                            {submittingRowId === jd.id ? "..." : "Kirim"}
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-gray-400">-</span>
+                        )
                       ) : (
                         <span className="text-[11px] font-bold text-gray-400">
                           {isApproved ? "Tuntas ✓" : "Terkirim ✓"}
