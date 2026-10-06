@@ -1,12 +1,13 @@
 // ============================================================================
 // Job Desk PDF Exporter
-// Exports the (filtered) job desk table — Divisi | Hari | Tanggal | Start Time |
-// PIC Teklap | Kegiatan | Keterangan | Key ID | Status — as an A4 landscape PDF
-// with the Badan Gizi Nasional logo in the header.
+// Exports the (filtered) job desk table — No | Start Time | Kegiatan | Keterangan —
+// as a compact A4 portrait PDF with the Badan Gizi Nasional logo in the header.
+// Tanggal / PIC shared by every row go in the summary line; when the rows span
+// several dates, each date gets its own separator row.
 // ============================================================================
 
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import autoTable, { type RowInput } from 'jspdf-autotable';
 import type { CateringJobDesk } from '@/types/cateringJobDesk';
 import { getBase64ImageWithDimensions } from './mbgDeliveryReportPdfExporter';
 
@@ -26,16 +27,6 @@ export function formatJobDeskDate(dateStr?: string): string {
   const d = new Date(dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`);
   if (isNaN(d.getTime())) return dateStr;
   return `${String(d.getDate()).padStart(2, '0')} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-function statusLabel(jd: CateringJobDesk): string {
-  const work = jd.status === 'complete' ? 'Complete' : jd.status === 'incomplete' ? 'Incomplete' : 'Belum Ditandai';
-  const review =
-    jd.reviewStatus === 'approved' ? 'Approved'
-    : jd.reviewStatus === 'rejected' ? 'Rejected'
-    : jd.reviewStatus === 'pending_review' ? 'Menunggu Review'
-    : 'Belum Submit';
-  return `${work}\n${review}`;
 }
 
 function keteranganText(jd: CateringJobDesk): string {
@@ -58,7 +49,7 @@ function sourceLabel(jd: CateringJobDesk): string {
 }
 
 export async function exportJobDesksPdf(jobDesks: CateringJobDesk[], options: JobDeskPdfOptions = {}): Promise<void> {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 12;
@@ -98,8 +89,20 @@ export async function exportJobDesksPdf(jobDesks: CateringJobDesk[], options: Jo
   const sources = new Set(jobDesks.map(sourceLabel));
   const sharedSource = sources.size === 1 ? [...sources][0] : '';
 
+  // Tanggal and PIC have no column of their own, so show them once when shared.
+  const filterSummary = (options.filterSummary ?? []).filter(Boolean);
+  const dateSet = new Set(jobDesks.map((jd) => jd.tanggal || ''));
+  const picSet = new Set(jobDesks.map((jd) => jd.pic || ''));
+  const singleDate = dateSet.size === 1 ? [...dateSet][0] : '';
+  const singlePic = picSet.size === 1 ? [...picSet][0] : '';
+  const sharedDate =
+    singleDate && !filterSummary.some((s) => s.startsWith('Tanggal:'))
+      ? `Tanggal: ${jobDesks[0].hari ? `${jobDesks[0].hari}, ` : ''}${formatJobDeskDate(singleDate)}`
+      : '';
+  const sharedPic = singlePic && !filterSummary.some((s) => s.startsWith('PIC:')) ? `PIC: ${singlePic}` : '';
+
   let curY = 34;
-  const summary = [...(options.filterSummary ?? []), sharedSource].filter(Boolean);
+  const summary = [...filterSummary, sharedPic, sharedDate, sharedSource].filter(Boolean);
   if (summary.length) {
     doc.setFontSize(8.5);
     doc.setTextColor(51, 65, 85);
@@ -108,7 +111,29 @@ export async function exportJobDesksPdf(jobDesks: CateringJobDesk[], options: Jo
     curY += lines.length * 4;
   }
 
-  // 4. Table
+  // 4. Table — rows stay in the caller's order; a separator row is inserted
+  // whenever the date changes (only when the rows span several dates).
+  const kegiatanCell = (jd: CateringJobDesk) => {
+    const kegiatan = jd.kegiatan || jd.title || '-';
+    const source = sourceLabel(jd);
+    return sharedSource || !source ? kegiatan : `${kegiatan}\n${source}`;
+  };
+  const body: RowInput[] = [];
+  let lastDate: string | undefined;
+  jobDesks.forEach((jd, i) => {
+    if (dateSet.size > 1 && jd.tanggal !== lastDate) {
+      lastDate = jd.tanggal;
+      body.push([
+        {
+          content: jd.tanggal ? `${jd.hari ? `${jd.hari}, ` : ''}${formatJobDeskDate(jd.tanggal)}` : 'Tanpa tanggal',
+          colSpan: 4,
+          styles: { fillColor: [226, 232, 240], fontStyle: 'bold', halign: 'left' },
+        },
+      ]);
+    }
+    body.push([i + 1, jd.startTime || '-', kegiatanCell(jd), keteranganText(jd)]);
+  });
+
   autoTable(doc, {
     startY: curY,
     margin: { left: margin, right: margin, bottom: 14 },
@@ -131,37 +156,18 @@ export async function exportJobDesksPdf(jobDesks: CateringJobDesk[], options: Jo
       fontSize: 8,
     },
     alternateRowStyles: { fillColor: [248, 250, 252] },
-    head: [['No', 'Divisi', 'Hari', 'Tanggal', 'Start Time', 'PIC Teklap', 'Kegiatan', 'Keterangan', 'Key ID', 'Status']],
-    body: jobDesks.map((jd, i) => [
-      i + 1,
-      jd.division === 'mbg' ? 'MBG' : 'Katering',
-      jd.hari || '-',
-      jd.tanggal || '-',
-      jd.startTime || '-',
-      jd.pic || '-',
-      sharedSource || !sourceLabel(jd)
-        ? jd.kegiatan || jd.title || '-'
-        : `${jd.kegiatan || jd.title || '-'}\n${sourceLabel(jd)}`,
-      keteranganText(jd),
-      jd.keyId || '-',
-      statusLabel(jd),
-    ]),
+    head: [['No', 'Start Time', 'Kegiatan', 'Keterangan']],
+    body,
     columnStyles: {
-      0: { cellWidth: 9, halign: 'center' },
-      1: { cellWidth: 17, halign: 'center' },
-      2: { cellWidth: 16 },
-      3: { cellWidth: 20, halign: 'center' },
-      4: { cellWidth: 15, halign: 'center', fontStyle: 'bold' },
-      5: { cellWidth: 18, halign: 'center' },
-      6: { cellWidth: 58, fontStyle: 'bold' },
-      7: { cellWidth: 'auto' },
-      8: { cellWidth: 32, halign: 'center', font: 'courier', fontStyle: 'bold', fontSize: 7.5 },
-      9: { cellWidth: 25, halign: 'center', fontSize: 7.5 },
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 18, halign: 'center', fontStyle: 'bold' },
+      2: { cellWidth: 70, fontStyle: 'bold' },
+      3: { cellWidth: 'auto' },
     },
     // A cell can't mix bold and normal text, so a kegiatan carrying a
     // lembaga/pesanan sub-label is drawn in normal weight.
     didParseCell: (data) => {
-      if (data.section === 'body' && data.column.index === 6 && String(data.cell.raw).includes('\n')) {
+      if (data.section === 'body' && data.column.index === 2 && String(data.cell.raw).includes('\n')) {
         data.cell.styles.fontStyle = 'normal';
       }
     },
