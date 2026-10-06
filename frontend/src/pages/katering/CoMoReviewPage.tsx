@@ -10,7 +10,6 @@
 // 6. Monitor overall completion & review stats in real-time
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { motion, AnimatePresence } from "motion/react";
 import {
   CheckCircle2,
   XCircle,
@@ -71,7 +70,6 @@ export function CoMoReviewPage() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectRemark, setRejectRemark] = useState("");
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [approvingJobDesk, setApprovingJobDesk] = useState<CateringJobDesk | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
 
   useEffect(() => {
@@ -743,10 +741,11 @@ export function CoMoReviewPage() {
                             <div>
                               <button
                                 type="button"
-                                onClick={() => setApprovingJobDesk(jd)}
-                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer underline"
+                                onClick={() => handleApprove(jd.id)}
+                                disabled={isProcessing}
+                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer underline disabled:opacity-50"
                               >
-                                Ubah ke Approve
+                                {isProcessing ? "Menyimpan..." : "Ubah ke Approve"}
                               </button>
                             </div>
                           </div>
@@ -788,12 +787,12 @@ export function CoMoReviewPage() {
                             {/* Approve Button */}
                             <button
                               type="button"
-                              onClick={() => setApprovingJobDesk(jd)}
+                              onClick={() => handleApprove(jd.id)}
                               disabled={isProcessing}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition-all cursor-pointer"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
                             >
                               <CheckCircle2 className="h-3.5 w-3.5" />
-                              Approve
+                              {isProcessing ? "Menyimpan..." : "Approve"}
                             </button>
 
                             {/* Reject Button */}
@@ -820,71 +819,6 @@ export function CoMoReviewPage() {
           </div>
         )}
       </div>
-
-      {/* Confirmation Modal for Approve */}
-      <AnimatePresence>
-        {approvingJobDesk && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-200"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-emerald-100 text-emerald-700 rounded-xl">
-                  <CheckCircle2 className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-gray-900">
-                    Konfirmasi Persetujuan (Approve)
-                  </h3>
-                  <p className="text-xs text-gray-500 font-mono">
-                    {approvingJobDesk.keyId} • {approvingJobDesk.division === "mbg" ? "🥛 Program MBG" : "🍱 Katering"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 text-xs space-y-1.5">
-                <p>
-                  <strong className="text-gray-700">Petugas:</strong> {approvingJobDesk.pic}
-                </p>
-                <p>
-                  <strong className="text-gray-700">Kegiatan:</strong> {approvingJobDesk.kegiatan}
-                </p>
-                <p>
-                  <strong className="text-gray-700">Status Pengerjaan:</strong>{" "}
-                  <span className="font-bold text-emerald-700">{approvingJobDesk.status}</span>
-                </p>
-              </div>
-
-              <p className="text-xs text-gray-500">
-                Dengan menyetujui, tugas ini akan ditandai tuntas 100% dan statusnya diperbarui untuk Manager Operasional.
-              </p>
-
-              <div className="flex gap-2 justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => setApprovingJobDesk(null)}
-                  className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await handleApprove(approvingJobDesk.id);
-                    setApprovingJobDesk(null);
-                  }}
-                  className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs cursor-pointer"
-                >
-                  Ya, Setujui Tugas
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
