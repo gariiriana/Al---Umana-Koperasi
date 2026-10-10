@@ -1,10 +1,11 @@
 // ============================================================================
-// MBG Bahan Checklist Page — Form Pemeriksaan Bahan Makanan
+// MBG Bahan Checklist Section — Form Pemeriksaan Bahan Makanan
 // Standar Resmi Badan Gizi Nasional Republik Indonesia
 // WYSIWYG Form Layout + Edit + Ceklis + Export PDF/DOCX + Arsip
+// Digunakan di halaman Persiapan MBG (tab Cek List Bahan)
 // ============================================================================
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck,
@@ -20,7 +21,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import { SearchableBatchSelector } from '@/components/mbg/SearchableBatchSelector';
 import type {
   MbgPmBatch,
   MbgBahanChecklistForm,
@@ -28,15 +28,7 @@ import type {
   MbgProductionDailyReport,
 } from '@/types/mbg';
 import {
-  subscribeBatches,
-} from '@/services/mbgAdminService';
-import {
-  subscribeDailyReport,
-  subscribeAllDailyReports,
-} from '@/services/mbgProductionService';
-import {
   subscribeBahanChecklist,
-  subscribeAllBahanChecklist,
   saveBahanChecklist,
   deleteBahanChecklist,
   extractIngredientsFromDailyReport,
@@ -63,16 +55,26 @@ function formatIndoDateLong(dateStr?: string): string {
   }
 }
 
-export function MbgBahanChecklistPage() {
+interface MbgBahanChecklistSectionProps {
+  selectedBatch: MbgPmBatch | undefined;
+  dailyReport: MbgProductionDailyReport | null;
+  /** Semua form cek list tersimpan (untuk Arsip) */
+  allForms: MbgBahanChecklistForm[];
+  /** Dipakai tombol "Buka / Edit" di Arsip untuk berpindah batch */
+  onSelectBatch: (batchId: string) => void;
+}
+
+export const MbgBahanChecklistSection: React.FC<MbgBahanChecklistSectionProps> = ({
+  selectedBatch,
+  dailyReport,
+  allForms,
+  onSelectBatch,
+}) => {
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const [rawBatches, setRawBatches] = useState<MbgPmBatch[]>([]);
-  const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
-  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
-  const [dailyReport, setDailyReport] = useState<MbgProductionDailyReport | null>(null);
+  const selectedBatchId = selectedBatch?.id ?? null;
   const [savedForm, setSavedForm] = useState<MbgBahanChecklistForm | null>(null);
-  const [allForms, setAllForms] = useState<MbgBahanChecklistForm[]>([]);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [archiveSearch, setArchiveSearch] = useState('');
 
@@ -91,77 +93,7 @@ export function MbgBahanChecklistPage() {
   const [officerName, setOfficerName] = useState('Ragha Eskha Utama, S. Hum.');
   const [officerTitle, setOfficerTitle] = useState('Kepala Satuan Pelayanan Pemenuhan Gizi');
 
-  // 1. Subscribe Batches
-  useEffect(() => {
-    const unsub = subscribeBatches((list) => {
-      setRawBatches(list);
-    });
-    return () => unsub();
-  }, []);
-
-  // 1b. Subscribe all daily reports from Produksi MBG
-  useEffect(() => {
-    const unsub = subscribeAllDailyReports((reports) => {
-      setAllDailyReports(reports);
-    });
-    return () => unsub();
-  }, []);
-
-  const dailyReportBatchIds = useMemo(
-    () => new Set(allDailyReports.map((r) => r.batchId)),
-    [allDailyReports]
-  );
-  const savedFormBatchIds = useMemo(
-    () => new Set(allForms.map((f) => f.batchId)),
-    [allForms]
-  );
-
-  // Filter batches: ONLY show batches that have been submitted from Produksi MBG
-  // or have a production daily report / inspection form
-  const batches = useMemo(() => {
-    return rawBatches.filter((b) => {
-      if (b.isBackup) return false;
-      // 1. Explicitly submitted to distribution by Produksi MBG
-      if (b.submittedToDistribution === true) return true;
-      // 2. Status indicates batch has progressed through / past production
-      if (['DELIVERING', 'DELIVERED', 'COOKING', 'PURCHASING'].includes(b.status)) return true;
-      // 3. Has a saved daily report with ingredient / PO data from Produksi MBG
-      if (dailyReportBatchIds.has(b.id)) return true;
-      // 4. Has an existing saved checklist inspection form
-      if (savedFormBatchIds.has(b.id)) return true;
-      return false;
-    });
-  }, [rawBatches, dailyReportBatchIds, savedFormBatchIds]);
-
-  // Synchronize selected batch from the submitted batches list
-  useEffect(() => {
-    setSelectedBatchId((prev) => {
-      if (batches.length === 0) return null;
-      if (prev && batches.some((b) => b.id === prev)) return prev;
-      const todayStr = getJakartaDate();
-      const active = batches.find((b) => b.tanggal === todayStr) || batches[0];
-      return active ? active.id : null;
-    });
-  }, [batches]);
-
-  const selectedBatch = useMemo(
-    () => batches.find((b) => b.id === selectedBatchId),
-    [batches, selectedBatchId]
-  );
-
-  // 2. Subscribe Daily Report for this batch (to get ingredients from production)
-  useEffect(() => {
-    if (!selectedBatchId) {
-      setDailyReport(null);
-      return;
-    }
-    const unsub = subscribeDailyReport(selectedBatchId, (report) => {
-      setDailyReport(report);
-    });
-    return () => unsub();
-  }, [selectedBatchId]);
-
-  // 3. Subscribe Bahan Checklist from Firestore for this batch
+  // 1. Subscribe Bahan Checklist from Firestore for this batch
   useEffect(() => {
     if (!selectedBatchId) {
       setSavedForm(null);
@@ -173,15 +105,7 @@ export function MbgBahanChecklistPage() {
     return () => unsub();
   }, [selectedBatchId]);
 
-  // 4. Subscribe all checklist forms for Archive Drawer
-  useEffect(() => {
-    const unsub = subscribeAllBahanChecklist((list) => {
-      setAllForms(list);
-    });
-    return () => unsub();
-  }, []);
-
-  // 5. Populate or initialize form state when batch or savedForm changes
+  // 2. Populate or initialize form state when batch or savedForm changes
   useEffect(() => {
     if (savedForm) {
       setNoForm(savedForm.noForm || '01/PBM/IX/2026');
@@ -383,10 +307,10 @@ export function MbgBahanChecklistPage() {
   }, [allForms, archiveSearch]);
 
   return (
-    <div className="min-h-screen bg-slate-50 font-['Hanken_Grotesk',system-ui,sans-serif] pb-16">
+    <div className="font-['Hanken_Grotesk',system-ui,sans-serif] pb-16">
       {/* Top Banner & Control Bar */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-xs max-w-4xl mx-auto">
+        <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           {/* Title & Badge */}
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-200 shadow-xs">
@@ -409,16 +333,6 @@ export function MbgBahanChecklistPage() {
 
           {/* Action Toolbar */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Batch Selector */}
-            <div className="min-w-[200px]">
-              <SearchableBatchSelector
-                batches={batches}
-                selectedBatchId={selectedBatchId}
-                onSelectBatch={(id) => setSelectedBatchId(id)}
-                importedBatchIds={dailyReportBatchIds}
-              />
-            </div>
-
             {/* Archive Drawer Button */}
             <button
               type="button"
@@ -469,12 +383,7 @@ export function MbgBahanChecklistPage() {
       </div>
 
       {/* Main Form Canvas (Paper-like WYSIWYG Document Card - Fits 100% on mobile without horizontal scroll) */}
-      <div className="max-w-4xl mx-auto px-1 sm:px-4 mt-2 sm:mt-6">
-        {batches.length === 0 && (
-          <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 text-xs text-amber-900 font-bold mb-4 flex items-center gap-2 shadow-xs">
-            <span>⚠️ Belum ada batch yang disubmit dari Produksi MBG. Pastikan batch sudah diproduksi & disubmit dari Produksi MBG agar data bahan otomatis terisi.</span>
-          </div>
-        )}
+      <div className="max-w-4xl mx-auto mt-2 sm:mt-4">
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -792,7 +701,7 @@ export function MbgBahanChecklistPage() {
       </div>
 
       {/* Action Bar Paling Bawah (Simpan Form, Export PDF, Export DOCX) */}
-      <div className="max-w-4xl mx-auto px-1 sm:px-4 mt-3 sm:mt-4 mb-10">
+      <div className="max-w-4xl mx-auto mt-3 sm:mt-4 mb-10">
         <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 font-['Hanken_Grotesk']">
           <div>
             <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
@@ -904,7 +813,7 @@ export function MbgBahanChecklistPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            setSelectedBatchId(form.batchId);
+                            onSelectBatch(form.batchId);
                             setShowArchiveModal(false);
                             showToast({ message: `Memuat form tanggal ${form.tanggal}`, variant: 'info' });
                           }}
@@ -952,4 +861,4 @@ export function MbgBahanChecklistPage() {
       </AnimatePresence>
     </div>
   );
-}
+};

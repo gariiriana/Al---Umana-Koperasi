@@ -1,6 +1,6 @@
 // ============================================================================
 // MBG Bahan Documentation Section — Foto Per Bahan & Arsip Dokumentasi
-// Digunakan di Distribusi MBG saat menerima data PM dan Produksi MBG
+// Digunakan di halaman Persiapan MBG (tab Dokumentasi Bahan)
 // ============================================================================
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';

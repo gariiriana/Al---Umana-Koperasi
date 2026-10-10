@@ -84,7 +84,7 @@ const MbgProductionPage = safeLazy(() => import("@/pages/mbg/MbgProductionPage")
 const MbgDistributionPage = safeLazy(() => import("@/pages/mbg/MbgDistributionPage").then(module => ({ default: module.MbgDistributionPage })));
 const MbgDeliveryPage = safeLazy(() => import("@/pages/mbg/MbgDeliveryPage").then(module => ({ default: module.MbgDeliveryPage })));
 const MbgArchivePage = safeLazy(() => import("@/pages/mbg/MbgArchivePage").then(module => ({ default: module.MbgArchivePage })));
-const MbgBahanChecklistPage = safeLazy(() => import("@/pages/mbg/MbgBahanChecklistPage").then(module => ({ default: module.MbgBahanChecklistPage })));
+const MbgPersiapanPage = safeLazy(() => import("@/pages/mbg/MbgPersiapanPage").then(module => ({ default: module.MbgPersiapanPage })));
 const PerformancePage = safeLazy(() => import("@/pages/PerformancePage").then(module => ({ default: module.PerformancePage })));
 const SuperAdminControlCenterPage = safeLazy(() => import("@/pages/SuperAdminControlCenterPage").then(module => ({ default: module.SuperAdminControlCenterPage })));
 const DeveloperControlCenterPage = safeLazy(() => import("@/pages/DeveloperControlCenterPage").then(module => ({ default: module.DeveloperControlCenterPage })));
@@ -781,15 +781,16 @@ function RoutesTree() {
         }
       />
       <Route
-        path="/mbg/checklist-bahan"
+        path="/mbg/persiapan"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Form Cek List Bahan" allowedRoles={["distribusi_mbg", "distribusi_mbg_2", "admin_mbg", "produksi_mbg", "kurir_mbg"]}>
-              <MbgBahanChecklistPage />
+            <ShelledRoute pageTitle="Persiapan" allowedRoles={["distribusi_mbg", "distribusi_mbg_2", "admin_mbg", "produksi_mbg", "kurir_mbg"]}>
+              <MbgPersiapanPage />
             </ShelledRoute>
           </Protected>
         }
       />
+      <Route path="/mbg/checklist-bahan" element={<Navigate to="/mbg/persiapan" replace />} />
       <Route path="/performance" element={<Protected><ShelledRoute pageTitle="Performa Saya" allowedRoles={["admin", "monitoring", "tim_produksi", "distribusi", "kurir", "produksi_1", "distribusi_1", "produksi_2", "distribusi_2", "mo_katering", "co_mo_katering", "admin_mbg", "produksi_mbg", "dokumentasi_produksiMBG", "distribusi_mbg", "kurir_mbg", "MBG2", "mbg2", "produksi_mbg_2", "distribusi_mbg_2", "super_admin", "developer"]}><PerformancePage /></ShelledRoute></Protected>} />
       <Route path="/super-admin/control-center" element={<Protected><ShelledRoute pageTitle="SDM Performance Control Center" allowedRoles={["super_admin", "developer"]}><SuperAdminControlCenterPage /></ShelledRoute></Protected>} />
       <Route path="/developer/control-center" element={<Protected><ShelledRoute pageTitle="Developer Control Center" allowedRoles={["developer"]}><DeveloperControlCenterPage /></ShelledRoute></Protected>} />

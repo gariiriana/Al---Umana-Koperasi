@@ -131,7 +131,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/mbg/production",
     "/mbg/distribution",
     "/mbg/delivery",
-    "/mbg/checklist-bahan",
+    "/mbg/persiapan",
   ],
 
   /**
@@ -144,7 +144,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/mbg/production",
     "/mbg/distribution",
     "/mbg/delivery",
-    "/mbg/checklist-bahan",
+    "/mbg/persiapan",
   ],
 
   /**
@@ -166,7 +166,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   distribusi_mbg: [
     "/mbg/distribution",
     "/mbg/delivery",
-    "/mbg/checklist-bahan",
+    "/mbg/persiapan",
   ],
 
   /**
@@ -174,7 +174,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
    */
   kurir_mbg: [
     "/mbg/delivery",
-    "/mbg/checklist-bahan",
+    "/mbg/persiapan",
   ],
 
   /**
@@ -206,7 +206,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/katering/jobdesk",
     "/mbg/distribution",
     "/mbg/delivery",
-    "/mbg/checklist-bahan",
+    "/mbg/persiapan",
   ],
 };
 

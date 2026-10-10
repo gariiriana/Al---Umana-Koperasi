@@ -27,14 +27,12 @@ import type {
   MbgPmEntry,
   MbgDeliveryTask,
   MbgSchoolProof,
-  MbgProductionDailyReport,
 } from '@/types/mbg';
 import {
   subscribeBatches,
   subscribeEntries,
   updateEntry,
 } from '@/services/mbgAdminService';
-import { subscribeAllDailyReports } from '@/services/mbgProductionService';
 import {
   subscribeDeliveryTasks,
   addDeliveryTask,
@@ -50,7 +48,6 @@ import {
 } from '@/services/mbgDeliveryService';
 import { LiveCamera } from '@/components/LiveCamera';
 import { SearchableBatchSelector } from '@/components/mbg/SearchableBatchSelector';
-import { MbgBahanDocumentationSection } from '@/components/mbg/MbgBahanDocumentationSection';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
@@ -121,9 +118,8 @@ export function MbgDistributionPage() {
   const [deliveryDocs, setDeliveryDocs] = useState<MbgDeliveryDocument[]>([]);
   const [kurirUsers, setKurirUsers] = useState<MbgKurirUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'assignment' | 'reports' | 'bahan'>('assignment');
+  const [activeTab, setActiveTab] = useState<'assignment' | 'reports'>('assignment');
   const [isExportingDailyPdf, setIsExportingDailyPdf] = useState(false);
-  const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
   // Tanggal batch yang masih Draft di Admin MBG (belum Submit Data PM)
   const [draftBatchDates, setDraftBatchDates] = useState<string[]>([]);
   const [batchLoadError, setBatchLoadError] = useState<string | null>(null);
@@ -134,11 +130,6 @@ export function MbgDistributionPage() {
   const selectedBatch = useMemo(
     () => batches.find((b) => b.id === selectedBatchId),
     [batches, selectedBatchId]
-  );
-
-  const currentDailyReport = useMemo(
-    () => allDailyReports.find((r) => r.batchId === selectedBatchId) || null,
-    [allDailyReports, selectedBatchId]
   );
 
   // Per-institution assignment modal
@@ -371,12 +362,6 @@ export function MbgDistributionPage() {
         setLoading(false);
       }
     );
-    return unsub;
-  }, []);
-
-  // Laporan Produksi MBG hanya dipakai untuk tab Dokumentasi Bahan, bukan syarat batch tampil
-  useEffect(() => {
-    const unsub = subscribeAllDailyReports(setAllDailyReports);
     return unsub;
   }, []);
 
@@ -1039,7 +1024,7 @@ export function MbgDistributionPage() {
             <>
               {/* Tab Controller */}
               <div className="flex gap-1 sm:gap-1.5 mb-6 bg-[#F3F4F6] rounded-xl p-1 max-w-2xl">
-                {(['assignment', 'reports', 'bahan'] as const).map((tab) => (
+                {(['assignment', 'reports'] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -1054,15 +1039,10 @@ export function MbgDistributionPage() {
                         <span className="sm:hidden">🚚 Penugasan</span>
                         <span className="hidden sm:inline">🚚 Penugasan Kurir</span>
                       </>
-                    ) : tab === 'reports' ? (
+                    ) : (
                       <>
                         <span className="sm:hidden">📄 Laporan</span>
                         <span className="hidden sm:inline">📄 Laporan Kurir</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="sm:hidden">📷 Foto Bahan</span>
-                        <span className="hidden sm:inline">📷 Dokumentasi Bahan</span>
                       </>
                     )}
                   </button>
@@ -1663,13 +1643,6 @@ export function MbgDistributionPage() {
                     </div>
                   )}
                 </div>
-              )}
-
-              {activeTab === 'bahan' && (
-                <MbgBahanDocumentationSection
-                  selectedBatch={selectedBatch}
-                  dailyReport={currentDailyReport}
-                />
               )}
             </>
           ) : (
