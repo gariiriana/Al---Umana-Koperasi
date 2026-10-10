@@ -1,9 +1,10 @@
 import {
-  addDoc, collection, deleteField, doc, onSnapshot, query, runTransaction,
-  serverTimestamp, updateDoc, where,
+  Bytes, addDoc, collection, deleteField, doc, getDoc, onSnapshot, query, runTransaction,
+  serverTimestamp, setDoc, updateDoc, where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { deadlineMillis } from "@/utils/taskKpi";
+import { EVIDENCE_ORIGINAL_MAX_BYTES, splitIntoChunks } from "@/utils/evidencePhoto";
 
 export type Division = "katering" | "mbg" | "general";
 
@@ -24,8 +25,13 @@ export interface AdHocTask {
   /** Deadline lokal WIB "YYYY-MM-DDTHH:mm" */
   deadline?: string;
   evidenceNote?: string;
-  /** Foto bukti (opsional), data URL JPEG terkompresi */
+  /** Pratinjau foto bukti (opsional), data URL JPEG kecil untuk daftar & panel */
   evidencePhoto?: string;
+  /** Foto asli (≤ 10 MB) disimpan terpotong di sub-koleksi evidence_chunks */
+  evidencePhotoChunks?: number;
+  evidencePhotoBytes?: number;
+  evidencePhotoType?: string;
+  evidencePhotoName?: string;
   status: string; createdBy: string; createdAt?: unknown; submittedAt?: unknown;
 }
 
@@ -48,8 +54,47 @@ export async function createAdHocTask(input: Pick<AdHocTask, "assigneeId" | "ass
   await addDoc(collection(db, "ad_hoc_tasks"), { ...input, status: "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
 }
 
+/** Foto asli yang sudah diunggah ke evidence_chunks. */
+export interface EvidenceOriginal {
+  chunks: number;
+  bytes: number;
+  type: string;
+  name: string;
+}
+
+/**
+ * Unggah foto asli ke Firestore, terpotong per EVIDENCE_CHUNK_BYTES (dokumen Firestore
+ * maks 1 MB). Hanya pemilik task sebelum submit (dijaga rules). Butuh koneksi.
+ */
+export async function uploadEvidenceOriginal(taskId: string, file: File, onProgress?: (fraction: number) => void): Promise<EvidenceOriginal> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Sesi login sudah berakhir.");
+  if (file.size > EVIDENCE_ORIGINAL_MAX_BYTES) throw new Error("Foto maksimal 10 MB.");
+  const parts = splitIntoChunks(new Uint8Array(await file.arrayBuffer()));
+  for (let i = 0; i < parts.length; i++) {
+    await setDoc(doc(db, "ad_hoc_tasks", taskId, "evidence_chunks", String(i)), {
+      index: i, total: parts.length, data: Bytes.fromUint8Array(parts[i]), uploadedBy: uid, createdAt: serverTimestamp(),
+    });
+    onProgress?.((i + 1) / parts.length);
+  }
+  return { chunks: parts.length, bytes: file.size, type: file.type || "image/jpeg", name: file.name || "foto-bukti.jpg" };
+}
+
+/** Gabungkan kembali foto asli dari evidence_chunks. */
+export async function loadEvidenceOriginal(task: Pick<AdHocTask, "id" | "evidencePhotoChunks" | "evidencePhotoType">): Promise<Blob> {
+  const total = task.evidencePhotoChunks ?? 0;
+  if (total <= 0) throw new Error("Task ini tidak punya foto asli.");
+  const snaps = await Promise.all(Array.from({ length: total }, (_, i) => getDoc(doc(db, "ad_hoc_tasks", task.id, "evidence_chunks", String(i)))));
+  const parts = snaps.map((s, i) => {
+    const data = s.exists() ? s.get("data") : null;
+    if (!(data instanceof Bytes)) throw new Error(`Bagian foto ${i + 1} dari ${total} tidak ditemukan.`);
+    return data.toUint8Array();
+  });
+  return new Blob(parts as BlobPart[], { type: task.evidencePhotoType || "image/jpeg" });
+}
+
 /** Submit selesai (final). Tetap bisa dilakukan setelah deadline — statusnya jadi Terlambat. */
-export async function submitAdHocTask(taskId: string, evidenceNote: string, evidencePhoto?: string): Promise<void> {
+export async function submitAdHocTask(taskId: string, evidenceNote: string, evidencePhoto?: string, original?: EvidenceOriginal): Promise<void> {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("Sesi login sudah berakhir.");
   if (!evidenceNote.trim()) throw new Error("Keterangan pekerjaan wajib diisi.");
@@ -62,6 +107,10 @@ export async function submitAdHocTask(taskId: string, evidenceNote: string, evid
     tx.update(ref, {
       status: "submitted", evidenceNote: evidenceNote.trim(),
       ...(evidencePhoto ? { evidencePhoto } : {}),
+      ...(original ? {
+        evidencePhotoChunks: original.chunks, evidencePhotoBytes: original.bytes,
+        evidencePhotoType: original.type, evidencePhotoName: original.name,
+      } : {}),
       submittedAt: serverTimestamp(), updatedAt: serverTimestamp(),
     });
   });

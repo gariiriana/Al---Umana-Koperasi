@@ -461,8 +461,32 @@ service cloud.firestore {
           && request.resource.data.evidenceNote is string
           && request.resource.data.evidenceNote.size() > 0
           && (!('evidencePhoto' in request.resource.data) || (request.resource.data.evidencePhoto is string && request.resource.data.evidencePhoto.size() < 900000))
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'evidenceNote', 'evidencePhoto', 'submittedAt', 'updatedAt']));
+          // Foto asli ≤ 10 MB terpotong di evidence_chunks (maks 12 potongan)
+          && (!('evidencePhotoChunks' in request.resource.data) || (request.resource.data.evidencePhotoChunks is int
+            && request.resource.data.evidencePhotoChunks >= 1 && request.resource.data.evidencePhotoChunks <= 12
+            && request.resource.data.evidencePhotoBytes is int && request.resource.data.evidencePhotoBytes <= 10485760))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'evidenceNote', 'evidencePhoto', 'evidencePhotoChunks', 'evidencePhotoBytes', 'evidencePhotoType', 'evidencePhotoName', 'submittedAt', 'updatedAt']));
       allow delete: if false;
+
+      // Potongan biner foto asli. Firestore membatasi dokumen 1 MB, jadi foto ≤ 10 MB
+      // disimpan sebagai 0..11 dokumen berisi Bytes ≤ 921.600 byte.
+      match /evidence_chunks/{chunkId} {
+        function parentTask() {
+          return get(/databases/$(database)/documents/ad_hoc_tasks/$(taskId)).data;
+        }
+        allow read: if request.auth != null && (isSuperAdmin() || parentTask().assigneeId == request.auth.uid);
+        allow create, update: if request.auth != null
+          && parentTask().assigneeId == request.auth.uid
+          && parentTask().get('submittedAt', null) == null
+          && chunkId.matches('^([0-9]|1[01])$')
+          && request.resource.data.keys().hasOnly(['index', 'total', 'data', 'uploadedBy', 'createdAt'])
+          && request.resource.data.index == int(chunkId)
+          && request.resource.data.total is int && request.resource.data.total >= 1 && request.resource.data.total <= 12
+          && request.resource.data.data is bytes
+          && request.resource.data.data.size() <= 921600
+          && request.resource.data.uploadedBy == request.auth.uid;
+        allow delete: if isSuperAdmin();
+      }
     }
 
     // -------------------------------------------------------------------

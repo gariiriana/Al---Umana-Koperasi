@@ -8,8 +8,9 @@ import {
   subscribeMyAdHocTasks,
   subscribeRoleAssignments,
   submitAdHocTask,
+  uploadEvidenceOriginal,
 } from "@/services/performanceService";
-import { EVIDENCE_PHOTO_MAX_BYTES, formatBytes, prepareEvidencePhoto, type EvidencePhoto } from "@/utils/evidencePhoto";
+import { EVIDENCE_ORIGINAL_MAX_BYTES, formatBytes, prepareEvidencePhoto, type EvidencePhoto } from "@/utils/evidencePhoto";
 import { AssessmentPanel, StatusPill, SummaryStrip, TaskDetail } from "@/components/kpi/TaskKpiWidgets";
 import { SidePanel } from "@/components/ui/SidePanel";
 import { PeriodSelect } from "@/components/ui/PeriodSelect";
@@ -45,6 +46,8 @@ export function PerformancePage() {
   const [evidence, setEvidence] = useState("");
   const [photo, setPhoto] = useState<EvidencePhoto | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
+  /** 0–1 selama foto asli diunggah, null kalau tidak sedang mengunggah */
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -77,13 +80,23 @@ export function PerformancePage() {
 
   const submit = async () => {
     if (!submitTask || !evidence.trim() || photoBusy) return;
+    if (photo && !navigator.onLine) {
+      setError("Sedang offline. Foto asli butuh koneksi untuk diunggah — coba lagi setelah online.");
+      return;
+    }
     setSaving(true);
+    setError("");
     try {
-      await submitAdHocTask(submitTask.id, evidence.trim(), photo?.dataUrl);
+      let original;
+      if (photo) {
+        setUploadProgress(0);
+        original = await uploadEvidenceOriginal(submitTask.id, photo.file, setUploadProgress);
+      }
+      await submitAdHocTask(submitTask.id, evidence.trim(), photo?.dataUrl, original);
       showToast({ message: `"${submitTask.title}" sudah disubmit`, variant: "success" });
       closeSubmit();
     } catch (err) { setError(err instanceof Error ? err.message : "Gagal submit task."); }
-    finally { setSaving(false); }
+    finally { setSaving(false); setUploadProgress(null); }
   };
 
   const submitLate = submitTask ? now > deadlineMillis(submitTask.deadline) : false;
@@ -207,16 +220,24 @@ export function PerformancePage() {
           </label>
 
           <div>
-            <span className="text-sm font-medium text-[#374151]">Foto bukti <span className="font-normal text-[#9CA3AF]">(opsional, hingga {formatBytes(EVIDENCE_PHOTO_MAX_BYTES)})</span></span>
+            <span className="text-sm font-medium text-[#374151]">Foto bukti <span className="font-normal text-[#9CA3AF]">(opsional, maks {formatBytes(EVIDENCE_ORIGINAL_MAX_BYTES)}, disimpan utuh)</span></span>
             <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
               onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = ""; }} />
             {photo ? (
               <div className="mt-1">
                 <div className="relative">
                   <img src={photo.dataUrl} alt="Foto bukti" className="w-full max-h-56 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] object-contain" />
-                  <button type="button" onClick={() => setPhoto(null)} aria-label="Hapus foto" className="absolute right-2 top-2 rounded-lg bg-white/90 p-1.5 text-[#B91C1C] shadow cursor-pointer"><Trash2 className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => setPhoto(null)} disabled={saving} aria-label="Hapus foto" className="absolute right-2 top-2 rounded-lg bg-white/90 p-1.5 text-[#B91C1C] shadow cursor-pointer disabled:opacity-40"><Trash2 className="h-4 w-4" /></button>
                 </div>
-                <p className="mt-1 text-xs text-[#6B7280]">Foto {formatBytes(photo.originalBytes)} dikompres jadi {formatBytes(photo.storedBytes)} supaya cepat terkirim.</p>
+                <p className="mt-1 text-xs text-[#6B7280]">Foto asli {formatBytes(photo.originalBytes)} akan diunggah utuh saat submit.</p>
+                {uploadProgress !== null && (
+                  <div className="mt-2" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(uploadProgress * 100)}>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-[#F3F4F6]">
+                      <div className="h-full bg-[#FBBF24] transition-all" style={{ width: `${Math.round(uploadProgress * 100)}%` }} />
+                    </div>
+                    <p className="mt-1 text-xs text-[#6B7280]">Mengunggah foto… {Math.round(uploadProgress * 100)}%</p>
+                  </div>
+                )}
               </div>
             ) : (
               <button type="button" onClick={() => fileRef.current?.click()} disabled={photoBusy}
@@ -234,7 +255,7 @@ export function PerformancePage() {
           <button type="button" onClick={closeSubmit} className="rounded-lg px-4 py-2 text-sm font-semibold text-[#374151] hover:bg-[#F3F4F6] cursor-pointer">Batal</button>
           <button type="button" disabled={saving || photoBusy || !evidence.trim()} onClick={submit}
             className="rounded-lg bg-[#FBBF24] px-4 py-2 text-sm font-bold text-[#111827] hover:bg-[#F59E0B] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
-            {saving ? "Mengirim…" : "Submit Selesai"}
+            {uploadProgress !== null ? `Mengunggah ${Math.round(uploadProgress * 100)}%…` : saving ? "Mengirim…" : "Submit Selesai"}
           </button>
         </footer>
       </div>

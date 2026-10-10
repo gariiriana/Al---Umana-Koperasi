@@ -3,8 +3,9 @@
 // Dipakai di Control Center (Super Admin) dan Performa Saya (tiap akun)
 // ============================================================================
 
-import type { ReactNode } from "react";
-import type { AdHocTask } from "@/services/performanceService";
+import { useEffect, useState, type ReactNode } from "react";
+import { loadEvidenceOriginal, type AdHocTask } from "@/services/performanceService";
+import { formatBytes } from "@/utils/evidencePhoto";
 import {
   KPI_STATUS_LABEL, formatDeadline, formatDuration, formatWib, lateMinutes, taskKpiStatus, toMillis,
   type KpiAssessment, type KpiSummary, type TaskKpiStatus,
@@ -118,12 +119,52 @@ export function TaskDetail({ task, now, assigneeName }: { task: AdHocTask; now: 
           <p className="whitespace-pre-wrap text-[#111827]">{task.evidenceNote}</p>
         </div>
       )}
-      {task.evidencePhoto && (
+      {(task.evidencePhoto || task.evidencePhotoChunks) && (
         <div>
           <h4 className="text-xs font-semibold text-[#6B7280] mb-1">Foto bukti</h4>
-          <img src={task.evidencePhoto} alt="Foto bukti" className="w-full rounded-lg border border-[#E5E7EB] object-contain max-h-80 bg-[#F9FAFB]" />
+          {task.evidencePhotoChunks ? <OriginalPhoto task={task} /> : (
+            <img src={task.evidencePhoto} alt="Foto bukti" className="w-full rounded-lg border border-[#E5E7EB] object-contain max-h-80 bg-[#F9FAFB]" />
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Pratinjau + tombol muat foto asli (digabung dari potongan di Firestore). */
+function OriginalPhoto({ task }: { task: AdHocTask }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try { setUrl(URL.createObjectURL(await loadEvidenceOriginal(task))); }
+    catch (e) { setError(e instanceof Error ? e.message : "Gagal memuat foto asli."); }
+    finally { setLoading(false); }
+  };
+
+  const size = task.evidencePhotoBytes ? formatBytes(task.evidencePhotoBytes) : "";
+  return (
+    <div className="space-y-2">
+      <img src={url ?? task.evidencePhoto} alt="Foto bukti" className="w-full rounded-lg border border-[#E5E7EB] object-contain max-h-96 bg-[#F9FAFB]" />
+      <div className="flex flex-wrap items-center gap-2">
+        {url ? (
+          <>
+            <a href={url} target="_blank" rel="noreferrer" className="rounded-lg border border-[#E5E7EB] px-3 py-1.5 text-xs font-semibold text-[#374151] hover:bg-[#F3F4F6]">Buka ukuran penuh</a>
+            <a href={url} download={task.evidencePhotoName || "foto-bukti.jpg"} className="rounded-lg bg-[#FBBF24] px-3 py-1.5 text-xs font-bold text-[#111827] hover:bg-[#F59E0B]">Unduh foto asli</a>
+          </>
+        ) : (
+          <button type="button" onClick={() => void load()} disabled={loading}
+            className="rounded-lg bg-[#FBBF24] px-3 py-1.5 text-xs font-bold text-[#111827] hover:bg-[#F59E0B] disabled:opacity-50 cursor-pointer">
+            {loading ? "Memuat foto asli…" : `Lihat foto asli${size ? ` (${size})` : ""}`}
+          </button>
+        )}
+        {!url && !loading && <span className="text-xs text-[#9CA3AF]">Yang tampil sekarang pratinjau.</span>}
+      </div>
+      {error && <p className="text-xs text-[#B91C1C]">{error}</p>}
     </div>
   );
 }

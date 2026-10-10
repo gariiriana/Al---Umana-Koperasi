@@ -1,14 +1,37 @@
 import { describe, expect, it } from "vitest";
 import {
-  ENCODE_STEPS, EVIDENCE_PHOTO_MAX_BYTES, EVIDENCE_PHOTO_MAX_CHARS, firstThatFits, formatBytes, prepareEvidencePhoto,
+  ENCODE_STEPS, EVIDENCE_CHUNK_BYTES, EVIDENCE_MAX_CHUNKS, EVIDENCE_ORIGINAL_MAX_BYTES, EVIDENCE_PHOTO_MAX_CHARS, EVIDENCE_PREVIEW_MAX_CHARS,
+  firstThatFits, formatBytes, prepareEvidencePhoto, splitIntoChunks,
 } from "@/utils/evidencePhoto";
 import { accountNameHint, personName } from "@/utils/personName";
 import { ALL_ROLES, KPI_EXCLUDED_ROLES, ROLE_PERMISSIONS } from "@/constants/roles";
 
 describe("foto bukti", () => {
-  it("menerima foto minimal 10 MB", () => {
-    expect(EVIDENCE_PHOTO_MAX_BYTES).toBeGreaterThanOrEqual(10 * 1024 * 1024);
+  it("foto asli maksimal 10 MB, potongan sesuai batas rules", () => {
+    expect(EVIDENCE_ORIGINAL_MAX_BYTES).toBe(10 * 1024 * 1024);
+    expect(EVIDENCE_CHUNK_BYTES).toBeLessThanOrEqual(921_600); // rules evidence_chunks
+    expect(EVIDENCE_MAX_CHUNKS).toBeLessThanOrEqual(12); // rules: chunk 0..11
+    expect(EVIDENCE_PREVIEW_MAX_CHARS).toBeLessThan(EVIDENCE_PHOTO_MAX_CHARS);
     expect(EVIDENCE_PHOTO_MAX_CHARS).toBeLessThan(900_000); // batas rules ad_hoc_tasks
+  });
+
+  it("foto 10 MB terpotong jadi 12 bagian dan bisa digabung utuh", () => {
+    const data = new Uint8Array(EVIDENCE_ORIGINAL_MAX_BYTES);
+    for (let i = 0; i < data.length; i += 4099) data[i] = i % 251;
+    const parts = splitIntoChunks(data);
+    expect(parts).toHaveLength(12);
+    expect(parts.every((p) => p.length <= EVIDENCE_CHUNK_BYTES)).toBe(true);
+    const joined = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+    let offset = 0;
+    for (const p of parts) { joined.set(p, offset); offset += p.length; }
+    expect(joined.length).toBe(data.length);
+    let same = true;
+    for (let i = 0; i < data.length; i++) if (joined[i] !== data[i]) { same = false; break; }
+    expect(same).toBe(true);
+  });
+
+  it("file kecil cukup satu potongan", () => {
+    expect(splitIntoChunks(new Uint8Array(1000))).toHaveLength(1);
   });
 
   it("memakai resolusi tertinggi yang ukurannya muat", async () => {
@@ -28,7 +51,7 @@ describe("foto bukti", () => {
 
   it("menolak file di atas batas dan file bukan foto dengan pesan jelas", async () => {
     const big = new File(["x"], "besar.jpg", { type: "image/jpeg" });
-    Object.defineProperty(big, "size", { value: EVIDENCE_PHOTO_MAX_BYTES + 1 });
+    Object.defineProperty(big, "size", { value: EVIDENCE_ORIGINAL_MAX_BYTES + 1 });
     await expect(prepareEvidencePhoto(big)).rejects.toThrow(/terlalu besar/);
     await expect(prepareEvidencePhoto(new File(["x"], "data.pdf", { type: "application/pdf" }))).rejects.toThrow(/harus berupa foto/);
   });

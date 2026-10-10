@@ -1,14 +1,27 @@
 // ============================================================================
-// Foto bukti task — terima foto besar dari kamera HP, simpan versi terkompres
+// Foto bukti task — foto asli ≤ 10 MB disimpan utuh di Firestore
 // ============================================================================
-// Foto disimpan sebagai data URL di dokumen Firestore (batas dokumen 1 MB; rules
-// ad_hoc_tasks membatasi evidencePhoto < 900.000 karakter). Foto kamera 10–25 MB
-// diperkecil bertahap sampai muat, jadi tidak pernah ditolak server.
+// Dokumen Firestore maksimal 1 MB, jadi foto asli dipotong per EVIDENCE_CHUNK_BYTES
+// ke ad_hoc_tasks/{id}/evidence_chunks/{0..11} (tipe Bytes). Dokumen task hanya
+// menyimpan pratinjau kecil (data URL) supaya daftar task tetap ringan.
 
-/** Ukuran file foto terbesar yang boleh dipilih. */
-export const EVIDENCE_PHOTO_MAX_BYTES = 25 * 1024 * 1024;
-/** Panjang data URL maksimal yang disimpan (di bawah batas rules 900.000). */
+/** Ukuran file foto asli terbesar yang boleh diunggah. */
+export const EVIDENCE_ORIGINAL_MAX_BYTES = 10 * 1024 * 1024;
+/** Isi biner per potongan (di bawah batas dokumen 1 MB; rules: ≤ 921.600). */
+export const EVIDENCE_CHUNK_BYTES = 900 * 1024;
+/** Jumlah potongan maksimal = ceil(10 MB / 900 KB) = 12 (rules: chunk 0..11). */
+export const EVIDENCE_MAX_CHUNKS = Math.ceil(EVIDENCE_ORIGINAL_MAX_BYTES / EVIDENCE_CHUNK_BYTES);
+/** Panjang data URL pratinjau maksimal di dokumen task. */
+export const EVIDENCE_PREVIEW_MAX_CHARS = 250_000;
+/** Batas lama rules untuk evidencePhoto di dokumen task (tetap berlaku). */
 export const EVIDENCE_PHOTO_MAX_CHARS = 850_000;
+
+/** Potong isi file menjadi bagian-bagian ≤ chunkBytes. */
+export function splitIntoChunks(data: Uint8Array, chunkBytes = EVIDENCE_CHUNK_BYTES): Uint8Array[] {
+  const parts: Uint8Array[] = [];
+  for (let offset = 0; offset < data.length; offset += chunkBytes) parts.push(data.subarray(offset, offset + chunkBytes));
+  return parts.length ? parts : [new Uint8Array(0)];
+}
 
 /** Urutan percobaan: resolusi tinggi dulu, turun sampai ukurannya muat. */
 export const ENCODE_STEPS: ReadonlyArray<{ maxSide: number; quality: number }> = [
@@ -21,10 +34,11 @@ export const ENCODE_STEPS: ReadonlyArray<{ maxSide: number; quality: number }> =
 ];
 
 export interface EvidencePhoto {
+  /** File asli yang akan diunggah utuh */
+  file: File;
+  /** Pratinjau kecil untuk dokumen task */
   dataUrl: string;
   originalBytes: number;
-  /** Perkiraan ukuran file JPEG hasil kompres */
-  storedBytes: number;
 }
 
 /** Ambil hasil encode pertama yang muat; null kalau semua langkah masih terlalu besar. */
@@ -69,13 +83,13 @@ async function decode(file: File): Promise<{ source: CanvasImageSource; width: n
   }
 }
 
-/** Validasi + kompres foto bukti. Melempar Error berbahasa Indonesia kalau gagal. */
+/** Validasi foto bukti + buat pratinjau kecil. Melempar Error berbahasa Indonesia kalau gagal. */
 export async function prepareEvidencePhoto(file: File): Promise<EvidencePhoto> {
   if (!file.type.startsWith("image/") && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)) {
     throw new Error("File harus berupa foto.");
   }
-  if (file.size > EVIDENCE_PHOTO_MAX_BYTES) {
-    throw new Error(`Foto terlalu besar (${formatBytes(file.size)}). Maksimal ${formatBytes(EVIDENCE_PHOTO_MAX_BYTES)}.`);
+  if (file.size > EVIDENCE_ORIGINAL_MAX_BYTES) {
+    throw new Error(`Foto terlalu besar (${formatBytes(file.size)}). Maksimal ${formatBytes(EVIDENCE_ORIGINAL_MAX_BYTES)}.`);
   }
   const img = await decode(file);
   try {
@@ -90,9 +104,9 @@ export async function prepareEvidencePhoto(file: File): Promise<EvidencePhoto> {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img.source, 0, 0, canvas.width, canvas.height);
       return canvas.toDataURL("image/jpeg", quality);
-    });
-    if (!dataUrl) throw new Error("Foto tidak bisa diperkecil sampai ukuran yang diizinkan. Coba foto lain.");
-    return { dataUrl, originalBytes: file.size, storedBytes: Math.round((dataUrl.length * 3) / 4) };
+    }, EVIDENCE_PREVIEW_MAX_CHARS);
+    if (!dataUrl) throw new Error("Pratinjau foto tidak bisa dibuat. Coba foto lain.");
+    return { file, dataUrl, originalBytes: file.size };
   } finally {
     img.release();
   }

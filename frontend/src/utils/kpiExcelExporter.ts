@@ -6,6 +6,7 @@
 
 import * as XLSX from "xlsx";
 import type { AdHocTask } from "@/services/performanceService";
+import { formatBytes } from "@/utils/evidencePhoto";
 import {
   KPI_STATUS_LABEL, assessKpi, fmtId, formatDeadline, formatDuration, formatWib, lateMinutes,
   monthLabel, summarizeTasks, taskKpiStatus, toMillis,
@@ -80,7 +81,7 @@ function buildPersonSheet(person: KpiPersonSheet, monthKey: string, now: number)
       KPI_STATUS_LABEL[status],
       status === "terlambat" ? formatDuration(lateMinutes(t, now)) : "-",
       t.evidenceNote ?? "",
-      t.evidencePhoto ? "Ada" : "-",
+      t.evidencePhotoChunks ? `Ada (asli ${formatBytes(t.evidencePhotoBytes ?? 0)})` : t.evidencePhoto ? "Ada" : "-",
     ]);
   });
 
