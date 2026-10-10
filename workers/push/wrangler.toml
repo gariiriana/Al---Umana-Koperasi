@@ -10,6 +10,10 @@ routes = [
 [triggers]
 crons = ["* * * * *"]
 
+# Simpan log Worker (lihat di dashboard Cloudflare → Workers → al-umana-push → Logs).
+[observability]
+enabled = true
+
 [vars]
 FIREBASE_PROJECT_ID = "al-umana-koperasi"
 

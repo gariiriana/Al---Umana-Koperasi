@@ -12,7 +12,7 @@
  * notifikasi role terakhir sampai ada akun lain yang login di HP itu.
  */
 
-import { doc, deleteDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, deleteDoc, getDocFromServer, setDoc, serverTimestamp } from "firebase/firestore";
 import { app, auth, db } from "@/lib/firebase";
 
 const DEVICE_STORAGE_KEY = "alumana-push-device";
@@ -127,6 +127,43 @@ export async function registerPushDevice(uid: string, role: string): Promise<Reg
   return device;
 }
 
+async function deviceDocStillThere(id: string): Promise<boolean> {
+  try {
+    return (await getDocFromServer(doc(db, "push_devices", id))).exists();
+  } catch (err) {
+    // Aturan `get` hanya untuk pemilik, jadi dokumen yang sudah dihapus juga ditolak.
+    if ((err as { code?: string }).code === "permission-denied") return false;
+    return true; // offline / jaringan: anggap masih ada, dicek lagi saat dibuka berikutnya
+  }
+}
+
+/**
+ * Putuskan langganan push HP ini supaya `getToken` berikutnya membuat token baru.
+ * (`deleteToken` Firebase mencoba mendaftarkan firebase-messaging-sw.js yang
+ * tidak dipakai aplikasi ini, jadi langganan diputus langsung.)
+ */
+async function dropPushSubscription(): Promise<void> {
+  const registration = await serviceWorkerReady();
+  const subscription = await registration.pushManager.getSubscription();
+  await subscription?.unsubscribe();
+}
+
+/**
+ * Dipanggil setiap aplikasi dibuka saat izin sudah diberikan. Daftar ulang
+ * kalau belum terdaftar untuk akun/role ini atau sudah lewat `maxAgeMs`.
+ * Kalau dokumen HP ini hilang — Worker menghapusnya karena FCM menolak
+ * tokennya — HP langsung minta token baru, tidak menunggu `maxAgeMs`.
+ */
+export async function refreshPushDevice(uid: string, role: string, maxAgeMs: number): Promise<RegisteredDevice | null> {
+  const device = getRegisteredDevice();
+  if (device && device.uid === uid && !(await deviceDocStillThere(device.id))) {
+    await dropPushSubscription();
+    return registerPushDevice(uid, role);
+  }
+  const fresh = device && device.uid === uid && device.role === role && Date.now() - device.at < maxAgeMs;
+  return fresh ? null : registerPushDevice(uid, role);
+}
+
 /** Minta izin (harus dari klik user) lalu daftarkan perangkat. */
 export async function enablePushNotifications(uid: string, role: string): Promise<NotificationPermission> {
   const permission = await Notification.requestPermission();
@@ -138,9 +175,8 @@ export async function enablePushNotifications(uid: string, role: string): Promis
 export async function disablePushOnThisDevice(): Promise<void> {
   const device = getRegisteredDevice();
   try {
-    const { getMessaging, deleteToken } = await import("firebase/messaging");
-    await deleteToken(getMessaging(app));
-  } catch { /* token mungkin sudah tidak ada */ }
+    await dropPushSubscription();
+  } catch { /* langganan mungkin sudah tidak ada */ }
   if (device) {
     try { await deleteDoc(doc(db, "push_devices", device.id)); } catch { /* dokumen milik akun lain */ }
   }

@@ -4,10 +4,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   enablePushNotifications,
   getPushAvailability,
-  getRegisteredDevice,
   isIos,
   isStandalone,
-  registerPushDevice,
+  refreshPushDevice,
   type PushAvailability,
 } from "@/services/pushService";
 import { canPromptInstall, onInstallPromptChange, promptInstall } from "@/services/installPrompt";
@@ -72,13 +71,11 @@ export function PushNotificationCenter() {
     return () => { cancelled = true; };
   }, [uid]);
 
-  // Perangkat yang sudah diizinkan: perbarui token & role secara diam-diam.
+  // Perangkat yang sudah diizinkan: perbarui token & role secara diam-diam
+  // (dan minta token baru kalau Worker sudah membuang token lama yang mati).
   useEffect(() => {
     if (!uid || !role || availability !== "ready" || permission !== "granted") return;
-    const device = getRegisteredDevice();
-    const fresh = device && device.uid === uid && device.role === role && Date.now() - device.at < REFRESH_MS;
-    if (fresh) return;
-    registerPushDevice(uid, role).catch((err) => {
+    refreshPushDevice(uid, role, REFRESH_MS).catch((err) => {
       console.warn("[push] gagal memperbarui perangkat:", err);
       setError(err instanceof Error ? err.message : "Gagal mendaftarkan HP untuk notifikasi.");
     });

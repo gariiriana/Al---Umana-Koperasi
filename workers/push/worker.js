@@ -175,12 +175,13 @@ async function sendFcm(env, counter, notification, device) {
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify(buildMessage(notification, device.token)),
   });
-  if (response.ok) return "ok";
+  if (response.ok) return { kind: "ok" };
   let body = null;
   try { body = await response.json(); } catch { /* ignore */ }
   const kind = classifyFcmError(response.status, body);
-  if (kind !== "invalid") console.warn("fcm send failed", response.status, body?.error?.status || "");
-  return kind;
+  const code = (body?.error?.details || []).map((d) => d?.errorCode).find(Boolean) || body?.error?.status || String(response.status);
+  console.warn("fcm send failed", kind, response.status, code, device.role);
+  return { kind, code };
 }
 
 // Concurrent passes (cron + kicks) are safe: the claim commit carries an
@@ -224,11 +225,13 @@ async function processPending(env) {
   let sent = 0;
   for (const { notification, targets } of plan) {
     const results = [];
+    const errors = [];
     for (const device of targets) {
-      const result = await sendFcm(env, counter, notification, device);
-      results.push(result);
-      if (result === "invalid") deadDevices.add(device.name);
-      if (result === "ok") sent++;
+      const { kind, code } = await sendFcm(env, counter, notification, device);
+      results.push(kind);
+      if (code) errors.push(code);
+      if (kind === "invalid") deadDevices.add(device.name);
+      if (kind === "ok") sent++;
     }
     const attempts = Number(notification.pushAttempts || 0);
     const status = finalStatus(targets.length, results, attempts);
@@ -237,6 +240,8 @@ async function processPending(env) {
       pushSentCount: results.filter((r) => r === "ok").length,
       pushAttempts: attempts + 1,
       pushedAt: new Date(),
+      // Kode error FCM (mis. UNREGISTERED) supaya kegagalan bisa ditelusuri dari Firestore.
+      ...(errors.length ? { pushError: [...new Set(errors)].join(",").slice(0, 200) } : {}),
     }));
   }
   for (const name of deadDevices) finalize.push({ delete: name });
