@@ -42,6 +42,8 @@ import type {
   PicShortName,
 } from "@/types/cateringJobDesk";
 import { JOBDESK_ROLE_LABELS, ROLE_TO_PIC_NAME, compareJobDeskTime } from "@/types/cateringJobDesk";
+import { JobDeskKeterangan } from "@/components/katering/JobDeskKeterangan";
+import { formatTanggalPanjang, groupJobDesksByTanggal } from "@/utils/jobDeskGrouping";
 
 /** Map user profile role to job desk assignable role. */
 function mapToAssignableRole(profileRole?: string): JobDeskAssignableRole | null {
@@ -240,9 +242,9 @@ export function OperationalJobDeskPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6 pb-16">
+    <div className="max-w-7xl mx-auto px-0 sm:px-4 py-1 sm:py-6 space-y-4 sm:space-y-6 pb-4 sm:pb-16">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-gradient-to-r from-slate-900 to-slate-800 p-6 rounded-3xl text-white shadow-lg">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-gradient-to-r from-slate-900 to-slate-800 p-4 sm:p-6 rounded-2xl sm:rounded-3xl text-white shadow-lg">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-slate-950">
@@ -254,7 +256,7 @@ export function OperationalJobDeskPage() {
               </span>
             )}
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+          <h1 className="text-lg sm:text-3xl font-extrabold tracking-tight leading-snug">
             Job Desk Saya — {JOBDESK_ROLE_LABELS[assignableRole]}
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 mt-1">
@@ -303,33 +305,28 @@ export function OperationalJobDeskPage() {
       </div>
 
       {/* KPI Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs">
-          <p className="text-xs font-bold text-gray-500">Total Tugas</p>
-          <p className="text-2xl font-black text-gray-900 mt-1">{stats.total}</p>
-        </div>
-        <div className="bg-blue-50/60 p-4 rounded-2xl border border-blue-200 shadow-xs">
-          <p className="text-xs font-bold text-blue-700">Complete (✅)</p>
-          <p className="text-2xl font-black text-blue-700 mt-1">{stats.completed}</p>
-        </div>
-        <div className="bg-orange-50/60 p-4 rounded-2xl border border-orange-200 shadow-xs">
-          <p className="text-xs font-bold text-orange-700">Incomplete (❌)</p>
-          <p className="text-2xl font-black text-orange-700 mt-1">{stats.incomplete}</p>
-        </div>
-        <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200 shadow-xs">
-          <p className="text-xs font-bold text-amber-700">Menunggu Review</p>
-          <p className="text-2xl font-black text-amber-700 mt-1">{stats.pendingReview}</p>
-        </div>
-        <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 shadow-xs">
-          <p className="text-xs font-bold text-emerald-700">Approved CO_MO</p>
-          <p className="text-2xl font-black text-emerald-700 mt-1">{stats.approved}</p>
-        </div>
+      {/* HP: satu baris 5 angka ringkas supaya daftar tugas langsung terlihat. */}
+      <div className="grid grid-cols-5 gap-1.5 sm:gap-3">
+        {[
+          { short: "Total", label: "Total Tugas", value: stats.total, box: "bg-white border-gray-200", text: "text-gray-900", sub: "text-gray-500" },
+          { short: "Selesai", label: "Complete (✅)", value: stats.completed, box: "bg-blue-50/60 border-blue-200", text: "text-blue-700", sub: "text-blue-700" },
+          { short: "Tidak", label: "Incomplete (❌)", value: stats.incomplete, box: "bg-orange-50/60 border-orange-200", text: "text-orange-700", sub: "text-orange-700" },
+          { short: "Review", label: "Menunggu Review", value: stats.pendingReview, box: "bg-amber-50/60 border-amber-200", text: "text-amber-700", sub: "text-amber-700" },
+          { short: "Approved", label: "Approved CO_MO", value: stats.approved, box: "bg-emerald-50/60 border-emerald-200", text: "text-emerald-700", sub: "text-emerald-700" },
+        ].map((s) => (
+          <div key={s.label} className={`${s.box} px-1 py-2 sm:p-4 rounded-xl sm:rounded-2xl border shadow-xs text-center sm:text-left`}>
+            <p className={`text-[10px] sm:text-xs font-bold ${s.sub} leading-tight`}>
+              <span className="sm:hidden">{s.short}</span><span className="hidden sm:inline">{s.label}</span>
+            </p>
+            <p className={`text-lg sm:text-2xl font-black ${s.text} sm:mt-1`}>{s.value}</p>
+          </div>
+        ))}
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-gray-200 shadow-xs grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
         {/* Search */}
-        <div className="relative">
+        <div className="relative col-span-2 sm:col-span-1">
           <label className="block text-[11px] font-bold text-gray-500 mb-1">
             Cari Kegiatan / Keterangan
           </label>
@@ -380,7 +377,7 @@ export function OperationalJobDeskPage() {
       </div>
 
       {/* Main Table: Excel-Style Spreadsheet View */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-clip">
         <div className="px-5 py-3.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <TableIcon className="h-4 w-4 text-amber-600" />
@@ -423,7 +420,82 @@ export function OperationalJobDeskPage() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* HP: kartu per tugas, dikelompokkan per tanggal — tombol aksi selalu terlihat
+              (tabel 11 kolom membuat Complete/Incomplete berada di luar layar). */}
+          <div className="md:hidden divide-y divide-gray-100">
+            {groupJobDesksByTanggal(filteredJobDesks).map(([tanggal, items]) => (
+              <section key={tanggal}>
+                <h3 className="sticky top-12 z-10 bg-gray-50/95 backdrop-blur px-4 py-2 text-[11px] font-extrabold uppercase tracking-wider text-gray-500 border-b border-gray-100">
+                  {items[0].hari ? `${items[0].hari}, ` : ""}{formatTanggalPanjang(tanggal)} · {items.length} tugas
+                </h3>
+                <ul className="divide-y divide-gray-100">
+                  {items.map((jd) => {
+                    const currentStatus = rowStatus[jd.id] || jd.status;
+                    const currentReason = rowReason[jd.id] || jd.incompleteReason || "";
+                    const isApproved = jd.reviewStatus === "approved";
+                    const isRejected = jd.reviewStatus === "rejected";
+                    const canEdit = !isApproved && jd.reviewStatus !== "pending_review";
+                    const busy = submittingRowId === jd.id;
+                    return (
+                      <li key={jd.id} className={`px-4 py-3.5 ${isApproved ? "bg-emerald-50/40" : isRejected ? "bg-red-50/40" : ""}`}>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-sm font-extrabold text-gray-900">{jd.startTime || "--:--"}</span>
+                          {jd.division === "mbg" ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200"><Milk className="h-3 w-3" />MBG</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200"><UtensilsCrossed className="h-3 w-3" />Katering</span>
+                          )}
+                          <span className="ml-auto"><ReviewBadge jd={jd} /></span>
+                        </div>
+                        <p className="mt-1.5 text-[15px] font-bold leading-snug text-gray-900">{jd.kegiatan || jd.title || "-"}</p>
+                        {(jd.orderLabel || jd.mbgInstitutionName) && (
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {jd.division === "mbg" ? `Lembaga: ${jd.mbgInstitutionName || jd.orderLabel}` : `Pesanan: ${jd.orderLabel}`}
+                          </p>
+                        )}
+                        <div className="mt-2"><JobDeskKeterangan jd={jd} /></div>
+                        {isRejected && jd.rejectionRemark && <RejectionRemark remark={jd.rejectionRemark} />}
+
+                        {canEdit ? (
+                          <div className="mt-3 space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <button type="button" onClick={() => handleSubmitRow(jd.id, "complete")} disabled={busy}
+                                className={`h-11 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 ${currentStatus === "complete" ? "bg-emerald-500 text-white" : "bg-emerald-50 text-emerald-800 border border-emerald-200 active:bg-emerald-100"}`}>
+                                <CheckCircle2 className="h-4 w-4" />{busy && currentStatus === "complete" ? "Mengirim…" : "Complete"}
+                              </button>
+                              <button type="button" onClick={() => setRowStatus((prev) => ({ ...prev, [jd.id]: "incomplete" }))} disabled={busy}
+                                className={`h-11 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 ${currentStatus === "incomplete" ? "bg-red-500 text-white" : "bg-red-50 text-red-700 border border-red-200 active:bg-red-100"}`}>
+                                <XCircle className="h-4 w-4" />Incomplete
+                              </button>
+                            </div>
+                            {currentStatus === "incomplete" && (
+                              <div className="space-y-2">
+                                <textarea value={currentReason} rows={2} placeholder="Tulis alasan tidak selesai…"
+                                  onChange={(e) => setRowReason((prev) => ({ ...prev, [jd.id]: e.target.value }))}
+                                  className="w-full px-3 py-2 rounded-xl border border-red-300 text-sm focus:ring-2 focus:ring-red-300 resize-none bg-white" />
+                                <button type="button" onClick={() => handleSubmitRow(jd.id, "incomplete", currentReason)} disabled={busy || !currentReason.trim()}
+                                  className="w-full h-11 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-amber-500 to-orange-500 disabled:opacity-40">
+                                  <Send className="h-4 w-4" />{busy ? "Mengirim…" : "Kirim ke CO_MO"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className={`mt-2 text-xs font-bold ${jd.pendingSync ? "text-amber-600" : jd.status === "incomplete" ? "text-orange-700" : "text-gray-500"}`}>
+                            {jd.pendingSync ? "Menunggu sinyal… terkirim otomatis" : jd.status === "incomplete" ? `Incomplete${jd.incompleteReason ? ` — ${jd.incompleteReason}` : ""}` : isApproved ? "Tuntas ✓" : "Complete · terkirim ✓"}
+                          </p>
+                        )}
+                        <p className="mt-2 text-[10px] font-mono text-gray-400">{jd.keyId}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
               <thead>
                 <tr className="bg-gray-100 border-b border-gray-200 text-gray-700 font-bold uppercase tracking-wider text-[10px]">
@@ -506,75 +578,8 @@ export function OperationalJobDeskPage() {
                       </td>
                       {/* Keterangan */}
                       <td className="py-3 px-3.5 text-gray-600">
-                        {jd.keterangan || jd.description ? (
-                          <div className="text-xs leading-relaxed text-gray-800 space-y-1">
-                            {(jd.keterangan || jd.description || "").split(" | ").map((part, pIdx) => {
-                              const trimmed = part.trim();
-                              if (!trimmed) return null;
-                              const lower = trimmed.toLowerCase();
-                              if (lower.startsWith("menu:")) {
-                                return (
-                                  <span key={pIdx} className="inline-block font-semibold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mr-1.5 mb-1">
-                                    {trimmed}
-                                  </span>
-                                );
-                              }
-                              if (lower.startsWith("jumlah:") || lower.startsWith("porsi:")) {
-                                return (
-                                  <span key={pIdx} className="inline-block font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 mr-1.5 mb-1">
-                                    {trimmed}
-                                  </span>
-                                );
-                              }
-                              if (lower.startsWith("porsi kecil:")) {
-                                return (
-                                  <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-950 text-xs">
-                                    <strong className="font-extrabold text-sky-800">Porsi Kecil:</strong>{" "}
-                                    <span className="text-slate-700">{trimmed.slice("porsi kecil:".length).trim()}</span>
-                                  </div>
-                                );
-                              }
-                              if (lower.startsWith("porsi besar:")) {
-                                return (
-                                  <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-950 text-xs">
-                                    <strong className="font-extrabold text-indigo-800">Porsi Besar:</strong>{" "}
-                                    <span className="text-slate-700">{trimmed.slice("porsi besar:".length).trim()}</span>
-                                  </div>
-                                );
-                              }
-                              if (lower.startsWith("porsi balita:")) {
-                                return (
-                                  <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-950 text-xs">
-                                    <strong className="font-extrabold text-rose-800">Porsi Balita:</strong>{" "}
-                                    <span className="text-slate-700">{trimmed.slice("porsi balita:".length).trim()}</span>
-                                  </div>
-                                );
-                              }
-                              if (lower.startsWith("porsi bumil/busui:") || lower.startsWith("porsi bumil:")) {
-                                const labelLen = lower.startsWith("porsi bumil/busui:") ? "porsi bumil/busui:".length : "porsi bumil:".length;
-                                return (
-                                  <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-950 text-xs">
-                                    <strong className="font-extrabold text-amber-800">Porsi Bumil/Busui:</strong>{" "}
-                                    <span className="text-slate-700">{trimmed.slice(labelLen).trim()}</span>
-                                  </div>
-                                );
-                              }
-                              return (
-                                <div key={pIdx} className="text-gray-600 text-xs">
-                                  {trimmed}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 italic text-xs">-</span>
-                        )}
-                        {isRejected && jd.rejectionRemark && (
-                          <div className="mt-1.5 p-2 bg-red-100/70 border border-red-200 rounded-lg text-red-800 text-[11px] font-medium">
-                            <span className="font-bold">Catatan Penolakan CO_MO:</span>{" "}
-                            {jd.rejectionRemark}
-                          </div>
-                        )}
+                        <JobDeskKeterangan jd={jd} />
+                        {isRejected && jd.rejectionRemark && <RejectionRemark remark={jd.rejectionRemark} />}
                       </td>
                       {/* Key ID */}
                       <td className="py-3 px-3.5 whitespace-nowrap">
@@ -668,28 +673,7 @@ export function OperationalJobDeskPage() {
 
                     {/* Status Review CO_MO */}
                     <td className="py-3 px-3.5 text-center">
-                      {jd.pendingSync ? (
-                        <span
-                          title="Tersimpan di perangkat ini, akan terkirim otomatis begitu sinyal tersambung"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-200 text-slate-700"
-                        >
-                          <WifiOff className="h-3.5 w-3.5" /> Belum terkirim
-                        </span>
-                      ) : isApproved ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Approved
-                        </span>
-                      ) : isRejected ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-800">
-                          <XCircle className="h-3.5 w-3.5" /> Rejected
-                        </span>
-                      ) : isPendingReview ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 animate-pulse">
-                          <Clock className="h-3.5 w-3.5" /> Menunggu Review
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-gray-400">Belum Submit</span>
-                      )}
+                      <ReviewBadge jd={jd} />
                     </td>
 
                     {/* Aksi: only an incomplete status needs an explicit send (with reason) */}
@@ -720,10 +704,40 @@ export function OperationalJobDeskPage() {
             </tbody>
           </table>
         </div>
+          </>
       )}
     </div>
   </div>
   );
+}
+
+function RejectionRemark({ remark }: { remark: string }) {
+  return (
+    <div className="mt-1.5 p-2 bg-red-100/70 border border-red-200 rounded-lg text-red-800 text-[11px] font-medium">
+      <span className="font-bold">Catatan Penolakan CO_MO:</span> {remark}
+    </div>
+  );
+}
+
+function ReviewBadge({ jd }: { jd: CateringJobDesk }) {
+  if (jd.pendingSync) {
+    return (
+      <span title="Tersimpan di perangkat ini, akan terkirim otomatis begitu sinyal tersambung"
+        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-200 text-slate-700">
+        <WifiOff className="h-3.5 w-3.5" /> Belum terkirim
+      </span>
+    );
+  }
+  if (jd.reviewStatus === "approved") {
+    return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800"><CheckCircle2 className="h-3.5 w-3.5" /> Approved</span>;
+  }
+  if (jd.reviewStatus === "rejected") {
+    return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-800"><XCircle className="h-3.5 w-3.5" /> Rejected</span>;
+  }
+  if (jd.reviewStatus === "pending_review") {
+    return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 animate-pulse"><Clock className="h-3.5 w-3.5" /> Menunggu Review</span>;
+  }
+  return <span className="text-[11px] text-gray-400">Belum Submit</span>;
 }
 
 export default OperationalJobDeskPage;

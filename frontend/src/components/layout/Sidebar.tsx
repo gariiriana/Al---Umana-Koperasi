@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { NavLink, Link } from "react-router-dom";
 import { motion } from "motion/react";
-import { ROLE_PERMISSIONS, ROLE_DEFAULT_REDIRECT } from "@/constants/roles";
+import { ROLE_DEFAULT_REDIRECT } from "@/constants/roles";
+import { navItemsForRole } from "./navItems";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleLabel } from "@/components/kpi/kpiStyles";
@@ -9,62 +10,16 @@ import { subscribeCourierOrders, subscribeOrders } from "@/services/realtimeServ
 import { isOrderPastDeadline } from "@/lib/orderHelpers";
 import type { Order } from '@/types/order';
 import {
-  Calendar,
   ChevronUp,
-  ClipboardCheck,
-  Factory,
-  FileText,
-  LayoutDashboard,
   LogOut,
-  Package,
-  Package2,
   Search,
   Settings,
-  ShoppingCart,
-  Truck,
-  History,
-  UtensilsCrossed,
   X,
   AlertCircle,
-  Trophy,
-  ShieldCheck,
-  type LucideIcon,
 } from "lucide-react";
 
 
-interface NavItem {
-  to: string;
-  label: string;
-  icon: LucideIcon;
-}
-
-export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
-  // --- Catering ---
-  { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
-  { to: "/admin/invoices", label: "Catatan", icon: FileText },
-  { to: "/admin/production", label: "Production", icon: Factory },
-  { to: "/admin/production/history", label: "Riwayat", icon: History },
-  { to: "/distribusi/scheduler", label: "Delivery Scheduler", icon: Calendar },
-  { to: "/distribusi/schedules", label: "Jadwal Distribusi", icon: Calendar },
-  { to: "/distribusi/handover", label: "Handover", icon: Truck },
-  { to: "/distribusi/delivery", label: "Delivery", icon: Package },
-  { to: "/admin/products", label: "Daftar Produk", icon: Package2 },
-  // --- Katering Operational ---
-  { to: "/katering/mo/jobdesk", label: "Manajemen Job Desk", icon: ClipboardCheck },
-  { to: "/katering/jobdesk", label: "Job Desk Saya", icon: ClipboardCheck },
-  { to: "/katering/co-mo/review", label: "Review Job Desk", icon: ClipboardCheck },
-  // --- MBG (Makan Bergizi Gratis) ---
-  { to: "/mbg/admin", label: "Admin MBG", icon: ClipboardCheck },
-  { to: "/mbg/archive", label: "Arsip PM", icon: History },
-  { to: "/mbg/production", label: "Produksi MBG", icon: UtensilsCrossed },
-  { to: "/mbg/distribution", label: "Distribusi MBG", icon: ClipboardCheck },
-  { to: "/mbg/persiapan", label: "Persiapan", icon: ClipboardCheck },
-  { to: "/mbg/delivery", label: "Kurir MBG", icon: Truck },
-  { to: "/performance", label: "Performa Saya", icon: Trophy },
-  { to: "/super-admin/control-center", label: "Control Center SDM", icon: ShieldCheck },
-  { to: "/developer/control-center", label: "Developer Control", icon: ShieldCheck },
-] as const;
+export { SIDEBAR_NAV_ITEMS } from "./navItems";
 
 const LABELS_DICT = {
   id: {
@@ -205,15 +160,7 @@ export function Sidebar({
     return () => unsubscribe();
   }, [userRole, user?.uid]);
 
-  const allowedItems = SIDEBAR_NAV_ITEMS.filter((item) => {
-    if (!userRole) return false;
-    if (item.to === "/performance") return (ROLE_PERMISSIONS[userRole] || []).includes("/performance");
-    if (item.to === "/super-admin/control-center") return userRole === "super_admin";
-    if (item.to === "/developer/control-center") return userRole === "developer";
-    if (userRole === "admin") return true;
-    const allowedPaths = ROLE_PERMISSIONS[userRole] || [];
-    return allowedPaths.includes(item.to);
-  });
+  const allowedItems = navItemsForRole(userRole);
 
   const initial = (userName ?? userEmail ?? "?").charAt(0).toUpperCase();
 
@@ -222,7 +169,7 @@ export function Sidebar({
       {/* Mobile Backdrop */}
       {isMobileOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-30 md:hidden animate-in fade-in duration-200"
+          className="fixed inset-0 bg-black/40 z-[45] md:hidden animate-in fade-in duration-200"
           onClick={onClose}
         />
       )}
@@ -230,7 +177,7 @@ export function Sidebar({
       <aside
         aria-label="Primary navigation"
         className={`
-          fixed inset-y-0 left-0 z-40 w-60 bg-white border-r border-[#E5E7EB] flex flex-col shrink-0 h-full min-h-screen
+          fixed inset-y-0 left-0 z-50 w-64 md:w-60 bg-white border-r border-[#E5E7EB] flex flex-col shrink-0 h-full min-h-screen
           transition-transform duration-300 ease-in-out
           md:translate-x-0
           ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
@@ -342,7 +289,7 @@ export function Sidebar({
               {userRole && (
                 <span className="inline-block text-[10px] font-bold bg-[#F3F4F6] text-[#6B7280] rounded-full px-2 py-0.5 mt-0.5">
                   {(() => {
-                    // Nama dari Super Admin (Control Center → Akun & Nama) selalu didahulukan.
+                    // Nama dari Super Admin (Control Center â†’ Akun & Nama) selalu didahulukan.
                     if (profile?.holderName?.trim()) return `${profile.holderName.trim()} (${roleLabel(userRole)})`;
                     const em = (userEmail || userName || "").toLowerCase();
                     if (em === "timproduksi@alumana.id" || em.includes("timproduksi") || em.includes("tim_produksi")) {

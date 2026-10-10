@@ -61,12 +61,13 @@ export function SearchableBatchSelector({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-white border border-[#E5E7EB] rounded-2xl px-5 py-3.5 flex items-center justify-between gap-3 text-xs font-bold text-[#374151] hover:border-[#FBBF24] focus:outline-none transition-all shadow-sm cursor-pointer"
+        className="w-full bg-white border border-[#E5E7EB] rounded-2xl px-4 sm:px-5 py-3 sm:py-3.5 flex items-center justify-between gap-3 text-xs font-bold text-[#374151] hover:border-[#FBBF24] focus:outline-none transition-all shadow-sm cursor-pointer"
       >
-        <div className="flex items-center gap-2.5 truncate">
+        <div className="flex items-center gap-2.5 min-w-0">
           <Calendar className="h-4 w-4 text-[#FBBF24] shrink-0" />
           {selectedBatch ? (
-            <div className="flex items-center gap-2 truncate">
+            // Di HP chip status boleh turun baris, jangan terpotong.
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
               <span className="font-extrabold text-sm text-[#111827]">{selectedBatch.tanggal}</span>
               {selectedBatchCfg && (
                 <span className={`text-[10px] font-extrabold rounded-full px-2.5 py-0.5 shrink-0 ${selectedBatchCfg.textClass} ${selectedBatchCfg.bgClass}`}>
@@ -83,7 +84,7 @@ export function SearchableBatchSelector({
             <span className="text-gray-400 font-bold">Pilih Batch Pengiriman...</span>
           )}
         </div>
-        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Dropdown Menu */}

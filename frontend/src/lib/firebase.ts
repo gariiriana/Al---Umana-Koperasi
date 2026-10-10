@@ -16,8 +16,9 @@
  */
 
 import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
+import { connectAuthEmulator, getAuth, signInWithEmailAndPassword, type Auth } from 'firebase/auth';
 import {
+  connectFirestoreEmulator,
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
@@ -69,12 +70,23 @@ export const db: Firestore = initializeFirestore(app, {
     : memoryLocalCache(),
 });
 
+// Mode audit lokal (`vite --mode emulator`, lihat .env.emulator): Auth & Firestore
+// Emulator dengan project demo-*, jadi tidak pernah menyentuh data produksi.
+const useEmulators = import.meta.env.DEV && import.meta.env.VITE_USE_EMULATORS === 'true';
+if (useEmulators) {
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  // Login cepat untuk skrip audit tampilan (tanpa Turnstile).
+  (window as unknown as { __emulatorSignIn?: (email: string, password: string) => Promise<unknown> })
+    .__emulatorSignIn = (email, password) => signInWithEmailAndPassword(auth, email, password);
+}
+
 // Analytics is only valid in a browser environment that supports the required
 // APIs (e.g., IndexedDB, cookies). `isSupported()` resolves asynchronously, so
 // `analytics` starts as `null` and is populated once support is confirmed.
 // Consumers see the updated value through ES module live bindings.
 export let analytics: Analytics | null = null;
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && !useEmulators) {
   isAnalyticsSupported()
     .then((supported) => {
       if (supported) {

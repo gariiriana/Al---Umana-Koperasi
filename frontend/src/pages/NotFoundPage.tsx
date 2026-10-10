@@ -44,18 +44,18 @@ export function NotFoundPage() {
           <Button
             variant="outlined"
             onClick={() => window.history.back()}
+            leftIcon={<ArrowLeft className="w-4 h-4 text-amber-300" />}
             className="w-full sm:w-auto border-white/20 hover:border-amber-400/50 hover:bg-amber-400/10 text-white font-semibold flex items-center justify-center gap-2"
           >
-            <ArrowLeft className="w-4 h-4 text-amber-300" />
             Kembali
           </Button>
 
           <Link to="/" className="w-full sm:w-auto">
             <Button
               variant="primary"
+              leftIcon={<Home className="w-4 h-4" />}
               className="w-full shadow-lg shadow-amber-500/20 hover:shadow-amber-500/30 transition-all font-semibold flex items-center justify-center gap-2"
             >
-              <Home className="w-4 h-4" />
               Ke Beranda
             </Button>
           </Link>

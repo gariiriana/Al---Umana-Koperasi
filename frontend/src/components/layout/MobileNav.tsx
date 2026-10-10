@@ -1,113 +1,56 @@
 import { NavLink } from "react-router-dom";
-import { motion } from "motion/react";
-import {
-  BadgeCheck,
-  Factory,
-  FileText,
-  LayoutDashboard,
-  Package2,
-  Send,
-  ShoppingCart,
-  Truck,
-  History,
-  Trophy,
-  ShieldCheck,
-  type LucideIcon,
-} from "lucide-react";
-
-import { ROLE_PERMISSIONS } from "@/constants/roles";
-
-interface MobileNavItem {
-  to: string;
-  label: string;
-  icon: LucideIcon;
-}
-
-// All possible nav items — filtered per role via ROLE_PERMISSIONS
-export const MOBILE_NAV_ITEMS: readonly MobileNavItem[] = [
-  { to: "/admin/dashboard",          label: "Dasbor",        icon: LayoutDashboard },
-  { to: "/admin/orders",            label: "Pesanan",       icon: ShoppingCart },
-  { to: "/admin/invoices",          label: "Catatan",       icon: FileText },
-  { to: "/admin/products",          label: "Produk",        icon: Package2 },
-  { to: "/admin/payment-approvals", label: "Pembayaran",    icon: BadgeCheck },
-  { to: "/admin/production",        label: "Produksi",      icon: Factory },
-  { to: "/admin/production/history", label: "Riwayat",       icon: History },
-  { to: "/distribusi/handover",     label: "Handover",      icon: Send },
-  { to: "/distribusi/delivery",     label: "Antar",         icon: Truck },
-  { to: "/performance",             label: "Performa",      icon: Trophy },
-  { to: "/super-admin/control-center", label: "Kontrol",    icon: ShieldCheck },
-  { to: "/developer/control-center", label: "Developer", icon: ShieldCheck },
-] as const;
+import { Menu } from "lucide-react";
+import { MOBILE_SHORT_LABELS, mobileTabsForRole } from "./navItems";
 
 export interface MobileNavProps {
   userRole?: string;
+  /** Membuka menu lengkap (drawer sidebar) untuk menu yang tidak muat di tab. */
+  onOpenMenu?: () => void;
 }
 
-export function MobileNav({ userRole }: MobileNavProps) {
-  let allowedItems = MOBILE_NAV_ITEMS.filter((item) => {
-    if (!userRole) return false;
-    if (item.to === "/super-admin/control-center") return userRole === "super_admin";
-    if (item.to === "/developer/control-center") return userRole === "developer";
-    if (userRole === "admin") return true;
-    const allowedPaths = ROLE_PERMISSIONS[userRole] || [];
-    return allowedPaths.includes(item.to);
-  });
+const TAB =
+  "flex flex-col items-center justify-center gap-0.5 w-full min-h-[52px] rounded-2xl px-1 " +
+  "font-['Hanken_Grotesk',system-ui,sans-serif] text-[11px] font-semibold leading-tight " +
+  "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FBBF24] transition-colors";
 
-  if (userRole === "monitoring") {
-    allowedItems = allowedItems
-      .filter((item) => ["/admin/dashboard", "/admin/orders"].includes(item.to))
-      .map((item) => ({
-        ...item,
-        label: item.to === "/admin/dashboard" ? "Dasbor" : "Pesanan",
-      }));
-  }
-
-  if (allowedItems.length === 0) return null;
+/**
+ * Navigasi bawah HP (di bawah md) — jangkauan jempol, seperti aplikasi.
+ * Menu diambil dari daftar yang sama dengan sidebar desktop.
+ */
+export function MobileNav({ userRole, onOpenMenu }: MobileNavProps) {
+  const { tabs, hasMore } = mobileTabsForRole(userRole);
+  if (tabs.length === 0) return null;
 
   return (
     <nav
-      aria-label="Mobile navigation"
+      aria-label="Navigasi utama"
       className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E5E7EB] pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_24px_rgba(0,0,0,0.06)]"
     >
-      <ul className="flex items-stretch justify-around px-1 pt-1.5 pb-1">
-        {allowedItems.map(({ to, label, icon: Icon }) => (
-          <li key={to} className="flex-1 max-w-[80px]">
-            <NavLink
-              to={to}
-              className="flex flex-col items-center gap-0.5 py-1 px-1 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FBBF24] focus-visible:ring-offset-2"
-            >
+      <ul className="flex items-stretch justify-around gap-0.5 px-1.5 py-1">
+        {tabs.map(({ to, label, icon: Icon }) => (
+          <li key={to} className="flex-1 min-w-0">
+            <NavLink to={to} end={to === "/admin/orders" || to === "/admin/production"} className={({ isActive }) => `${TAB} ${isActive ? "text-[#111827]" : "text-[#6B7280]"}`}>
               {({ isActive }) => (
                 <>
-                  <motion.span
-                    className={
-                      "inline-flex items-center justify-center h-8 w-10 rounded-2xl transition-colors " +
-                      (isActive ? "bg-[#FBBF24]" : "bg-transparent")
-                    }
-                    initial={false}
-                    animate={{ scale: isActive ? 1 : 0.95 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  >
-                    <Icon
-                      className={
-                        "h-[18px] w-[18px] transition-colors " +
-                        (isActive ? "text-[#111827]" : "text-[#9CA3AF]")
-                      }
-                      aria-hidden="true"
-                    />
-                  </motion.span>
-                  <span
-                    className={
-                      "text-[10px] font-semibold font-['Hanken_Grotesk',system-ui,sans-serif] transition-colors " +
-                      (isActive ? "text-[#111827]" : "text-[#9CA3AF]")
-                    }
-                  >
-                    {label}
+                  <span className={`inline-flex h-7 w-12 items-center justify-center rounded-full transition-colors ${isActive ? "bg-[#FBBF24]" : ""}`}>
+                    <Icon className="h-[19px] w-[19px]" aria-hidden="true" />
                   </span>
+                  <span className="max-w-full truncate">{MOBILE_SHORT_LABELS[to] ?? label}</span>
                 </>
               )}
             </NavLink>
           </li>
         ))}
+        {hasMore && (
+          <li className="flex-1 min-w-0">
+            <button type="button" onClick={onOpenMenu} className={`${TAB} text-[#6B7280]`} aria-label="Menu lainnya">
+              <span className="inline-flex h-7 w-12 items-center justify-center rounded-full">
+                <Menu className="h-[19px] w-[19px]" aria-hidden="true" />
+              </span>
+              <span>Lainnya</span>
+            </button>
+          </li>
+        )}
       </ul>
     </nav>
   );

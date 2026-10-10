@@ -38,6 +38,8 @@ import {
 } from "@/services/cateringJobDeskService";
 import type { CateringJobDesk, PicShortName } from "@/types/cateringJobDesk";
 import { JobDeskSyncStatus } from "@/components/katering/JobDeskSyncStatus";
+import { JobDeskKeterangan } from "@/components/katering/JobDeskKeterangan";
+import { formatTanggalPanjang, groupJobDesksByTanggal } from "@/utils/jobDeskGrouping";
 import { useJobDeskSync } from "@/hooks/useJobDeskSync";
 import {
   JOBDESK_ROLE_LABELS,
@@ -282,19 +284,19 @@ export function CoMoReviewPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6 pb-16">
+    <div className="max-w-7xl mx-auto px-0 sm:px-4 py-1 sm:py-6 space-y-4 sm:space-y-6 pb-4 sm:pb-16">
       <JobDeskSyncStatus state={jobDeskSync.state} checkedAt={jobDeskSync.checkedAt} onSync={jobDeskSync.syncNow} />
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-3xl text-white shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-4 sm:p-6 rounded-2xl sm:rounded-3xl text-white shadow-xl">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-amber-300 text-xs font-semibold backdrop-blur-md mb-2">
             <Sparkles className="h-3.5 w-3.5" />
             Monitoring & Validasi Review CO_MO
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+          <h1 className="text-lg sm:text-3xl font-extrabold tracking-tight leading-snug">
             Ruang Review Co-Manager Operasional
           </h1>
-          <p className="text-slate-300 text-xs sm:text-sm mt-1">
+          <p className="hidden sm:block text-slate-300 text-xs sm:text-sm mt-1">
             Pantau dan verifikasi checklist tugas dari Joko, Dwi, Shifa, Wandi, dan MBG2 (Katering & Program MBG).
           </p>
         </div>
@@ -340,7 +342,7 @@ export function CoMoReviewPage() {
       </div>
 
       {/* Stats Dashboard / Review Status Filter Pills */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-5 gap-1.5 sm:gap-3">
         {[
           { label: "Total", value: stats.total, color: "text-gray-700", bg: "bg-gray-100", icon: BarChart3 },
           { label: "Perlu Review", value: stats.pendingReview, color: "text-amber-700", bg: "bg-amber-100", icon: Clock },
@@ -366,24 +368,24 @@ export function CoMoReviewPage() {
                 else if (s.label === "Rejected") setReviewFilter("rejected");
                 else if (s.label === "Belum Submit") setReviewFilter("not_submitted");
               }}
-              className={`${s.bg} rounded-2xl p-3.5 text-center transition-all hover:scale-105 cursor-pointer ${
+              className={`${s.bg} rounded-xl sm:rounded-2xl px-1 py-2 sm:p-3.5 text-center transition-all hover:scale-105 cursor-pointer ${
                 isSelected ? "ring-2 ring-indigo-500 ring-offset-2 shadow-xs" : ""
               }`}
             >
-              <s.icon className={`h-4 w-4 ${s.color} mx-auto mb-1`} />
+              <s.icon className={`hidden sm:block h-4 w-4 ${s.color} mx-auto mb-1`} />
               <p className={`text-xl font-extrabold ${s.color}`}>{s.value}</p>
-              <p className="text-[10px] font-bold text-gray-500 mt-0.5">{s.label}</p>
+              <p className="text-[10px] font-bold text-gray-500 mt-0.5 leading-tight">{s.label}</p>
             </button>
           );
         })}
       </div>
 
       {/* Multi-Filter Bar: Role, Order, Date, Search */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs space-y-3">
+      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-gray-200 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-bold text-gray-700">
             <Filter className="h-4 w-4 text-indigo-600" />
-            <span>Filter Lanjutan (Role, Pesanan / Lembaga, Tanggal)</span>
+            <span>Filter<span className="hidden sm:inline"> Lanjutan (Role, Pesanan / Lembaga, Tanggal)</span></span>
           </div>
 
           {activeFilterCount > 0 && (
@@ -397,7 +399,7 @@ export function CoMoReviewPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
           {/* 1. Filter by Petugas / PIC */}
           <div className="relative">
             <label className="block text-[11px] font-bold text-gray-500 mb-1">
@@ -510,12 +512,12 @@ export function CoMoReviewPage() {
       </div>
 
       {/* Main Table: Excel-Style Spreadsheet View for CO_MO */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-clip">
         <div className="px-5 py-3.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <TableIcon className="h-4 w-4 text-indigo-600" />
             <p className="text-xs font-bold text-gray-800">
-              Tabel Monitoring & Review ({filteredJobDesks.length} Baris)
+              <span className="sm:hidden">{filteredJobDesks.length} tugas</span><span className="hidden sm:inline">Tabel Monitoring & Review ({filteredJobDesks.length} Baris)</span>
               {selectedPic !== "all" && (
                 <span> — PIC: <strong className="text-indigo-700">{selectedPic}</strong></span>
               )}
@@ -549,7 +551,67 @@ export function CoMoReviewPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* HP: kartu per tugas per tanggal — Approve / Tolak selalu terlihat tanpa geser tabel. */}
+          <div className="md:hidden divide-y divide-gray-100">
+            {groupJobDesksByTanggal(filteredJobDesks).map(([tanggal, items]) => (
+              <section key={tanggal}>
+                <h3 className="sticky top-12 z-10 bg-gray-50/95 backdrop-blur px-4 py-2 text-[11px] font-extrabold uppercase tracking-wider text-gray-500 border-b border-gray-100">
+                  {items[0].hari ? `${items[0].hari}, ` : ""}{formatTanggalPanjang(tanggal)} · {items.length} tugas
+                </h3>
+                <ul className="divide-y divide-gray-100">
+                  {items.map((jd) => {
+                    const isApproved = jd.reviewStatus === "approved";
+                    const isRejected = jd.reviewStatus === "rejected";
+                    const isPendingReview = jd.reviewStatus === "pending_review";
+                    return (
+                      <li key={jd.id} className={`px-4 py-3.5 ${isPendingReview ? "bg-amber-50/50" : isApproved ? "bg-emerald-50/30" : isRejected ? "bg-red-50/30" : ""}`}>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-sm font-extrabold text-gray-900">{jd.startTime || "--:--"}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-slate-100 text-slate-800 border border-slate-200">{jd.pic}</span>
+                          {jd.division === "mbg" ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200"><Milk className="h-3 w-3" />MBG</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200"><UtensilsCrossed className="h-3 w-3" />Katering</span>
+                          )}
+                          <span className="ml-auto text-[11px] font-bold">
+                            {jd.status === "complete" ? <span className="text-blue-700">✓ Complete</span>
+                              : jd.status === "incomplete" ? <span className="text-orange-700">✕ Incomplete</span>
+                              : <span className="text-gray-400">Belum ditandai</span>}
+                          </span>
+                        </div>
+                        <p className="mt-1.5 text-[15px] font-bold leading-snug text-gray-900">{jd.kegiatan || jd.title}</p>
+                        {(jd.orderLabel || jd.mbgInstitutionName) && (
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {jd.division === "mbg" ? `Lembaga: ${jd.mbgInstitutionName || jd.orderLabel}` : `Pesanan: ${jd.orderLabel}`}
+                          </p>
+                        )}
+                        <div className="mt-2"><JobDeskKeterangan jd={jd} /></div>
+                        {jd.incompleteReason && (
+                          <p className="mt-1.5 p-2 bg-orange-100/70 border border-orange-200 rounded-lg text-orange-800 text-xs"><strong>Alasan incomplete:</strong> {jd.incompleteReason}</p>
+                        )}
+                        {isRejected && jd.rejectionRemark && (
+                          <p className="mt-1.5 p-2 bg-red-100/70 border border-red-200 rounded-lg text-red-800 text-xs"><strong>Remark CO_MO:</strong> {jd.rejectionRemark}</p>
+                        )}
+                        <div className="mt-3">
+                          <ReviewActions
+                            size="lg" isApproved={isApproved} isRejected={isRejected} isRejecting={rejectingId === jd.id}
+                            isProcessing={processingId === jd.id} remark={rejectRemark} onRemarkChange={setRejectRemark}
+                            onApprove={() => handleApprove(jd.id)} onReject={() => handleReject(jd.id)}
+                            onStartReject={() => { setRejectingId(jd.id); setRejectRemark(""); }}
+                            onCancelReject={() => { setRejectingId(null); setRejectRemark(""); }}
+                          />
+                        </div>
+                        <p className="mt-2 text-[10px] font-mono text-gray-400">{jd.keyId}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
               <thead>
                 <tr className="bg-gray-100 border-b border-gray-200 text-gray-700 font-bold uppercase tracking-wider text-[10px]">
@@ -626,69 +688,7 @@ export function CoMoReviewPage() {
                       </td>
                       {/* Keterangan */}
                       <td className="py-3 px-3.5 text-gray-600">
-                        {jd.keterangan || jd.description ? (
-                          <div className="text-xs leading-relaxed text-gray-800 space-y-1">
-                            {(jd.keterangan || jd.description || "").split(" | ").map((part, pIdx) => {
-                              const trimmed = part.trim();
-                              if (!trimmed) return null;
-                              const lower = trimmed.toLowerCase();
-                              if (lower.startsWith("menu:")) {
-                                return (
-                                  <span key={pIdx} className="inline-block font-semibold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mr-1.5 mb-1">
-                                    {trimmed}
-                                  </span>
-                                );
-                              }
-                              if (lower.startsWith("jumlah:") || lower.startsWith("porsi:")) {
-                                return (
-                                  <span key={pIdx} className="inline-block font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 mr-1.5 mb-1">
-                                    {trimmed}
-                                  </span>
-                                );
-                              }
-                              if (lower.startsWith("porsi kecil:")) {
-                                return (
-                                  <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-950 text-xs">
-                                    <strong className="font-extrabold text-sky-800">Porsi Kecil:</strong>{" "}
-                                    <span className="text-slate-700">{trimmed.slice("porsi kecil:".length).trim()}</span>
-                                  </div>
-                                );
-                              }
-                              if (lower.startsWith("porsi besar:")) {
-                                return (
-                                  <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-950 text-xs">
-                                    <strong className="font-extrabold text-indigo-800">Porsi Besar:</strong>{" "}
-                                    <span className="text-slate-700">{trimmed.slice("porsi besar:".length).trim()}</span>
-                                  </div>
-                                );
-                              }
-                              if (lower.startsWith("porsi balita:")) {
-                                return (
-                                  <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-950 text-xs">
-                                    <strong className="font-extrabold text-rose-800">Porsi Balita:</strong>{" "}
-                                    <span className="text-slate-700">{trimmed.slice("porsi balita:".length).trim()}</span>
-                                  </div>
-                                );
-                              }
-                              if (lower.startsWith("porsi bumil/busui:") || lower.startsWith("porsi bumil:")) {
-                                const labelLen = lower.startsWith("porsi bumil/busui:") ? "porsi bumil/busui:".length : "porsi bumil:".length;
-                                return (
-                                  <div key={pIdx} className="mt-1 p-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-950 text-xs">
-                                    <strong className="font-extrabold text-amber-800">Porsi Bumil/Busui:</strong>{" "}
-                                    <span className="text-slate-700">{trimmed.slice(labelLen).trim()}</span>
-                                  </div>
-                                );
-                              }
-                              return (
-                                <div key={pIdx} className="text-gray-600 text-xs">
-                                  {trimmed}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 italic text-xs">-</span>
-                        )}
+                        <JobDeskKeterangan jd={jd} />
                         {jd.incompleteReason && (
                           <div className="mt-1 p-1.5 bg-orange-100/70 border border-orange-200 rounded-lg text-orange-800 text-[10px]">
                             <strong>Alasan incomplete:</strong> {jd.incompleteReason}
@@ -726,87 +726,13 @@ export function CoMoReviewPage() {
 
                       {/* Aksi Review CO_MO */}
                       <td className="py-3 px-3.5 text-center">
-                        {isApproved ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Disetujui (Approved)
-                          </span>
-                        ) : isRejected ? (
-                          <div className="space-y-1">
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold bg-red-100 text-red-800 border border-red-200">
-                              <XCircle className="h-3.5 w-3.5" /> Ditolak (Rejected)
-                            </span>
-                            <div>
-                              <button
-                                type="button"
-                                onClick={() => handleApprove(jd.id)}
-                                disabled={isProcessing}
-                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer underline disabled:opacity-50"
-                              >
-                                {isProcessing ? "Menyimpan..." : "Ubah ke Approve"}
-                              </button>
-                            </div>
-                          </div>
-                        ) : isRejecting ? (
-                          <div className="space-y-2 p-2 bg-red-50 rounded-xl border border-red-200 text-left">
-                            <label className="block text-[10px] font-bold text-red-800">
-                              Catatan Penolakan untuk Petugas:
-                            </label>
-                            <textarea
-                              value={rejectRemark}
-                              onChange={(e) => setRejectRemark(e.target.value)}
-                              placeholder="Tulis alasan kenapa ditolak..."
-                              rows={2}
-                              className="w-full px-2 py-1 rounded-lg border border-red-300 text-xs focus:ring-1 focus:ring-red-400 bg-white"
-                            />
-                            <div className="flex gap-1.5 justify-end">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setRejectingId(null);
-                                  setRejectRemark("");
-                                }}
-                                className="px-2 py-1 text-[10px] font-bold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 cursor-pointer"
-                              >
-                                Batal
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleReject(jd.id)}
-                                disabled={isProcessing || !rejectRemark.trim()}
-                                className="px-2.5 py-1 text-[10px] font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50 cursor-pointer"
-                              >
-                                {isProcessing ? "Menyimpan..." : "Kirim Penolakan"}
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center gap-1.5">
-                            {/* Approve Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleApprove(jd.id)}
-                              disabled={isProcessing}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
-                            >
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              {isProcessing ? "Menyimpan..." : "Approve"}
-                            </button>
-
-                            {/* Reject Button */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRejectingId(jd.id);
-                                setRejectRemark("");
-                              }}
-                              disabled={isProcessing}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 transition-all cursor-pointer"
-                            >
-                              <XCircle className="h-3.5 w-3.5" />
-                              Tolak
-                            </button>
-                          </div>
-                        )}
+                        <ReviewActions
+                          size="sm" isApproved={isApproved} isRejected={isRejected} isRejecting={isRejecting}
+                          isProcessing={isProcessing} remark={rejectRemark} onRemarkChange={setRejectRemark}
+                          onApprove={() => handleApprove(jd.id)} onReject={() => handleReject(jd.id)}
+                          onStartReject={() => { setRejectingId(jd.id); setRejectRemark(""); }}
+                          onCancelReject={() => { setRejectingId(null); setRejectRemark(""); }}
+                        />
                       </td>
                     </tr>
                   );
@@ -814,8 +740,85 @@ export function CoMoReviewPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
+    </div>
+  );
+}
+
+interface ReviewActionsProps {
+  /** "sm" untuk sel tabel desktop, "lg" untuk kartu HP (tombol tinggi 44px). */
+  size: "sm" | "lg";
+  isApproved: boolean;
+  isRejected: boolean;
+  isRejecting: boolean;
+  isProcessing: boolean;
+  remark: string;
+  onRemarkChange: (value: string) => void;
+  onApprove: () => void;
+  onReject: () => void;
+  onStartReject: () => void;
+  onCancelReject: () => void;
+}
+
+/** Approve / Tolak (dengan catatan) — sama di tabel desktop dan kartu HP. */
+function ReviewActions({ size, isApproved, isRejected, isRejecting, isProcessing, remark, onRemarkChange, onApprove, onReject, onStartReject, onCancelReject }: ReviewActionsProps) {
+  const lg = size === "lg";
+  const btn = lg ? "h-11 px-4 text-sm rounded-xl" : "px-3 py-1.5 text-xs rounded-xl";
+  const icon = lg ? "h-4 w-4" : "h-3.5 w-3.5";
+
+  if (isApproved) {
+    return (
+      <span className={`inline-flex items-center gap-1 font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 ${lg ? "px-3 py-2 text-sm rounded-xl" : "px-3 py-1.5 text-xs rounded-xl"}`}>
+        <CheckCircle2 className={icon} /> Disetujui (Approved)
+      </span>
+    );
+  }
+  if (isRejected) {
+    return (
+      <div className={`flex gap-2 ${lg ? "items-center justify-between" : "flex-col items-center gap-1"}`}>
+        <span className={`inline-flex items-center gap-1 font-bold bg-red-100 text-red-800 border border-red-200 rounded-xl ${lg ? "px-3 py-2 text-sm" : "px-3 py-1 text-xs"}`}>
+          <XCircle className={icon} /> Ditolak (Rejected)
+        </span>
+        <button type="button" onClick={onApprove} disabled={isProcessing}
+          className={`font-bold text-indigo-600 hover:text-indigo-800 underline disabled:opacity-50 ${lg ? "text-sm py-2" : "text-[10px]"}`}>
+          {isProcessing ? "Menyimpan..." : "Ubah ke Approve"}
+        </button>
+      </div>
+    );
+  }
+  if (isRejecting) {
+    return (
+      <div className="space-y-2 p-2 bg-red-50 rounded-xl border border-red-200 text-left">
+        <label className={`block font-bold text-red-800 ${lg ? "text-xs" : "text-[10px]"}`}>Catatan Penolakan untuk Petugas:</label>
+        <textarea value={remark} onChange={(e) => onRemarkChange(e.target.value)} placeholder="Tulis alasan kenapa ditolak..." rows={2}
+          className={`w-full rounded-lg border border-red-300 focus:ring-1 focus:ring-red-400 bg-white ${lg ? "px-3 py-2 text-sm" : "px-2 py-1 text-xs"}`} />
+        <div className={lg ? "grid grid-cols-2 gap-2" : "flex gap-1.5 justify-end"}>
+          <button type="button" onClick={onCancelReject}
+            className={`font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-100 ${lg ? "h-11 rounded-xl text-sm" : "px-2 py-1 text-[10px] rounded-lg"}`}>
+            Batal
+          </button>
+          <button type="button" onClick={onReject} disabled={isProcessing || !remark.trim()}
+            className={`font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 ${lg ? "h-11 rounded-xl text-sm" : "px-2.5 py-1 text-[10px] rounded-lg"}`}>
+            {isProcessing ? "Menyimpan..." : "Kirim Penolakan"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className={lg ? "grid grid-cols-2 gap-2" : "flex items-center justify-center gap-1.5"}>
+      <button type="button" onClick={onApprove} disabled={isProcessing}
+        className={`inline-flex items-center justify-center gap-1 font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition-all disabled:opacity-50 ${btn}`}>
+        <CheckCircle2 className={icon} />
+        {isProcessing ? "Menyimpan..." : "Approve"}
+      </button>
+      <button type="button" onClick={onStartReject} disabled={isProcessing}
+        className={`inline-flex items-center justify-center gap-1 font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 transition-all ${btn}`}>
+        <XCircle className={icon} />
+        Tolak
+      </button>
     </div>
   );
 }

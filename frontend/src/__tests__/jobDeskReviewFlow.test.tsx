@@ -53,7 +53,9 @@ const jobDesk = (id: string, kegiatan: string): Partial<CateringJobDesk> => ({
   pic: 'Dwi', assignedRole: 'distribusi_1', division: 'mbg', status: 'pending', reviewStatus: 'not_submitted',
 });
 
-const rowOf = (text: string) => within(screen.getByText(text).closest('tr') as HTMLElement);
+// Halaman merender tabel (desktop) dan kartu (HP); rowOf = baris tabel, cardOf = kartu HP.
+const rowOf = (text: string) => within(screen.getAllByText(text).map((el) => el.closest('tr')).find(Boolean) as HTMLElement);
+const cardOf = (text: string) => within(screen.getAllByText(text).map((el) => el.closest('li')).find(Boolean) as HTMLElement);
 const asDwi = () => { fake.store.profile = { uid: 'dwi-uid', role: 'distribusi_1' }; fake.store.user = { uid: 'dwi-uid' }; };
 const asCoMo = () => { fake.store.profile = { uid: 'como-uid', role: 'CO_MO' }; fake.store.user = { uid: 'como-uid' }; };
 
@@ -136,5 +138,31 @@ describe('job desk Complete → CO_MO approve flow', () => {
     fireEvent.click(complete);
     await waitFor(() => expect(fake.submit).toHaveBeenCalledTimes(2));
     expect(await rowOf('goreng tahu').findByText('Menunggu Review')).toBeTruthy();
+  });
+});
+
+describe('tampilan kartu HP', () => {
+  it('PIC menekan Complete di kartu dan CO_MO menyetujui dari kartu', async () => {
+    const dwi = render(<OperationalJobDeskPage />);
+    fireEvent.click(cardOf('goreng tahu').getByRole('button', { name: /Complete/ }));
+    await waitFor(() => expect(fake.submit).toHaveBeenCalledWith('005', 'complete', 'dwi-uid', undefined, expect.anything()));
+    expect(await cardOf('goreng tahu').findByText('Menunggu Review')).toBeTruthy();
+    dwi.unmount();
+
+    asCoMo();
+    render(<CoMoReviewPage />);
+    fireEvent.click(cardOf('goreng tahu').getByRole('button', { name: /^Approve$/ }));
+    await waitFor(() => expect(fake.approve).toHaveBeenCalledWith('005', 'como-uid', expect.anything()));
+    expect(await cardOf('goreng tahu').findByText(/Disetujui \(Approved\)/)).toBeTruthy();
+  });
+
+  it('Incomplete di kartu butuh alasan sebelum Kirim', async () => {
+    render(<OperationalJobDeskPage />);
+    fireEvent.click(cardOf('iris jahe').getByRole('button', { name: /Incomplete/ }));
+    const kirim = cardOf('iris jahe').getByRole('button', { name: /Kirim ke CO_MO/ }) as HTMLButtonElement;
+    expect(kirim.disabled).toBe(true);
+    fireEvent.change(cardOf('iris jahe').getByPlaceholderText(/Tulis alasan tidak selesai/), { target: { value: 'jahe habis' } });
+    fireEvent.click(kirim);
+    await waitFor(() => expect(fake.submit).toHaveBeenCalledWith('006', 'incomplete', 'dwi-uid', 'jahe habis', expect.anything()));
   });
 });

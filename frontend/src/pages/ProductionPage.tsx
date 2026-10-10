@@ -879,10 +879,10 @@ export function ProductionPage() {
 
         <div className="flex flex-col sm:flex-row gap-3 items-center border-t border-[#F3F4F6] pt-3 font-['Hanken_Grotesk']">
           <span className="text-xs font-bold text-[#4B5563] self-start sm:self-center shrink-0">Filter Tanggal Acara:</span>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:flex items-center gap-2 w-full sm:w-auto">
             <input
               type="date"
-              className="rounded-xl border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#374151] focus:border-[#FBBF24] focus:outline-none w-full sm:w-40 font-semibold"
+              className="min-w-0 rounded-xl border border-[#D1D5DB] bg-white px-2.5 sm:px-3 py-2 sm:py-1.5 text-xs text-[#374151] focus:border-[#FBBF24] focus:outline-none w-full sm:w-40 font-semibold"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
               aria-label="Tanggal Mulai"
@@ -890,7 +890,7 @@ export function ProductionPage() {
             <span className="text-xs text-neutral-400">s/d</span>
             <input
               type="date"
-              className="rounded-xl border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#374151] focus:border-[#FBBF24] focus:outline-none w-full sm:w-40 font-semibold"
+              className="min-w-0 rounded-xl border border-[#D1D5DB] bg-white px-2.5 sm:px-3 py-2 sm:py-1.5 text-xs text-[#374151] focus:border-[#FBBF24] focus:outline-none w-full sm:w-40 font-semibold"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
               aria-label="Tanggal Akhir"

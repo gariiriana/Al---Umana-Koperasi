@@ -1416,11 +1416,11 @@ export function OrdersPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-4">
+    <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto p-0 sm:p-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-2xl border border-[#E5E7EB] shadow-xs">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 sm:gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-[#E5E7EB] shadow-xs">
         <div>
-          <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-[#111827]">
+          <h1 className="font-['Manrope',system-ui,sans-serif] text-xl sm:text-2xl font-extrabold text-[#111827]">
             Daftar Pesanan & Invoice
           </h1>
           <p className="text-xs text-[#6B7280] font-['Hanken_Grotesk'] mt-1">
@@ -1499,10 +1499,10 @@ export function OrdersPage() {
 
           <div className="flex flex-col sm:flex-row gap-3 items-center border-t border-[#F3F4F6] pt-3">
             <span className="text-xs font-bold text-[#4B5563] self-start sm:self-center shrink-0">Filter Tanggal Acara / Input:</span>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:flex items-center gap-2 w-full sm:w-auto">
               <input
                 type="date"
-                className="rounded-xl border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#374151] focus:border-[#FBBF24] focus:outline-none w-full sm:w-40 font-semibold"
+                className="min-w-0 rounded-xl border border-[#D1D5DB] bg-white px-2.5 sm:px-3 py-2 sm:py-1.5 text-xs text-[#374151] focus:border-[#FBBF24] focus:outline-none w-full sm:w-40 font-semibold"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 aria-label="Tanggal Mulai"
@@ -1510,7 +1510,7 @@ export function OrdersPage() {
               <span className="text-xs text-neutral-400">s/d</span>
               <input
                 type="date"
-                className="rounded-xl border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs text-[#374151] focus:border-[#FBBF24] focus:outline-none w-full sm:w-40 font-semibold"
+                className="min-w-0 rounded-xl border border-[#D1D5DB] bg-white px-2.5 sm:px-3 py-2 sm:py-1.5 text-xs text-[#374151] focus:border-[#FBBF24] focus:outline-none w-full sm:w-40 font-semibold"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 aria-label="Tanggal Akhir"
@@ -2042,7 +2042,7 @@ export function OrdersPage() {
       </div>
 
       {/* Mobile Card List View (visible on mobile/tablet, hidden on xl+) */}
-      <div className="xl:hidden grid grid-cols-2 md:grid-cols-3 gap-3">
+      <div className="xl:hidden grid grid-cols-1 min-[560px]:grid-cols-2 md:grid-cols-3 gap-3">
         {filteredOrders.length === 0 ? (
           <div className="col-span-full py-12 text-center text-sm text-[#6B7280] font-['Hanken_Grotesk'] bg-white rounded-2xl border border-[#E5E7EB]">
             Tidak ada pesanan ditemukan.
@@ -2058,7 +2058,7 @@ export function OrdersPage() {
             return (
               <div
                 key={o.id}
-                className="bg-white rounded-xl border border-[#E5E7EB] shadow-xs flex flex-col justify-between text-[#374151] p-2.5 gap-2 text-[11px]"
+                className="bg-white rounded-xl border border-[#E5E7EB] shadow-xs flex flex-col justify-between text-[#374151] p-3.5 min-[560px]:p-2.5 gap-2.5 min-[560px]:gap-2 text-[13px] min-[560px]:text-[11px]"
               >
                 {/* Header: ID, Type & Operational Status */}
                 <div className="flex flex-wrap items-center justify-between gap-1 pb-1.5 border-b border-[#F3F4F6]">

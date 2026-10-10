@@ -405,21 +405,31 @@ describe("Authentication UI Features", () => {
       window.history.pushState({}, "", "/admin/orders");
       render(<AppRouter />);
 
+      // Tab bawah HP (lg:hidden) ikut dirender di jsdom; cek header terpisah darinya.
+      const bottomNav = 'nav[aria-label="Navigasi utama"]';
+      const headerLink = (href: string) =>
+        [...document.querySelectorAll(`a[href="${href}"]`)].find((a) => !a.closest(bottomNav)) ?? null;
+
       await waitFor(() => {
         // Admin sees allowed links
-        expect(document.querySelector('a[href="/admin/orders"]')).not.toBeNull();
-        expect(document.querySelector('a[href="/admin/dashboard"]')).toBeNull();
-        expect(document.querySelector('a[href="/admin/invoices"]')).toBeNull();
+        expect(headerLink("/admin/orders")).not.toBeNull();
+        expect(headerLink("/admin/dashboard")).toBeNull();
+        expect(headerLink("/admin/invoices")).toBeNull();
 
         // Admin does not see tracking/production/delivery/etc.
-        expect(document.querySelector('a[href="/admin/tracking"]')).toBeNull();
-        expect(document.querySelector('a[href="/admin/products"]')).toBeNull();
-        expect(document.querySelector('a[href="/admin/payment-approvals"]')).toBeNull();
-        expect(document.querySelector('a[href="/admin/production"]')).toBeNull();
-        expect(document.querySelector('a[href="/admin/qc"]')).toBeNull();
-        expect(document.querySelector('a[href="/distribusi/handover"]')).toBeNull();
-        expect(document.querySelector('a[href="/distribusi/delivery"]')).toBeNull();
+        expect(headerLink("/admin/tracking")).toBeNull();
+        expect(headerLink("/admin/products")).toBeNull();
+        expect(headerLink("/admin/payment-approvals")).toBeNull();
+        expect(headerLink("/admin/production")).toBeNull();
+        expect(headerLink("/admin/qc")).toBeNull();
+        expect(headerLink("/distribusi/handover")).toBeNull();
+        expect(headerLink("/distribusi/delivery")).toBeNull();
       });
+
+      // Di HP, tab bawah admin berisi halaman kerja admin, bukan keranjang.
+      expect(document.querySelector(`${bottomNav} a[href="/admin/dashboard"]`)).not.toBeNull();
+      expect(document.querySelector(`${bottomNav} a[href="/admin/orders"]`)).not.toBeNull();
+      expect(document.querySelector(`${bottomNav} a[href="/cart"]`)).toBeNull();
 
       // Open profile dropdown to check Settings and other role links
       const profileBtn = document.getElementById("profile-menu-button");

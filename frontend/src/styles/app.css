@@ -75,6 +75,61 @@ h6 {
   font-family: var(--font-heading);
 }
 
+/* ── Tabel lebar: kolom pertama (nama sekolah/posyandu) menempel di kiri ──
+   Saat tabel MBG digeser ke samping di HP, nama baris tetap terlihat. Di layer
+   components supaya warna baris dari utility Tailwind (bg-*) tetap menang. */
+@layer components {
+  .table-sticky-first > tbody > tr {
+    background-color: #fff;
+  }
+  .table-sticky-first > thead > tr:first-child > th:first-child,
+  .table-sticky-first > tbody > tr > td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background-color: inherit;
+    /* border-collapse: garis kanan tidak ikut menempel, diganti bayangan tipis */
+    box-shadow: inset -1px 0 0 #cbd5e1, 4px 0 6px -4px rgba(15, 23, 42, 0.18);
+  }
+  @media (max-width: 767px) {
+    .table-sticky-first > thead > tr:first-child > th:first-child,
+    .table-sticky-first > tbody > tr > td:first-child {
+      min-width: 132px !important;
+      max-width: 150px;
+    }
+  }
+
+  /* Varian: kolom centang + nama (Distribusi MBG) menempel bersama. */
+  .table-sticky-pair > tbody > tr {
+    background-color: #fff;
+  }
+  .table-sticky-pair > thead > tr:first-child > th:nth-child(-n + 2),
+  .table-sticky-pair > tbody > tr > td:nth-child(-n + 2) {
+    position: sticky;
+    z-index: 2;
+    background-color: inherit;
+  }
+  .table-sticky-pair > thead > tr:first-child > th:first-child,
+  .table-sticky-pair > tbody > tr > td:first-child {
+    left: 0;
+    width: 36px;
+    min-width: 36px;
+    max-width: 36px;
+  }
+  .table-sticky-pair > thead > tr:first-child > th:nth-child(2),
+  .table-sticky-pair > tbody > tr > td:nth-child(2) {
+    left: 36px;
+    box-shadow: inset -1px 0 0 #cbd5e1, 4px 0 6px -4px rgba(15, 23, 42, 0.18);
+  }
+  @media (max-width: 767px) {
+    .table-sticky-pair > thead > tr:first-child > th:nth-child(2),
+    .table-sticky-pair > tbody > tr > td:nth-child(2) {
+      min-width: 124px !important;
+      max-width: 140px;
+    }
+  }
+}
+
 /* ── Fly-to-Cart animation ───────────────────────────────────────────── */
 @keyframes flyToCart {
   0% {

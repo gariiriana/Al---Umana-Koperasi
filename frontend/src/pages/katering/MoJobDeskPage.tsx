@@ -1281,29 +1281,29 @@ export function MoJobDeskPage() {
       {/* ========================================================================= */}
       {/* HERO HEADER */}
       {/* ========================================================================= */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white p-6 sm:p-8 rounded-3xl shadow-xl border border-slate-800">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+      <div className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white p-4 sm:p-8 rounded-2xl sm:rounded-3xl shadow-xl border border-slate-800">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-6">
           <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-amber-400 text-slate-950 shadow-xs">
                 <Sparkles className="h-3.5 w-3.5" />
                 Manager Operational (MO)
               </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-200 border border-slate-700">
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-200 border border-slate-700">
                 <CalendarDays className="h-3.5 w-3.5 text-amber-400" />
                 Sistem Job Desk Berbasis Tanggal (Per Tanggal)
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+            <h1 className="text-lg sm:text-3xl font-extrabold tracking-tight text-white leading-snug">
               Penyusunan & Distribusi Job Desk Harian
             </h1>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+            <p className="hidden sm:block text-xs sm:text-sm text-slate-300 leading-relaxed">
               Pilih tanggal operasional untuk melihat seluruh pesanan katering atau batch MBG pada hari tersebut, lalu bagikan penugasan ke tim operasional (Joko, Shifa, Dwi, Wandi).
             </p>
           </div>
 
           {/* Quick Stats Banner */}
-          <div className="grid grid-cols-2 gap-3 shrink-0">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 shrink-0">
             <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/10 text-center">
               <p className="text-[10px] font-bold uppercase tracking-wider text-amber-300">
                 Tanggal Katering
@@ -1331,20 +1331,20 @@ export function MoJobDeskPage() {
       </div>
 
 
-      <div className="flex border-b border-slate-200 gap-2 sm:gap-4 overflow-x-auto">
+      <div className="grid grid-cols-3 sm:flex border-b border-slate-200 sm:gap-4">
         <button
           type="button"
           onClick={() => setActiveTab("dates")}
           aria-current={activeTab === "dates" ? "page" : undefined}
-          className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 py-3 px-2 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "dates"
               ? "border-amber-500 text-slate-950 font-extrabold"
               : "border-transparent text-slate-500 hover:text-slate-900"
           }`}
         >
           <ListTodo className="h-4 w-4 text-amber-600" />
-          <span>Susun Job Desk</span>
-          <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 font-bold">
+          <span><span className="sm:hidden">Susun</span><span className="hidden sm:inline">Susun Job Desk</span></span>
+          <span className="hidden sm:inline ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 font-bold">
             {stats.totalCateringDates + stats.totalMbgDates} Tanggal
           </span>
           <span className="hidden md:inline text-[11px] font-medium text-slate-400">Pilih tanggal → cek draft → simpan</span>
@@ -1354,15 +1354,15 @@ export function MoJobDeskPage() {
           type="button"
           onClick={() => setActiveTab("table")}
           aria-current={activeTab === "table" ? "page" : undefined}
-          className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 py-3 px-2 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "table"
               ? "border-amber-500 text-slate-950 font-extrabold"
               : "border-transparent text-slate-500 hover:text-slate-900"
           }`}
         >
           <FileSpreadsheet className="h-4 w-4 text-amber-600" />
-          <span>Rekap & Status</span>
-          <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 font-bold">
+          <span><span className="sm:hidden">Rekap</span><span className="hidden sm:inline">Rekap & Status</span></span>
+          <span className="hidden sm:inline ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 font-bold">
             {stats.totalDesks}
           </span>
         </button>
@@ -1371,14 +1371,14 @@ export function MoJobDeskPage() {
           type="button"
           onClick={() => setActiveTab("archive")}
           aria-current={activeTab === "archive" ? "page" : undefined}
-          className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+          className={`flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 py-3 px-2 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "archive"
               ? "border-amber-500 text-slate-950 font-extrabold"
               : "border-transparent text-slate-500 hover:text-slate-900"
           }`}
         >
           <Archive className="h-4 w-4 text-amber-600" />
-          <span>Arsip Teklap</span>
+          <span><span className="sm:hidden">Arsip</span><span className="hidden sm:inline">Arsip Teklap</span></span>
           <span className="hidden md:inline text-[11px] font-medium text-slate-400">Lembar tugas per tanggal</span>
         </button>
       </div>
@@ -1476,7 +1476,7 @@ export function MoJobDeskPage() {
                         className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden transition-all duration-200 hover:border-slate-300"
                       >
                         {/* Date Group Card Header */}
-                        <div className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-50/50 border-b border-slate-200/80">
+                        <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 bg-slate-50/50 border-b border-slate-200/80">
                           <div className="flex items-center gap-3">
                             <div className="h-12 w-12 rounded-2xl bg-amber-400/20 border border-amber-400/40 flex flex-col items-center justify-center text-amber-900 shrink-0 font-extrabold">
                               <span className="text-[10px] uppercase">{group.hari.slice(0, 3)}</span>
@@ -1484,8 +1484,8 @@ export function MoJobDeskPage() {
                             </div>
 
                             <div>
-                              <div className="flex items-center gap-2">
-                                <h3 className="text-base font-extrabold text-slate-900">
+                              <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
+                                <h3 className="text-[15px] sm:text-base font-extrabold text-slate-900 leading-snug">
                                   {group.hari}, {formatIndoDate(group.date)}
                                 </h3>
                                 {group.isAssigned ? (
@@ -1494,7 +1494,7 @@ export function MoJobDeskPage() {
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
-                                    <AlertCircle className="h-3 w-3" /> {group.unassignedOrdersCount} Pesanan Belum Ditugaskan
+                                    <AlertCircle className="h-3 w-3" /> {group.unassignedOrdersCount} <span className="sm:hidden">belum ditugaskan</span><span className="hidden sm:inline">Pesanan Belum Ditugaskan</span>
                                   </span>
                                 )}
                               </div>
@@ -1510,22 +1510,22 @@ export function MoJobDeskPage() {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2.5">
+                          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-2.5">
                             <button
                               type="button"
                               onClick={() => toggleDateExpanded(group.date)}
-                              className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-xs font-bold text-slate-700 transition-colors cursor-pointer"
+                              className="h-11 sm:h-auto px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-xs font-bold text-slate-700 transition-colors cursor-pointer"
                             >
-                              {isExpanded ? "Sembunyikan Pesanan ˄" : "Lihat Daftar Pesanan >"}
+                              {isExpanded ? "Sembunyikan ˄" : <><span className="sm:hidden">Lihat Pesanan</span><span className="hidden sm:inline">Lihat Daftar Pesanan &gt;</span></>}
                             </button>
 
                             <button
                               type="button"
                               onClick={() => handleGenerateCateringJobDesksForDate(group)}
-                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black bg-amber-400 hover:bg-amber-500 text-slate-950 shadow-xs cursor-pointer transition-all active:scale-95"
+                              className="h-11 sm:h-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black bg-amber-400 hover:bg-amber-500 text-slate-950 shadow-xs cursor-pointer transition-all active:scale-95"
                             >
                               <FileSpreadsheet className="h-3.5 w-3.5" />
-                              <span>Susun Job Desk Tanggal Ini</span>
+                              <span><span className="sm:hidden">Susun Job Desk</span><span className="hidden sm:inline">Susun Job Desk Tanggal Ini</span></span>
                             </button>
                           </div>
                         </div>
@@ -1633,7 +1633,7 @@ export function MoJobDeskPage() {
                         className="bg-white rounded-2xl border border-emerald-200/80 shadow-xs overflow-hidden transition-all duration-200 hover:border-emerald-300"
                       >
                         {/* MBG Date Group Card Header */}
-                        <div className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-emerald-50/40 border-b border-emerald-100">
+                        <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 bg-emerald-50/40 border-b border-emerald-100">
                           <div className="flex items-center gap-3">
                             <div className="h-12 w-12 rounded-2xl bg-emerald-500 text-white flex flex-col items-center justify-center shrink-0 font-extrabold shadow-xs">
                               <span className="text-[10px] uppercase">{group.hari.slice(0, 3)}</span>
@@ -1641,8 +1641,8 @@ export function MoJobDeskPage() {
                             </div>
 
                             <div>
-                              <div className="flex items-center gap-2">
-                                <h3 className="text-base font-extrabold text-slate-900">
+                              <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
+                                <h3 className="text-[15px] sm:text-base font-extrabold text-slate-900 leading-snug">
                                   {group.hari}, {formatIndoDate(group.date)}
                                 </h3>
                                 {group.isAssigned ? (
@@ -1664,13 +1664,13 @@ export function MoJobDeskPage() {
                           </div>
 
                           {/* Header Action Buttons */}
-                          <div className="flex items-center gap-2 self-start sm:self-center">
+                          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:self-center">
                             <button
                               type="button"
                               onClick={() => toggleMbgDateExpanded(group)}
-                              className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors"
+                              className="h-11 sm:h-auto flex items-center justify-center gap-1 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors"
                             >
-                              <span>{isExpanded ? "Sembunyikan Institusi" : "Lihat Daftar Institusi"}</span>
+                              <span>{isExpanded ? "Sembunyikan" : <><span className="sm:hidden">Lihat Institusi</span><span className="hidden sm:inline">Lihat Daftar Institusi</span></>}</span>
                               {isExpanded ? (
                                 <ChevronDown className="h-3.5 w-3.5" />
                               ) : (
@@ -1681,10 +1681,10 @@ export function MoJobDeskPage() {
                             <button
                               type="button"
                               onClick={() => handleGenerateMbgJobDesksForDate(group)}
-                              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs cursor-pointer transition-all active:scale-95"
+                              className="h-11 sm:h-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs cursor-pointer transition-all active:scale-95"
                             >
                               <Sparkles className="h-3.5 w-3.5" />
-                              <span>🥛 Susun Job Desk MBG Tanggal Ini</span>
+                              <span><span className="sm:hidden">Susun Job Desk</span><span className="hidden sm:inline">🥛 Susun Job Desk MBG Tanggal Ini</span></span>
                             </button>
                           </div>
                         </div>

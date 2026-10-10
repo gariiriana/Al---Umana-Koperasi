@@ -67,6 +67,15 @@ export const STOREFRONT_NAV_ITEMS: readonly StorefrontNavItem[] = [
   { to: "/cart", label: "Keranjang", icon: ShoppingCart, badgeKey: "cart" },
 ] as const;
 
+/** Admin memakai layout toko, tetapi tab bawahnya halaman kerja admin (bukan keranjang). */
+export const ADMIN_BOTTOM_NAV_ITEMS: readonly StorefrontNavItem[] = [
+  { to: "/", label: "Beranda", icon: Home, end: true },
+  { to: "/admin/dashboard", label: "Dasbor", icon: LayoutDashboard },
+  { to: "/admin/orders", label: "Pesanan", icon: ShoppingCart, end: true },
+  { to: "/admin/invoices", label: "Catatan", icon: FileText },
+  { to: "/admin/promos", label: "Promo", icon: Tag },
+] as const;
+
 /* ─── shared nav styles ──────────────────────────────────────────────── */
 
 const BOTTOM_ITEM_BASE =
@@ -139,6 +148,8 @@ const getLocalizedLabel = (key: string, langCode: "id" | "en") => {
   if (key === "Kategori") return langCode === "id" ? "Kategori" : "Category";
   if (key === "Keranjang") return langCode === "id" ? "Keranjang" : "Cart";
   if (key === "Pesanan") return langCode === "id" ? "Pesanan" : "Orders";
+  if (key === "Dasbor") return langCode === "id" ? "Dasbor" : "Dashboard";
+  if (key === "Catatan") return langCode === "id" ? "Catatan" : "Notes";
   return key;
 };
 
@@ -986,7 +997,9 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
             }
           >
             {/* Content wrapper: full width on desktop, capped for readability */}
-            <div className="w-full max-w-7xl mx-auto min-w-0">
+            {/* Halaman kerja admin (dasbor, pesanan, dst.) dirancang untuk shell admin:
+                beri jarak tepi sendiri supaya tidak menempel ke pinggir layar HP. */}
+            <div className={`w-full max-w-7xl mx-auto min-w-0 ${/^\/(admin|distribusi)\//.test(location.pathname) ? "px-3 sm:px-4 lg:px-6 py-4" : ""}`}>
               {children}
             </div>
           </main>
@@ -1003,7 +1016,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
           }
         >
           <ul className="flex items-stretch justify-around px-2 py-1">
-            {STOREFRONT_NAV_ITEMS.map(
+            {(profile?.role === "admin" ? ADMIN_BOTTOM_NAV_ITEMS : STOREFRONT_NAV_ITEMS).map(
               ({ to, label, icon: Icon, end, badgeKey }) => (
                 <li key={to} className="flex-1">
                   <NavLink

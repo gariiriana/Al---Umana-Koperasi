@@ -2942,7 +2942,7 @@ export function MbgProductionPage() {
                               </span>
                             </div>
                             <div className="overflow-x-auto border border-slate-300 rounded-xl bg-white shadow-xs">
-                              <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] border-collapse border border-slate-300 text-xs">
+                              <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] border-collapse border border-slate-300 text-xs table-sticky-first">
                                 <thead>
                                   <tr className="bg-slate-200 text-[9px] font-extrabold text-slate-800 uppercase tracking-tight text-center border-b border-slate-300">
                                     <th rowSpan={2} className="px-2 py-1.5 border-r border-slate-300 text-left min-w-[170px]">
