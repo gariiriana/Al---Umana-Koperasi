@@ -48,6 +48,13 @@
   color: var(--color-secondary);
   background-color: var(--color-background);
   overflow-x: clip;
+  /* Kunci zoom: hanya geser (scroll) yang diizinkan, pinch & double-tap zoom mati.
+     Peta Leaflet dan kamera tetap bisa zoom karena memakai event sentuh sendiri. */
+  touch-action: pan-x pan-y;
+  /* Cegah Chrome/Safari memperbesar teks otomatis (font boosting). */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overscroll-behavior-x: none;
 }
 
 body {

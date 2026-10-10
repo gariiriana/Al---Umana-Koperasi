@@ -8,6 +8,9 @@ import { startFirestoreAutoResync } from "./services/firestoreResync";
 // supaya data realtime (mis. submit job desk) tidak macet di cache.
 startFirestoreAutoResync();
 
+// Safari iOS mengabaikan user-scalable=no, jadi gesture pinch-zoom halaman diblok manual.
+document.addEventListener("gesturestart", (event) => event.preventDefault());
+
 // Auto-reload on stale Vite chunk after deployment
 window.addEventListener("vite:preloadError", (event) => {
   console.warn("New version detected, reloading page...", event);
