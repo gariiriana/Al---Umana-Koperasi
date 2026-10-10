@@ -3,158 +3,127 @@
 // Dipakai di Control Center (Super Admin) dan Performa Saya (tiap akun)
 // ============================================================================
 
-import { useState } from "react";
-import { Image as ImageIcon, X } from "lucide-react";
+import type { ReactNode } from "react";
 import type { AdHocTask } from "@/services/performanceService";
 import {
   KPI_STATUS_LABEL, formatDeadline, formatDuration, formatWib, lateMinutes, taskKpiStatus, toMillis,
   type KpiAssessment, type KpiSummary, type TaskKpiStatus,
 } from "@/utils/taskKpi";
-import { KPI_STATUS_STYLE } from "@/components/kpi/kpiStyles";
+import { KPI_STATUS_STYLE, fmtNum, fmtPct } from "@/components/kpi/kpiStyles";
 
-const GRADE_STYLE: Record<KpiAssessment["grade"], string> = {
-  A: "bg-emerald-50 border-emerald-200 text-emerald-800",
-  B: "bg-blue-50 border-blue-200 text-blue-800",
-  C: "bg-amber-50 border-amber-200 text-amber-800",
-  D: "bg-red-50 border-red-200 text-red-800",
-  "-": "bg-slate-50 border-slate-200 text-slate-700",
-};
-
-export function KpiStatusBadge({ status }: { status: TaskKpiStatus }) {
+export function StatusPill({ status }: { status: TaskKpiStatus }) {
   return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${KPI_STATUS_STYLE[status].badge}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${KPI_STATUS_STYLE[status].pill}`}>
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: KPI_STATUS_STYLE[status].dot }} />
       {KPI_STATUS_LABEL[status]}
     </span>
   );
 }
 
-/** Tiga kotak Proses / Terpenuhi / Terlambat dengan jumlah dan persen dari total task. */
-export function KpiStatusTiles({ summary }: { summary: KpiSummary }) {
-  const tiles: { key: TaskKpiStatus; n: number; pct: number }[] = [
-    { key: "proses", n: summary.proses, pct: summary.pctProses },
-    { key: "terpenuhi", n: summary.terpenuhi, pct: summary.pctTerpenuhi },
-    { key: "terlambat", n: summary.terlambat, pct: summary.pctTerlambat },
+/** Satu baris angka ringkas: Total · Proses · Terpenuhi · Terlambat · Ketepatan waktu. */
+export function SummaryStrip({ summary, totalLabel = "Task" }: { summary: KpiSummary; totalLabel?: string }) {
+  const items: { label: string; value: string; sub?: string; cls?: string }[] = [
+    { label: totalLabel, value: String(summary.total) },
+    { label: "Proses", value: String(summary.proses), sub: fmtPct(summary.pctProses), cls: KPI_STATUS_STYLE.proses.text },
+    { label: "Terpenuhi", value: String(summary.terpenuhi), sub: fmtPct(summary.pctTerpenuhi), cls: KPI_STATUS_STYLE.terpenuhi.text },
+    { label: "Terlambat", value: String(summary.terlambat), sub: fmtPct(summary.pctTerlambat), cls: KPI_STATUS_STYLE.terlambat.text },
+    { label: "Ketepatan waktu", value: fmtPct(summary.ketepatanWaktu) },
   ];
   return (
-    <div className="grid grid-cols-3 gap-2">
-      {tiles.map((t) => (
-        <div key={t.key} className={`rounded-xl border px-3 py-2.5 text-center ${KPI_STATUS_STYLE[t.key].badge}`}>
-          <p className="text-xl font-extrabold tabular-nums">{t.pct}%</p>
-          <p className="text-[11px] font-bold">{KPI_STATUS_LABEL[t.key]} · {t.n}</p>
+    <div className="grid grid-cols-2 sm:grid-cols-5 rounded-xl border border-[#E5E7EB] bg-white divide-y sm:divide-y-0 sm:divide-x divide-[#E5E7EB]">
+      {items.map((it, i) => (
+        <div key={it.label} className={`px-4 py-3 ${i === 0 ? "col-span-2 sm:col-span-1" : ""}`}>
+          <p className="text-xs text-[#6B7280]">{it.label}</p>
+          <p className={`mt-0.5 text-xl font-bold tabular-nums ${it.cls ?? "text-[#111827]"}`}>
+            {it.value}
+            {it.sub && <span className="ml-1.5 text-xs font-medium text-[#9CA3AF]">{it.sub}</span>}
+          </p>
         </div>
       ))}
     </div>
   );
 }
 
-/** Bar bertumpuk Proses / Terpenuhi / Terlambat. */
-export function KpiStackedBar({ summary }: { summary: KpiSummary }) {
-  if (summary.total === 0) return <div className="h-1.5 w-full rounded-full bg-slate-100" />;
-  return (
-    <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-      <div className={KPI_STATUS_STYLE.terpenuhi.bar} style={{ width: `${summary.pctTerpenuhi}%` }} />
-      <div className={KPI_STATUS_STYLE.terlambat.bar} style={{ width: `${summary.pctTerlambat}%` }} />
-      <div className={KPI_STATUS_STYLE.proses.bar} style={{ width: `${summary.pctProses}%` }} />
-    </div>
-  );
-}
+const GRADE_TEXT: Record<KpiAssessment["grade"], string> = {
+  A: "text-[#047857]", B: "text-[#1D4ED8]", C: "text-[#B45309]", D: "text-[#B91C1C]", "-": "text-[#6B7280]",
+};
 
-/** Kartu penilaian KPI otomatis: nilai, grade, komponen, kesimpulan, rekomendasi. */
-export function KpiAssessmentCard({ assessment, periode }: { assessment: KpiAssessment; periode: string }) {
+/** Penilaian KPI otomatis: nilai, grade, komponen, kesimpulan, rekomendasi. */
+export function AssessmentPanel({ assessment, periode }: { assessment: KpiAssessment; periode: string }) {
   const a = assessment;
   return (
-    <div className={`rounded-xl border p-5 ${GRADE_STYLE[a.grade]}`}>
-      <div className="flex items-start justify-between gap-4">
+    <section className="rounded-xl border border-[#E5E7EB] bg-white">
+      <div className="flex items-start justify-between gap-4 px-4 py-3 border-b border-[#F3F4F6]">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider opacity-70">Penilaian KPI · {periode}</p>
-          <p className="mt-1 text-lg font-extrabold">{a.predikat}</p>
+          <h3 className="text-sm font-semibold text-[#111827]">Penilaian KPI</h3>
+          <p className="text-xs text-[#6B7280]">{periode}</p>
         </div>
-        <div className="text-right shrink-0">
-          <p className="text-3xl font-black tabular-nums leading-none">{a.nilai ?? "-"}</p>
-          <p className="text-[11px] font-bold mt-1">Grade {a.grade}</p>
+        <div className="text-right">
+          <p className={`text-2xl font-bold tabular-nums leading-none ${GRADE_TEXT[a.grade]}`}>{fmtNum(a.nilai)}</p>
+          <p className={`mt-1 text-xs font-semibold ${GRADE_TEXT[a.grade]}`}>{a.grade === "-" ? a.predikat : `${a.grade} · ${a.predikat}`}</p>
         </div>
       </div>
       {a.komponen.length > 0 && (
-        <div className="mt-4 space-y-2.5">
-          {a.komponen.map((k) => (
-            <div key={k.label}>
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="font-semibold">{k.label} <span className="opacity-60">({Math.round(k.bobot * 100)}%)</span></span>
-                <span className="font-bold tabular-nums">{k.skor}</span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/70">
-                <div className="h-full rounded-full bg-current opacity-60" style={{ width: `${Math.max(2, k.skor)}%` }} />
-              </div>
-              <p className="mt-0.5 text-[11px] opacity-70">{k.keterangan}</p>
-            </div>
-          ))}
-        </div>
+        <table className="w-full text-sm">
+          <tbody>
+            {a.komponen.map((k) => (
+              <tr key={k.label} className="border-b border-[#F3F4F6]">
+                <td className="px-4 py-2">
+                  <p className="text-[#111827]">{k.label} <span className="text-xs text-[#9CA3AF]">bobot {Math.round(k.bobot * 100)}%</span></p>
+                  <p className="text-xs text-[#6B7280]">{k.keterangan}</p>
+                </td>
+                <td className="px-4 py-2 text-right font-semibold tabular-nums text-[#111827] align-top">{fmtNum(k.skor)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
-      <p className="mt-4 text-sm leading-relaxed text-slate-700">{a.kesimpulan}</p>
-      <p className="mt-2 text-sm leading-relaxed font-semibold">{a.rekomendasi}</p>
-    </div>
+      <div className="px-4 py-3 space-y-2 text-sm leading-relaxed">
+        <p className="text-[#374151]">{a.kesimpulan}</p>
+        <p className="text-[#111827]"><span className="font-semibold">Rekomendasi:</span> {a.rekomendasi}</p>
+      </div>
+    </section>
   );
 }
 
-/** Daftar task dengan status KPI. `onSubmit` memunculkan tombol Submit untuk task yang belum disubmit. */
-export function KpiTaskList({ tasks, now, onSubmit, emptyText }: {
-  tasks: AdHocTask[]; now: number; onSubmit?: (task: AdHocTask) => void; emptyText: string;
-}) {
-  const [photo, setPhoto] = useState<string | null>(null);
-  if (tasks.length === 0) return <p className="px-5 py-8 text-center text-sm text-slate-400">{emptyText}</p>;
-  const sorted = [...tasks].sort((a, b) => (a.deadline ?? "").localeCompare(b.deadline ?? ""));
+/** Detail lengkap satu task (isi panel samping). */
+export function TaskDetail({ task, now, assigneeName }: { task: AdHocTask; now: number; assigneeName?: string }) {
+  const status = taskKpiStatus(task, now);
+  const submitted = toMillis(task.submittedAt);
+  const rows: [string, ReactNode][] = [
+    ...(assigneeName ? [["Untuk", assigneeName] as [string, ReactNode]] : []),
+    ["Status", <StatusPill status={status} />],
+    ["Deadline", formatDeadline(task.deadline)],
+    ["Disubmit", Number.isNaN(submitted) ? "Belum submit" : formatWib(submitted)],
+    ...(status === "terlambat" ? [["Terlambat", formatDuration(lateMinutes(task, now))] as [string, ReactNode]] : []),
+    ["Dibuat", formatWib(toMillis(task.createdAt))],
+  ];
   return (
-    <>
-      <div className="divide-y divide-slate-100">
-        {sorted.map((t) => {
-          const status = taskKpiStatus(t, now);
-          const submitted = toMillis(t.submittedAt);
-          return (
-            <div key={t.id} className="px-5 py-3.5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900">{t.title}</p>
-                  {onSubmit && <p className="mt-0.5 text-xs text-slate-600 whitespace-pre-wrap">{t.instructions}</p>}
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    Deadline {formatDeadline(t.deadline)}
-                    {" · "}
-                    {Number.isNaN(submitted) ? "Belum submit" : `Submit ${formatWib(submitted)}`}
-                    {status === "terlambat" && <span className="font-semibold text-red-600"> · terlambat {formatDuration(lateMinutes(t, now))}</span>}
-                  </p>
-                  {t.evidenceNote && <p className="mt-1 text-xs text-slate-600 whitespace-pre-wrap">📝 {t.evidenceNote}</p>}
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-2">
-                  <div className="flex items-center gap-2">
-                    {t.evidencePhoto && (
-                      <button type="button" title="Lihat foto bukti" onClick={() => setPhoto(t.evidencePhoto!)}
-                        className="rounded-lg border border-slate-200 p-1 text-slate-500 hover:bg-slate-100 cursor-pointer">
-                        <ImageIcon className="h-4 w-4" />
-                      </button>
-                    )}
-                    <KpiStatusBadge status={status} />
-                  </div>
-                  {onSubmit && Number.isNaN(submitted) && (
-                    <button type="button" onClick={() => onSubmit(t)}
-                      className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-700 transition-colors cursor-pointer">
-                      Submit Selesai
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {photo && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onClick={() => setPhoto(null)}>
-          <div className="relative max-w-2xl w-full">
-            <button type="button" onClick={() => setPhoto(null)} className="absolute -top-10 right-0 rounded-full bg-white/90 p-1.5 text-slate-700 cursor-pointer" aria-label="Tutup foto">
-              <X className="h-5 w-5" />
-            </button>
-            <img src={photo} alt="Foto bukti task" className="w-full rounded-xl object-contain max-h-[80vh] bg-white" />
+    <div className="space-y-5 text-sm">
+      <dl className="grid grid-cols-[110px_1fr] gap-y-2">
+        {rows.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="text-[#6B7280]">{k}</dt>
+            <dd className="text-[#111827]">{v}</dd>
           </div>
+        ))}
+      </dl>
+      <div>
+        <h4 className="text-xs font-semibold text-[#6B7280] mb-1">Instruksi</h4>
+        <p className="whitespace-pre-wrap text-[#111827]">{task.instructions}</p>
+      </div>
+      {task.evidenceNote && (
+        <div>
+          <h4 className="text-xs font-semibold text-[#6B7280] mb-1">Keterangan pekerjaan</h4>
+          <p className="whitespace-pre-wrap text-[#111827]">{task.evidenceNote}</p>
         </div>
       )}
-    </>
+      {task.evidencePhoto && (
+        <div>
+          <h4 className="text-xs font-semibold text-[#6B7280] mb-1">Foto bukti</h4>
+          <img src={task.evidencePhoto} alt="Foto bukti" className="w-full rounded-lg border border-[#E5E7EB] object-contain max-h-80 bg-[#F9FAFB]" />
+        </div>
+      )}
+    </div>
   );
 }

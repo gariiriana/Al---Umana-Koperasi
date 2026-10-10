@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Camera, ClipboardList, History, Send, Trash2, X } from "lucide-react";
+import { Camera, Trash2, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 import {
   type AdHocTask,
   type RoleAssignment,
@@ -8,30 +9,42 @@ import {
   subscribeRoleAssignments,
   submitAdHocTask,
 } from "@/services/performanceService";
-import { compressImageBase64 } from "@/services/mbgDeliveryService";
-import { KpiAssessmentCard, KpiStatusTiles, KpiTaskList } from "@/components/kpi/TaskKpiWidgets";
+import { EVIDENCE_PHOTO_MAX_BYTES, formatBytes, prepareEvidencePhoto, type EvidencePhoto } from "@/utils/evidencePhoto";
+import { AssessmentPanel, StatusPill, SummaryStrip, TaskDetail } from "@/components/kpi/TaskKpiWidgets";
+import { SidePanel } from "@/components/ui/SidePanel";
+import { PeriodSelect } from "@/components/ui/PeriodSelect";
+import { roleLabel } from "@/components/kpi/kpiStyles";
 import { useNow } from "@/hooks/useNow";
 import { getJakartaDate } from "@/utils/date";
+import { personName } from "@/utils/personName";
+import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import {
-  assessKpi, deadlineMillis, formatDeadline, isSubmitted, monthLabel, summarizeTasks, taskMonthKey,
+  assessKpi, deadlineMillis, formatDeadline, formatDuration, isSubmitted, monthLabel, summarizeTasks, taskKpiStatus, taskMonthKey,
 } from "@/utils/taskKpi";
 
-const readAsDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(reader.result as string);
-  reader.onerror = () => reject(new Error("Gagal membaca foto."));
-  reader.readAsDataURL(file);
-});
+const inputCls = "w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]";
+
+/** "sisa 2 jam 15 menit" / "lewat 3 jam" */
+function timeLeft(task: AdHocTask, now: number) {
+  const diff = Math.round((deadlineMillis(task.deadline) - now) / 60000);
+  return diff > 0
+    ? { text: `sisa ${formatDuration(diff)}`, late: false, urgent: diff <= 24 * 60 }
+    : { text: `lewat ${formatDuration(-diff)}`, late: true, urgent: true };
+}
 
 export function PerformancePage() {
   const { user, profile } = useAuth();
+  const { showToast } = useToast();
   const now = useNow();
+  const today = getJakartaDate();
   const [tasks, setTasks] = useState<AdHocTask[]>([]);
   const [roles, setRoles] = useState<RoleAssignment[]>([]);
-  const [month, setMonth] = useState(() => getJakartaDate().slice(0, 7));
-  const [selectedTask, setSelectedTask] = useState<AdHocTask | null>(null);
+  const [month, setMonth] = useState(() => today.slice(0, 7));
+  const [submitTask, setSubmitTask] = useState<AdHocTask | null>(null);
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [evidence, setEvidence] = useState("");
-  const [photo, setPhoto] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<EvidencePhoto | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -42,116 +55,188 @@ export function PerformancePage() {
     return () => cleanups.forEach((unsubscribe) => unsubscribe());
   }, [user]);
 
-  const name = profile?.displayName || "Tim Al Umana";
+  const name = profile ? personName(profile) : "Tim Al Umana";
   const periode = monthLabel(month);
-  const monthTasks = useMemo(() => tasks.filter((t) => taskMonthKey(t) === month), [tasks, month]);
-  const openTasks = useMemo(() => tasks.filter((t) => !isSubmitted(t) && taskMonthKey(t) !== null), [tasks]);
+  const monthTasks = useMemo(() => tasks.filter((t) => taskMonthKey(t) === month).sort((a, b) => (a.deadline ?? "").localeCompare(b.deadline ?? "")), [tasks, month]);
+  const openTasks = useMemo(() => tasks.filter((t) => !isSubmitted(t) && taskMonthKey(t) !== null).sort((a, b) => (a.deadline ?? "").localeCompare(b.deadline ?? "")), [tasks]);
   const summary = useMemo(() => summarizeTasks(monthTasks, now), [monthTasks, now]);
   const assessment = useMemo(() => assessKpi(summary, name, periode), [summary, name, periode]);
+  const detailTask = useMemo(() => tasks.find((t) => t.id === detailTaskId) ?? null, [tasks, detailTaskId]);
 
-  const closeModal = () => { setSelectedTask(null); setEvidence(""); setPhoto(null); setError(""); };
+  const closeSubmit = () => { setSubmitTask(null); setEvidence(""); setPhoto(null); setError(""); };
+  useEscapeLayer(!!submitTask, () => { if (!saving) closeSubmit(); });
 
   const pickPhoto = async (file?: File) => {
     if (!file) return;
-    try { setPhoto(await compressImageBase64(await readAsDataUrl(file), 1024, 1024, 0.7)); }
+    setPhotoBusy(true);
+    setError("");
+    try { setPhoto(await prepareEvidencePhoto(file)); }
     catch (err) { setError(err instanceof Error ? err.message : "Gagal memproses foto."); }
+    finally { setPhotoBusy(false); }
   };
 
   const submit = async () => {
-    if (!selectedTask || !evidence.trim()) return;
+    if (!submitTask || !evidence.trim() || photoBusy) return;
     setSaving(true);
-    try { await submitAdHocTask(selectedTask.id, evidence.trim(), photo ?? undefined); closeModal(); }
-    catch (err) { setError(err instanceof Error ? err.message : "Gagal submit task."); }
+    try {
+      await submitAdHocTask(submitTask.id, evidence.trim(), photo?.dataUrl);
+      showToast({ message: `"${submitTask.title}" sudah disubmit`, variant: "success" });
+      closeSubmit();
+    } catch (err) { setError(err instanceof Error ? err.message : "Gagal submit task."); }
     finally { setSaving(false); }
   };
 
-  const selectedLate = selectedTask ? now > deadlineMillis(selectedTask.deadline) : false;
+  const submitLate = submitTask ? now > deadlineMillis(submitTask.deadline) : false;
 
-  return <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
-    <section className="rounded-3xl bg-gradient-to-r from-slate-900 to-slate-700 text-white p-6 md:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-amber-400 text-xs font-bold tracking-widest">PERFORMA SAYA</p>
-          <h1 className="text-2xl md:text-3xl font-black mt-1">Halo, {name}</h1>
-          <p className="text-slate-300 text-sm mt-1">KPI dihitung dari ketepatan waktu submit task dari Super Admin.</p>
-        </div>
-        <label className="text-xs text-slate-300">
-          <span className="block mb-1 font-semibold">Periode</span>
-          <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)}
-            className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white [color-scheme:dark]" />
-        </label>
+  return <div className="mx-auto max-w-5xl px-4 py-6 md:px-6 space-y-6 font-['Hanken_Grotesk',system-ui,sans-serif]">
+    <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 className="text-2xl font-bold text-[#111827]">Performa Saya</h1>
+        <p className="mt-0.5 text-sm text-[#6B7280]">Halo, {name}. KPI kamu dihitung dari ketepatan waktu submit task dari Super Admin.</p>
       </div>
-      <div className="mt-6 grid grid-cols-3 gap-3">
-        <div><p className="text-slate-400 text-xs">KETEPATAN WAKTU</p><p className="text-3xl font-black tabular-nums">{summary.ketepatanWaktu == null ? "-" : `${summary.ketepatanWaktu}%`}</p></div>
-        <div><p className="text-slate-400 text-xs">NILAI KPI</p><p className="text-3xl font-black tabular-nums">{assessment.nilai ?? "-"} <span className="text-base font-bold text-amber-400">{assessment.grade !== "-" && assessment.grade}</span></p></div>
-        <div><p className="text-slate-400 text-xs">TASK {periode.toUpperCase()}</p><p className="text-3xl font-black tabular-nums">{summary.total}</p></div>
+      <PeriodSelect value={month} onChange={setMonth} today={today} />
+    </header>
+
+    {/* Perlu dikerjakan */}
+    <section>
+      <h2 className="mb-2 text-sm font-semibold text-[#111827]">Perlu dikerjakan <span className="ml-1 text-xs font-medium text-[#9CA3AF]">{openTasks.length}</span></h2>
+      {openTasks.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-[#E5E7EB] bg-white px-4 py-6 text-center text-sm text-[#6B7280]">Tidak ada task yang perlu dikerjakan.</p>
+      ) : (
+        <ul className="divide-y divide-[#F3F4F6] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
+          {openTasks.map((t) => {
+            const left = timeLeft(t, now);
+            return (
+              <li key={t.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <button type="button" onClick={() => setDetailTaskId(t.id)} className="min-w-0 text-left cursor-pointer">
+                  <p className="text-sm font-semibold text-[#111827]">{t.title}</p>
+                  <p className="mt-0.5 line-clamp-1 text-xs text-[#6B7280]">{t.instructions}</p>
+                  <p className="mt-1 text-xs">
+                    <span className="text-[#374151]">Deadline {formatDeadline(t.deadline)}</span>
+                    <span className={`ml-2 font-semibold ${left.late ? "text-[#B91C1C]" : left.urgent ? "text-[#B45309]" : "text-[#6B7280]"}`}>{left.text}</span>
+                  </p>
+                </button>
+                <button type="button" onClick={() => setSubmitTask(t)}
+                  className="shrink-0 rounded-lg bg-[#FBBF24] px-4 py-2 text-sm font-bold text-[#111827] hover:bg-[#F59E0B] cursor-pointer">
+                  Submit
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+
+    {/* Rekap bulan */}
+    <section className="space-y-3">
+      <h2 className="text-sm font-semibold text-[#111827]">Rekap {periode}</h2>
+      <SummaryStrip summary={summary} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <AssessmentPanel assessment={assessment} periode={periode} />
+        <div className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
+          <div className="border-b border-[#F3F4F6] px-4 py-3">
+            <h3 className="text-sm font-semibold text-[#111827]">Task {periode}</h3>
+          </div>
+          {monthTasks.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-[#6B7280]">Belum ada task dari Super Admin untuk {periode}.</p>
+          ) : (
+            <ul className="max-h-[420px] divide-y divide-[#F3F4F6] overflow-y-auto">
+              {monthTasks.map((t) => (
+                <li key={t.id}>
+                  <button type="button" onClick={() => setDetailTaskId(t.id)} className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-[#F9FAFB] cursor-pointer">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-[#111827]">{t.title}</span>
+                      <span className="block text-xs text-[#6B7280]">Deadline {formatDeadline(t.deadline)}</span>
+                    </span>
+                    <StatusPill status={taskKpiStatus(t, now)} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </section>
 
-    {openTasks.length > 0 && (
-      <section className="rounded-2xl border border-amber-200 bg-amber-50/60 overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-amber-200">
-          <h2 className="font-black flex items-center gap-2 text-amber-900"><AlertTriangle className="h-5 w-5" /> Task Belum Disubmit ({openTasks.length})</h2>
-          <p className="text-xs text-amber-800 mt-0.5">Submit sebelum deadline supaya dihitung Terpenuhi. Lewat deadline tetap bisa submit, tapi dihitung Terlambat.</p>
-        </div>
-        <div className="bg-white">
-          <KpiTaskList tasks={openTasks} now={now} onSubmit={(t) => setSelectedTask(t)} emptyText="" />
-        </div>
+    {roles.length > 0 && (
+      <section>
+        <h2 className="mb-2 text-sm font-semibold text-[#111827]">Riwayat role</h2>
+        <ul className="divide-y divide-[#F3F4F6] rounded-xl border border-[#E5E7EB] bg-white">
+          {roles.map((role) => (
+            <li key={role.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
+              <span className="text-[#111827]">{roleLabel(role.role)}</span>
+              <span className={role.status === "active" ? "font-semibold text-[#047857]" : "text-[#6B7280]"}>{role.status === "active" ? "Aktif" : "Sebelumnya"}</span>
+            </li>
+          ))}
+        </ul>
       </section>
     )}
 
-    <section className="grid gap-5 lg:grid-cols-2">
-      <div className="space-y-3">
-        <KpiStatusTiles summary={summary} />
-        <KpiAssessmentCard assessment={assessment} periode={periode} />
-      </div>
-      <div className="rounded-2xl border bg-white overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-slate-100">
-          <h2 className="font-black flex gap-2"><ClipboardList /> Task {periode}</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Task dari Super Admin dengan deadline di bulan ini.</p>
+    {/* Detail task */}
+    <SidePanel open={!!detailTask} onClose={() => setDetailTaskId(null)} title={detailTask?.title ?? ""}
+      footer={detailTask && !isSubmitted(detailTask) && (
+        <div className="flex justify-end">
+          <button type="button" onClick={() => { setSubmitTask(detailTask); setDetailTaskId(null); }}
+            className="rounded-lg bg-[#FBBF24] px-4 py-2 text-sm font-bold text-[#111827] hover:bg-[#F59E0B] cursor-pointer">Submit</button>
         </div>
-        <div className="max-h-[520px] overflow-y-auto">
-          <KpiTaskList tasks={monthTasks} now={now} onSubmit={(t) => setSelectedTask(t)} emptyText={`Belum ada task dari Super Admin untuk ${periode}.`} />
-        </div>
-      </div>
-    </section>
+      )}>
+      {detailTask && <TaskDetail task={detailTask} now={now} />}
+    </SidePanel>
 
-    <section className="rounded-2xl border bg-white p-5"><h2 className="font-black flex gap-2"><History /> Riwayat Role</h2><div className="mt-4 grid md:grid-cols-2 gap-3">{roles.length ? roles.map((role) => <div key={role.id} className="rounded-xl bg-slate-50 p-3"><b>{role.role}</b><p className="text-sm text-slate-500">{role.division} · {role.status === "active" ? "Role aktif" : "Role sebelumnya"}</p></div>) : <p className="text-sm text-slate-400">Riwayat role akan mulai tercatat saat role diubah lewat Control Center.</p>}</div></section>
-
-    {selectedTask && <div className="fixed inset-0 bg-black/40 grid place-items-center p-4 z-50">
-      <div className="bg-white rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="font-black text-xl">{selectedTask.title}</h2>
-          <button type="button" onClick={closeModal} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer" aria-label="Tutup"><X className="h-5 w-5" /></button>
-        </div>
-        <p className="mt-2 text-slate-600 whitespace-pre-wrap">{selectedTask.instructions}</p>
-        <p className={`mt-3 text-sm font-semibold ${selectedLate ? "text-red-600" : "text-slate-700"}`}>
-          Deadline: {formatDeadline(selectedTask.deadline)}{selectedLate && " — sudah lewat, submit sekarang akan dihitung Terlambat"}
-        </p>
-
-        <label className="mt-4 block text-sm font-bold text-slate-800">Keterangan pekerjaan <span className="text-red-500">*</span></label>
-        <textarea value={evidence} onChange={(event) => setEvidence(event.target.value)} className="mt-1 w-full rounded-xl border p-3 text-sm" rows={4} placeholder="Jelaskan apa yang sudah dikerjakan (boleh sertakan link)..." />
-
-        <p className="mt-3 text-sm font-bold text-slate-800">Foto bukti <span className="font-normal text-slate-400">(opsional)</span></p>
-        <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
-          onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = ""; }} />
-        {photo ? (
-          <div className="mt-1 relative">
-            <img src={photo} alt="Foto bukti" className="w-full max-h-56 object-contain rounded-xl border bg-slate-50" />
-            <button type="button" onClick={() => setPhoto(null)} className="absolute top-2 right-2 rounded-lg bg-white/90 p-1.5 text-red-600 shadow cursor-pointer" aria-label="Hapus foto"><Trash2 className="h-4 w-4" /></button>
+    {/* Submit */}
+    {submitTask && <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 sm:p-4">
+      <div role="dialog" aria-modal="true" aria-label="Submit task" className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white shadow-xl">
+        <header className="flex items-start justify-between gap-3 border-b border-[#E5E7EB] px-5 py-4">
+          <div className="min-w-0">
+            <h2 className="text-base font-bold text-[#111827]">Submit task</h2>
+            <p className="text-sm text-[#6B7280] truncate">{submitTask.title}</p>
           </div>
-        ) : (
-          <button type="button" onClick={() => fileRef.current?.click()} className="mt-1 w-full rounded-xl border border-dashed border-slate-300 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">
-            <Camera className="inline h-4 mr-1" /> Ambil / Pilih Foto
-          </button>
-        )}
+          <button type="button" onClick={closeSubmit} aria-label="Tutup" className="rounded-lg p-1.5 text-[#6B7280] hover:bg-[#F3F4F6] cursor-pointer"><X className="h-5 w-5" /></button>
+        </header>
 
-        {error && <p className="mt-2 text-sm font-semibold text-rose-600">{error}</p>}
-        <p className="mt-3 text-xs text-slate-500">Submit bersifat final dan tidak bisa diubah. Waktu submit dicatat otomatis dari server.</p>
-        <div className="mt-3 flex items-center gap-3">
-          <button disabled={saving || !evidence.trim()} onClick={submit} className="rounded-xl bg-slate-900 px-4 py-2 text-white font-bold disabled:opacity-40 cursor-pointer"><Send className="inline h-4" /> {saving ? "Mengirim..." : "Submit Selesai"}</button>
-          <button type="button" onClick={closeModal} className="text-sm font-bold text-slate-500 cursor-pointer">Batal</button>
+        <div className="space-y-4 px-5 py-4">
+          <p className={`rounded-lg px-3 py-2 text-sm ${submitLate ? "bg-[#FEF2F2] text-[#B91C1C]" : "bg-[#F9FAFB] text-[#374151]"}`}>
+            Deadline {formatDeadline(submitTask.deadline)}
+            {submitLate ? " — sudah lewat, submit sekarang dihitung Terlambat." : ` — ${timeLeft(submitTask, now).text}.`}
+          </p>
+
+          <label className="block">
+            <span className="text-sm font-medium text-[#374151]">Keterangan pekerjaan <span className="text-[#B91C1C]">*</span></span>
+            <textarea value={evidence} onChange={(event) => setEvidence(event.target.value)} rows={4}
+              className={`${inputCls} mt-1 resize-none`} placeholder="Jelaskan apa yang sudah dikerjakan (boleh sertakan link)" />
+          </label>
+
+          <div>
+            <span className="text-sm font-medium text-[#374151]">Foto bukti <span className="font-normal text-[#9CA3AF]">(opsional, hingga {formatBytes(EVIDENCE_PHOTO_MAX_BYTES)})</span></span>
+            <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = ""; }} />
+            {photo ? (
+              <div className="mt-1">
+                <div className="relative">
+                  <img src={photo.dataUrl} alt="Foto bukti" className="w-full max-h-56 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] object-contain" />
+                  <button type="button" onClick={() => setPhoto(null)} aria-label="Hapus foto" className="absolute right-2 top-2 rounded-lg bg-white/90 p-1.5 text-[#B91C1C] shadow cursor-pointer"><Trash2 className="h-4 w-4" /></button>
+                </div>
+                <p className="mt-1 text-xs text-[#6B7280]">Foto {formatBytes(photo.originalBytes)} dikompres jadi {formatBytes(photo.storedBytes)} supaya cepat terkirim.</p>
+              </div>
+            ) : (
+              <button type="button" onClick={() => fileRef.current?.click()} disabled={photoBusy}
+                className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-[#D1D5DB] py-3 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-60 cursor-pointer">
+                <Camera className="h-4 w-4" /> {photoBusy ? "Memproses foto…" : "Ambil atau pilih foto"}
+              </button>
+            )}
+          </div>
+
+          {error && <p className="rounded-lg bg-[#FEF2F2] px-3 py-2 text-sm text-[#B91C1C]">{error}</p>}
+          <p className="text-xs text-[#6B7280]">Submit bersifat final. Waktu submit dicatat otomatis dari server.</p>
         </div>
+
+        <footer className="flex justify-end gap-2 border-t border-[#E5E7EB] px-5 py-3">
+          <button type="button" onClick={closeSubmit} className="rounded-lg px-4 py-2 text-sm font-semibold text-[#374151] hover:bg-[#F3F4F6] cursor-pointer">Batal</button>
+          <button type="button" disabled={saving || photoBusy || !evidence.trim()} onClick={submit}
+            className="rounded-lg bg-[#FBBF24] px-4 py-2 text-sm font-bold text-[#111827] hover:bg-[#F59E0B] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+            {saving ? "Mengirim…" : "Submit Selesai"}
+          </button>
+        </footer>
       </div>
     </div>}
   </div>;

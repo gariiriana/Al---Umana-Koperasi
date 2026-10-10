@@ -106,7 +106,8 @@ describe('Excel per orang', () => {
     expect(find('Periode')?.[1]).toBe('Oktober 2026');
     expect(find('Nilai KPI')?.[3]).toBe(76.4);
     expect(find('Grade')?.[1]).toBe('B — Baik');
-    expect(String(find('Kesimpulan')?.[1])).toContain('Nilai KPI 76.4');
+    expect(String(find('Kesimpulan')?.[1])).toContain('Nilai KPI 76,4');
+    expect(find('Ketepatan Waktu')?.[1]).toBe('66,7%');
     const header = rows.findIndex((r) => r[0] === 'No');
     expect(rows.slice(header + 1).map((r) => r[6])).toEqual(['Terpenuhi', 'Terpenuhi', 'Terlambat', 'Proses']);
   });

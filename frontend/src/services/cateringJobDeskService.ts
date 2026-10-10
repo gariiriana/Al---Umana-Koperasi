@@ -373,7 +373,10 @@ export function subscribeJobDesksByRole(
     q,
     (snapshot) => {
       const results = snapshot.docs
-        .map((d) => docToJobDesk(d.id, d.data() as Record<string, unknown>))
+        .map((d) => ({
+          ...docToJobDesk(d.id, d.data() as Record<string, unknown>),
+          pendingSync: d.metadata.hasPendingWrites,
+        }))
         .filter((jd) => {
           // 1. Joko (ProduksiMBG2@alumana.id / Produksi 1):
           if (isJoko) {

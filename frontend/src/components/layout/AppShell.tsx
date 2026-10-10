@@ -34,7 +34,7 @@ export function AppShell({
   onSignOut,
 }: AppShellProps) {
   const { lang, setLang } = useLanguage();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -233,7 +233,10 @@ export function AppShell({
                           )}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-bold text-[#111827] truncate">{userName || "Pengguna"}</p>
+                          <p className="text-sm font-bold text-[#111827] truncate">{profile?.holderName?.trim() || userName || "Pengguna"}</p>
+                          {profile?.holderName?.trim() && userName && (
+                            <p className="text-xs text-[#6B7280] truncate">Akun {userName}</p>
+                          )}
                           {userRole && (
                             <span className="inline-block text-[10px] font-bold bg-[#F3F4F6] text-[#6B7280] rounded-full px-2 py-0.5 mt-0.5">
                               {roleBadge[userRole] ?? userRole}

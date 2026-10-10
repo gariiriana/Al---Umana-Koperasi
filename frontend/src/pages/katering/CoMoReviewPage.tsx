@@ -37,6 +37,8 @@ import {
   rejectJobDesk,
 } from "@/services/cateringJobDeskService";
 import type { CateringJobDesk, PicShortName } from "@/types/cateringJobDesk";
+import { JobDeskSyncStatus } from "@/components/katering/JobDeskSyncStatus";
+import { useJobDeskSync } from "@/hooks/useJobDeskSync";
 import {
   JOBDESK_ROLE_LABELS,
   PIC_NAME_TO_ROLE,
@@ -56,6 +58,7 @@ export function CoMoReviewPage() {
   const { user } = useAuth();
   const [allJobDesks, setAllJobDesks] = useState<CateringJobDesk[]>([]);
   const [loading, setLoading] = useState(true);
+  const jobDeskSync = useJobDeskSync(allJobDesks, !loading);
 
   // Multi-Filter state
   const [divisionFilter, setDivisionFilter] = useState<"all" | "katering" | "mbg">("all");
@@ -274,6 +277,7 @@ export function CoMoReviewPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6 pb-16">
+      <JobDeskSyncStatus state={jobDeskSync.state} checkedAt={jobDeskSync.checkedAt} onSync={jobDeskSync.syncNow} />
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-3xl text-white shadow-xl">
         <div>

@@ -14,6 +14,11 @@ import { getBase64ImageWithDimensions } from './mbgDeliveryReportPdfExporter';
 export interface JobDeskPdfOptions {
   /** Filter lines shown under the title, e.g. ["PIC: Dwi", "Tanggal: 05 Oktober 2026"]. */
   filterSummary?: string[];
+  /**
+   * For a single date with several PICs: insert a "PIC: …" separator row whenever
+   * the PIC changes. The caller passes rows already grouped by PIC.
+   */
+  groupByPic?: boolean;
 }
 
 const MONTHS = [
@@ -119,17 +124,20 @@ export async function exportJobDesksPdf(jobDesks: CateringJobDesk[], options: Jo
     return sharedSource || !source ? kegiatan : `${kegiatan}\n${source}`;
   };
   const body: RowInput[] = [];
+  const separator = (content: string): RowInput => [
+    { content, colSpan: 4, styles: { fillColor: [226, 232, 240], fontStyle: 'bold', halign: 'left' } },
+  ];
+  const picSeparators = !!options.groupByPic && dateSet.size === 1 && picSet.size > 1;
   let lastDate: string | undefined;
+  let lastPic: string | undefined;
   jobDesks.forEach((jd, i) => {
     if (dateSet.size > 1 && jd.tanggal !== lastDate) {
       lastDate = jd.tanggal;
-      body.push([
-        {
-          content: jd.tanggal ? `${jd.hari ? `${jd.hari}, ` : ''}${formatJobDeskDate(jd.tanggal)}` : 'Tanpa tanggal',
-          colSpan: 4,
-          styles: { fillColor: [226, 232, 240], fontStyle: 'bold', halign: 'left' },
-        },
-      ]);
+      body.push(separator(jd.tanggal ? `${jd.hari ? `${jd.hari}, ` : ''}${formatJobDeskDate(jd.tanggal)}` : 'Tanpa tanggal'));
+    }
+    if (picSeparators && jd.pic !== lastPic) {
+      lastPic = jd.pic;
+      body.push(separator(`PIC: ${jd.pic || '-'}`));
     }
     body.push([i + 1, jd.startTime || '-', kegiatanCell(jd), keteranganText(jd)]);
   });

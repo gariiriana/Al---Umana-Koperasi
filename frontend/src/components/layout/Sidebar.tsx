@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { ROLE_PERMISSIONS, ROLE_DEFAULT_REDIRECT } from "@/constants/roles";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { roleLabel } from "@/components/kpi/kpiStyles";
 import { subscribeCourierOrders, subscribeOrders } from "@/services/realtimeService";
 import { isOrderPastDeadline } from "@/lib/orderHelpers";
 import type { Order } from '@/types/order';
@@ -166,10 +167,8 @@ const roleBadge: Record<string, string> = {
   produksi_mbg_2: "Ust. Joko (Produksi MBG 2)",
   distribusi_mbg_2: "Wandi (Distribusi 2)",
   dokumentasi_produksiMBG: "Dokumentasi MBG",
-  purchasing_mbg: "Purchasing MBG",
   distribusi_mbg: "Distribusi MBG",
   kurir_mbg: "Kurir MBG",
-  sub_purchasing_mbg: "Sub Purchasing",
 };
 
 export function Sidebar({
@@ -185,7 +184,7 @@ export function Sidebar({
   onClose,
 }: SidebarProps) {
   const { lang } = useLanguage();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [hasPastDeadlineOrders, setHasPastDeadlineOrders] = useState(false);
 
@@ -343,6 +342,8 @@ export function Sidebar({
               {userRole && (
                 <span className="inline-block text-[10px] font-bold bg-[#F3F4F6] text-[#6B7280] rounded-full px-2 py-0.5 mt-0.5">
                   {(() => {
+                    // Nama dari Super Admin (Control Center → Akun & Nama) selalu didahulukan.
+                    if (profile?.holderName?.trim()) return `${profile.holderName.trim()} (${roleLabel(userRole)})`;
                     const em = (userEmail || userName || "").toLowerCase();
                     if (em === "timproduksi@alumana.id" || em.includes("timproduksi") || em.includes("tim_produksi")) {
                       return "Ust. Joko (Tim Produksi)";

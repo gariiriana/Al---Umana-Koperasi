@@ -165,6 +165,9 @@ export interface KpiAssessment {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
+/** Angka gaya Indonesia untuk teks: 66,7 */
+export const fmtId = (n: number) => n.toLocaleString("id-ID", { maximumFractionDigits: 1 });
+
 function gradeOf(nilai: number): Pick<KpiAssessment, "grade" | "predikat"> {
   if (nilai >= 90) return { grade: "A", predikat: "Sangat Baik" };
   if (nilai >= 75) return { grade: "B", predikat: "Baik" };
@@ -208,14 +211,14 @@ export function assessKpi(summary: KpiSummary, name: string, periode: string): K
 
   const parts = [
     `Selama ${periode}, ${name} menerima ${s.total} task dari Super Admin.`,
-    `Dari ${s.dinilai} task yang sudah jatuh tempo, ${s.terpenuhi} diselesaikan tepat waktu (${ketepatan}%)`
+    `Dari ${s.dinilai} task yang sudah jatuh tempo, ${s.terpenuhi} diselesaikan tepat waktu (${fmtId(ketepatan)}%)`
       + (s.terlambatSubmit > 0 ? `, ${s.terlambatSubmit} disubmit terlambat` : "")
       + (s.belumSubmit > 0 ? `, ${s.belumSubmit} belum disubmit padahal deadline sudah lewat` : "")
       + ".",
   ];
   if (s.terlambat > 0) parts.push(`Rata-rata keterlambatan ${formatDuration(s.avgLateMinutes)}.`);
   if (s.proses > 0) parts.push(`${s.proses} task masih berjalan dan belum dihitung.`);
-  parts.push(`Nilai KPI ${nilai} (${grade} — ${predikat}).`);
+  parts.push(`Nilai KPI ${fmtId(nilai)} (${grade} — ${predikat}).`);
 
   const saran: string[] = [];
   if (grade === "A") saran.push("Sangat disiplin terhadap deadline. Pertahankan, dan layak dipercaya dengan task yang lebih besar.");

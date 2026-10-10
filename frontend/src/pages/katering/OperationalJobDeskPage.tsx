@@ -27,6 +27,7 @@ import {
   UtensilsCrossed,
   Sparkles,
   FileDown,
+  WifiOff,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { exportJobDesksPdf, formatJobDeskDate } from "@/utils/jobDeskPdfExporter";
@@ -665,7 +666,14 @@ export function OperationalJobDeskPage() {
 
                     {/* Status Review CO_MO */}
                     <td className="py-3 px-3.5 text-center">
-                      {isApproved ? (
+                      {jd.pendingSync ? (
+                        <span
+                          title="Tersimpan di perangkat ini, akan terkirim otomatis begitu sinyal tersambung"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-200 text-slate-700"
+                        >
+                          <WifiOff className="h-3.5 w-3.5" /> Belum terkirim
+                        </span>
+                      ) : isApproved ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
                           <CheckCircle2 className="h-3.5 w-3.5" /> Approved
                         </span>
@@ -699,8 +707,8 @@ export function OperationalJobDeskPage() {
                           <span className="text-[11px] text-gray-400">-</span>
                         )
                       ) : (
-                        <span className="text-[11px] font-bold text-gray-400">
-                          {isApproved ? "Tuntas ✓" : "Terkirim ✓"}
+                        <span className={`text-[11px] font-bold ${jd.pendingSync ? "text-amber-600" : "text-gray-400"}`}>
+                          {jd.pendingSync ? "Menunggu sinyal…" : isApproved ? "Tuntas ✓" : "Terkirim ✓"}
                         </span>
                       )}
                     </td>

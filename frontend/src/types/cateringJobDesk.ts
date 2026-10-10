@@ -176,6 +176,9 @@ export interface CateringJobDesk {
   /** Firestore timestamps. */
   createdAt: string;
   updatedAt: string;
+
+  /** True selama perubahan dari perangkat ini belum diterima server (mis. sedang offline). */
+  pendingSync?: boolean;
 }
 
 /** Helper to extract only YYYY-MM-DD from any date string / ISO datetime */

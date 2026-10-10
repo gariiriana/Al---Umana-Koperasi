@@ -99,9 +99,11 @@ export function DailyReportExcelSections({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
 
+  // Ikuti laporan terbaru selama tidak sedang diedit. Laporan yang hilang (batch lain
+  // belum punya laporan) juga harus mengosongkan draft, bukan menampilkan laporan lama.
   useEffect(() => {
-    if (report && !editingTab) {
-      setDraftReport(report);
+    if (!editingTab) {
+      setDraftReport(report ?? null);
     }
   }, [report, editingTab]);
 

@@ -7,7 +7,7 @@
 import * as XLSX from "xlsx";
 import type { AdHocTask } from "@/services/performanceService";
 import {
-  KPI_STATUS_LABEL, assessKpi, formatDeadline, formatDuration, formatWib, lateMinutes,
+  KPI_STATUS_LABEL, assessKpi, fmtId, formatDeadline, formatDuration, formatWib, lateMinutes,
   monthLabel, summarizeTasks, taskKpiStatus, toMillis,
 } from "@/utils/taskKpi";
 
@@ -35,7 +35,7 @@ function buildPersonSheet(person: KpiPersonSheet, monthKey: string, now: number)
   const periode = monthLabel(monthKey);
   const s = summarizeTasks(person.tasks, now);
   const a = assessKpi(s, person.name, periode);
-  const pctText = (n: number) => `${n}%`;
+  const pctText = (n: number) => `${fmtId(n)}%`;
 
   const rows: (string | number)[][] = [
     ["REKAP KPI TASK SUPER ADMIN"],
@@ -52,7 +52,7 @@ function buildPersonSheet(person: KpiPersonSheet, monthKey: string, now: number)
     ["Terlambat", s.terlambat, pctText(s.pctTerlambat)],
     ["   • Disubmit terlambat", s.terlambatSubmit, ""],
     ["   • Belum submit (deadline lewat)", s.belumSubmit, ""],
-    ["Ketepatan Waktu", s.ketepatanWaktu == null ? "-" : `${s.ketepatanWaktu}%`, "Terpenuhi ÷ (Terpenuhi + Terlambat)"],
+    ["Ketepatan Waktu", s.ketepatanWaktu == null ? "-" : pctText(s.ketepatanWaktu), "Terpenuhi ÷ (Terpenuhi + Terlambat)"],
     ["Rata-rata Keterlambatan", formatDuration(s.avgLateMinutes), ""],
     [],
     ["PENILAIAN KPI", "Bobot", "Skor", "Nilai", "Keterangan"],

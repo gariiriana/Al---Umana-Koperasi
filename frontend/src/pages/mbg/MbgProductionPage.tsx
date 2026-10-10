@@ -422,22 +422,50 @@ export function MbgProductionPage() {
     };
   }, [user, activeTab, archiveSearchQuery]);
 
-  // Subscribe entries + nutrition + recipe adjustments + daily report for selected batch
+  // Batch yang datanya (entries, gizi, penyesuaian resep, laporan harian) sedang tampil.
+  const [loadedBatchId, setLoadedBatchId] = useState<string | null>(null);
+  const batchSwitching = !!selectedBatchId && loadedBatchId !== selectedBatchId;
+
+  // Subscribe entries + nutrition + recipe adjustments + daily report for selected batch.
+  // Saat ganti batch, keempat data ditahan sampai semuanya terkirim minimal sekali lalu
+  // diterapkan bersamaan dalam satu render. Tanpa ini tabel tergambar ulang 3–4 kali
+  // (layar kedip/geter) dan data batch lama sempat tercampur dengan batch baru.
   useEffect(() => {
     if (!selectedBatchId || !user) return;
-    const unsub1 = subscribeEntries(selectedBatchId, setEntries);
-    const unsub2 = subscribeNutrition(selectedBatchId, setNutritionData);
-    const unsub3 = subscribeRecipeAdjustments(selectedBatchId, (list) => {
-      setRecipeAdjustments(list as unknown as RecipeAdjustment[]);
-    }, (err) => {
-      console.error('Error loading recipe adjustments:', err);
-    });
-    const unsub4 = subscribeDailyReport(selectedBatchId, (report) => {
-      setDailyReport(report);
-    }, (err) => {
-      console.error('Error loading daily report:', err);
-    });
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
+    type Slot = 'entries' | 'nutrition' | 'adjustments' | 'report';
+    const apply: Record<Slot, (value: unknown) => void> = {
+      entries: (v) => setEntries(v as MbgPmEntry[]),
+      nutrition: (v) => setNutritionData(v as MbgNutritionEntry[]),
+      adjustments: (v) => setRecipeAdjustments(v as RecipeAdjustment[]),
+      report: (v) => setDailyReport(v as MbgProductionDailyReport | null),
+    };
+    const empty: Record<Slot, unknown> = { entries: [], nutrition: [], adjustments: [], report: null };
+    const slots = Object.keys(apply) as Slot[];
+    const first: Partial<Record<Slot, unknown>> = {};
+    let live = false;
+    const goLive = () => {
+      if (live) return;
+      live = true;
+      clearTimeout(fallback);
+      slots.forEach((k) => apply[k](k in first ? first[k] : empty[k]));
+      setLoadedBatchId(selectedBatchId);
+    };
+    const receive = (k: Slot) => (value: unknown) => {
+      if (live) { apply[k](value); return; }
+      first[k] = value;
+      if (slots.every((s) => s in first)) goLive();
+    };
+    const fail = (k: Slot, label: string) => (err: Error) => {
+      console.error(`Error loading ${label}:`, err);
+      if (!live) receive(k)(empty[k]);
+    };
+    // Sumber yang lambat tidak boleh menahan tampilan terlalu lama.
+    const fallback = setTimeout(goLive, 4000);
+    const unsub1 = subscribeEntries(selectedBatchId, receive('entries'));
+    const unsub2 = subscribeNutrition(selectedBatchId, receive('nutrition'));
+    const unsub3 = subscribeRecipeAdjustments(selectedBatchId, receive('adjustments'), fail('adjustments', 'recipe adjustments'));
+    const unsub4 = subscribeDailyReport(selectedBatchId, receive('report'), fail('report', 'daily report'));
+    return () => { clearTimeout(fallback); unsub1(); unsub2(); unsub3(); unsub4(); };
   }, [selectedBatchId, user]);
 
   const selectedBatch = useMemo(() => {
@@ -1599,8 +1627,9 @@ export function MbgProductionPage() {
             submittedToDistributionBy: user?.uid || '',
           });
 
-          // 2. Auto-save laporan ke Arsip Gizi (mbg_daily_reports) — BUKAN ke Arsip PM
-          if (dailyReport && user) {
+          // 2. Auto-save laporan ke Arsip Gizi (mbg_daily_reports) — BUKAN ke Arsip PM.
+          //    Hanya laporan milik batch ini; jangan pernah memindahkan laporan batch lain.
+          if (dailyReport && user && dailyReport.batchId === selectedBatchId) {
             await saveDailyReport(dailyReport.id || null, {
               ...dailyReport,
               batchId: selectedBatchId,
@@ -2417,6 +2446,7 @@ export function MbgProductionPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <Calendar className="h-4 w-4 text-[#FBBF24]" />
                     <span className="text-sm font-black">{selectedBatch.tanggal}</span>
+                    {batchSwitching && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#F59E0B]" aria-label="Memuat data batch" />}
                     <button
                       type="button"
                       onClick={(e) => {
@@ -2656,7 +2686,7 @@ export function MbgProductionPage() {
               )}
             </div>
           ) : (
-            <>
+            <div aria-busy={batchSwitching} className={`transition-opacity duration-150 ${batchSwitching ? 'opacity-50 pointer-events-none delay-200' : 'delay-0'}`}>
               {activeTab === 'pm-data' ? (
                 /* PM Data View (Read-Only) */
                 <div className="space-y-4 font-['Hanken_Grotesk']">
@@ -2791,6 +2821,7 @@ export function MbgProductionPage() {
                         {showImportedDetails && (
                           <div className="pt-3 border-t border-emerald-200/60 animate-in fade-in duration-150">
                             <DailyReportExcelSections
+                              key={curReport.batchId || selectedBatchId || 'report'}
                               report={curReport}
                               activeSubTab={dailyReportSubTab}
                               onSubTabChange={setDailyReportSubTab}
@@ -3944,7 +3975,7 @@ export function MbgProductionPage() {
                   </div>
                 </div>
               )}
-            </>
+            </div>
           )}
         </>
       )}

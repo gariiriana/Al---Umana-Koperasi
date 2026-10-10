@@ -487,7 +487,6 @@ export function DashboardPage() {
                     pelanggan: "Pelanggan",
                     admin_mbg: "Admin MBG",
                     produksi_mbg: "Produksi MBG",
-                    purchasing_mbg: "Purchasing MBG",
                     distribusi_mbg: "Distribusi MBG",
                     kurir_mbg: "Kurir MBG",
                     mo_katering: "Manager Operasional (MO)",

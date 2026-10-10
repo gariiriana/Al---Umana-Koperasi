@@ -179,7 +179,6 @@ export const MBG_COOKING_STATUS_CONFIG: Record<string, { label: string; color: s
 export const MBG_ROLE_BADGES: Record<string, string> = {
   admin_mbg: 'Admin MBG',
   produksi_mbg: 'Produksi MBG',
-  purchasing_mbg: 'Purchasing MBG',
   distribusi_mbg: 'Distribusi MBG',
   kurir_mbg: 'Kurir MBG',
 };

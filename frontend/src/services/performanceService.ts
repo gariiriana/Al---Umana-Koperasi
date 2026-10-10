@@ -1,6 +1,6 @@
 import {
-  addDoc, collection, doc, onSnapshot, query, runTransaction,
-  serverTimestamp, where,
+  addDoc, collection, deleteField, doc, onSnapshot, query, runTransaction,
+  serverTimestamp, updateDoc, where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { deadlineMillis } from "@/utils/taskKpi";
@@ -65,6 +65,13 @@ export async function submitAdHocTask(taskId: string, evidenceNote: string, evid
       submittedAt: serverTimestamp(), updatedAt: serverTimestamp(),
     });
   });
+}
+
+/** Super Admin: atur atas nama siapa akun ini (kosong = hapus). */
+export async function setAccountHolderName(userId: string, holderName: string): Promise<void> {
+  const name = holderName.trim().replace(/\s+/g, " ");
+  if (name.length > 60) throw new Error("Nama maksimal 60 karakter.");
+  await updateDoc(doc(db, "users", userId), { holderName: name ? name : deleteField(), updatedAt: serverTimestamp() });
 }
 
 export async function changeUserRole(input: { userId: string; role: string; division: Division; changedBy: string; reason?: string }): Promise<void> {

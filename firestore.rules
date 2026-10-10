@@ -77,12 +77,6 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'produksi_mbg';
     }
 
-    function isPurchasingMbg() {
-      return request.auth != null
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'purchasing_mbg';
-    }
-
     function isDistribusiMbg() {
       return request.auth != null
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -105,12 +99,6 @@ service cloud.firestore {
         );
     }
 
-    function isSubPurchasingMbg() {
-      return request.auth != null
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'sub_purchasing_mbg';
-    }
-
     function isDokumentasiProduksiMbg() {
       return request.auth != null
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -128,7 +116,7 @@ service cloud.firestore {
     }
 
     function isAnyMbg() {
-      return isAdminMbg() || isProduksiMbg() || isProduksiMbg2() || isDokumentasiProduksiMbg() || isPurchasingMbg() || isDistribusiMbg() || isKurirMbg() || isSubPurchasingMbg();
+      return isAdminMbg() || isProduksiMbg() || isProduksiMbg2() || isDokumentasiProduksiMbg() || isDistribusiMbg() || isKurirMbg();
     }
 
     function isSuperAdmin() {
@@ -622,7 +610,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /mbg_suppliers/{supplierId} {
       allow read: if isMbgStaff();
-      allow create, update, delete: if isAdmin() || isAdminMbg() || isPurchasingMbg() || isSubPurchasingMbg();
+      allow create, update, delete: if isAdmin() || isAdminMbg();
     }
 
     // -------------------------------------------------------------------
@@ -630,7 +618,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /mbg_purchase_orders/{orderId} {
       allow read: if isMbgStaff();
-      allow create, update, delete: if isAdmin() || isAdminMbg() || isPurchasingMbg() || isSubPurchasingMbg();
+      allow create, update, delete: if isAdmin() || isAdminMbg();
     }
 
     // -------------------------------------------------------------------
@@ -638,7 +626,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /mbg_sub_purchasing_tasks/{taskId} {
       allow read: if isMbgStaff();
-      allow create, update, delete: if isAdmin() || isAdminMbg() || isPurchasingMbg() || isSubPurchasingMbg();
+      allow create, update, delete: if isAdmin() || isAdminMbg();
     }
 
     // -------------------------------------------------------------------
@@ -720,7 +708,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /mbg_purchasing_documents/{docId} {
       allow read: if isMbgStaff();
-      allow create, update, delete: if isAdmin() || isAdminMbg() || isPurchasingMbg() || isSubPurchasingMbg();
+      allow create, update, delete: if isAdmin() || isAdminMbg();
     }
 
     // -------------------------------------------------------------------

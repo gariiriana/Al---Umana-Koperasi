@@ -6,7 +6,7 @@
  * `/category/:name`).
  */
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
-  developer: ["/developer/control-center", "/super-admin/control-center", "/performance"],
+  developer: ["/developer/control-center", "/super-admin/control-center"],
   super_admin: ["/super-admin/control-center"],
   /**
    * Admin: mengelola pesanan, invoice, dan melihat dashboard.
@@ -155,12 +155,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
 
   /**
-   * Purchasing MBG: Dialihkan ke Produksi MBG (Laporan Pembelian Harian Excel).
-   */
-  purchasing_mbg: [
-  ],
-
-  /**
    * Distribusi MBG: QC barang masuk, assign tugas kurir, serta akses & edit fitur kurir.
    */
   distribusi_mbg: [
@@ -175,12 +169,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   kurir_mbg: [
     "/mbg/delivery",
     "/mbg/persiapan",
-  ],
-
-  /**
-   * Sub Purchasing MBG: Dialihkan ke Produksi MBG.
-   */
-  sub_purchasing_mbg: [
   ],
 
   /**
@@ -216,10 +204,11 @@ export const NO_TASK_ROLES: readonly string[] = ["kurir", "kurir_mbg"];
 /** Role yang tidak tampil di Monitoring KPI dan tidak bisa diberi task. */
 export const KPI_EXCLUDED_ROLES: readonly string[] = ["super_admin", "developer", "pelanggan", "customer", ...NO_TASK_ROLES];
 
-// Performa Saya tersedia bagi semua role internal yang bisa menerima task.
+// Performa Saya tersedia bagi semua role internal yang bisa menerima task
+// (super_admin, developer, dan kurir tidak punya KPI, jadi tidak diberi menu ini).
 // Menambahkannya di satu tempat mencegah navigasi desktop dan mobile tidak sinkron.
 for (const role of Object.keys(ROLE_PERMISSIONS)) {
-  if (role !== "super_admin" && !NO_TASK_ROLES.includes(role) && !ROLE_PERMISSIONS[role].includes("/performance")) {
+  if (!KPI_EXCLUDED_ROLES.includes(role) && !ROLE_PERMISSIONS[role].includes("/performance")) {
     ROLE_PERMISSIONS[role] = [...ROLE_PERMISSIONS[role], "/performance"];
   }
 }
@@ -240,10 +229,8 @@ export const ADMIN_SHELL_ROLES = [
   "admin_mbg",
   "produksi_mbg",
   "dokumentasi_produksiMBG",
-  "purchasing_mbg",
   "distribusi_mbg",
   "kurir_mbg",
-  "sub_purchasing_mbg",
   "MBG2",
   "mbg2",
   "produksi_mbg_2",
@@ -268,10 +255,8 @@ export const ALL_ROLES = [
   "admin_mbg",
   "produksi_mbg",
   "dokumentasi_produksiMBG",
-  "purchasing_mbg",
   "distribusi_mbg",
   "kurir_mbg",
-  "sub_purchasing_mbg",
   "MBG2",
   "mbg2",
   "produksi_mbg_2",
@@ -301,10 +286,8 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   admin_mbg: "/mbg/admin",
   produksi_mbg: "/mbg/production",
   dokumentasi_produksiMBG: "/mbg/production",
-  purchasing_mbg: "/performance",
   distribusi_mbg: "/mbg/distribution",
   kurir_mbg: "/mbg/delivery",
-  sub_purchasing_mbg: "/performance",
   MBG2: "/katering/jobdesk",
   mbg2: "/katering/jobdesk",
   produksi_mbg_2: "/katering/jobdesk",

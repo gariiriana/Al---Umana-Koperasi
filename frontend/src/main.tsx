@@ -2,6 +2,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/app.css";
 import App from "./App.tsx";
+import { startFirestoreAutoResync } from "./services/firestoreResync";
+
+// Sambungkan ulang listener Firestore saat aplikasi kembali dibuka / sinyal kembali,
+// supaya data realtime (mis. submit job desk) tidak macet di cache.
+startFirestoreAutoResync();
 
 // Auto-reload on stale Vite chunk after deployment
 window.addEventListener("vite:preloadError", (event) => {

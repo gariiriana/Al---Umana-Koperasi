@@ -35,7 +35,11 @@ import {
   CalendarDays,
   ListTodo,
   ArrowUpDown,
+  Archive,
 } from "lucide-react";
+import { TeklapArchive } from "@/components/katering/TeklapArchive";
+import { JobDeskSyncStatus } from "@/components/katering/JobDeskSyncStatus";
+import { useJobDeskSync } from "@/hooks/useJobDeskSync";
 import { useAuth } from "@/contexts/AuthContext";
 import { getJakartaDate } from "@/utils/date";
 import { subscribeOrders } from "@/services/realtimeService";
@@ -222,22 +226,46 @@ interface MbgDateGroup {
   isAssigned: boolean;
 }
 
+// ── Draft lokal: isian form yang belum disimpan bertahan walau koneksi putus,
+//    tab di-reload, atau HP menutup aplikasi di background. ──
+interface StoredDraft {
+  rows: DraftRow[];
+  date: string;
+  division: "katering" | "mbg";
+  savedAt: number;
+}
+const draftKey = (uid?: string) => `mo-jobdesk-draft:${uid ?? "anon"}`;
+const draftHasContent = (rows: DraftRow[]) =>
+  rows.some((r) => r.kegiatan?.trim() || r.keterangan?.trim() || r.orderLabel?.trim() || r.mbgInstitutionName?.trim());
+function readDraft(uid?: string): StoredDraft | null {
+  try {
+    const raw = localStorage.getItem(draftKey(uid));
+    if (!raw) return null;
+    const draft = JSON.parse(raw) as StoredDraft;
+    return Array.isArray(draft?.rows) && draftHasContent(draft.rows) ? draft : null;
+  } catch {
+    return null;
+  }
+}
+
 export function MoJobDeskPage() {
   const { user } = useAuth();
+  const [restoredDraft, setRestoredDraft] = useState<StoredDraft | null>(() => readDraft(user?.uid));
   const [jobDesks, setJobDesks] = useState<CateringJobDesk[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [mbgBatches, setMbgBatches] = useState<MbgPmBatch[]>([]);
   const [mbgEntries, setMbgEntries] = useState<MbgPmEntry[]>([]);
   const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"dates" | "form" | "table">("dates");
+  const jobDeskSync = useJobDeskSync(jobDesks, !loading);
+  const [activeTab, setActiveTab] = useState<"dates" | "form" | "table" | "archive">(() => (restoredDraft ? "form" : "dates"));
 
   // Division switcher in Tab 1 (Date-Centric Handover)
-  const [handoverDivision, setHandoverDivision] = useState<"katering" | "mbg">("katering");
+  const [handoverDivision, setHandoverDivision] = useState<"katering" | "mbg">(() => restoredDraft?.division ?? "katering");
 
   // Selected date context for form drafting
   const todayStr = getJakartaDate();
-  const [selectedOperationalDate, setSelectedOperationalDate] = useState<string>(todayStr);
+  const [selectedOperationalDate, setSelectedOperationalDate] = useState<string>(() => restoredDraft?.date ?? todayStr);
 
   // Expanded dates state in Tab 1
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
@@ -261,7 +289,7 @@ export function MoJobDeskPage() {
   const [dateHandoverFilter, setDateHandoverFilter] = useState<"all" | "unassigned" | "assigned">("all");
 
   // Draft rows for batch entry
-  const [rows, setRows] = useState<DraftRow[]>([
+  const [rows, setRows] = useState<DraftRow[]>(() => restoredDraft?.rows ?? [
     {
       id: "row-1",
       division: "katering",
@@ -278,6 +306,38 @@ export function MoJobDeskPage() {
   ]);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  // True setelah MO mengubah isian sendiri. Template yang baru dimuat otomatis bukan
+  // draft: tanpa ini, membuka template lalu kembali membuat halaman selalu terbuka di
+  // form dengan "draft dipulihkan" berisi template yang tidak pernah diketik.
+  const [draftDirty, setDraftDirty] = useState(() => !!restoredDraft);
+
+  // Simpan draft ke perangkat setiap kali isian berubah; hapus kalau form kosong.
+  useEffect(() => {
+    try {
+      const key = draftKey(user?.uid);
+      if (draftDirty && draftHasContent(rows)) {
+        const draft: StoredDraft = { rows, date: selectedOperationalDate, division: handoverDivision, savedAt: Date.now() };
+        localStorage.setItem(key, JSON.stringify(draft));
+      } else {
+        localStorage.removeItem(key);
+      }
+    } catch {
+      // Penyimpanan lokal tidak tersedia (mode privat / penuh) — form tetap jalan normal.
+    }
+  }, [rows, draftDirty, selectedOperationalDate, handoverDivision, user?.uid]);
+
+  const discardDraft = useCallback(() => {
+    if (!confirm("Buang draft yang dipulihkan? Isian yang belum disimpan akan dihapus.")) return;
+    setRestoredDraft(null);
+    setDraftDirty(false);
+    setRows([{
+      id: `row-${Date.now()}-1`, division: handoverDivision, hari: getHariFromDate(selectedOperationalDate),
+      tanggal: selectedOperationalDate, startTime: "07:00", pic: handoverDivision === "mbg" ? "Shifa" : "Joko",
+      kegiatan: "", keterangan: "", keyId: generateKeyId(selectedOperationalDate, 1, handoverDivision === "mbg" ? "MBG" : "CAT"),
+      orderId: "", orderLabel: "",
+    }]);
+    setActiveTab("dates");
+  }, [handoverDivision, selectedOperationalDate]);
 
   // Subscribe to all job desks, orders, and MBG data
   useEffect(() => {
@@ -718,6 +778,7 @@ export function MoJobDeskPage() {
         });
       }
 
+      setDraftDirty(false);
       setRows(finalRows);
       setActiveTab("form");
     },
@@ -825,6 +886,7 @@ export function MoJobDeskPage() {
         });
       }
 
+      setDraftDirty(false);
       setRows(finalRows);
       setActiveTab("form");
     },
@@ -833,6 +895,7 @@ export function MoJobDeskPage() {
 
   // Manually sort draft rows in Tab 2 by date and start time (earliest morning first)
   const handleSortRowsByTime = useCallback(() => {
+    setDraftDirty(true);
     setRows((prev) => {
       const sorted = [...prev].sort((a, b) => {
         const dateDiff = (a.tanggal || "").localeCompare(b.tanggal || "");
@@ -872,6 +935,7 @@ export function MoJobDeskPage() {
     // Default blank row if no group matches
     const d = selectedOperationalDate || todayStr;
     const div = handoverDivision;
+    setDraftDirty(false);
     setRows([
       {
         id: `row-${Date.now()}-1`,
@@ -898,6 +962,7 @@ export function MoJobDeskPage() {
 
   // Add new empty row to draft form
   const handleAddRow = useCallback(() => {
+    setDraftDirty(true);
     setRows((prev) => {
       const lastRow = prev[prev.length - 1];
       const defaultDate = lastRow ? lastRow.tanggal : selectedOperationalDate || todayStr;
@@ -928,6 +993,7 @@ export function MoJobDeskPage() {
   // Insert a new row directly below a specific row
   const handleInsertRowBelow = useCallback(
     (targetRowId: string) => {
+      setDraftDirty(true);
       setRows((prev) => {
         const targetIndex = prev.findIndex((r) => r.id === targetRowId);
         if (targetIndex === -1) return prev;
@@ -970,6 +1036,7 @@ export function MoJobDeskPage() {
   // Remove a row from draft form and re-index Key IDs
   const handleRemoveRow = useCallback(
     (rowId: string) => {
+      setDraftDirty(true);
       setRows((prev) => {
         if (prev.length <= 1) return prev;
         const filtered = prev.filter((r) => r.id !== rowId);
@@ -985,6 +1052,7 @@ export function MoJobDeskPage() {
   // Handle in-line cell change in draft table
   const handleRowChange = useCallback(
     (rowId: string, field: keyof DraftRow, value: unknown) => {
+      setDraftDirty(true);
       setRows((prev) =>
         prev.map((r) => {
           if (r.id !== rowId) return r;
@@ -1060,8 +1128,16 @@ export function MoJobDeskPage() {
         };
       });
 
-      await batchCreateJobDesks(inputs);
+      // Begitu dipanggil, tulisan sudah masuk antrean lokal Firestore (tersimpan di
+      // perangkat, terkirim otomatis saat online). Hapus draft sekarang, jangan menunggu
+      // jawaban server: kalau MO offline lalu me-reload, draft yang dipulihkan akan
+      // tersimpan dua kali. Kalau server menolak, draft disimpan lagi di catch.
+      const pendingSave = batchCreateJobDesks(inputs);
+      setDraftDirty(false);
+      try { localStorage.removeItem(draftKey(user?.uid)); } catch { /* penyimpanan lokal tidak tersedia */ }
+      await pendingSave;
 
+      setRestoredDraft(null);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
 
@@ -1085,6 +1161,7 @@ export function MoJobDeskPage() {
       setActiveTab("table");
     } catch (err) {
       console.error("Failed saving job desks:", err);
+      setDraftDirty(true); // simpan lagi isian ke draft perangkat
       alert("Terjadi kesalahan saat menyimpan job desk ke database.");
     } finally {
       setSaving(false);
@@ -1200,6 +1277,7 @@ export function MoJobDeskPage() {
 
       {activeTab !== "form" && (
         <div className="space-y-6">
+      <JobDeskSyncStatus state={jobDeskSync.state} checkedAt={jobDeskSync.checkedAt} onSync={jobDeskSync.syncNow} />
       {/* ========================================================================= */}
       {/* HERO HEADER */}
       {/* ========================================================================= */}
@@ -1257,9 +1335,9 @@ export function MoJobDeskPage() {
         <button
           type="button"
           onClick={() => setActiveTab("dates")}
-          aria-current={activeTab !== "table" ? "page" : undefined}
+          aria-current={activeTab === "dates" ? "page" : undefined}
           className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab !== "table"
+            activeTab === "dates"
               ? "border-amber-500 text-slate-950 font-extrabold"
               : "border-transparent text-slate-500 hover:text-slate-900"
           }`}
@@ -1288,7 +1366,24 @@ export function MoJobDeskPage() {
             {stats.totalDesks}
           </span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("archive")}
+          aria-current={activeTab === "archive" ? "page" : undefined}
+          className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === "archive"
+              ? "border-amber-500 text-slate-950 font-extrabold"
+              : "border-transparent text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Archive className="h-4 w-4 text-amber-600" />
+          <span>Arsip Teklap</span>
+          <span className="hidden md:inline text-[11px] font-medium text-slate-400">Lembar tugas per tanggal</span>
+        </button>
       </div>
+
+      {activeTab === "archive" && <TeklapArchive jobDesks={jobDesks} />}
 
       {/* ========================================================================= */}
       {/* TAB 1: JADWAL & PESANAN PER TANGGAL (DATE-CENTRIC HANDOVER) */}
@@ -1661,6 +1756,17 @@ export function MoJobDeskPage() {
       {/* Halaman form terpisah, dibuka setelah pengguna memilih Susun Job Desk. */}
       {activeTab === "form" && rows.length > 0 && (
         <div className="space-y-5">
+          {restoredDraft && (
+            <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm text-amber-950">
+                <b>Draft yang belum disimpan dipulihkan</b> (terakhir diketik {new Date(restoredDraft.savedAt).toLocaleString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} WIB). Lanjutkan, lalu klik simpan.
+              </p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setRestoredDraft(null)} className="rounded-lg px-3 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100">Oke</button>
+                <button type="button" onClick={discardDraft} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-50">Buang draft</button>
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
             <div>
               <p className="text-sm font-extrabold text-emerald-950">Draft job desk siap ditinjau</p>
@@ -1702,6 +1808,7 @@ export function MoJobDeskPage() {
                   onChange={(e) => {
                     const newDate = e.target.value;
                     setSelectedOperationalDate(newDate);
+                    setDraftDirty(true);
                     setRows((prev) =>
                       prev.map((r, idx) => ({
                         ...r,

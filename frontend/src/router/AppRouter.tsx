@@ -12,7 +12,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AdminAccessDenied } from "@/components/layout/AdminAccessDenied";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
-import { OfflineScreen } from "@/components/ui/OfflineScreen";
+import { OfflineBanner } from "@/components/ui/OfflineBanner";
 import {
   ROLE_DEFAULT_REDIRECT,
 } from "@/constants/roles";
@@ -791,7 +791,7 @@ function RoutesTree() {
         }
       />
       <Route path="/mbg/checklist-bahan" element={<Navigate to="/mbg/persiapan" replace />} />
-      <Route path="/performance" element={<Protected><ShelledRoute pageTitle="Performa Saya" allowedRoles={["admin", "monitoring", "tim_produksi", "distribusi", "produksi_1", "distribusi_1", "produksi_2", "distribusi_2", "mo_katering", "co_mo_katering", "admin_mbg", "produksi_mbg", "dokumentasi_produksiMBG", "distribusi_mbg", "MBG2", "mbg2", "produksi_mbg_2", "distribusi_mbg_2", "super_admin", "developer"]}><PerformancePage /></ShelledRoute></Protected>} />
+      <Route path="/performance" element={<Protected><ShelledRoute pageTitle="Performa Saya" allowedRoles={["admin", "monitoring", "tim_produksi", "distribusi", "produksi_1", "distribusi_1", "produksi_2", "distribusi_2", "mo_katering", "co_mo_katering", "admin_mbg", "produksi_mbg", "dokumentasi_produksiMBG", "distribusi_mbg", "MBG2", "mbg2", "produksi_mbg_2", "distribusi_mbg_2"]}><PerformancePage /></ShelledRoute></Protected>} />
       <Route path="/super-admin/control-center" element={<Protected><ShelledRoute pageTitle="SDM Performance Control Center" allowedRoles={["super_admin", "developer"]}><SuperAdminControlCenterPage /></ShelledRoute></Protected>} />
       <Route path="/developer/control-center" element={<Protected><ShelledRoute pageTitle="Developer Control Center" allowedRoles={["developer"]}><DeveloperControlCenterPage /></ShelledRoute></Protected>} />
 
@@ -904,11 +904,11 @@ export function AppRouter() {
     };
   }, []);
 
-  if (!isOnline) {
-    return <OfflineScreen />;
-  }
-
+  // Jangan pernah mengganti seluruh pohon aplikasi saat offline: itu membongkar
+  // semua halaman dan menghapus isian form yang belum disubmit.
   return (
+    <>
+    {!isOnline && <OfflineBanner />}
     <BrowserRouter
       future={{
         v7_startTransition: true,
@@ -923,6 +923,7 @@ export function AppRouter() {
         <GlobalSignOutModal />
       </AuthProvider>
     </BrowserRouter>
+    </>
   );
 }
 
