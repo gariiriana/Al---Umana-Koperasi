@@ -159,6 +159,10 @@ function corsHeaders(request, env) {
   const origin = request.headers.get("origin");
   const allowed = new Set([
     env.ALLOWED_ORIGIN,
+    // Domain utama aplikasi. Tanpa ini POST tanda tangan (yang selalu membawa
+    // header Origin) dari koperasi-alumana.com ditolak 403.
+    "https://koperasi-alumana.com",
+    "https://www.koperasi-alumana.com",
     "https://al-umana-koperasi.web.app",
     "https://al-umana-koperasi.firebaseapp.com",
   ].filter(Boolean));

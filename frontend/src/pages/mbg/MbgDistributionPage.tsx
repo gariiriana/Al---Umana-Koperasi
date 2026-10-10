@@ -58,6 +58,7 @@ import {
   compareCouriers,
 } from '@/utils/mbgDeliveryReportPdfExporter';
 import { getJakartaDate } from '@/utils/date';
+import { batchSource, subscribeBatchData } from '@/utils/batchScopedSubscriptions';
 
 function getAutoRekapTotals(entries: MbgPmEntry[]) {
   return entries.filter((entry) => !entry.isSekolahLibur).reduce(
@@ -383,25 +384,22 @@ export function MbgDistributionPage() {
 
   // Auto-sync removed to prevent unexpected duplicate data additions
 
-  // Subscribe relevant batch data
-  useEffect(() => {
-    if (!selectedBatchId) return;
-    const unsub1 = subscribeEntries(selectedBatchId, setEntries);
-    const unsub2 = subscribeDeliveryTasks(selectedBatchId, setDeliveryTasks);
-    return () => {
-      unsub1();
-      unsub2();
-    };
-  }, [selectedBatchId]);
-
-  // Subscribe delivery documents for the selected batch only (saving thousands of reads)
+  // Data batch terpilih (entries, tugas kurir, dokumen pengiriman — hanya batch ini, hemat read).
+  // Saat ganti batch ketiganya diterapkan bersamaan supaya tabel tidak tergambar ulang
+  // berkali-kali dengan campuran data batch lama & baru (layar geter).
   useEffect(() => {
     if (!selectedBatchId) {
       setDeliveryDocs([]);
       return;
     }
-    const unsub = subscribeBatchDeliveryDocuments(selectedBatchId, setDeliveryDocs);
-    return unsub;
+    return subscribeBatchData([
+      batchSource<MbgPmEntry[]>({ label: 'data PM', empty: [], apply: setEntries,
+        subscribe: (onData, onError) => subscribeEntries(selectedBatchId, onData, onError) }),
+      batchSource<MbgDeliveryTask[]>({ label: 'tugas kurir', empty: [], apply: setDeliveryTasks,
+        subscribe: (onData, onError) => subscribeDeliveryTasks(selectedBatchId, onData, onError) }),
+      batchSource<MbgDeliveryDocument[]>({ label: 'dokumen pengiriman', empty: [], apply: setDeliveryDocs,
+        subscribe: (onData) => subscribeBatchDeliveryDocuments(selectedBatchId, onData) }),
+    ], () => {});
   }, [selectedBatchId]);
 
   // Search & Filter state for Laporan Kurir in Distribusi MBG

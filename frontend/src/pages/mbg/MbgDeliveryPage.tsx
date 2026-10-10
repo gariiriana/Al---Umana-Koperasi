@@ -49,6 +49,7 @@ import { MBG_DELIVERY_STATUS_CONFIG } from '@/constants/mbgConstants';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { exportMbgDeliveryReportPdf } from '@/utils/mbgDeliveryReportPdfExporter';
+import { batchSource, subscribeBatchData } from '@/utils/batchScopedSubscriptions';
 
 export function MbgDeliveryPage() {
   const { user, profile } = useAuth();
@@ -139,35 +140,45 @@ export function MbgDeliveryPage() {
     }
   }, [profile, user, isAdminOrSupervisor, selectedPetugasName]);
 
+  // Data yang sedang tampil milik batch + tim mana. Saat ganti batch/tim, data lama tetap
+  // tampil (redup, tidak bisa diklik) sampai tugas & entries baru masuk bersamaan — dulu
+  // keduanya dikosongkan dulu sehingga halaman kosong lalu terisi lagi (kedip/geter).
+  const viewKey = selectedBatchId && user ? `${selectedBatchId}|${selectedPetugasName}|${isAdminOrSupervisor}` : null;
+  const [loadedViewKey, setLoadedViewKey] = useState<string | null>(null);
+  const viewSwitching = !!viewKey && loadedViewKey !== viewKey;
+
   // Subscribe to tasks for the selected batch & petugas
   useEffect(() => {
-    setTasks([]);
-    setEntries([]);
     setProofModalEntry(null);
-    if (!selectedBatchId || !user) return;
+    if (!selectedBatchId || !user || !viewKey) {
+      setTasks([]);
+      setEntries([]);
+      setLoadedViewKey(null);
+      return;
+    }
 
     const uUid = user?.uid || '';
     const uEmail = user?.email || '';
     const uName = selectedPetugasName;
 
-    const unsubTasks = subscribeKurirTasks(
-      selectedBatchId,
-      isAdminOrSupervisor ? '' : uUid,
-      isAdminOrSupervisor ? '' : uEmail,
-      isAdminOrSupervisor ? uName : '',
-      (data) => {
-        setTasks(data);
-      },
-      (error) => showToast({ message: error.message, variant: 'error' })
-    );
-
-    const unsubEntries = subscribeEntries(selectedBatchId, setEntries);
-
-    return () => {
-      unsubTasks();
-      unsubEntries();
-    };
-  }, [selectedBatchId, selectedPetugasName, profile?.displayName, user, isAdminOrSupervisor, showToast]);
+    return subscribeBatchData([
+      batchSource<MbgDeliveryTask[]>({
+        label: 'tugas kurir', empty: [], apply: setTasks,
+        subscribe: (onData, onError) => subscribeKurirTasks(
+          selectedBatchId,
+          isAdminOrSupervisor ? '' : uUid,
+          isAdminOrSupervisor ? '' : uEmail,
+          isAdminOrSupervisor ? uName : '',
+          onData,
+          (error) => { showToast({ message: error.message, variant: 'error' }); onError(error); }
+        ),
+      }),
+      batchSource<MbgPmEntry[]>({
+        label: 'data PM', empty: [], apply: setEntries,
+        subscribe: (onData, onError) => subscribeEntries(selectedBatchId, onData, onError),
+      }),
+    ], () => setLoadedViewKey(viewKey));
+  }, [selectedBatchId, selectedPetugasName, profile?.displayName, user, isAdminOrSupervisor, showToast, viewKey]);
 
   // Keep proofModalEntry in sync with live entries snapshot
   useEffect(() => {
@@ -1034,6 +1045,8 @@ export function MbgDeliveryPage() {
               </button>
             )}
           </div>
+          <div aria-busy={viewSwitching}
+            className={`transition-opacity duration-150 ${viewSwitching && loadedViewKey ? 'opacity-50 pointer-events-none delay-200' : 'delay-0'}`}>
           {selectedBatchId && activeTask ? (
             <div className="space-y-6">
               {/* Task Summary Card */}
@@ -1539,6 +1552,7 @@ export function MbgDeliveryPage() {
               )}
             </div>
           )}
+          </div>
         </div>
       )}
 

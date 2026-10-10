@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBatchIdUrlSync } from '@/hooks/useBatchIdUrlSync';
 import { useToast } from '@/contexts/ToastContext';
 import * as XLSX from 'xlsx';
 import type { MbgPmBatch, MbgPmEntry, MbgInstitutionType, MbgClassBreakdown, MbgDayMenu } from '@/types/mbg';
@@ -1413,25 +1414,33 @@ export function MbgAdminPage() {
     return unsub;
   }, []);
 
+  // Nilai terbaru untuk callback snapshot batch. Snapshot yang masuk tepat setelah ganti
+  // tanggal / buat batch baru tidak boleh memakai batchId URL yang sudah usang.
+  const urlBatchIdRef = useRef(urlBatchId);
+  urlBatchIdRef.current = urlBatchId;
+  const weeklyScheduleRef = useRef(weeklySchedule);
+  weeklyScheduleRef.current = weeklySchedule;
+  const uid = user?.uid;
+
   // Subscribe to batches and auto-create today's batch
   useEffect(() => {
     const unsub = subscribeBatches(
       async (b) => {
+        const urlId = urlBatchIdRef.current;
         setAllBatches(b);
         // Tampilkan semua batch aktif, serta batch yang dituju via URL jika berstatus backup
-        const visibleBatches = b.filter((item) => !item.isBackup || item.id === urlBatchId);
+        const visibleBatches = b.filter((item) => !item.isBackup || item.id === urlId);
         setBatches(visibleBatches);
         setLoadingBatches(false);
 
         const todayStr = getJakartaDate();
         const todayBatch = b.find((batch) => batch.tanggal === todayStr && !batch.isBackup);
 
+        // Pilihan user yang masih ada selalu dipertahankan (dulu URL yang tertinggal satu
+        // render menimpanya, sehingga pilihan bolak-balik antara batch lama & baru).
         setSelectedBatchId((current) => {
-          if (urlBatchId && b.some((batch) => batch.id === urlBatchId)) {
-            return urlBatchId;
-          }
-          const isCurrentValid = current ? b.some((batch) => batch.id === current) : false;
-          if (isCurrentValid) return current;
+          if (current && b.some((batch) => batch.id === current)) return current;
+          if (urlId && b.some((batch) => batch.id === urlId)) return urlId;
           if (todayBatch) return todayBatch.id;
           if (visibleBatches.length > 0) return visibleBatches[0].id;
           if (b.length > 0) return b[0].id;
@@ -1439,9 +1448,9 @@ export function MbgAdminPage() {
         });
 
         // Auto-create batch for today if completely absent from Firestore (only if not loading a specific batch via URL)
-        if (!todayBatch && !urlBatchId) {
+        if (!todayBatch && !urlId) {
           try {
-            const newId = await createBatch(todayStr, user?.uid || 'admin', false, weeklySchedule);
+            const newId = await createBatch(todayStr, uid || 'admin', false, weeklyScheduleRef.current);
             setSelectedBatchId((current) => current || newId);
           } catch (err) {
             console.error('Failed to auto-create batch for today:', err);
@@ -1455,32 +1464,29 @@ export function MbgAdminPage() {
       true // includeBackup = true agar batch yang diarahkan dari arsip dapat diakses
     );
     return unsub;
-  }, [user, weeklySchedule, urlBatchId]);
+  }, [uid]);
 
-  // Sinkronisasi selectedBatchId ketika url search param batchId berubah
-  useEffect(() => {
-    if (urlBatchId && allBatches.length > 0) {
-      const match = allBatches.find((b) => b.id === urlBatchId);
-      if (match) {
-        if (selectedBatchId !== urlBatchId) {
-          setSelectedBatchId(urlBatchId);
-        }
-        setBatches((prev) => (prev.some((b) => b.id === urlBatchId) ? prev : [match, ...prev]));
-      }
-    }
-  }, [urlBatchId, allBatches, selectedBatchId]);
+  // URL ?batchId= ↔ batch terpilih, tanpa saling menimpa (lihat hook).
+  useBatchIdUrlSync(selectedBatchId, setSelectedBatchId);
 
-  // Sinkronisasi query param ketika selectedBatchId berubah
+  // Batch backup yang dibuka lewat URL tetap tampil di daftar
   useEffect(() => {
-    if (selectedBatchId && selectedBatchId !== urlBatchId) {
-      setSearchParams({ batchId: selectedBatchId }, { replace: true });
-    }
-  }, [selectedBatchId, urlBatchId, setSearchParams]);
+    if (!urlBatchId) return;
+    const match = allBatches.find((b) => b.id === urlBatchId);
+    if (match) setBatches((prev) => (prev.some((b) => b.id === urlBatchId) ? prev : [match, ...prev]));
+  }, [urlBatchId, allBatches]);
+
+  // Batch yang entries-nya sedang tampil. Saat ganti batch, tabel lama tetap tampil (redup)
+  // sampai data batch baru masuk — tidak berganti tabel → spinner → tabel yang membuat
+  // halaman melompat-lompat.
+  const [entriesBatchId, setEntriesBatchId] = useState<string | null>(null);
+  const entriesSwitching = !!selectedBatchId && entriesBatchId !== selectedBatchId;
 
   // Subscribe to entries when batch is selected
   useEffect(() => {
     if (!selectedBatchId) {
       setEntries([]);
+      setEntriesBatchId(null);
       return;
     }
     setLoadingEntries(true);
@@ -1488,6 +1494,7 @@ export function MbgAdminPage() {
       selectedBatchId,
       (e) => {
         setEntries(e);
+        setEntriesBatchId(selectedBatchId);
         setLoadingEntries(false);
       },
       (err) => {
@@ -2176,8 +2183,9 @@ export function MbgAdminPage() {
             </div>
           </div>
 
-          {/* Main Content Layout: Full Width Table */}
-          <div className="w-full min-w-0">
+          {/* Main Content Layout: Full Width Table — redup & terkunci selama data batch baru dimuat */}
+          <div aria-busy={entriesSwitching}
+            className={`w-full min-w-0 transition-opacity duration-150 ${entriesSwitching && entriesBatchId ? 'opacity-50 pointer-events-none delay-200' : 'delay-0'}`}>
               {/* Search Bar & Actions */}
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="relative max-w-sm flex-1 min-w-[200px]">
@@ -2192,7 +2200,8 @@ export function MbgAdminPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1.5 rounded-lg">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1.5 rounded-lg">
+                    {entriesSwitching && <Loader2 className="h-3 w-3 animate-spin text-[#F59E0B]" aria-label="Memuat data batch" />}
                     Total: {filteredEntries.length} Institusi
                   </span>
 
@@ -2251,7 +2260,7 @@ export function MbgAdminPage() {
               )}
 
               {/* Single Unified Table */}
-              {loadingEntries ? (
+              {loadingEntries && !entriesBatchId ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-6 w-6 animate-spin text-[#FBBF24]" />
                 </div>
