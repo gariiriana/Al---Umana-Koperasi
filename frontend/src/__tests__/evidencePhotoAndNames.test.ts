@@ -84,6 +84,10 @@ describe("role", () => {
     expect(ROLE_PERMISSIONS).not.toHaveProperty("purchasing_mbg");
   });
 
+  it("Produksi 2 dan Distribusi 2 tidak bisa diberi task", () => {
+    expect(KPI_EXCLUDED_ROLES).toEqual(expect.arrayContaining(["produksi_2", "distribusi_2", "kurir", "kurir_mbg"]));
+  });
+
   it("Performa Saya hanya untuk role yang bisa diberi task", () => {
     for (const [role, paths] of Object.entries(ROLE_PERMISSIONS)) {
       expect(paths.includes("/performance"), role).toBe(!KPI_EXCLUDED_ROLES.includes(role));

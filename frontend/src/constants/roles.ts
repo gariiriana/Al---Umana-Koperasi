@@ -198,8 +198,11 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
 };
 
-/** Role yang tidak pernah diberi task oleh Super Admin, jadi tidak punya KPI. */
-export const NO_TASK_ROLES: readonly string[] = ["kurir", "kurir_mbg"];
+/**
+ * Role yang tidak pernah diberi task oleh Super Admin, jadi tidak punya KPI:
+ * kurir katering & MBG, serta akun Produksi 2 dan Distribusi 2.
+ */
+export const NO_TASK_ROLES: readonly string[] = ["kurir", "kurir_mbg", "produksi_2", "distribusi_2"];
 
 /** Role yang tidak tampil di Monitoring KPI dan tidak bisa diberi task. */
 export const KPI_EXCLUDED_ROLES: readonly string[] = ["super_admin", "developer", "pelanggan", "customer", ...NO_TASK_ROLES];
