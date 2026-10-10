@@ -296,7 +296,7 @@ export function MbgDeliveryPage() {
   const handleStartDelivery = async () => {
     if (!activeTask) return;
     try {
-      await updateTaskStatus(activeTask.id, 'delivering');
+      await updateTaskStatus(activeTask.id, 'delivering', activeTask);
       showToast({ message: 'Status diperbarui: Sedang Mengirim!', variant: 'success' });
     } catch {
       showToast({ message: 'Gagal update status pengiriman', variant: 'error' });

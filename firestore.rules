@@ -497,12 +497,56 @@ service cloud.firestore {
     // notifications for customers.
     // Recipients can update their own notifications (mark as read).
     // Only admins can delete.
+    // recipientId = uid penerima ATAU nama role (mis. 'mo_katering').
+    // Dokumen baru ber-pushStatus 'pending' dikirim ke HP oleh Worker
+    // `al-umana-push` (service account, melewati rules) lalu ditandai 'sent'.
+    function isValidNotification() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['recipientId', 'type', 'title', 'titleEn', 'message', 'messageEn',
+          'orderId', 'orderShortId', 'actorRole', 'actorUid', 'link', 'read', 'pushStatus', 'createdAt'])
+        && d.recipientId is string && d.recipientId.size() > 0 && d.recipientId.size() <= 128
+        && d.title is string && d.title.size() <= 200
+        && d.message is string && d.message.size() <= 1000
+        && d.read == false
+        && (!('pushStatus' in d) || d.pushStatus == 'pending')
+        && (!('actorUid' in d) || d.actorUid == request.auth.uid)
+        && (!('link' in d) || (d.link is string && d.link.matches('^/[A-Za-z0-9/_-]{0,120}$')));
+    }
+
     match /notifications/{notificationId} {
-      allow read: if request.auth != null && (resource.data.recipientId == request.auth.uid || isOrderStaff());
-      allow create: if isOrderStaff();
+      allow read: if request.auth != null && (
+        resource.data.recipientId == request.auth.uid || isOrderStaff()
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.recipientId == getUserRole())
+      );
+      // Staf internal boleh memberi notifikasi ke siapa saja; pelanggan hanya
+      // ke admin (pesanan baru) atau ke dirinya sendiri (notifikasi uji).
+      allow create: if request.auth != null && isValidNotification() && (
+        isOrderStaff() || isDeveloper()
+        || request.resource.data.recipientId in ['admin', request.auth.uid]
+      );
       allow update: if request.auth != null && resource.data.recipientId == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
       allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------
+    // Push devices — token FCM per HP (id = sha256(token)).
+    // -------------------------------------------------------------------
+    // HP tetap terdaftar setelah Keluar (keputusan pemilik): akun berikutnya
+    // yang login di HP yang sama menimpa uid/role dokumen ini. Hanya HP itu
+    // sendiri yang tahu token-nya, jadi id dokumen tidak bisa ditebak.
+    match /push_devices/{deviceId} {
+      allow get: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create, update: if request.auth != null
+        && deviceId.matches('^[0-9a-f]{64}$')
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && request.resource.data.keys().hasOnly(['token', 'uid', 'role', 'platform', 'standalone', 'userAgent', 'updatedAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.role == getUserRole()
+        && request.resource.data.token is string
+        && request.resource.data.token.size() > 20 && request.resource.data.token.size() < 4096
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
 
     // -------------------------------------------------------------------

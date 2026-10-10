@@ -40,6 +40,7 @@ import {
   subscribeKurirUsers,
   type MbgKurirUser,
 } from '@/services/mbgDistributionService';
+import { notifyMbgCourierTasks, type CourierAssignment } from '@/services/flowNotifications';
 import {
   subscribeBatchDeliveryDocuments,
   updateSchoolDeliveryProof,
@@ -695,6 +696,7 @@ export function MbgDistributionPage() {
 
       let created = 0;
       let updated = 0;
+      const courierAssignments: CourierAssignment[] = [];
 
       for (const kName of kurirs) {
         const kEntries = sourceEntries.filter((e) => e.assignedPetugasName === kName && !e.isSekolahLibur);
@@ -719,6 +721,7 @@ export function MbgDistributionPage() {
         );
 
         const taskDeadline = deadlines[kName] || existingTask?.deadlineAt || (selectedBatch ? `${selectedBatch.tanggal}T15:00` : '');
+        courierAssignments.push({ courierId: kId, assistantId: kenekId, destinations: entryIds.length, portions: totalPorsi });
 
         if (existingTask) {
           await updateDeliveryTask(existingTask.id, {
@@ -763,6 +766,7 @@ export function MbgDistributionPage() {
         }
       }
 
+      notifyMbgCourierTasks(selectedBatchId, courierAssignments);
       showToast({
         message: `Tugas Pengiriman berhasil dikirim ke akun Kurir! (${created} tugas baru, ${updated} diperbarui)`,
         variant: 'success',

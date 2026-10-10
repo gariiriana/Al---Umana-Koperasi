@@ -18,6 +18,12 @@ import {
 import { db } from "@/lib/firebase";
 import { archiveAndDelete } from "@/services/developerRecycleBinService";
 import { subscriptionManager } from "./subscriptionManager";
+import {
+  notifyJobDeskReviewed,
+  notifyJobDeskSubmitted,
+  notifyJobDesksAssigned,
+  type JobDeskContext,
+} from "./flowNotifications";
 import type {
   CateringJobDesk,
   JobDeskAssignableRole,
@@ -154,6 +160,7 @@ export async function createJobDesk(input: CreateJobDeskInput): Promise<string> 
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  notifyJobDesksAssigned([{ assignedRole: role, tanggal: input.tanggal, kegiatan: input.kegiatan }]);
   return docRef.id;
 }
 
@@ -163,11 +170,13 @@ export async function batchCreateJobDesks(
 ): Promise<number> {
   const batch = writeBatch(db);
   const collRef = collection(db, COLLECTION);
+  const assigned: { assignedRole: string; tanggal: string; kegiatan: string }[] = [];
 
   inputs.forEach((input, index) => {
     const role: JobDeskAssignableRole =
       input.assignedRole ||
       (PIC_NAME_TO_ROLE[input.pic as PicShortName] || "produksi_1");
+    assigned.push({ assignedRole: role, tanggal: input.tanggal, kegiatan: input.kegiatan });
     const calculatedHari = input.hari || getHariFromDate(input.tanggal);
     const division = input.division || (input.mbgBatchId || input.mbgInstitutionName ? "mbg" : "katering");
     const keyPrefix = division === "mbg" ? "MBG" : "CAT";
@@ -202,6 +211,7 @@ export async function batchCreateJobDesks(
   });
 
   await batch.commit();
+  notifyJobDesksAssigned(assigned);
   return inputs.length;
 }
 
@@ -236,7 +246,8 @@ export async function submitJobDeskStatus(
   jobDeskId: string,
   status: JobDeskStatus,
   submittedByUid: string,
-  incompleteReason?: string
+  incompleteReason?: string,
+  context?: JobDeskContext
 ): Promise<void> {
   const updateData: Record<string, unknown> = {
     status,
@@ -253,6 +264,7 @@ export async function submitJobDeskStatus(
   }
 
   await updateDoc(doc(db, COLLECTION, jobDeskId), updateData);
+  if (context) notifyJobDeskSubmitted(context, status !== "incomplete", incompleteReason);
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +274,8 @@ export async function submitJobDeskStatus(
 /** Approve a submitted job desk. */
 export async function approveJobDesk(
   jobDeskId: string,
-  reviewedByUid: string
+  reviewedByUid: string,
+  context?: JobDeskContext
 ): Promise<void> {
   await updateDoc(doc(db, COLLECTION, jobDeskId), {
     reviewStatus: "approved",
@@ -271,13 +284,15 @@ export async function approveJobDesk(
     rejectionRemark: null,
     updatedAt: serverTimestamp(),
   });
+  if (context) notifyJobDeskReviewed(context, true);
 }
 
 /** Reject a submitted job desk with remark. */
 export async function rejectJobDesk(
   jobDeskId: string,
   reviewedByUid: string,
-  remark: string
+  remark: string,
+  context?: JobDeskContext
 ): Promise<void> {
   await updateDoc(doc(db, COLLECTION, jobDeskId), {
     reviewStatus: "rejected",
@@ -290,6 +305,7 @@ export async function rejectJobDesk(
     submittedBy: null,
     updatedAt: serverTimestamp(),
   });
+  if (context) notifyJobDeskReviewed(context, false, remark);
 }
 
 // ---------------------------------------------------------------------------

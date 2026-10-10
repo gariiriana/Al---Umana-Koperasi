@@ -1,0 +1,18 @@
+name = "al-umana-push"
+account_id = "42957b053de047bdb5d17c57be5bda9b"
+main = "worker.js"
+compatibility_date = "2026-09-22"
+routes = [
+  { pattern = "koperasi-alumana.com/api/push/*", zone_name = "koperasi-alumana.com" }
+]
+
+# Safety net: deliver anything the app's /api/push/kick did not trigger.
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+FIREBASE_PROJECT_ID = "al-umana-koperasi"
+
+# Encrypted secrets (never in this file or the repository):
+#   npx wrangler secret put FIREBASE_CLIENT_EMAIL
+#   npx wrangler secret put FIREBASE_PRIVATE_KEY

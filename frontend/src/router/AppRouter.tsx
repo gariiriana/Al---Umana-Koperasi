@@ -19,6 +19,8 @@ import {
 import { StorefrontLayout } from "@/storefront/layouts/StorefrontLayout";
 import { HomePage } from "@/storefront/pages/HomePage";
 import { subscribeNotifications } from "@/services/notificationService";
+import { isPushActiveOnThisDevice } from "@/services/pushService";
+import { PushNotificationCenter } from "@/components/notifications/PushNotificationCenter";
 
 // Helper function to auto-retry and auto-reload on dynamic import chunk loading failures (e.g. after new deployments)
 function safeLazy<T extends React.ComponentType<unknown>>(
@@ -842,17 +844,16 @@ function GlobalSignOutModal() {
   );
 }
 
+/**
+ * Cadangan saat push belum aktif di perangkat ini: notifikasi baru yang masuk
+ * selagi aplikasi terbuka ditampilkan lewat service worker. Izin diminta oleh
+ * PushNotificationCenter (harus dari klik user, syarat Chrome & iOS).
+ */
 function BrowserNotificationListener() {
   const { user, profile } = useAuth();
 
   useEffect(() => {
     if (!user) return;
-
-    if (typeof window !== "undefined" && "Notification" in window) {
-      if (Notification.permission === "default") {
-        Notification.requestPermission();
-      }
-    }
 
     const subscriptionStartTime = Date.now();
 
@@ -860,24 +861,28 @@ function BrowserNotificationListener() {
       user.uid,
       profile?.role,
       (notifications) => {
+        // Perangkat dengan push aktif sudah menerima notifikasi dari Worker.
+        if (isPushActiveOnThisDevice()) return;
+        if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+        if (!("serviceWorker" in navigator)) return;
+
         const newUnread = notifications.filter(
           (n) => !n.read && Date.parse(n.createdAt) > subscriptionStartTime
         );
-
-        if (newUnread.length > 0 && typeof window !== "undefined" && "Notification" in window) {
-          if (Notification.permission === "granted") {
-            newUnread.forEach((n) => {
-              const sessionKey = `browser-notif-shown-${n.id}`;
-              if (!sessionStorage.getItem(sessionKey)) {
-                sessionStorage.setItem(sessionKey, "true");
-                new window.Notification(n.title, {
-                  body: n.message,
-                  icon: "/logo.png",
-                });
-              }
-            });
-          }
-        }
+        newUnread.forEach((n) => {
+          const sessionKey = `browser-notif-shown-${n.id}`;
+          if (sessionStorage.getItem(sessionKey)) return;
+          sessionStorage.setItem(sessionKey, "true");
+          // `new Notification()` tidak didukung Chrome Android; lewat SW berfungsi di semua browser.
+          navigator.serviceWorker.ready
+            .then((registration) => registration.showNotification(n.title, {
+              body: n.message,
+              icon: "/icons/icon-192x192.png",
+              badge: "/icons/badge-96x96.png",
+              tag: n.id,
+            }))
+            .catch(() => { /* service worker belum aktif */ });
+        });
       },
       (err) => console.error("Global notification listener error:", err)
     );
@@ -917,6 +922,7 @@ export function AppRouter() {
     >
       <AuthProvider>
         <BrowserNotificationListener />
+        <PushNotificationCenter />
         <Suspense fallback={<LoadingScreen message="Memuat halaman..." />}>
           <RoutesTree />
         </Suspense>

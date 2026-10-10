@@ -2,16 +2,21 @@
  * Notification Writer Service
  *
  * Pushes real-time notifications to the Firestore `notifications` collection.
- * Called from orderService.ts whenever an action occurs that the customer
- * should be informed about (order creation, status transitions, payment
- * changes, QC results, delivery updates, etc.).
+ * Called from the order, job desk, MBG and Super Admin task flows whenever an
+ * action occurs that another account should be informed about.
+ *
+ * Every document is created with `pushStatus: "pending"`; the Cloudflare
+ * Worker `al-umana-push` delivers it to the recipient's phones (even when the
+ * app is closed) and marks it "sent". `recipientId` is either a user uid or a
+ * role name (e.g. "mo_katering"); the Worker expands role aliases.
  *
  * Notifications are written fire-and-forget — errors are logged but never
  * block the calling flow.
  */
 
 import { collection, doc, setDoc, Timestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { kickPushWorker } from "./pushService";
 
 export type NotificationType =
   | "order"
@@ -19,6 +24,9 @@ export type NotificationType =
   | "production"
   | "delivery"
   | "validation"
+  | "jobdesk"
+  | "mbg"
+  | "task"
   | "system";
 
 export interface PushNotificationPayload {
@@ -31,7 +39,12 @@ export interface PushNotificationPayload {
   orderId?: string;
   orderShortId?: string;
   actorRole: string;
+  /** Halaman yang dibuka saat notifikasi diketuk (default: beranda role). */
+  link?: string;
 }
+
+const MAX_TITLE = 200;
+const MAX_MESSAGE = 1000;
 
 /**
  * Write a notification document to Firestore.
@@ -49,20 +62,42 @@ export async function pushNotification(
 
   const colRef = collection(db, "notifications");
   const notifDoc = doc(colRef);
+  const actorUid = auth.currentUser?.uid;
 
   await setDoc(notifDoc, {
     recipientId: payload.recipientId,
     type: payload.type,
-    title: payload.title,
-    titleEn: payload.titleEn,
-    message: payload.message,
-    messageEn: payload.messageEn,
+    title: payload.title.slice(0, MAX_TITLE),
+    titleEn: payload.titleEn.slice(0, MAX_TITLE),
+    message: payload.message.slice(0, MAX_MESSAGE),
+    messageEn: payload.messageEn.slice(0, MAX_MESSAGE),
     orderId: payload.orderId ?? null,
     orderShortId: payload.orderShortId ?? null,
     actorRole: payload.actorRole,
+    ...(actorUid ? { actorUid } : {}),
+    ...(payload.link ? { link: payload.link } : {}),
     read: false,
+    pushStatus: "pending",
     createdAt: Timestamp.now(),
   });
+  kickPushWorker();
+}
+
+/** Same notification to several recipients (uids and/or role names), deduplicated. */
+export async function notifyRecipients(
+  recipients: Array<string | null | undefined>,
+  payload: Omit<PushNotificationPayload, "recipientId">
+): Promise<void> {
+  const unique = [...new Set(recipients.filter((r): r is string => Boolean(r)))];
+  await Promise.all(unique.map((recipientId) => pushNotification({ ...payload, recipientId })));
+}
+
+/** Fire-and-forget variant: a failed notification must never break the user's action. */
+export function notifyQuietly(
+  recipients: Array<string | null | undefined>,
+  payload: Omit<PushNotificationPayload, "recipientId">
+): void {
+  notifyRecipients(recipients, payload).catch((err) => console.error("[notify] gagal mengirim notifikasi:", err));
 }
 
 /**

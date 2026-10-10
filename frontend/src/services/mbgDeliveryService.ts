@@ -8,6 +8,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { hasCompleteMbgProof, isMbgTaskAssignedTo } from '@/lib/mbgCourierAssignment';
+import { notifyMbgBatchStatus, notifyMbgDeliveryProgress } from './flowNotifications';
 import type { MbgDeliveryTask, MbgDeliveryStatus, MbgPmEntry } from '@/types/mbg';
 
 const DELIVERY_COLLECTION = 'mbg_delivery_tasks';
@@ -42,7 +43,8 @@ export function subscribeKurirTasks(
 
 export async function updateTaskStatus(
   taskId: string,
-  status: MbgDeliveryStatus
+  status: MbgDeliveryStatus,
+  context?: Pick<MbgDeliveryTask, 'batchId' | 'petugasName'>
 ): Promise<void> {
   if (status === 'delivered') throw new Error('Gunakan penyelesaian pengiriman untuk memvalidasi seluruh bukti.');
   const updates: Partial<MbgDeliveryTask> = {
@@ -50,16 +52,17 @@ export async function updateTaskStatus(
     updatedAt: new Date().toISOString(),
   };
   await updateDoc(doc(db, DELIVERY_COLLECTION, taskId), updates);
+  if (status === 'delivering' && context) notifyMbgDeliveryProgress(context.batchId, context.petugasName, false);
 }
 
 /** Validate fresh task, batch and per-school evidence before committing completion. */
 export async function completeTaskAndBatch(task: MbgDeliveryTask): Promise<void> {
   const taskRef = doc(db, DELIVERY_COLLECTION, task.id);
-  await runTransaction(db, async (transaction) => {
+  const completedNow = await runTransaction(db, async (transaction) => {
     const taskSnapshot = await transaction.get(taskRef);
     if (!taskSnapshot.exists()) throw new Error('Tugas pengiriman tidak ditemukan.');
     const currentTask = taskSnapshot.data() as MbgDeliveryTask;
-    if (currentTask.status === 'delivered') return;
+    if (currentTask.status === 'delivered') return false;
     if (currentTask.status !== 'delivering') throw new Error('Mulai pengantaran sebelum menyelesaikan tugas.');
     const batchSnapshot = await transaction.get(doc(db, 'mbg_pm_batches', currentTask.batchId));
     if (!batchSnapshot.exists() || batchSnapshot.data().productionCookingStatus !== 'cooked') {
@@ -82,6 +85,7 @@ export async function completeTaskAndBatch(task: MbgDeliveryTask): Promise<void>
     }
     if (!activeCount) throw new Error('Tidak ada tujuan aktif untuk diselesaikan.');
     transaction.update(taskRef, { status: 'delivered', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    return true;
   });
 
   // Read all tasks, including those of other couriers, before promoting the shared batch.
@@ -89,6 +93,9 @@ export async function completeTaskAndBatch(task: MbgDeliveryTask): Promise<void>
   const activeTasks = taskSnapshot.docs.filter((item) => item.data().entryIds?.length > 0);
   if (activeTasks.length && activeTasks.every((item) => item.data().status === 'delivered')) {
     await updateDoc(doc(db, 'mbg_pm_batches', task.batchId), { status: 'DELIVERED', updatedAt: new Date().toISOString() });
+    if (completedNow) notifyMbgBatchStatus(task.batchId, 'DELIVERED');
+  } else if (completedNow) {
+    notifyMbgDeliveryProgress(task.batchId, task.petugasName, true);
   }
 }
 

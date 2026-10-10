@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 6 376 410" width="752" height="820">
+  <!-- Logo KASMA, digambar ulang sebagai vektor dari logo asli supaya tajam di semua ukuran.
+       Latar transparan; ikon PWA menaruhnya di atas kotak putih (scripts/pwa/render-icons.mjs). -->
+  <defs>
+    <linearGradient id="drop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFD526"/>
+      <stop offset="1" stop-color="#E9A100"/>
+    </linearGradient>
+    <linearGradient id="k" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EDEDED"/>
+    </linearGradient>
+  </defs>
+  <!-- Heksagon kuning, sudut membulat -->
+  <polygon points="208,30 373,121 373,301 208,392 43,301 43,121"
+    fill="#FFC907" stroke="#FFC907" stroke-width="16" stroke-linejoin="round"/>
+  <!-- Garis putih di dalam heksagon -->
+  <polygon points="208,53 351,132 351,290 208,369 65,290 65,132"
+    fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linejoin="round"/>
+  <!-- Huruf k: batang yang melengkung menampung tetes madu, lengan, dan kaki -->
+  <g fill="url(#k)">
+    <path d="M106,111 L152,100 L152,306 C152,330 166,343 186,344 C206,345 226,340 246,326
+             C232,346 208,358 182,358 C138,358 106,330 106,288 Z"/>
+    <path d="M230,118 L294,118 L152,262 L152,198 Z"/>
+    <path d="M185,225 L214,197 L302,314 L246,314 Z"/>
+  </g>
+  <!-- Tetes madu -->
+  <path d="M186,250 C180,272 164,288 164,308 C164,324 174,334 187,334 C200,334 210,324 210,308 C210,288 192,272 186,250 Z"
+    fill="url(#drop)"/>
+</svg>

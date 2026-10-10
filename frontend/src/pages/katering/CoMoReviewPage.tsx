@@ -54,6 +54,12 @@ const PIC_OPTIONS: PicShortName[] = [
   "Wandi",
 ];
 
+/** Detail job desk untuk isi notifikasi ke PIC & MO setelah review. */
+function reviewContext(jobDesks: CateringJobDesk[], id: string) {
+  const jd = jobDesks.find((item) => item.id === id);
+  return jd ? { kegiatan: jd.kegiatan, pic: jd.pic, tanggal: jd.tanggal, assignedRole: jd.assignedRole } : undefined;
+}
+
 export function CoMoReviewPage() {
   const { user } = useAuth();
   const [allJobDesks, setAllJobDesks] = useState<CateringJobDesk[]>([]);
@@ -187,14 +193,14 @@ export function CoMoReviewPage() {
     async (id: string) => {
       setProcessingId(id);
       try {
-        await approveJobDesk(id, user?.uid || "");
+        await approveJobDesk(id, user?.uid || "", reviewContext(allJobDesks, id));
       } catch (err) {
         console.error("Failed to approve job desk:", err);
       } finally {
         setProcessingId(null);
       }
     },
-    [user?.uid]
+    [user?.uid, allJobDesks]
   );
 
   // Handle reject with remark
@@ -206,7 +212,7 @@ export function CoMoReviewPage() {
       }
       setProcessingId(id);
       try {
-        await rejectJobDesk(id, user?.uid || "", rejectRemark.trim());
+        await rejectJobDesk(id, user?.uid || "", rejectRemark.trim(), reviewContext(allJobDesks, id));
         setRejectingId(null);
         setRejectRemark("");
       } catch (err) {
@@ -215,7 +221,7 @@ export function CoMoReviewPage() {
         setProcessingId(null);
       }
     },
-    [rejectRemark, user?.uid]
+    [rejectRemark, user?.uid, allJobDesks]
   );
 
   const activeFilterCount =

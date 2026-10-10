@@ -5,6 +5,7 @@ import {
 import { auth, db } from "@/lib/firebase";
 import { deadlineMillis } from "@/utils/taskKpi";
 import { EVIDENCE_ORIGINAL_MAX_BYTES, splitIntoChunks } from "@/utils/evidencePhoto";
+import { notifyTaskAssigned, notifyTaskSubmitted } from "./flowNotifications";
 
 export type Division = "katering" | "mbg" | "general";
 
@@ -52,6 +53,7 @@ export async function createAdHocTask(input: Pick<AdHocTask, "assigneeId" | "ass
     throw new Error("Deadline wajib diisi lengkap (tanggal dan jam).");
   }
   await addDoc(collection(db, "ad_hoc_tasks"), { ...input, status: "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  notifyTaskAssigned(input.assigneeId, input.title, input.deadline);
 }
 
 /** Foto asli yang sudah diunggah ke evidence_chunks. */
@@ -98,7 +100,7 @@ export async function submitAdHocTask(taskId: string, evidenceNote: string, evid
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("Sesi login sudah berakhir.");
   if (!evidenceNote.trim()) throw new Error("Keterangan pekerjaan wajib diisi.");
-  await runTransaction(db, async (tx) => {
+  const submitted = await runTransaction(db, async (tx) => {
     const ref = doc(db, "ad_hoc_tasks", taskId); const snap = await tx.get(ref);
     if (!snap.exists()) throw new Error("Task tidak ditemukan.");
     const task = snap.data() as AdHocTask;
@@ -113,7 +115,9 @@ export async function submitAdHocTask(taskId: string, evidenceNote: string, evid
       } : {}),
       submittedAt: serverTimestamp(), updatedAt: serverTimestamp(),
     });
+    return task;
   });
+  notifyTaskSubmitted(submitted.title, submitted.assigneeNameSnapshot);
 }
 
 /** Super Admin: atur atas nama siapa akun ini (kosong = hapus). */

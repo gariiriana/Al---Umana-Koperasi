@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 6 376 410" width="752" height="820">
+  <!-- Badge notifikasi Android: siluet putih heksagon KASMA, huruf k berlubang (transparan). -->
+  <defs>
+    <mask id="cut">
+      <rect x="0" y="0" width="422" height="422" fill="#fff"/>
+      <g fill="#000">
+        <path d="M108,110 L150,100 L150,292 L108,300 Z"/>
+        <path d="M230,118 L292,118 L150,260 L150,198 Z"/>
+        <path d="M186,226 L214,198 L300,312 L244,312 Z"/>
+        <path d="M108,286 C108,318 128,334 154,338 L150,300 Z"/>
+        <path d="M182,266 C176,286 160,298 160,314 C160,328 170,336 182,336 C194,336 204,328 204,314 C204,298 188,286 182,266 Z"/>
+      </g>
+    </mask>
+  </defs>
+  <polygon points="208,30 373,121 373,301 208,392 43,301 43,121" mask="url(#cut)"
+    fill="#fff" stroke="#fff" stroke-width="16" stroke-linejoin="round"/>
+</svg>

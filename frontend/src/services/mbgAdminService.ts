@@ -21,6 +21,7 @@ import {
 import { setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { subscriptionManager } from './subscriptionManager';
+import { notifyMbgBatchStatus, notifyMbgCooking } from './flowNotifications';
 import type { MbgPmBatch, MbgPmEntry, MbgBatchStatus, MbgDayMenu, MbgProductionCookingStatus } from '@/types/mbg';
 import { MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
 import { archiveAndDelete, archiveSnapshotsAndDelete, stageArchiveAndDelete } from '@/services/developerRecycleBinService';
@@ -249,6 +250,7 @@ export async function updateBatchStatus(
   status: MbgBatchStatus
 ): Promise<void> {
   await updateBatch(batchId, { status });
+  notifyMbgBatchStatus(batchId, status);
 }
 
 /** Confirm cooking in a transaction so stale tabs cannot move a batch backwards. */
@@ -264,6 +266,7 @@ export async function updateBatchCookingStatus(batchId: string, status: MbgProdu
   // Pure direct write: INSTANT (< 100ms), 0 reads, no 429 quota delays
   const ref = doc(db, BATCHES_COLLECTION, batchId);
   await updateDoc(ref, cookingUpdates);
+  notifyMbgCooking(batchId, status);
 }
 
 export async function deleteBatch(batchId: string): Promise<void> {

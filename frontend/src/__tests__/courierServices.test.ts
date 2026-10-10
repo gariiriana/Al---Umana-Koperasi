@@ -43,6 +43,7 @@ const fake = vi.hoisted(() => {
 vi.mock('@/lib/firebase', () => ({ db: {} }));
 vi.mock('@/services/authService', () => ({ currentUser: () => ({ uid: fake.state.actor }) }));
 vi.mock('@/services/notificationWriter', () => ({ pushNotification: fake.notify, shortOrderId: (id: string) => id }));
+vi.mock('@/services/flowNotifications', () => ({ notifyMbgBatchStatus: vi.fn(), notifyMbgDeliveryProgress: vi.fn() }));
 vi.mock('@/services/whatsappService', () => ({ sendWhatsAppNotification: vi.fn(), sendWhatsAppNotificationDirect: vi.fn(), WA_MESSAGES: {} }));
 vi.mock('@/services/developerRecycleBinService', () => ({ archiveAndDelete: vi.fn(), archiveSnapshotsAndDelete: vi.fn() }));
 vi.mock('firebase/firestore', async (importOriginal) => ({

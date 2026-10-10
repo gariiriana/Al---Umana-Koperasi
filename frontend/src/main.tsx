@@ -3,6 +3,10 @@ import { createRoot } from "react-dom/client";
 import "./styles/app.css";
 import App from "./App.tsx";
 import { startFirestoreAutoResync } from "./services/firestoreResync";
+import { captureInstallPrompt } from "./services/installPrompt";
+
+// Simpan event "pasang aplikasi" sedini mungkin untuk tombol Pasang di kartu notifikasi.
+captureInstallPrompt();
 
 // Sambungkan ulang listener Firestore saat aplikasi kembali dibuka / sinyal kembali,
 // supaya data realtime (mis. submit job desk) tidak macet di cache.

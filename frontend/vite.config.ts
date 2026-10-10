@@ -12,45 +12,39 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["logo.png", "icons/*.png"],
+      // Satu-satunya manifest aplikasi (dulu ada public/manifest.json ganda yang
+      // terbaca duluan oleh browser). Ikon dibuat oleh scripts/pwa/generate-pwa-icons.ps1.
       manifest: {
-        name: "Al-Umana Koperasi",
+        id: "/",
+        name: "Al-Umanaa Koperasi",
         short_name: "Al-Umanaa",
         description: "Sistem Order Fulfillment & Delivery Koperasi Al-Umanaa Pesantren",
         theme_color: "#D97706",
-        background_color: "#F3F4F6",
+        background_color: "#FFFFFF",
         display: "standalone",
-        orientation: "portrait-primary",
+        orientation: "portrait",
         scope: "/",
         start_url: "/",
         lang: "id",
+        categories: ["business", "productivity"],
         icons: [
-          { src: "/icons/icon-72x72.png", sizes: "72x72", type: "image/png" },
-          { src: "/icons/icon-96x96.png", sizes: "96x96", type: "image/png" },
-          { src: "/icons/icon-128x128.png", sizes: "128x128", type: "image/png" },
-          { src: "/icons/icon-144x144.png", sizes: "144x144", type: "image/png" },
-          { src: "/icons/icon-152x152.png", sizes: "152x152", type: "image/png" },
-          { src: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
-          { src: "/icons/icon-384x384.png", sizes: "384x384", type: "image/png" },
-          { src: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
-        ],
-        shortcuts: [
-          {
-            name: "Input Pesanan",
-            short_name: "Pesanan",
-            url: "/orders/new",
-            icons: [{ src: "/icons/icon-96x96.png", sizes: "96x96" }],
-          },
-          {
-            name: "Dashboard",
-            short_name: "Dashboard",
-            url: "/dashboard",
-            icons: [{ src: "/icons/icon-96x96.png", sizes: "96x96" }],
-          },
+          { src: "/icons/icon-72x72.png", sizes: "72x72", type: "image/png", purpose: "any" },
+          { src: "/icons/icon-96x96.png", sizes: "96x96", type: "image/png", purpose: "any" },
+          { src: "/icons/icon-128x128.png", sizes: "128x128", type: "image/png", purpose: "any" },
+          { src: "/icons/icon-144x144.png", sizes: "144x144", type: "image/png", purpose: "any" },
+          { src: "/icons/icon-152x152.png", sizes: "152x152", type: "image/png", purpose: "any" },
+          { src: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/icons/icon-384x384.png", sizes: "384x384", type: "image/png", purpose: "any" },
+          { src: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "/icons/maskable-192x192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+          { src: "/icons/maskable-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
+        // Handler push & klik notifikasi (public/push-sw.js) ikut di service worker yang sama.
+        importScripts: ["/push-sw.js"],
         // Cache static assets (fonts, css, js)
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [

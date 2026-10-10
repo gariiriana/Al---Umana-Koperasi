@@ -128,12 +128,14 @@ export function OperationalJobDeskPage() {
 
       setRowStatus((prev) => ({ ...prev, [jdId]: status }));
       setSubmittingRowId(jdId);
+      const jd = jobDesks.find((item) => item.id === jdId);
       try {
         await submitJobDeskStatus(
           jdId,
           status,
           user?.uid || "",
-          status === "incomplete" ? reason.trim() : undefined
+          status === "incomplete" ? reason.trim() : undefined,
+          jd ? { kegiatan: jd.kegiatan, pic: jd.pic, tanggal: jd.tanggal, assignedRole: jd.assignedRole } : undefined
         );
       } catch (err) {
         console.error("Failed submitting job desk:", err);
@@ -142,7 +144,7 @@ export function OperationalJobDeskPage() {
         setSubmittingRowId(null);
       }
     },
-    [user?.uid]
+    [user?.uid, jobDesks]
   );
 
   // Filtered job desks

@@ -1,0 +1,9 @@
+{
+  "name": "al-umana-push",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test logic.test.mjs",
+    "deploy": "npx wrangler@3 deploy"
+  }
+}

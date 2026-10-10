@@ -11,6 +11,10 @@ backend/firebase-service-account.json
 *.key
 *-key.json
 serviceAccountKey.json
+*firebase-adminsdk*.json
+
+# Cloudflare Wrangler local state
+.wrangler/
 
 # Build artifacts
 dist/

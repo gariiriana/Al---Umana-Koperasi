@@ -72,7 +72,8 @@ describe('job desk Complete → CO_MO approve flow', () => {
 
     fireEvent.click(rowOf('goreng tahu').getByRole('button', { name: /Complete/ }));
 
-    await waitFor(() => expect(fake.submit).toHaveBeenCalledWith('005', 'complete', 'dwi-uid', undefined));
+    await waitFor(() => expect(fake.submit).toHaveBeenCalledWith('005', 'complete', 'dwi-uid', undefined,
+      expect.objectContaining({ kegiatan: expect.stringMatching(/goreng tahu/i) })));
     expect(fake.submit).toHaveBeenCalledTimes(1);
     expect(await rowOf('goreng tahu').findByText('Menunggu Review')).toBeTruthy();
     expect(rowOf('goreng tahu').getByText('Terkirim ✓')).toBeTruthy();
@@ -91,7 +92,8 @@ describe('job desk Complete → CO_MO approve flow', () => {
     fireEvent.change(rowOf('iris jahe').getByPlaceholderText('Tulis alasan incomplete...'), { target: { value: 'jahe habis' } });
     fireEvent.click(kirim);
 
-    await waitFor(() => expect(fake.submit).toHaveBeenCalledWith('006', 'incomplete', 'dwi-uid', 'jahe habis'));
+    await waitFor(() => expect(fake.submit).toHaveBeenCalledWith('006', 'incomplete', 'dwi-uid', 'jahe habis',
+      expect.objectContaining({ kegiatan: expect.stringMatching(/iris jahe/i) })));
     expect(await rowOf('iris jahe').findByText('Menunggu Review')).toBeTruthy();
   });
 
@@ -106,7 +108,8 @@ describe('job desk Complete → CO_MO approve flow', () => {
     asCoMo();
     const como = render(<CoMoReviewPage />);
     fireEvent.click(rowOf('goreng tahu').getByRole('button', { name: /^Approve$/ }));
-    await waitFor(() => expect(fake.approve).toHaveBeenCalledWith('005', 'como-uid'));
+    await waitFor(() => expect(fake.approve).toHaveBeenCalledWith('005', 'como-uid',
+      expect.objectContaining({ kegiatan: expect.stringMatching(/goreng tahu/i), assignedRole: expect.any(String) })));
     expect(screen.queryByText(/Konfirmasi Persetujuan/)).toBeNull();
     expect(await rowOf('goreng tahu').findByText(/Disetujui \(Approved\)/)).toBeTruthy();
     como.unmount();
