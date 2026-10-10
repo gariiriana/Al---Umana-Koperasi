@@ -210,10 +210,16 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
 };
 
-// Performa Saya tersedia bagi semua role internal. Menambahkannya di satu
-// tempat mencegah navigasi desktop dan mobile tidak sinkron.
+/** Role yang tidak pernah diberi task oleh Super Admin, jadi tidak punya KPI. */
+export const NO_TASK_ROLES: readonly string[] = ["kurir", "kurir_mbg"];
+
+/** Role yang tidak tampil di Monitoring KPI dan tidak bisa diberi task. */
+export const KPI_EXCLUDED_ROLES: readonly string[] = ["super_admin", "developer", "pelanggan", "customer", ...NO_TASK_ROLES];
+
+// Performa Saya tersedia bagi semua role internal yang bisa menerima task.
+// Menambahkannya di satu tempat mencegah navigasi desktop dan mobile tidak sinkron.
 for (const role of Object.keys(ROLE_PERMISSIONS)) {
-  if (role !== "super_admin" && !ROLE_PERMISSIONS[role].includes("/performance")) {
+  if (role !== "super_admin" && !NO_TASK_ROLES.includes(role) && !ROLE_PERMISSIONS[role].includes("/performance")) {
     ROLE_PERMISSIONS[role] = [...ROLE_PERMISSIONS[role], "/performance"];
   }
 }

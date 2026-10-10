@@ -1,15 +1,22 @@
 import { useEffect, useMemo, useState, useCallback, Fragment } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
-import {
-  ArrowLeft, ArrowRight, ChevronRight, MoreHorizontal,
-} from "lucide-react";
+import { ArrowLeft, ChevronRight, FileSpreadsheet, MoreHorizontal } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth, type UserProfile } from "@/contexts/AuthContext";
 import {
-  changeUserRole, createAdHocTask, reviewAdHocTask,
-  type AdHocTask, type PerformanceActivity,
+  changeUserRole, createAdHocTask, subscribeAllAdHocTasks,
+  type AdHocTask,
 } from "@/services/performanceService";
-import { ALL_ROLES } from "@/constants/roles";
+import { ALL_ROLES, KPI_EXCLUDED_ROLES } from "@/constants/roles";
+import { KpiAssessmentCard, KpiStackedBar, KpiStatusTiles, KpiTaskList } from "@/components/kpi/TaskKpiWidgets";
+import { KPI_STATUS_STYLE } from "@/components/kpi/kpiStyles";
+import { useNow } from "@/hooks/useNow";
+import { getJakartaDate } from "@/utils/date";
+import { exportKpiExcel, type KpiPersonSheet } from "@/utils/kpiExcelExporter";
+import {
+  KPI_STATUS_LABEL, assessKpi, formatDeadline, formatDuration, lateMinutes, monthLabel,
+  summarizeTasks, taskKpiStatus, taskMonthKey, type KpiSummary, type TaskKpiStatus,
+} from "@/utils/taskKpi";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Staff = UserProfile & { uid: string };
@@ -24,85 +31,21 @@ const divisionFor = (role: string): Division =>
 const roleLabel = (role: string) =>
   role.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-const taskStatusConfig = [
-  { key: "approved", label: "Selesai", color: "#059669" },
-  { key: "pending_review", label: "Review", color: "#D97706" },
-  { key: "revision_required", label: "Revisi", color: "#DC2626" },
-  { key: "pending", label: "Belum", color: "#94A3B8" },
-  { key: "in_progress", label: "Proses", color: "#4F46E5" },
-] as const;
-
-const ROLE_JOBDESK: Record<string, { tasks: string[]; kpiAspects: string[] }> = {
-  admin: { tasks: ["Input pesanan", "Kelola invoice", "Koordinasi pelanggan", "Update jadwal distribusi"], kpiAspects: ["Akurasi data pesanan", "Kecepatan input", "Responsif pelanggan"] },
-  tim_produksi: { tasks: ["Proses masak", "Quality control", "Kelola stok bahan", "Jadwal produksi"], kpiAspects: ["Ketepatan waktu produksi", "Kualitas makanan", "Efisiensi bahan"] },
-  produksi_1: { tasks: ["Produksi makanan katering", "Kontrol kualitas", "Koordinasi bahan baku"], kpiAspects: ["Output produksi", "Zero defect rate", "Ketepatan jadwal"] },
-  distribusi: { tasks: ["Handover barang", "Penjadwalan distribusi", "Koordinasi kurir"], kpiAspects: ["On-time delivery", "Zero loss", "Efisiensi rute"] },
-  distribusi_1: { tasks: ["Handover barang", "Penjadwalan distribusi", "Koordinasi kurir"], kpiAspects: ["On-time delivery", "Zero loss", "Efisiensi rute"] },
-  kurir: { tasks: ["Pengantaran pesanan", "Bukti delivery", "Konfirmasi penerima"], kpiAspects: ["Delivery success rate", "Ketepatan waktu", "Keluhan pelanggan"] },
-  produksi_2: { tasks: ["Support produksi", "Job desk harian", "Dokumentasi"], kpiAspects: ["Task completion rate", "Kualitas support"] },
-  distribusi_2: { tasks: ["Job desk distribusi", "Support pengiriman"], kpiAspects: ["Task completion rate", "Keakuratan distribusi"] },
-  mo_katering: { tasks: ["Terima pesanan dari admin", "Buat job desk", "Distribusikan tugas"], kpiAspects: ["Kecepatan delegasi", "Keakuratan job desk", "Team utilization"] },
-  co_mo_katering: { tasks: ["Review job desk", "Approve/reject submission", "Quality assurance"], kpiAspects: ["Review turnaround", "Approval accuracy", "Feedback quality"] },
-  admin_mbg: { tasks: ["Kelola batch MBG", "Input pesanan MBG", "Arsip PM", "Laporan MBG"], kpiAspects: ["Akurasi data", "Kecepatan proses", "Kelengkapan laporan"] },
-  produksi_mbg: { tasks: ["Produksi makanan MBG", "Dokumentasi memasak", "Laporan harian"], kpiAspects: ["Output produksi", "Ketepatan porsi", "Dokumentasi lengkap"] },
-  dokumentasi_produksiMBG: { tasks: ["Foto proses produksi", "Update status masak", "Arsip dokumentasi"], kpiAspects: ["Kelengkapan foto", "Ketepatan update"] },
-  purchasing_mbg: { tasks: ["Belanja bahan baku", "Laporan pembelian", "Negosiasi harga"], kpiAspects: ["Cost efficiency", "Ketepatan belanja"] },
-  sub_purchasing_mbg: { tasks: ["Support belanja", "Pencatatan bahan"], kpiAspects: ["Akurasi pencatatan", "Responsivitas"] },
-  distribusi_mbg: { tasks: ["QC barang masuk", "Assign kurir MBG", "Kelola pengiriman MBG"], kpiAspects: ["Zero defect QC", "On-time assignment"] },
-  kurir_mbg: { tasks: ["Antar makanan MBG", "Bukti foto", "Serah terima"], kpiAspects: ["Delivery success rate", "Ketepatan waktu"] },
-  MBG2: { tasks: ["Support produksi MBG", "Job desk harian"], kpiAspects: ["Task completion", "Kontribusi tim"] },
-  mbg2: { tasks: ["Support produksi MBG", "Job desk harian"], kpiAspects: ["Task completion", "Kontribusi tim"] },
-  produksi_mbg_2: { tasks: ["Support produksi MBG", "Job desk harian"], kpiAspects: ["Task completion", "Kontribusi tim"] },
-  distribusi_mbg_2: { tasks: ["Support distribusi MBG", "Job desk distribusi"], kpiAspects: ["Task completion", "Keakuratan"] },
-  monitoring: { tasks: ["Pantau pesanan", "Lihat dashboard", "Laporan harian"], kpiAspects: ["Monitoring coverage", "Alert responsiveness"] },
-};
-
-// ─── Recommendation Engine ───────────────────────────────────────────────────
-function generateRecommendation(person: Staff, pActs: PerformanceActivity[], pTasks: AdHocTask[], allActs: PerformanceActivity[], allStaff: Staff[]) {
-  const xp = pActs.reduce((s, a) => s + (a.xp ?? (a.sourceType === "ad_hoc_task" ? 25 : 10)), 0);
-  const approved = pTasks.filter((t) => t.status === "approved").length;
-  const total = pTasks.length;
-  const rate = total > 0 ? approved / total : 0;
-  const cateringActs = pActs.filter((a) => a.sourceType === "catering_jobdesk").length;
-  const mbgActs = pActs.filter((a) => a.sourceType === "mbg_operation").length;
-
-  const roleBuckets: Record<string, string[]> = {};
-  for (const s of allStaff) { if (!roleBuckets[s.role]) roleBuckets[s.role] = []; roleBuckets[s.role].push(s.uid); }
-  const roleAvg: Record<string, number> = {};
-  for (const [r, uids] of Object.entries(roleBuckets)) {
-    roleAvg[r] = uids.length > 0 ? allActs.filter((a) => uids.includes(a.userId)).reduce((s, a) => s + (a.xp ?? 10), 0) / uids.length : 0;
-  }
-  const avg = roleAvg[person.role] ?? 0;
-  const ratio = avg > 0 ? xp / avg : xp > 0 ? 1.5 : 0;
-
-  if (xp === 0 && total === 0)
-    return { status: "observasi" as const, role: person.role, summary: "Belum ada data aktivitas yang tercatat. Butuh waktu lebih lama untuk evaluasi yang akurat.", verdict: "Data belum cukup untuk penilaian — lanjutkan observasi dan berikan task untuk mengukur kapabilitas." };
-  if (ratio >= 1.3 && rate >= 0.7)
-    return { status: "excellent" as const, role: person.role, summary: `Performa ${Math.round(ratio * 100)}% di atas rata-rata role. Completion rate ${Math.round(rate * 100)}%.`, verdict: `Sangat optimal di posisi ${roleLabel(person.role)}. Pertahankan penempatan ini dan pertimbangkan tanggung jawab tambahan.` };
-  if (ratio >= 0.8 && rate >= 0.5)
-    return { status: "baik" as const, role: person.role, summary: `Performa sesuai standar (${Math.round(ratio * 100)}% dari rata-rata). Ada ruang untuk peningkatan.`, verdict: `Cukup solid di role ${roleLabel(person.role)}. Bisa ditingkatkan dengan coaching dan task yang lebih menantang.` };
-  if (xp > 0 && ratio < 0.5) {
-    let sugRole = person.role; let note = "Performa di bawah rata-rata role. Perlu evaluasi mendalam dan pendampingan.";
-    if (cateringActs > mbgActs && person.role.includes("mbg")) { sugRole = "produksi_1"; note = "Aktivitas katering lebih dominan — pertimbangkan pindah ke divisi Katering."; }
-    else if (mbgActs > cateringActs && !person.role.includes("mbg")) { sugRole = "produksi_mbg"; note = "Kontribusi di MBG lebih kuat — pertimbangkan pindah ke divisi MBG."; }
-    return { status: "perhatian" as const, role: sugRole, summary: `Performa ${Math.round(ratio * 100)}% dari rata-rata role. ${note}`, verdict: sugRole !== person.role ? `Pertimbangkan penempatan ulang ke ${roleLabel(sugRole)} untuk optimalisasi kontribusi.` : "Berikan pendampingan intensif dan evaluasi ulang dalam 2 minggu." };
-  }
-  return { status: "cukup" as const, role: person.role, summary: `XP: ${xp}, Task: ${total}. Data masih terbatas untuk rekomendasi kuat.`, verdict: `Lanjutkan di role ${roleLabel(person.role)} sambil kumpulkan lebih banyak data performa.` };
-}
-
-// ─── Division config ─────────────────────────────────────────────────────────
 const DIV_STYLE = {
-  katering: { tag: "Katering", border: "border-l-amber-400", bg: "bg-amber-50", tagBg: "bg-amber-100 text-amber-700", barBg: "bg-amber-400" },
-  mbg:      { tag: "MBG",      border: "border-l-teal-400",  bg: "bg-teal-50",  tagBg: "bg-teal-100 text-teal-700",   barBg: "bg-teal-400"  },
-  general:  { tag: "Umum",     border: "border-l-indigo-400",bg: "bg-indigo-50", tagBg: "bg-indigo-100 text-indigo-700",barBg: "bg-indigo-400"},
+  katering: { tag: "Katering", border: "border-l-amber-400", tagBg: "bg-amber-100 text-amber-700", avatar: "bg-amber-500", text: "text-amber-600" },
+  mbg:      { tag: "MBG",      border: "border-l-teal-400",  tagBg: "bg-teal-100 text-teal-700",   avatar: "bg-teal-500",  text: "text-teal-600" },
+  general:  { tag: "Umum",     border: "border-l-indigo-400", tagBg: "bg-indigo-100 text-indigo-700", avatar: "bg-indigo-500", text: "text-indigo-600" },
 };
+
+const pctLabel = (s: KpiSummary) => (s.ketepatanWaktu == null ? "-" : `${s.ketepatanWaktu}%`);
 
 // ═════════════════════════════════════════════════════════════════════════════
 export function SuperAdminControlCenterPage() {
   const { user } = useAuth();
+  const now = useNow();
   const [staff, setStaff] = useState<Staff[]>([]);
-  const [activities, setActivities] = useState<PerformanceActivity[]>([]);
   const [tasks, setTasks] = useState<AdHocTask[]>([]);
+  const [month, setMonth] = useState(() => getJakartaDate().slice(0, 7));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -116,36 +59,59 @@ export function SuperAdminControlCenterPage() {
   const [taskInstructions, setTaskInstructions] = useState("");
   const [taskDeadline, setTaskDeadline] = useState("");
 
-  useEffect(() => onSnapshot(collection(db, "users"), (s) => setStaff(s.docs.map((d) => ({ ...d.data(), uid: d.id } as Staff)).filter((p) => (p.role as string) !== "pelanggan" && (p.role as string) !== "customer")), (e) => setError(e.message)), []);
-  useEffect(() => onSnapshot(collection(db, "performance_activities"), (s) => setActivities(s.docs.map((d) => ({ ...d.data(), id: d.id } as PerformanceActivity))), (e) => setError(e.message)), []);
-  useEffect(() => onSnapshot(collection(db, "ad_hoc_tasks"), (s) => setTasks(s.docs.map((d) => ({ ...d.data(), id: d.id } as AdHocTask))), (e) => setError(e.message)), []);
+  useEffect(() => onSnapshot(collection(db, "users"), (s) => setStaff(s.docs.map((d) => ({ ...d.data(), uid: d.id } as Staff))), (e) => setError(e.message)), []);
+  useEffect(() => subscribeAllAdHocTasks(setTasks, (e) => setError(e.message)), []);
 
+  const periode = monthLabel(month);
+  const kpiStaff = useMemo(() => staff.filter((s) => !KPI_EXCLUDED_ROLES.includes(s.role)), [staff]);
+  const staffById = useMemo(() => new Map(staff.map((s) => [s.uid, s])), [staff]);
+  const monthTasks = useMemo(() => tasks.filter((t) => taskMonthKey(t) === month), [tasks, month]);
+  const tasksByUser = useMemo(() => {
+    const m = new Map<string, AdHocTask[]>();
+    for (const t of monthTasks) m.set(t.assigneeId, [...(m.get(t.assigneeId) ?? []), t]);
+    return m;
+  }, [monthTasks]);
+  const tasksOf = useCallback((uid: string) => tasksByUser.get(uid) ?? [], [tasksByUser]);
+
+  const overall = useMemo(() => summarizeTasks(monthTasks, now), [monthTasks, now]);
   const roleMetrics = useMemo(() => {
-    const m: Record<string, { people: number; xp: number; members: Staff[] }> = {};
-    for (const s of staff) { if (!m[s.role]) m[s.role] = { people: 0, xp: 0, members: [] }; m[s.role].people++; m[s.role].members.push(s); }
-    for (const [role, v] of Object.entries(m)) v.xp = activities.filter((a) => v.members.some((p) => p.uid === a.userId) && a.roleSnapshot === role).reduce((s, a) => s + (a.xp ?? (a.sourceType === "ad_hoc_task" ? 25 : 10)), 0);
-    return Object.entries(m).map(([role, v]) => ({ role, ...v })).sort((a, b) => b.xp - a.xp);
-  }, [staff, activities]);
-
-  const maxRoleXp = useMemo(() => Math.max(...roleMetrics.map((r) => r.xp), 1), [roleMetrics]);
-  const totalXp = useMemo(() => activities.reduce((s, a) => s + (a.xp ?? (a.sourceType === "ad_hoc_task" ? 25 : 10)), 0), [activities]);
-  const pendingReviews = useMemo(() => tasks.filter((t) => t.status === "pending_review"), [tasks]);
-  const statusCounts = useMemo(() => { const c: Record<string, number> = {}; for (const s of taskStatusConfig) c[s.key] = tasks.filter((t) => t.status === s.key).length; return c; }, [tasks]);
+    const m: Record<string, Staff[]> = {};
+    for (const s of kpiStaff) (m[s.role] ??= []).push(s);
+    return Object.entries(m)
+      .map(([role, members]) => ({ role, members, summary: summarizeTasks(members.flatMap((p) => tasksOf(p.uid)), now) }))
+      .sort((a, b) => b.summary.total - a.summary.total || roleLabel(a.role).localeCompare(roleLabel(b.role)));
+  }, [kpiStaff, tasksOf, now]);
+  const lateTasks = useMemo(
+    () => monthTasks.filter((t) => taskKpiStatus(t, now) === "terlambat").sort((a, b) => lateMinutes(b, now) - lateMinutes(a, now)),
+    [monthTasks, now],
+  );
 
   const selectedPerson = useMemo(() => staff.find((s) => s.uid === selectedPersonId) ?? null, [staff, selectedPersonId]);
-  const selectedRoleMembers = useMemo(() => selectedRole ? staff.filter((s) => s.role === selectedRole) : [], [staff, selectedRole]);
-  const personActivities = useMemo(() => selectedPerson ? activities.filter((a) => a.userId === selectedPerson.uid) : [], [activities, selectedPerson]);
-  const personTasks = useMemo(() => selectedPerson ? tasks.filter((t) => t.assigneeId === selectedPerson.uid) : [], [tasks, selectedPerson]);
-  const personXp = useMemo(() => personActivities.reduce((s, a) => s + (a.xp ?? (a.sourceType === "ad_hoc_task" ? 25 : 10)), 0), [personActivities]);
-  const recommendation = useMemo(() => selectedPerson ? generateRecommendation(selectedPerson, personActivities, personTasks, activities, staff) : null, [selectedPerson, personActivities, personTasks, activities, staff]);
+  const selectedRoleMembers = useMemo(() => selectedRole ? kpiStaff.filter((s) => s.role === selectedRole) : [], [kpiStaff, selectedRole]);
+  const personTasks = useMemo(() => selectedPerson ? tasksOf(selectedPerson.uid) : [], [tasksOf, selectedPerson]);
+  const personSummary = useMemo(() => summarizeTasks(personTasks, now), [personTasks, now]);
+  const personAssessment = useMemo(() => selectedPerson ? assessKpi(personSummary, selectedPerson.displayName, periode) : null, [personSummary, selectedPerson, periode]);
+  const canGiveTask = !!selectedPerson && !KPI_EXCLUDED_ROLES.includes(selectedPerson.role);
 
   const goToRole = useCallback((r: string) => { setSelectedRole(r); setView("role-detail"); setSelectedPersonId(null); }, []);
-  const goToPerson = useCallback((uid: string) => { setSelectedPersonId(uid); setView("person-detail"); setShowTaskForm(false); setShowChangeRole(false); setTaskTitle(""); setTaskInstructions(""); setTaskDeadline(""); const p = staff.find((s) => s.uid === uid); if (p) setNewRole(p.role); }, [staff]);
+  const goToPerson = useCallback((uid: string) => { const p = staff.find((s) => s.uid === uid); setSelectedPersonId(uid); setSelectedRole(p?.role ?? null); setView("person-detail"); setShowTaskForm(false); setShowChangeRole(false); setTaskTitle(""); setTaskInstructions(""); setTaskDeadline(""); if (p) setNewRole(p.role); }, [staff]);
   const goBack = useCallback(() => { if (view === "person-detail") { setView("role-detail"); setSelectedPersonId(null); } else if (view === "role-detail") { setView("overview"); setSelectedRole(null); } }, [view]);
 
   const doChangeRole = async () => { if (!user || !selectedPerson) return; setBusy(true); try { await changeUserRole({ userId: selectedPerson.uid, role: newRole, division: divisionFor(newRole), changedBy: user.uid }); setError(""); setShowChangeRole(false); } catch (e) { setError(e instanceof Error ? e.message : "Gagal ubah role."); } finally { setBusy(false); } };
-  const doGiveTask = async () => { if (!user || !selectedPerson || !taskTitle.trim() || !taskInstructions.trim()) return; setBusy(true); try { await createAdHocTask({ assigneeId: selectedPerson.uid, assigneeNameSnapshot: selectedPerson.displayName, roleSnapshot: selectedPerson.role, divisionSnapshot: divisionFor(selectedPerson.role), title: taskTitle.trim(), instructions: taskInstructions.trim(), priority: "normal", deadline: taskDeadline || undefined, evidenceRequired: true, createdBy: user.uid }); setTaskTitle(""); setTaskInstructions(""); setTaskDeadline(""); setShowTaskForm(false); setError(""); } catch (e) { setError(e instanceof Error ? e.message : "Gagal buat task."); } finally { setBusy(false); } };
-  const doReview = async (t: AdHocTask, ok: boolean) => { if (!confirm(ok ? "Setujui task ini?" : "Kembalikan untuk revisi?")) return; try { await reviewAdHocTask(t.id, ok, ok ? "Disetujui Super Admin" : "Mohon perbaiki bukti."); } catch (e) { setError(e instanceof Error ? e.message : "Review gagal."); } };
+  const doGiveTask = async () => {
+    if (!user || !selectedPerson || !canGiveTask || !taskTitle.trim() || !taskInstructions.trim() || !taskDeadline) return;
+    setBusy(true);
+    try {
+      await createAdHocTask({ assigneeId: selectedPerson.uid, assigneeNameSnapshot: selectedPerson.displayName, roleSnapshot: selectedPerson.role, divisionSnapshot: divisionFor(selectedPerson.role), title: taskTitle.trim(), instructions: taskInstructions.trim(), deadline: taskDeadline, createdBy: user.uid });
+      setTaskTitle(""); setTaskInstructions(""); setTaskDeadline(""); setShowTaskForm(false); setError("");
+    } catch (e) { setError(e instanceof Error ? e.message : "Gagal buat task."); } finally { setBusy(false); }
+  };
+
+  const sheetFor = useCallback((uid: string, list: AdHocTask[]): KpiPersonSheet => {
+    const p = staffById.get(uid);
+    return { name: p?.displayName || list[0]?.assigneeNameSnapshot || "Tanpa Nama", role: roleLabel(p?.role || list[0]?.roleSnapshot || "-"), tasks: list };
+  }, [staffById]);
+  const doExport = (people: KpiPersonSheet[]) => { try { exportKpiExcel(people, month, now); setError(""); } catch (e) { setError(e instanceof Error ? e.message : "Gagal export Excel."); } };
 
   const crumbs = useMemo(() => {
     const c: { label: string; onClick?: () => void }[] = [{ label: "Monitoring", onClick: () => { setView("overview"); setSelectedRole(null); setSelectedPersonId(null); } }];
@@ -162,13 +128,28 @@ export function SuperAdminControlCenterPage() {
 
       {/* ── Header ──────────────────────────────────────────────── */}
       <header className="mb-7 rounded-2xl bg-slate-900 px-6 py-6 md:px-8 md:py-7">
-        <p className="text-[11px] font-bold uppercase tracking-widest text-amber-400">Super Admin · SDM Performance</p>
-        <h1 className="mt-1.5 text-[22px] font-extrabold text-white md:text-[26px]" style={{ letterSpacing: "-0.02em" }}>
-          Monitoring Center KPI
-        </h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Pantau performa seluruh personel, analisis KPI tiap role, dan dapatkan rekomendasi penempatan.
-        </p>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-amber-400">Super Admin · SDM Performance</p>
+            <h1 className="mt-1.5 text-[22px] font-extrabold text-white md:text-[26px]" style={{ letterSpacing: "-0.02em" }}>
+              Monitoring Center KPI
+            </h1>
+            <p className="mt-1 text-sm text-slate-400">
+              KPI dihitung dari ketepatan waktu submit task yang diberikan Super Admin.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-slate-400">
+              <span className="block mb-1 font-semibold">Periode</span>
+              <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)}
+                className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm text-white [color-scheme:dark]" />
+            </label>
+            <button type="button" onClick={() => doExport([...tasksByUser.entries()].map(([uid, list]) => sheetFor(uid, list)))}
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-bold text-white hover:bg-emerald-700 transition-colors cursor-pointer">
+              <FileSpreadsheet className="h-4 w-4" /> Export Excel
+            </button>
+          </div>
+        </div>
       </header>
 
       {error && (
@@ -201,10 +182,10 @@ export function SuperAdminControlCenterPage() {
           {/* Stats */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {[
-              { n: staff.length, label: "Personel Aktif", accent: "border-l-amber-400", icon: "👥" },
-              { n: totalXp, label: "Total XP", accent: "border-l-indigo-400", icon: "⚡" },
-              { n: pendingReviews.length, label: "Menunggu Review", accent: "border-l-orange-400", icon: "📋" },
-              { n: roleMetrics.filter((r) => r.xp > 0).length, label: "Role Aktif", accent: "border-l-emerald-400", icon: "🏷" },
+              { n: kpiStaff.length, label: "Personel Dinilai", accent: "border-l-amber-400", icon: "👥" },
+              { n: overall.total, label: `Task ${periode}`, accent: "border-l-indigo-400", icon: "📋" },
+              { n: pctLabel(overall), label: "Ketepatan Waktu", accent: "border-l-emerald-400", icon: "⏱" },
+              { n: overall.terlambat, label: "Task Terlambat", accent: "border-l-red-400", icon: "⚠️" },
             ].map((s) => (
               <div key={s.label} className={`rounded-xl border border-slate-200 border-l-[3px] ${s.accent} bg-white px-4 py-4`}>
                 <div className="flex items-start justify-between">
@@ -221,11 +202,10 @@ export function SuperAdminControlCenterPage() {
           {/* Role Grid */}
           <section>
             <h2 className="text-[15px] font-extrabold text-slate-900 mb-1">Monitoring per Role</h2>
-            <p className="text-xs text-slate-400 mb-4">Klik role untuk lihat performa tiap personel</p>
+            <p className="text-xs text-slate-400 mb-4">Klik role untuk lihat KPI tiap personel · % = ketepatan waktu {periode}</p>
             <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
               {roleMetrics.map((r) => {
                 const d = ds(r.role);
-                const pct = maxRoleXp > 0 ? (r.xp / maxRoleXp) * 100 : 0;
                 return (
                   <button key={r.role} onClick={() => goToRole(r.role)}
                     className={`group flex items-center gap-3 rounded-xl border border-slate-200 border-l-[3px] ${d.border} bg-white px-4 py-3.5 text-left transition-all hover:shadow-md hover:border-slate-300`}
@@ -236,12 +216,11 @@ export function SuperAdminControlCenterPage() {
                         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold ${d.tagBg}`}>{d.tag}</span>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-slate-500 mb-2">
-                        <span>{r.people} org</span>
-                        <span className="font-semibold text-slate-800 tabular-nums">{r.xp} XP</span>
+                        <span>{r.members.length} org</span>
+                        <span>{r.summary.total} task</span>
+                        <span className="font-semibold text-slate-800 tabular-nums">{r.summary.total ? pctLabel(r.summary) : "Belum ada task"}</span>
                       </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                        <div className={`h-full rounded-full ${d.barBg} transition-all duration-700`} style={{ width: `${Math.max(3, pct)}%` }} />
-                      </div>
+                      <KpiStackedBar summary={r.summary} />
                     </div>
                     <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-500" />
                   </button>
@@ -250,61 +229,63 @@ export function SuperAdminControlCenterPage() {
             </div>
           </section>
 
-          {/* Bottom: Tasks + Reviews */}
+          {/* Bottom: Status + Late tasks */}
           <div className="grid gap-5 lg:grid-cols-[1fr_1.4fr]">
-            {/* Task breakdown */}
             <section className="rounded-xl border border-slate-200 bg-white p-5">
               <h3 className="text-sm font-extrabold text-slate-900 mb-1">Status Task</h3>
-              <p className="text-[11px] text-slate-400 mb-4">{tasks.length} task total</p>
-              {/* Mini donut */}
-              <div className="flex items-center gap-5 mb-5">
+              <p className="text-[11px] text-slate-400 mb-4">{overall.total} task · {periode}</p>
+              <div className="flex items-center gap-5">
                 <div className="relative h-[88px] w-[88px] shrink-0">
                   <svg viewBox="0 0 112 112" className="h-full w-full -rotate-90">
                     <circle cx="56" cy="56" r="42" fill="none" stroke="#F1F5F9" strokeWidth="10" />
-                    {(() => { let off = 0; const c = 2 * Math.PI * 42; const tot = tasks.length || 1; return taskStatusConfig.map((s) => { const v = statusCounts[s.key] ?? 0; const len = (v / tot) * c; const el = v > 0 ? <circle key={s.key} cx="56" cy="56" r="42" fill="none" stroke={s.color} strokeWidth="10" strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-off} /> : null; off += len; return el; }); })()}
+                    {(() => {
+                      let off = 0; const c = 2 * Math.PI * 42; const tot = overall.total || 1;
+                      return (["terpenuhi", "terlambat", "proses"] as TaskKpiStatus[]).map((k) => {
+                        const v = overall[k]; const len = (v / tot) * c;
+                        const el = v > 0 ? <circle key={k} cx="56" cy="56" r="42" fill="none" stroke={KPI_STATUS_STYLE[k].dot} strokeWidth="10" strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-off} /> : null;
+                        off += len; return el;
+                      });
+                    })()}
                   </svg>
                   <div className="absolute inset-0 grid place-items-center">
-                    <span className="text-lg font-extrabold text-slate-900 tabular-nums">{tasks.length}</span>
+                    <span className="text-lg font-extrabold text-slate-900 tabular-nums">{overall.total}</span>
                   </div>
                 </div>
                 <div className="flex-1 space-y-2">
-                  {taskStatusConfig.map((s) => (
-                    <div key={s.key} className="flex items-center justify-between text-xs">
+                  {(["proses", "terpenuhi", "terlambat"] as TaskKpiStatus[]).map((k) => (
+                    <div key={k} className="flex items-center justify-between text-xs">
                       <span className="flex items-center gap-2 text-slate-600">
-                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.color }} />{s.label}
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: KPI_STATUS_STYLE[k].dot }} />{KPI_STATUS_LABEL[k]}
                       </span>
-                      <span className="font-bold text-slate-900 tabular-nums">{statusCounts[s.key] ?? 0}</span>
+                      <span className="font-bold text-slate-900 tabular-nums">{overall[k]} · {k === "proses" ? overall.pctProses : k === "terpenuhi" ? overall.pctTerpenuhi : overall.pctTerlambat}%</span>
                     </div>
                   ))}
                 </div>
               </div>
             </section>
 
-            {/* Pending reviews */}
             <section className="rounded-xl border border-slate-200 bg-white p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-sm font-extrabold text-slate-900">Menunggu Review</h3>
-                  <p className="text-[11px] text-slate-400">{pendingReviews.length} task perlu ditinjau</p>
+                  <h3 className="text-sm font-extrabold text-slate-900">Task Terlambat</h3>
+                  <p className="text-[11px] text-slate-400">{lateTasks.length} task melewati deadline · {periode}</p>
                 </div>
-                {pendingReviews.length > 0 && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-700 tabular-nums">{pendingReviews.length}</span>}
               </div>
               <div className="space-y-2 max-h-[240px] overflow-y-auto">
-                {pendingReviews.length ? pendingReviews.map((t) => (
-                  <div key={t.id} className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
+                {lateTasks.length ? lateTasks.map((t) => (
+                  <button key={t.id} onClick={() => goToPerson(t.assigneeId)} className="block w-full rounded-lg border border-slate-100 bg-slate-50/60 p-3 text-left hover:bg-slate-100 transition-colors">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-slate-900 truncate">{t.title}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{t.assigneeNameSnapshot} · {roleLabel(t.roleSnapshot)}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{staffById.get(t.assigneeId)?.displayName ?? t.assigneeNameSnapshot} · deadline {formatDeadline(t.deadline)}</p>
                       </div>
-                      <div className="flex shrink-0 gap-1.5">
-                        <button onClick={() => doReview(t, true)} className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-slate-700 transition-colors">Approve</button>
-                        <button onClick={() => doReview(t, false)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 transition-colors">Revisi</button>
-                      </div>
+                      <span className="shrink-0 rounded-md bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-700">
+                        {t.submittedAt ? "+" : "belum submit · "}{formatDuration(lateMinutes(t, now))}
+                      </span>
                     </div>
-                  </div>
+                  </button>
                 )) : (
-                  <div className="py-8 text-center"><p className="text-sm text-slate-400">Semua task sudah ditinjau.</p></div>
+                  <div className="py-8 text-center"><p className="text-sm text-slate-400">Tidak ada task terlambat.</p></div>
                 )}
               </div>
             </section>
@@ -317,8 +298,7 @@ export function SuperAdminControlCenterPage() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {view === "role-detail" && selectedRole && (() => {
         const d = ds(selectedRole);
-        const roleXp = activities.filter((a) => selectedRoleMembers.some((m) => m.uid === a.userId)).reduce((s, a) => s + (a.xp ?? 10), 0);
-        const jobdesk = ROLE_JOBDESK[selectedRole];
+        const rs = summarizeTasks(selectedRoleMembers.flatMap((m) => tasksOf(m.uid)), now);
         return (
           <div className="space-y-5">
             <div className={`rounded-2xl border border-slate-200 border-l-4 ${d.border} bg-white p-5 md:p-6`}>
@@ -326,48 +306,41 @@ export function SuperAdminControlCenterPage() {
                 <div>
                   <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${d.tagBg}`}>{d.tag}</span>
                   <h2 className="mt-1.5 text-xl font-extrabold text-slate-900">{roleLabel(selectedRole)}</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">{periode}</p>
                 </div>
                 <div className="flex gap-8 text-center">
                   <div><p className="text-2xl font-extrabold text-slate-900 tabular-nums">{selectedRoleMembers.length}</p><p className="text-[10px] font-semibold uppercase text-slate-400 tracking-wide">Personel</p></div>
-                  <div><p className="text-2xl font-extrabold text-slate-900 tabular-nums">{roleXp}</p><p className="text-[10px] font-semibold uppercase text-slate-400 tracking-wide">Total XP</p></div>
+                  <div><p className="text-2xl font-extrabold text-slate-900 tabular-nums">{rs.total}</p><p className="text-[10px] font-semibold uppercase text-slate-400 tracking-wide">Task</p></div>
+                  <div><p className="text-2xl font-extrabold text-slate-900 tabular-nums">{pctLabel(rs)}</p><p className="text-[10px] font-semibold uppercase text-slate-400 tracking-wide">Tepat Waktu</p></div>
                 </div>
               </div>
-              {jobdesk && (
-                <div className="mt-5 grid sm:grid-cols-2 gap-4">
-                  <div className="rounded-lg bg-slate-50 p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">Tugas Utama</p>
-                    {jobdesk.tasks.map((t) => <p key={t} className="text-sm text-slate-700 py-0.5 pl-3 relative before:absolute before:left-0 before:top-[11px] before:h-1 before:w-1 before:rounded-full before:bg-slate-400">{t}</p>)}
-                  </div>
-                  <div className="rounded-lg bg-slate-50 p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">Aspek KPI</p>
-                    {jobdesk.kpiAspects.map((k) => <p key={k} className="text-sm text-slate-700 py-0.5 pl-3 relative before:absolute before:left-0 before:top-[11px] before:h-1 before:w-1 before:rounded-full before:bg-amber-400">{k}</p>)}
-                  </div>
-                </div>
-              )}
+              <div className="mt-5"><KpiStatusTiles summary={rs} /></div>
             </div>
 
-            {/* Members */}
             <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+              <div className="px-5 py-3.5 border-b border-slate-100">
                 <h3 className="text-sm font-extrabold text-slate-900">Personel ({selectedRoleMembers.length})</h3>
               </div>
               <div className="divide-y divide-slate-100">
                 {selectedRoleMembers.length ? selectedRoleMembers.map((m) => {
-                  const mXp = activities.filter((a) => a.userId === m.uid).reduce((s, a) => s + (a.xp ?? 10), 0);
-                  const mTasks = tasks.filter((t) => t.assigneeId === m.uid);
-                  const mApproved = mTasks.filter((t) => t.status === "approved").length;
+                  const ms = summarizeTasks(tasksOf(m.uid), now);
+                  const ma = assessKpi(ms, m.displayName, periode);
                   return (
                     <button key={m.uid} onClick={() => goToPerson(m.uid)}
                       className="group flex w-full items-center gap-4 px-5 py-3.5 text-left hover:bg-slate-50 transition-colors"
                     >
-                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${
-                        divisionFor(m.role) === "katering" ? "bg-amber-500" : divisionFor(m.role) === "mbg" ? "bg-teal-500" : "bg-indigo-500"
-                      }`}>{(m.displayName ?? "?")[0].toUpperCase()}</div>
-                      <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-slate-900 truncate">{m.displayName}</p></div>
+                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${ds(m.role).avatar}`}>{(m.displayName ?? "?")[0].toUpperCase()}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 truncate">{m.displayName}</p>
+                        <p className="text-[11px] text-slate-400 sm:hidden">{ms.total} task · {pctLabel(ms)}</p>
+                      </div>
                       <div className="hidden sm:flex items-center gap-5 text-xs text-slate-500 tabular-nums">
-                        <span><b className="text-slate-800">{mXp}</b> XP</span>
-                        <span><b className="text-slate-800">{mApproved}</b>/{mTasks.length} task</span>
-                        <span>Lv {Math.floor(mXp / 100) + 1}</span>
+                        <span><b className="text-slate-800">{ms.total}</b> task</span>
+                        <span className="text-emerald-700"><b>{ms.terpenuhi}</b> terpenuhi</span>
+                        <span className="text-red-600"><b>{ms.terlambat}</b> terlambat</span>
+                        <span className="text-blue-700"><b>{ms.proses}</b> proses</span>
+                        <span className="w-14 text-right font-bold text-slate-800">{pctLabel(ms)}</span>
+                        <span className="w-16 text-right font-bold text-slate-800">{ma.nilai == null ? "-" : `${ma.nilai} · ${ma.grade}`}</span>
                       </div>
                       <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
                     </button>
@@ -382,138 +355,46 @@ export function SuperAdminControlCenterPage() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* PERSON DETAIL                                               */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      {view === "person-detail" && selectedPerson && (
+      {view === "person-detail" && selectedPerson && personAssessment && (
         <div className="space-y-5">
 
           {/* Profile */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 md:p-6">
-            <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl text-xl font-bold text-white ${
-              divisionFor(selectedPerson.role) === "katering" ? "bg-amber-500" : divisionFor(selectedPerson.role) === "mbg" ? "bg-teal-500" : "bg-indigo-500"
-            }`}>{(selectedPerson.displayName ?? "?")[0].toUpperCase()}</div>
+            <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl text-xl font-bold text-white ${ds(selectedPerson.role).avatar}`}>{(selectedPerson.displayName ?? "?")[0].toUpperCase()}</div>
             <div className="flex-1 min-w-0">
               <h2 className="text-lg font-extrabold text-slate-900">{selectedPerson.displayName}</h2>
-              <p className="text-xs text-slate-500">{roleLabel(selectedPerson.role)} · <span className={`font-semibold ${divisionFor(selectedPerson.role) === "katering" ? "text-amber-600" : divisionFor(selectedPerson.role) === "mbg" ? "text-teal-600" : "text-indigo-600"}`}>{ds(selectedPerson.role).tag}</span></p>
+              <p className="text-xs text-slate-500">{roleLabel(selectedPerson.role)} · <span className={`font-semibold ${ds(selectedPerson.role).text}`}>{ds(selectedPerson.role).tag}</span> · {periode}</p>
             </div>
-            <div className="flex gap-6 text-center">
-              {[{ n: personXp, l: "XP" }, { n: Math.floor(personXp / 100) + 1, l: "Level" }, { n: personActivities.length, l: "Aktivitas" }, { n: personTasks.filter((t) => t.status === "approved").length, l: "Selesai" }].map((s) => (
+            <div className="flex items-center gap-6 text-center">
+              {[{ n: personSummary.total, l: "Task" }, { n: pctLabel(personSummary), l: "Tepat Waktu" }, { n: personAssessment.nilai ?? "-", l: "Nilai KPI" }].map((s) => (
                 <div key={s.l}>
                   <p className="text-xl font-extrabold text-slate-900 tabular-nums">{s.n}</p>
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{s.l}</p>
                 </div>
               ))}
+              <button type="button" disabled={personTasks.length === 0} onClick={() => doExport([sheetFor(selectedPerson.uid, personTasks)])}
+                title="Export rekap KPI orang ini ke Excel"
+                className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                <FileSpreadsheet className="h-4 w-4" /> Excel
+              </button>
             </div>
           </div>
 
-          {/* KPI + Rekomendasi */}
+          {/* KPI + Task list */}
           <div className="grid gap-5 lg:grid-cols-2">
-            {/* KPI */}
-            <div className="rounded-xl border border-slate-200 bg-white p-5">
-              <h3 className="text-sm font-extrabold text-slate-900 mb-4">Breakdown KPI</h3>
-              <div className="space-y-3.5">
-                {[
-                  { label: "Job Desk Katering", val: personActivities.filter((a) => a.sourceType === "catering_jobdesk").length * 10, color: "bg-amber-400" },
-                  { label: "Operasional MBG", val: personActivities.filter((a) => a.sourceType === "mbg_operation").length * 10, color: "bg-teal-400" },
-                  { label: "Task Tambahan", val: personActivities.filter((a) => a.sourceType === "ad_hoc_task").length * 25, color: "bg-indigo-400" },
-                ].map((r) => (
-                  <div key={r.label}>
-                    <div className="flex items-center justify-between text-xs mb-1.5">
-                      <span className="text-slate-600">{r.label}</span>
-                      <span className="font-bold text-slate-900 tabular-nums">{r.val} XP</span>
-                    </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                      <div className={`h-full rounded-full ${r.color} transition-all duration-700`} style={{ width: `${personXp > 0 ? Math.max(3, (r.val / personXp) * 100) : 2}%` }} />
-                    </div>
-                  </div>
-                ))}
+            <div className="space-y-3">
+              <KpiStatusTiles summary={personSummary} />
+              <KpiAssessmentCard assessment={personAssessment} periode={periode} />
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-slate-900">Task {periode}</h3>
+                <span className="text-xs text-slate-400 tabular-nums">{personTasks.length} task</span>
               </div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-6 mb-2.5">Status task</p>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { k: "approved", l: "Selesai", c: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-                  { k: "pending_review", l: "Review", c: "border-amber-200 bg-amber-50 text-amber-700" },
-                  { k: "revision_required", l: "Revisi", c: "border-red-200 bg-red-50 text-red-600" },
-                ].map((s) => (
-                  <div key={s.k} className={`rounded-lg border px-3 py-2.5 text-center ${s.c}`}>
-                    <p className="text-lg font-extrabold tabular-nums">{personTasks.filter((t) => t.status === s.k).length}</p>
-                    <p className="text-[10px] font-semibold opacity-75">{s.l}</p>
-                  </div>
-                ))}
+              <div className="max-h-[520px] overflow-y-auto">
+                <KpiTaskList tasks={personTasks} now={now} emptyText={`Belum ada task untuk ${periode}.`} />
               </div>
             </div>
-
-            {/* Rekomendasi */}
-            {recommendation && (
-              <div className="space-y-3">
-                <div className={`rounded-xl p-5 ${
-                  recommendation.status === "excellent" ? "bg-emerald-50 border border-emerald-200" :
-                  recommendation.status === "baik" ? "bg-blue-50 border border-blue-200" :
-                  recommendation.status === "perhatian" ? "bg-amber-50 border border-amber-200" :
-                  "bg-slate-50 border border-slate-200"
-                }`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`h-2.5 w-2.5 rounded-full ${
-                      recommendation.status === "excellent" ? "bg-emerald-500" :
-                      recommendation.status === "baik" ? "bg-blue-500" :
-                      recommendation.status === "perhatian" ? "bg-amber-500" : "bg-slate-400"
-                    }`} />
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Kesimpulan Performa</p>
-                  </div>
-                  <p className={`text-sm font-bold ${
-                    recommendation.status === "excellent" ? "text-emerald-800" :
-                    recommendation.status === "baik" ? "text-blue-800" :
-                    recommendation.status === "perhatian" ? "text-amber-800" : "text-slate-700"
-                  }`}>
-                    {recommendation.status === "excellent" ? "Performa Excellent" :
-                     recommendation.status === "baik" ? "Performa Baik" :
-                     recommendation.status === "perhatian" ? "Perlu Perhatian Khusus" :
-                     recommendation.status === "cukup" ? "Performa Cukup" : "Dalam Observasi"}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-600 leading-relaxed">{recommendation.verdict}</p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-white p-5">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3">Rekomendasi Penempatan</p>
-                  <div className="flex items-center gap-2.5 text-sm mb-2.5">
-                    <span className="font-medium text-slate-500">{roleLabel(selectedPerson.role)}</span>
-                    <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
-                    <span className={`font-bold ${recommendation.role === selectedPerson.role ? "text-emerald-700" : "text-amber-700"}`}>
-                      {recommendation.role === selectedPerson.role ? "Tetap di posisi ini" : roleLabel(recommendation.role)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">{recommendation.summary}</p>
-                </div>
-
-                {ROLE_JOBDESK[selectedPerson.role] && (
-                  <div className="rounded-xl border border-slate-200 bg-white p-5">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">Jobdesk Dievaluasi</p>
-                    {ROLE_JOBDESK[selectedPerson.role].tasks.map((t) => (
-                      <p key={t} className="text-sm text-slate-700 py-0.5 pl-3 relative before:absolute before:left-0 before:top-[11px] before:h-1 before:w-1 before:rounded-full before:bg-slate-400">{t}</p>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Activity log */}
-          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-sm font-extrabold text-slate-900">Riwayat Aktivitas</h3>
-              <span className="text-xs text-slate-400 tabular-nums">{personActivities.length} tercatat</span>
-            </div>
-            {personActivities.length ? (
-              <div className="divide-y divide-slate-100 max-h-[260px] overflow-y-auto">
-                {personActivities.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between px-5 py-3">
-                    <div className="min-w-0">
-                      <p className="text-sm text-slate-900 truncate">{a.title}</p>
-                      <p className="text-[11px] text-slate-400">{a.roleSnapshot} · {a.sourceType.replace(/_/g, " ")}</p>
-                    </div>
-                    <span className="shrink-0 ml-3 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-700 tabular-nums">+{a.xp ?? 10}</span>
-                  </div>
-                ))}
-              </div>
-            ) : <p className="px-5 py-8 text-center text-sm text-slate-400">Belum ada aktivitas KPI tercatat.</p>}
           </div>
 
           {/* Actions */}
@@ -533,23 +414,26 @@ export function SuperAdminControlCenterPage() {
                 </div>
               )}
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white">
-              <button onClick={() => { setShowTaskForm(!showTaskForm); setShowChangeRole(false); }} className="flex w-full items-center justify-between px-5 py-3.5 text-left">
-                <span className="text-sm font-bold text-slate-900">Beri Task Tambahan</span>
-                <MoreHorizontal className="h-4 w-4 text-slate-400" />
-              </button>
-              {showTaskForm && (
-                <div className="px-5 pb-5 space-y-3 border-t border-slate-100 pt-3">
-                  <p className="text-xs text-slate-500">Untuk <b className="text-slate-700">{selectedPerson.displayName}</b></p>
-                  <input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Judul task" className="w-full rounded-lg border border-slate-200 p-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-300" />
-                  <textarea value={taskInstructions} onChange={(e) => setTaskInstructions(e.target.value)} placeholder="Instruksi" rows={3} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-300 resize-none" />
-                  <div className="flex items-center gap-2">
-                    <input type="date" value={taskDeadline} onChange={(e) => setTaskDeadline(e.target.value)} className="rounded-lg border border-slate-200 p-2.5 text-sm" />
-                    <button onClick={doGiveTask} disabled={busy || !taskTitle.trim() || !taskInstructions.trim()} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Kirim</button>
+            {canGiveTask && (
+              <div className="rounded-xl border border-slate-200 bg-white">
+                <button onClick={() => { setShowTaskForm(!showTaskForm); setShowChangeRole(false); }} className="flex w-full items-center justify-between px-5 py-3.5 text-left">
+                  <span className="text-sm font-bold text-slate-900">Beri Task</span>
+                  <MoreHorizontal className="h-4 w-4 text-slate-400" />
+                </button>
+                {showTaskForm && (
+                  <div className="px-5 pb-5 space-y-3 border-t border-slate-100 pt-3">
+                    <p className="text-xs text-slate-500">Untuk <b className="text-slate-700">{selectedPerson.displayName}</b></p>
+                    <input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Judul task" className="w-full rounded-lg border border-slate-200 p-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-300" />
+                    <textarea value={taskInstructions} onChange={(e) => setTaskInstructions(e.target.value)} placeholder="Instruksi" rows={3} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-300 resize-none" />
+                    <label className="block text-xs font-semibold text-slate-600">
+                      Deadline (tanggal & jam WIB) <span className="text-red-500">*</span>
+                      <input type="datetime-local" value={taskDeadline} onChange={(e) => setTaskDeadline(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2.5 text-sm font-normal" />
+                    </label>
+                    <button onClick={doGiveTask} disabled={busy || !taskTitle.trim() || !taskInstructions.trim() || !taskDeadline} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Kirim Task</button>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

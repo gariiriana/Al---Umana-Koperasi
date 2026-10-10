@@ -447,31 +447,33 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Legacy XP records — sistem XP sudah dihapus, KPI kini dihitung langsung
+    // dari ad_hoc_tasks. Koleksi dibiarkan read-only (kosong) sampai semua
+    // browser memuat versi frontend baru; tidak ada lagi penulisan.
     match /performance_activities/{activityId} {
       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isSuperAdmin());
-      // KPI records are append-only and must be tied to an approved Job Desk
-      // or an approved additional task. This prevents browser-side XP forging.
-      allow create: if request.resource.data.status == 'approved'
-        && ((isCoMoKatering() || isSuperAdmin())
-          && request.resource.data.sourceType == 'catering_jobdesk'
-          && get(/databases/$(database)/documents/catering_jobdesks/$(request.resource.data.sourceId)).data.reviewStatus == 'approved'
-          && get(/databases/$(database)/documents/catering_jobdesks/$(request.resource.data.sourceId)).data.submittedBy == request.resource.data.userId
-          || (isSuperAdmin()
-            && request.resource.data.sourceType == 'ad_hoc_task'
-            && getAfter(/databases/$(database)/documents/ad_hoc_tasks/$(request.resource.data.sourceId)).data.status == 'approved'
-            && getAfter(/databases/$(database)/documents/ad_hoc_tasks/$(request.resource.data.sourceId)).data.assigneeId == request.resource.data.userId));
-      allow update: if false;
-      allow delete: if false;
+      allow create, update, delete: if false;
     }
 
+    // Task dari Super Admin = satu-satunya sumber KPI (ketepatan waktu submit).
+    // Submit bersifat final: hanya pemilik task, sekali, dengan jam server
+    // (submittedAt == request.time) agar waktu submit tidak bisa dimanipulasi.
     match /ad_hoc_tasks/{taskId} {
       allow read: if request.auth != null && (resource.data.assigneeId == request.auth.uid || isSuperAdmin());
-      allow create: if isSuperAdmin();
+      allow create: if isSuperAdmin()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.deadline is string
+        && request.resource.data.deadline.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$');
       allow update: if isSuperAdmin()
         || (request.auth != null && resource.data.assigneeId == request.auth.uid
-          && resource.data.status in ['pending', 'in_progress', 'revision_required']
-          && request.resource.data.status == 'pending_review'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'evidenceNote', 'submittedAt', 'updatedAt']));
+          && resource.data.get('submittedAt', null) == null
+          // 'pending_review' masih diterima untuk browser yang belum memuat frontend baru
+          && request.resource.data.status in ['submitted', 'pending_review']
+          && request.resource.data.submittedAt == request.time
+          && request.resource.data.evidenceNote is string
+          && request.resource.data.evidenceNote.size() > 0
+          && (!('evidencePhoto' in request.resource.data) || (request.resource.data.evidencePhoto is string && request.resource.data.evidencePhoto.size() < 900000))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'evidenceNote', 'evidencePhoto', 'submittedAt', 'updatedAt']));
       allow delete: if false;
     }
 

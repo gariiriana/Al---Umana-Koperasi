@@ -24,12 +24,10 @@ const fake = vi.hoisted(() => {
     approve: vi.fn(async (id: string) => store.patch(id, { reviewStatus: 'approved' })),
     reject: vi.fn(async (id: string, _uid: string, remark: string) =>
       store.patch(id, { reviewStatus: 'rejected', rejectionRemark: remark, status: 'pending', submittedBy: null })),
-    record: vi.fn().mockResolvedValue(undefined),
   };
 });
 
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: fake.store.user, profile: fake.store.profile }) }));
-vi.mock('@/services/performanceService', () => ({ recordApprovedJobDesk: fake.record }));
 vi.mock('@/services/cateringJobDeskService', () => {
   const subscribe = (pick: () => unknown[], cb: (data: unknown[]) => void) => {
     const listener = () => cb(pick());
@@ -111,7 +109,6 @@ describe('job desk Complete → CO_MO approve flow', () => {
     await waitFor(() => expect(fake.approve).toHaveBeenCalledWith('005', 'como-uid'));
     expect(screen.queryByText(/Konfirmasi Persetujuan/)).toBeNull();
     expect(await rowOf('goreng tahu').findByText(/Disetujui \(Approved\)/)).toBeTruthy();
-    expect(fake.record).toHaveBeenCalledWith(expect.objectContaining({ userId: 'dwi-uid', sourceId: '005' }));
     como.unmount();
 
     // 3. Dwi's page now shows the task as approved and finished.
