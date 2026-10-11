@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
+  Activity,
   Bell,
   ShoppingBag,
   Info,
@@ -13,6 +14,9 @@ import {
   CreditCard,
   ShieldCheck,
   Factory,
+  ClipboardCheck,
+  ClipboardList,
+  UtensilsCrossed,
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,6 +28,7 @@ import {
   subscribeNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  splitNotificationsByTab,
   STATIC_PROMO_NOTIFICATIONS,
   STATIC_INFO_NOTIFICATIONS,
 } from "@/services/notificationService";
@@ -101,6 +106,12 @@ function getNotifIcon(type: string) {
       return { icon: ShieldCheck, bg: "bg-teal-50", text: "text-teal-600" };
     case "promo":
       return { icon: Gift, bg: "bg-red-50", text: "text-red-500" };
+    case "task":
+      return { icon: ClipboardCheck, bg: "bg-amber-50", text: "text-amber-600" };
+    case "jobdesk":
+      return { icon: ClipboardList, bg: "bg-indigo-50", text: "text-indigo-600" };
+    case "mbg":
+      return { icon: UtensilsCrossed, bg: "bg-orange-50", text: "text-orange-600" };
     default:
       return { icon: Info, bg: "bg-blue-50", text: "text-blue-500" };
   }
@@ -109,6 +120,7 @@ function getNotifIcon(type: string) {
 export function NotificationsPage() {
   const { user, profile, requestSignOut } = useAuth();
   const { lang } = useLanguage();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"order" | "promo" | "info">("order");
   const [firestoreNotifs, setFirestoreNotifs] = useState<FirestoreNotification[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -119,6 +131,13 @@ export function NotificationsPage() {
   const [, setTick] = useState(0);
 
   const handleNotificationClick = async (item: FirestoreNotification | NotificationItem) => {
+    // Task, job desk & MBG: buka halamannya langsung, sama seperti saat notifikasi push diketuk.
+    // Tanda dibaca dikirim di belakang supaya ketukan tidak menunggu server.
+    if ("read" in item && item.link?.startsWith("/") && !item.orderId) {
+      if (!item.read) markNotificationAsRead(item.id).catch((err) => console.error("Failed to mark notification as read:", err));
+      navigate(item.link);
+      return;
+    }
     if ("read" in item && !item.read) {
       try {
         await markNotificationAsRead(item.id);
@@ -175,9 +194,8 @@ export function NotificationsPage() {
   }, []);
 
   // Filter notifications by tab
-  const orderTabTypes = ["order", "production", "delivery", "validation"];
-  const orderNotifs = firestoreNotifs.filter((n) => orderTabTypes.includes(n.type));
-  const paymentNotifs = firestoreNotifs.filter((n) => n.type === "payment" || n.type === "system");
+  const { activity: orderNotifs, info: paymentNotifs } = splitNotificationsByTab(firestoreNotifs);
+  const isCustomer = !profile || ["customer", "pelanggan"].includes(profile.role);
 
   const unreadOrderCount = orderNotifs.filter((n) => !n.read).length;
 
@@ -224,7 +242,9 @@ export function NotificationsPage() {
 
   const t = {
     title: lang === "id" ? "Pusat Notifikasi" : "Notification Center",
-    tabOrder: lang === "id" ? "Status Pesanan" : "Order Status",
+    tabOrder: isCustomer
+      ? (lang === "id" ? "Status Pesanan" : "Order Status")
+      : (lang === "id" ? "Aktivitas" : "Activity"),
     tabPromo: lang === "id" ? "Promo" : "Promos",
     tabInfo: lang === "id" ? "Info & Pembayaran" : "Info & Payments",
     noNotif: lang === "id" ? "Belum ada notifikasi baru" : "No new notifications",
@@ -336,7 +356,7 @@ export function NotificationsPage() {
                 }`}
               >
                 <div className="flex items-center justify-center gap-1.5">
-                  <ShoppingBag className="h-4 w-4" />
+                  {isCustomer ? <ShoppingBag className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
                   <span>{t.tabOrder}</span>
                   {unreadOrderCount > 0 && (
                     <span className="bg-red-500 text-white text-[9px] font-bold h-4 min-w-4 px-1 rounded-full flex items-center justify-center">
@@ -439,7 +459,9 @@ export function NotificationsPage() {
                             )}
                           </div>
                           <span className="text-[11px] font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1">
-                            {lang === "id" ? "Lihat Detail Laporan →" : "View Details →"}
+                            {item.link && !item.orderId
+                              ? (lang === "id" ? "Buka →" : "Open →")
+                              : (lang === "id" ? "Lihat Detail Laporan →" : "View Details →")}
                           </span>
                         </div>
                       </div>

@@ -524,7 +524,12 @@ service cloud.firestore {
         isOrderStaff() || isDeveloper()
         || request.resource.data.recipientId in ['admin', request.auth.uid]
       );
-      allow update: if request.auth != null && resource.data.recipientId == request.auth.uid
+      // Penerima boleh menandai dibaca, baik notifikasi pribadi (uid) maupun
+      // notifikasi untuk role-nya. Status dibaca notifikasi role berlaku untuk
+      // semua akun dengan role itu, sama seperti hitungan lonceng.
+      allow update: if request.auth != null
+        && (resource.data.recipientId == request.auth.uid
+          || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && resource.data.recipientId == getUserRole()))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
       allow delete: if isAdmin();
     }

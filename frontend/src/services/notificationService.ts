@@ -40,6 +40,26 @@ export interface FirestoreNotification {
   actorRole: string;
   read: boolean;
   createdAt: string;
+  /** Halaman tujuan saat diketuk (task, job desk, MBG). */
+  link?: string | null;
+}
+
+/** Tipe yang tampil di tab Info & Pembayaran; semua tipe lain tampil di tab pertama. */
+export const INFO_NOTIFICATION_TYPES = ["payment", "system"];
+
+/**
+ * Bagi notifikasi ke tab. Tab pertama memuat semua tipe selain info/pembayaran
+ * (pesanan, task, job desk, MBG, …) supaya tidak ada notifikasi yang ikut
+ * dihitung lonceng tapi tidak tampil di mana pun.
+ */
+export function splitNotificationsByTab(list: FirestoreNotification[]): {
+  activity: FirestoreNotification[];
+  info: FirestoreNotification[];
+} {
+  const activity: FirestoreNotification[] = [];
+  const info: FirestoreNotification[] = [];
+  for (const n of list) (INFO_NOTIFICATION_TYPES.includes(n.type) ? info : activity).push(n);
+  return { activity, info };
 }
 
 function firestoreDocToNotification(
@@ -70,6 +90,7 @@ function firestoreDocToNotification(
     actorRole: (data.actorRole as string) ?? "system",
     read: (data.read as boolean) ?? false,
     createdAt,
+    link: (data.link as string | undefined) ?? null,
   };
 }
 
