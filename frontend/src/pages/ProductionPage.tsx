@@ -9,6 +9,7 @@ import { subscribeProductionOrders } from "@/services/realtimeService";
 import type { Order } from "@/types/order";
 
 import { ProductImage } from "@/components/ProductImage";
+import { DeliverySchedule } from "@/components/DeliverySchedule";
 import { parseIngredients } from "@/lib/ingredientsParser";
 import { getProduct } from "@/services/catalogService";
 import { useToast } from "@/contexts/ToastContext";
@@ -196,18 +197,7 @@ function OrderCard({ order, busyId, onStart, onComplete }: {
             </div>
           </div>
 
-          {/* Delivery time */}
-          <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 mb-3 bg-[#F9FAFB] rounded-lg px-2 py-1.5 md:px-3 md:py-2 border border-[#E5E7EB]">
-            <div className="flex items-center gap-1 shrink-0">
-              <Clock className="h-3 w-3 md:h-3.5 md:w-3.5 text-[#6B7280]" />
-              <span className="text-[10px] md:text-xs font-['Hanken_Grotesk',system-ui,sans-serif] text-[#6B7280]">
-                Target:
-              </span>
-            </div>
-            <span className="text-[10px] md:text-xs font-bold text-[#111827] font-['Hanken_Grotesk',system-ui,sans-serif] md:ml-auto truncate">
-              {order.deliveryTime}
-            </span>
-          </div>
+          <DeliverySchedule deliveryTime={order.deliveryTime} eventDate={order.eventDate} />
 
           {/* Recipient & Destination Info */}
           {(order.recipientName || order.deliveryAddress) && (
