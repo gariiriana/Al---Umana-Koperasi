@@ -35,7 +35,7 @@ const LABELS_DICT = {
     "/admin/products": "Daftar Produk",
     // Katering Operational
     "/katering/mo/jobdesk": "Manajemen Job Desk",
-    "/katering/jobdesk": "Job Desk Saya",
+    "/katering/jobdesk": "Job Desk Teklap",
     "/katering/co-mo/review": "Review Job Desk",
     // MBG
     "/mbg/admin": "Admin MBG",
@@ -61,7 +61,7 @@ const LABELS_DICT = {
     "/admin/products": "Product List",
     // Katering Operational
     "/katering/mo/jobdesk": "Job Desk Management",
-    "/katering/jobdesk": "My Job Desk",
+    "/katering/jobdesk": "Field Team Job Desk",
     "/katering/co-mo/review": "Job Desk Review",
     // MBG
     "/mbg/admin": "MBG Admin",

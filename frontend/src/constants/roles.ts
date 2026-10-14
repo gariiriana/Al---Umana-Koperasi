@@ -138,6 +138,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
    * Tim Produksi MBG: Akses penuh ke seluruh fitur MBG.
    */
   produksi_mbg: [
+    "/katering/jobdesk",
     "/mbg/admin",
     "/mbg/admin/batch/new",
     "/mbg/archive",
@@ -158,6 +159,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
    * Distribusi MBG: QC barang masuk, assign tugas kurir, serta akses & edit fitur kurir.
    */
   distribusi_mbg: [
+    "/katering/jobdesk",
     "/mbg/distribution",
     "/mbg/delivery",
     "/mbg/persiapan",

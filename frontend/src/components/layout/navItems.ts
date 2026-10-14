@@ -38,7 +38,7 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/admin/products", label: "Daftar Produk", icon: Package2 },
   // --- Katering Operational ---
   { to: "/katering/mo/jobdesk", label: "Manajemen Job Desk", icon: ClipboardCheck },
-  { to: "/katering/jobdesk", label: "Job Desk Saya", icon: ClipboardCheck },
+  { to: "/katering/jobdesk", label: "Job Desk Teklap", icon: ClipboardCheck },
   { to: "/katering/co-mo/review", label: "Review Job Desk", icon: ClipboardCheck },
   // --- MBG (Makan Bergizi Gratis) ---
   { to: "/mbg/admin", label: "Admin MBG", icon: ClipboardList },

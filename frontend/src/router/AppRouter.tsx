@@ -689,7 +689,7 @@ function RoutesTree() {
         element={
           <Protected>
             <ShelledRoute
-              pageTitle="Job Desk Saya"
+              pageTitle="Job Desk Teklap"
               allowedRoles={[
                 "produksi_1",
                 "distribusi_1",
@@ -697,6 +697,8 @@ function RoutesTree() {
                 "distribusi_2",
                 "tim_produksi",
                 "distribusi",
+                "produksi_mbg",
+                "distribusi_mbg",
                 "MBG2",
                 "mbg2",
                 "produksi_mbg_2",

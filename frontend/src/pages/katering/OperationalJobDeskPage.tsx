@@ -257,7 +257,7 @@ export function OperationalJobDeskPage() {
             )}
           </div>
           <h1 className="text-lg sm:text-3xl font-extrabold tracking-tight leading-snug">
-            Job Desk Saya — {JOBDESK_ROLE_LABELS[assignableRole]}
+            Job Desk Teklap — {JOBDESK_ROLE_LABELS[assignableRole]}
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 mt-1">
             Klik ✅ Complete untuk langsung mengirim ke CO_MO. Untuk ❌ Incomplete, isi alasan lalu klik Kirim.
