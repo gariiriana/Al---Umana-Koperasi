@@ -21,6 +21,7 @@ import {
   Download,
   Trash2,
   Upload,
+  RotateCw,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { hasCompleteMbgProof, isMbgTaskAssignedTo } from '@/lib/mbgCourierAssignment';
@@ -37,6 +38,9 @@ import {
   setHandoverPhoto,
   addDeliveryPhoto,
   updateSchoolDeliveryProof,
+  saveRotatedSchoolDeliveryProof,
+  MBG_PROOF_PHOTO_FIELDS,
+  type MbgProofType,
   deleteSchoolDeliveryProof,
   updatePhotoDescription,
   saveDeliveryDocument,
@@ -44,6 +48,7 @@ import {
   type MbgDeliveryDocument,
 } from '@/services/mbgDeliveryService';
 import { LiveCamera } from '@/components/LiveCamera';
+import { ProofPhotoEditor } from '@/components/mbg/ProofPhotoEditor';
 import { MBG_DELIVERY_STATUS_CONFIG } from '@/constants/mbgConstants';
 
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -79,6 +84,9 @@ export function MbgDeliveryPage() {
 
   // 4-Proof Modal state
   const [proofModalEntry, setProofModalEntry] = useState<MbgPmEntry | null>(null);
+  const [editingPhoto, setEditingPhoto] = useState<{
+    entryId: string; taskId: string; proofType: MbgProofType; photoUrl: string; label: string;
+  } | null>(null);
   const [targetProofType, setTargetProofType] = useState<'menu' | 'penerima' | 'serah_terima' | 'surat_jalan'>('penerima');
 
   // Description edit state (per entry per proof type)
@@ -150,6 +158,7 @@ export function MbgDeliveryPage() {
   // Subscribe to tasks for the selected batch & petugas
   useEffect(() => {
     setProofModalEntry(null);
+    setEditingPhoto(null);
     if (!selectedBatchId || !user || !viewKey) {
       setTasks([]);
       setEntries([]);
@@ -179,16 +188,6 @@ export function MbgDeliveryPage() {
       }),
     ], () => setLoadedViewKey(viewKey));
   }, [selectedBatchId, selectedPetugasName, profile?.displayName, user, isAdminOrSupervisor, showToast, viewKey]);
-
-  // Keep proofModalEntry in sync with live entries snapshot
-  useEffect(() => {
-    if (proofModalEntry) {
-      const updated = entries.find((e) => e.id === proofModalEntry.id);
-      if (updated) {
-        setProofModalEntry(updated);
-      }
-    }
-  }, [entries, proofModalEntry]);
 
   const uniqueKurirNames = useMemo<string[]>(() => {
     const visibleEntries = isAdminOrSupervisor ? entries : entries.filter((e) => e.assignedPetugasId === user?.uid || e.assignedKenekId === user?.uid);
@@ -232,6 +231,26 @@ export function MbgDeliveryPage() {
       };
     });
   }, [activeTask, entries]);
+
+  // Include task-only legacy proofs when refreshing the open photo manager.
+  useEffect(() => {
+    setProofModalEntry((current) => current ? taskEntries.find((entry) => entry.id === current.id) || null : null);
+  }, [taskEntries]);
+
+  const handleEditProofPhoto = (entry: MbgPmEntry, proofType: MbgProofType, label: string) => {
+    const photoUrl = entry[MBG_PROOF_PHOTO_FIELDS[proofType]];
+    if (!activeTask || !photoUrl) return;
+    setEditingPhoto({ entryId: entry.id, taskId: activeTask.id, proofType, photoUrl, label });
+  };
+
+  const handleSaveRotatedPhoto = async (dataUrl: string) => {
+    if (!editingPhoto) return;
+    const { entryId, taskId, proofType, photoUrl } = editingPhoto;
+    await saveRotatedSchoolDeliveryProof(entryId, proofType, photoUrl, dataUrl, taskId);
+    const field = MBG_PROOF_PHOTO_FIELDS[proofType];
+    setEntries((current) => current.map((entry) => entry.id === entryId ? { ...entry, [field]: dataUrl } : entry));
+    showToast({ message: 'Rotasi foto berhasil disimpan', variant: 'success' });
+  };
 
   const activeNonLiburEntries = useMemo(() => {
     return taskEntries.filter((e) => !e.isSekolahLibur);
@@ -1591,6 +1610,7 @@ export function MbgDeliveryPage() {
                 onDeviceUpload={(file) => handleDeviceFileUpload(file, proofModalEntry, 'menu')}
                 onDownload={() => handleDownloadProofPhoto(proofModalEntry.photoMenuUrl, `ompreng_${proofModalEntry.institutionName}.jpg`)}
                 onDelete={() => handleDeleteProofPhoto(proofModalEntry.id, 'menu')}
+                onEdit={() => handleEditProofPhoto(proofModalEntry, 'menu', 'Foto Kedatangan Ompreng di Sekolah')}
                 onDescChange={(val) => handleDescriptionChange(proofModalEntry.id, 'menu', val)}
               />
 
@@ -1607,6 +1627,7 @@ export function MbgDeliveryPage() {
                 onDeviceUpload={(file) => handleDeviceFileUpload(file, proofModalEntry, 'serah_terima')}
                 onDownload={() => handleDownloadProofPhoto(proofModalEntry.photoSerahTerimaUrl, `serah_terima_${proofModalEntry.institutionName}.jpg`)}
                 onDelete={() => handleDeleteProofPhoto(proofModalEntry.id, 'serah_terima')}
+                onEdit={() => handleEditProofPhoto(proofModalEntry, 'serah_terima', 'Foto Serah Terima dengan PJ Sekolah')}
                 onDescChange={(val) => handleDescriptionChange(proofModalEntry.id, 'serah_terima', val)}
                 isGeotag
               />
@@ -1624,6 +1645,7 @@ export function MbgDeliveryPage() {
                 onDeviceUpload={(file) => handleDeviceFileUpload(file, proofModalEntry, 'surat_jalan')}
                 onDownload={() => handleDownloadProofPhoto(proofModalEntry.photoSuratJalanUrl, `surat_jalan_${proofModalEntry.institutionName}.jpg`)}
                 onDelete={() => handleDeleteProofPhoto(proofModalEntry.id, 'surat_jalan')}
+                onEdit={() => handleEditProofPhoto(proofModalEntry, 'surat_jalan', 'Foto Surat Jalan / BAST')}
                 onDescChange={(val) => handleDescriptionChange(proofModalEntry.id, 'surat_jalan', val)}
               />
 
@@ -1640,6 +1662,7 @@ export function MbgDeliveryPage() {
                 onDeviceUpload={(file) => handleDeviceFileUpload(file, proofModalEntry, 'penerima')}
                 onDownload={() => handleDownloadProofPhoto(proofModalEntry.photoPenerimaUrl, `ompreng_kosong_${proofModalEntry.institutionName}.jpg`)}
                 onDelete={() => handleDeleteProofPhoto(proofModalEntry.id, 'penerima')}
+                onEdit={() => handleEditProofPhoto(proofModalEntry, 'penerima', 'Foto Pengambilan Ompreng Kosong')}
                 onDescChange={(val) => handleDescriptionChange(proofModalEntry.id, 'penerima', val)}
                 isGeotag
               />
@@ -1655,6 +1678,16 @@ export function MbgDeliveryPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {editingPhoto && (
+        <ProofPhotoEditor
+          key={`${editingPhoto.entryId}_${editingPhoto.proofType}`}
+          photoUrl={editingPhoto.photoUrl}
+          label={editingPhoto.label}
+          onSave={handleSaveRotatedPhoto}
+          onClose={() => setEditingPhoto(null)}
+        />
       )}
 
       {/* Live Camera Dialog */}
@@ -1684,6 +1717,7 @@ function ProofSlot({
   onDeviceUpload,
   onDownload,
   onDelete,
+  onEdit,
   onDescChange,
   isGeotag,
 }: {
@@ -1698,6 +1732,7 @@ function ProofSlot({
   onDeviceUpload: (file: File) => void;
   onDownload?: () => void;
   onDelete?: () => void;
+  onEdit: () => void;
   onDescChange: (val: string) => void;
   isGeotag?: boolean;
 }) {
@@ -1780,6 +1815,16 @@ function ProofSlot({
           {/* Action buttons when photo exists */}
           {photoUrl && (
             <>
+              <button
+                type="button"
+                onClick={onEdit}
+                title="Edit foto: putar kiri atau kanan"
+                aria-label={`Edit foto: ${label}`}
+                className="px-3 py-2 text-[10px] font-extrabold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 rounded-xl cursor-pointer flex items-center gap-1"
+              >
+                <RotateCw className="h-3.5 w-3.5" />
+                Edit foto
+              </button>
               {onDownload && (
                 <button
                   type="button"

@@ -14,6 +14,41 @@ import type { MbgDeliveryTask, MbgDeliveryStatus, MbgPmEntry } from '@/types/mbg
 const DELIVERY_COLLECTION = 'mbg_delivery_tasks';
 const DOCUMENTS_COLLECTION = 'mbg_delivery_documents';
 
+export type MbgProofType = 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan';
+export const MBG_PROOF_PHOTO_FIELDS = {
+  menu: 'photoMenuUrl',
+  penerima: 'photoPenerimaUrl',
+  serah_terima: 'photoSerahTerimaUrl',
+  surat_jalan: 'photoSuratJalanUrl',
+} as const;
+
+/** Replace only image pixels, preserving descriptions, capture time and geotags. */
+export async function saveRotatedSchoolDeliveryProof(
+  entryId: string,
+  proofType: MbgProofType,
+  originalPhotoUrl: string,
+  rotatedPhotoUrl: string,
+  taskId?: string,
+): Promise<void> {
+  const field = MBG_PROOF_PHOTO_FIELDS[proofType];
+  const entryRef = doc(db, 'mbg_pm_entries', entryId);
+  const taskRef = taskId && !taskId.startsWith('virt-task-') ? doc(db, DELIVERY_COLLECTION, taskId) : null;
+  await runTransaction(db, async (transaction) => {
+    const entrySnapshot = await transaction.get(entryRef);
+    const taskSnapshot = taskRef ? await transaction.get(taskRef) : null;
+    if (!entrySnapshot.exists()) throw new Error('Data sekolah tidak ditemukan.');
+    const currentPhoto = entrySnapshot.data()[field] || taskSnapshot?.data()?.schoolProofs?.[entryId]?.[field];
+    if (currentPhoto !== originalPhotoUrl) {
+      throw new Error('Foto sudah berubah. Tutup editor lalu buka ulang foto terbaru.');
+    }
+    const updatedAt = new Date().toISOString();
+    transaction.update(entryRef, { [field]: rotatedPhotoUrl, updatedAt });
+    if (taskRef) {
+      transaction.update(taskRef, { [`schoolProofs.${entryId}.${field}`]: rotatedPhotoUrl, updatedAt });
+    }
+  });
+}
+
 export function subscribeKurirTasks(
   batchId: string,
   userUid: string,

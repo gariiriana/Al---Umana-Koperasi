@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  RotateCw,
 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import type {
@@ -44,10 +45,14 @@ import { notifyMbgCourierTasks, type CourierAssignment } from '@/services/flowNo
 import {
   subscribeBatchDeliveryDocuments,
   updateSchoolDeliveryProof,
+  saveRotatedSchoolDeliveryProof,
+  MBG_PROOF_PHOTO_FIELDS,
+  type MbgProofType,
   deleteSchoolDeliveryProof,
   type MbgDeliveryDocument,
 } from '@/services/mbgDeliveryService';
 import { LiveCamera } from '@/components/LiveCamera';
+import { ProofPhotoEditor } from '@/components/mbg/ProofPhotoEditor';
 import { SearchableBatchSelector } from '@/components/mbg/SearchableBatchSelector';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -142,6 +147,20 @@ export function MbgDistributionPage() {
 
   // Correction & Editing Modal state for Laporan Kurir
   const [editingReportDoc, setEditingReportDoc] = useState<MbgDeliveryDocument | null>(null);
+  const [editingPhoto, setEditingPhoto] = useState<{
+    entryId: string; taskId?: string; proofType: MbgProofType; photoUrl: string; label: string;
+  } | null>(null);
+
+  useEffect(() => { setEditingPhoto(null); }, [selectedBatchId, editingReportDoc]);
+
+  const handleSaveRotatedPhoto = async (dataUrl: string) => {
+    if (!editingPhoto) return;
+    const { entryId, taskId, proofType, photoUrl } = editingPhoto;
+    await saveRotatedSchoolDeliveryProof(entryId, proofType, photoUrl, dataUrl, taskId);
+    const field = MBG_PROOF_PHOTO_FIELDS[proofType];
+    setEntries((current) => current.map((entry) => entry.id === entryId ? { ...entry, [field]: dataUrl } : entry));
+    showToast({ message: 'Rotasi foto laporan kurir berhasil disimpan', variant: 'success' });
+  };
   const [activeCorrectionSlot, setActiveCorrectionSlot] = useState<{
     entryId: string;
     institutionName: string;
@@ -2065,6 +2084,21 @@ export function MbgDistributionPage() {
                                 )}
                               </div>
 
+                              {pt.url && (
+                                <button
+                                  type="button"
+                                  disabled={isUploadingCorrectionPhoto}
+                                  onClick={() => setEditingPhoto({
+                                    entryId: entry.id, taskId: matchedTask?.id, proofType: pt.id,
+                                    photoUrl: pt.url!, label: `${entry.institutionName} — ${pt.title}`,
+                                  })}
+                                  className="inline-flex w-full items-center justify-center gap-1.5 py-2 px-2 bg-amber-50 hover:bg-amber-100 text-amber-900 text-[10px] font-extrabold rounded-lg border border-amber-300 disabled:opacity-50 cursor-pointer"
+                                  aria-label={`Edit foto: ${entry.institutionName} — ${pt.title}`}
+                                >
+                                  <RotateCw className="h-3.5 w-3.5" /> Edit foto
+                                </button>
+                              )}
+
                               {/* Control Buttons */}
                               <div className="flex gap-1.5 pt-1">
                                 <label className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-extrabold rounded-lg border border-blue-200 cursor-pointer">
@@ -2132,6 +2166,16 @@ export function MbgDistributionPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {editingPhoto && (
+        <ProofPhotoEditor
+          key={`${editingPhoto.entryId}_${editingPhoto.proofType}`}
+          photoUrl={editingPhoto.photoUrl}
+          label={editingPhoto.label}
+          onSave={handleSaveRotatedPhoto}
+          onClose={() => setEditingPhoto(null)}
+        />
+      )}
 
       {/* Live Camera for Correction */}
       {isLiveCameraOpen && activeCorrectionSlot && (

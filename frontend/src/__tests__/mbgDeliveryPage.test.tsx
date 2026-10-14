@@ -10,6 +10,7 @@ const fake = vi.hoisted(() => ({
   archive: vi.fn().mockResolvedValue('archive'),
   complete: vi.fn().mockResolvedValue(undefined),
   toast: vi.fn(),
+  rotate: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: fake.user, profile: fake.profile }) }));
@@ -18,6 +19,7 @@ vi.mock('@/lib/firebase', () => ({ db: {} }));
 vi.mock('@/utils/date', () => ({ getJakartaDate: () => '2026-10-03' }));
 vi.mock('@/services/gpsService', () => ({ startTracker: () => ({ stop: vi.fn() }) }));
 vi.mock('@/components/LiveCamera', () => ({ LiveCamera: () => null }));
+vi.mock('@/utils/rotatePhoto', () => ({ rotatePhoto: (url: string, turns: number) => Promise.resolve(turns ? `rotated_${url}` : url) }));
 vi.mock('@/components/mbg/SearchableBatchSelector', () => ({ SearchableBatchSelector: () => null }));
 vi.mock('@/utils/mbgDeliveryReportPdfExporter', () => ({ exportMbgDeliveryReportPdf: fake.exportPdf }));
 vi.mock('@/services/mbgAdminService', () => ({
@@ -30,6 +32,8 @@ vi.mock('@/services/mbgDeliveryService', () => ({
   saveDeliveryDocument: fake.archive, completeTaskAndBatch: fake.complete,
   updateTaskStatus: vi.fn(), setHandoverPhoto: vi.fn(), addDeliveryPhoto: vi.fn(),
   updateSchoolDeliveryProof: vi.fn(), deleteSchoolDeliveryProof: vi.fn(), updatePhotoDescription: vi.fn(),
+  saveRotatedSchoolDeliveryProof: fake.rotate,
+  MBG_PROOF_PHOTO_FIELDS: { menu: 'photoMenuUrl', penerima: 'photoPenerimaUrl', serah_terima: 'photoSerahTerimaUrl', surat_jalan: 'photoSuratJalanUrl' },
 }));
 
 import { MbgDeliveryPage } from '@/pages/mbg/MbgDeliveryPage';
@@ -52,6 +56,25 @@ beforeEach(() => {
 });
 
 describe('MBG delivery PDF and completion actions', () => {
+  it.each([
+    ['Foto Kedatangan Ompreng di Sekolah', 'menu', 'menu', 'photoMenuUrl'],
+    ['Foto Serah Terima dengan PJ Sekolah (Geotag)', 'serah_terima', 'handover', 'photoSerahTerimaUrl'],
+    ['Foto Surat Jalan / BAST', 'surat_jalan', 'letter', 'photoSuratJalanUrl'],
+    ['Foto Pengambilan Ompreng Kosong', 'penerima', 'container', 'photoPenerimaUrl'],
+  ])('saves rotated %s and uses it in the PDF', async (label, proofType, original, field) => {
+    render(<MbgDeliveryPage />);
+    fireEvent.click((await screen.findAllByRole('button', { name: /Lengkap \(4\/4\)/ }))[0]);
+    fireEvent.click(await screen.findByRole('button', { name: `Edit foto: ${label}` }));
+    fireEvent.click(screen.getByRole('button', { name: 'Putar kanan 90°' }));
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Simpan foto' }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Simpan foto' }));
+    await waitFor(() => expect(fake.rotate).toHaveBeenCalledWith('school', proofType, original, `rotated_${original}`, 'task'));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit foto' })).toBeNull());
+    expect((screen.getByAltText(label) as HTMLImageElement).src).toContain(`rotated_${original}`);
+    fireEvent.click(screen.getByRole('button', { name: 'Selesai' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Export PDF$/ }));
+    await waitFor(() => expect(fake.exportPdf).toHaveBeenCalledWith(expect.objectContaining({ entries: [expect.objectContaining({ [field]: `rotated_${original}` })] })));
+  });
   it('exports and archives a PDF without marking the task delivered', async () => {
     render(<MbgDeliveryPage />);
     fireEvent.click(await screen.findByRole('button', { name: /^Export PDF$/ }));
