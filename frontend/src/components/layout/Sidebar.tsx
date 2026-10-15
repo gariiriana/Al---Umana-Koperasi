@@ -6,7 +6,7 @@ import { navItemsForRole } from "./navItems";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleLabel } from "@/components/kpi/kpiStyles";
-import { subscribeCourierOrders, subscribeOrders } from "@/services/realtimeService";
+import { subscribeCourierOrders, subscribeOpenOrders } from "@/services/realtimeService";
 import { isOrderPastDeadline } from "@/lib/orderHelpers";
 import type { Order } from '@/types/order';
 import {
@@ -155,7 +155,8 @@ export function Sidebar({
       if (!user?.uid) return;
       return subscribeCourierOrders(user.uid, listener, onError);
     }
-    const unsubscribe = subscribeOrders(listener, onError);
+    // Finished orders never pass their deadline, so only open ones are read.
+    const unsubscribe = subscribeOpenOrders(listener, onError);
 
     return () => unsubscribe();
   }, [userRole, user?.uid]);

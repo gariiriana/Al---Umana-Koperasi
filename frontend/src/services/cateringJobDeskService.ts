@@ -14,6 +14,7 @@ import {
   getDocs,
   Timestamp,
   writeBatch,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { archiveAndDelete } from "@/services/developerRecycleBinService";
@@ -383,90 +384,117 @@ export function subscribeJobDesksByRole(
   const isDwi = role === "distribusi_1";
   const isDualDistribusi = role === "distribusi_2" || role === "distribusi_mbg_2";
 
-  const q = query(collection(db, COLLECTION), orderBy("tanggal", "desc"));
+  // Read only this PIC's rows from the server (by role, and by PIC name for rows whose
+  // role field disagrees) instead of the whole collection; the filter below is unchanged.
+  const serverMatch = isJoko
+    ? { roles: ["produksi_1", "MBG2"], pics: ["Joko", "MBG2"] }
+    : isShifa
+    ? { roles: ["produksi_2"], pics: ["Shifa"] }
+    : isDwi
+    ? { roles: ["distribusi_1"], pics: ["Dwi"] }
+    : isDualDistribusi
+    ? { roles: ["distribusi_2", "distribusi_mbg_2"], pics: ["Wandi", "Distribusi2"] }
+    : { roles: [role], pics: [] as string[] };
+  const queries = [
+    query(collection(db, COLLECTION), where("assignedRole", "in", serverMatch.roles)),
+    ...(serverMatch.pics.length ? [query(collection(db, COLLECTION), where("pic", "in", serverMatch.pics))] : []),
+  ];
+  const parts = new Map<number, QueryDocumentSnapshot[]>();
 
-  return subscriptionManager.subscribe(
-    q,
-    (snapshot) => {
-      const results = snapshot.docs
-        .map((d) => ({
-          ...docToJobDesk(d.id, d.data() as Record<string, unknown>),
-          pendingSync: d.metadata.hasPendingWrites,
-        }))
-        .filter((jd) => {
-          // 1. Joko (ProduksiMBG2@alumana.id / Produksi 1):
-          if (isJoko) {
-            if (
-              jd.pic === "Joko" ||
-              jd.pic === "MBG2" ||
-              jd.assignedRole === "produksi_1" ||
-              jd.assignedRole === "MBG2" ||
-              jd.pic?.toLowerCase().includes("joko")
-            ) {
-              return true;
-            }
-            return false;
+  const emit = () => {
+    const docs = new Map<string, QueryDocumentSnapshot>();
+    for (const part of parts.values()) for (const d of part) docs.set(d.id, d);
+    const results = [...docs.values()]
+      // Same set the former orderBy("tanggal") listener returned: rows that have the field.
+      .filter((d) => d.get("tanggal") !== undefined)
+      .map((d) => ({
+        ...docToJobDesk(d.id, d.data() as Record<string, unknown>),
+        pendingSync: d.metadata.hasPendingWrites,
+      }))
+      .filter((jd) => {
+        // 1. Joko (ProduksiMBG2@alumana.id / Produksi 1):
+        if (isJoko) {
+          if (
+            jd.pic === "Joko" ||
+            jd.pic === "MBG2" ||
+            jd.assignedRole === "produksi_1" ||
+            jd.assignedRole === "MBG2" ||
+            jd.pic?.toLowerCase().includes("joko")
+          ) {
+            return true;
           }
-
-          // 2. Hashifah Dzihniyah Zhafirah / Shifa (ProduksiMBG@alumana.id / Produksi 2):
-          if (isShifa) {
-            if (
-              jd.pic === "Shifa" ||
-              jd.assignedRole === "produksi_2" ||
-              jd.pic?.toLowerCase().includes("shifa") ||
-              jd.pic?.toLowerCase().includes("hashifah")
-            ) {
-              return true;
-            }
-            return false;
-          }
-
-          // 3. Dwi (distribusimbg@alumana.id / Distribusi 1):
-          if (isDwi) {
-            if (
-              jd.pic === "Dwi" ||
-              jd.assignedRole === "distribusi_1" ||
-              jd.pic?.toLowerCase().includes("dwi")
-            ) {
-              return true;
-            }
-            return false;
-          }
-
-          // 4. Wandi (Dstribusi2@alumana.id / Distribusi 2 - Katering & MBG):
-          if (isDualDistribusi) {
-            if (
-              jd.assignedRole === "distribusi_2" ||
-              jd.assignedRole === "distribusi_mbg_2" ||
-              jd.pic === "Wandi" ||
-              jd.pic === "Distribusi2" ||
-              jd.pic?.toLowerCase().includes("distribusi")
-            ) {
-              return true;
-            }
-            return false;
-          }
-
-          if (jd.assignedRole === role) return true;
           return false;
-        });
-
-      results.sort((a, b) => {
-        const dateA = a.tanggal || "";
-        const dateB = b.tanggal || "";
-        if (dateA !== dateB) {
-          return dateB.localeCompare(dateA);
         }
-        return compareJobDeskTime(a.startTime, b.startTime);
+
+        // 2. Hashifah Dzihniyah Zhafirah / Shifa (ProduksiMBG@alumana.id / Produksi 2):
+        if (isShifa) {
+          if (
+            jd.pic === "Shifa" ||
+            jd.assignedRole === "produksi_2" ||
+            jd.pic?.toLowerCase().includes("shifa") ||
+            jd.pic?.toLowerCase().includes("hashifah")
+          ) {
+            return true;
+          }
+          return false;
+        }
+
+        // 3. Dwi (distribusimbg@alumana.id / Distribusi 1):
+        if (isDwi) {
+          if (
+            jd.pic === "Dwi" ||
+            jd.assignedRole === "distribusi_1" ||
+            jd.pic?.toLowerCase().includes("dwi")
+          ) {
+            return true;
+          }
+          return false;
+        }
+
+        // 4. Wandi (Dstribusi2@alumana.id / Distribusi 2 - Katering & MBG):
+        if (isDualDistribusi) {
+          if (
+            jd.assignedRole === "distribusi_2" ||
+            jd.assignedRole === "distribusi_mbg_2" ||
+            jd.pic === "Wandi" ||
+            jd.pic === "Distribusi2" ||
+            jd.pic?.toLowerCase().includes("distribusi")
+          ) {
+            return true;
+          }
+          return false;
+        }
+
+        if (jd.assignedRole === role) return true;
+        return false;
       });
 
-      onData(results);
-    },
-    (error) => {
-      console.error("subscribeJobDesksByRole error:", error);
-      onError?.(error);
-    }
+    results.sort((a, b) => {
+      const dateA = a.tanggal || "";
+      const dateB = b.tanggal || "";
+      if (dateA !== dateB) {
+        return dateB.localeCompare(dateA);
+      }
+      return compareJobDeskTime(a.startTime, b.startTime);
+    });
+
+    onData(results);
+  };
+
+  const unsubs = queries.map((q, index) =>
+    subscriptionManager.subscribe(
+      q,
+      (snapshot) => {
+        parts.set(index, snapshot.docs);
+        if (parts.size === queries.length) emit();
+      },
+      (error) => {
+        console.error("subscribeJobDesksByRole error:", error);
+        onError?.(error);
+      }
+    )
   );
+  return () => unsubs.forEach((unsub) => unsub());
 }
 
 /** One-time fetch of all job desks for a specific order. */

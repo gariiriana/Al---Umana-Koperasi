@@ -97,6 +97,10 @@ vi.mock("../services/realtimeService", () => ({
     listener([]);
     return () => {};
   }),
+  subscribeOpenOrders: vi.fn((listener) => {
+    listener([]);
+    return () => {};
+  }),
   subscribeProductionOrders: vi.fn((listener) => {
     listener([]);
     return () => {};

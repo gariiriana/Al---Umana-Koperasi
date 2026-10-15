@@ -67,12 +67,14 @@ export const isQueuedForProduction = (status: OrderStatus): boolean =>
 export const isAssignableForDelivery = (status: OrderStatus): boolean =>
   isQueuedForProduction(status) || status === "IN_PRODUCTION" || status === "READY_TO_DELIVER" || status === "READY";
 
+/** Orders in these statuses are finished and can no longer pass their deadline. */
+export const ORDER_FINISHED_STATUSES: OrderStatus[] = ["COMPLETED", "DELIVERED", "FAILED", "DELIVERY_FAILED"];
+
 export const isOrderPastDeadline = (order: { eventDate?: string; createdAt?: string; deliveryTime?: string; status: OrderStatus }): boolean => {
   const dateStr = order.eventDate || order.createdAt;
   if (!dateStr) return false;
 
-  const terminalStatuses = ["COMPLETED", "DELIVERED", "FAILED", "DELIVERY_FAILED"];
-  if (terminalStatuses.includes(order.status)) return false;
+  if (ORDER_FINISHED_STATUSES.includes(order.status)) return false;
 
   const datePart = dateStr.slice(0, 10);
   let time = "12:00";

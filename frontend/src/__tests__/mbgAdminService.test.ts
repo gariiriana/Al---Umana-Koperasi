@@ -98,7 +98,9 @@ const {
   restoreMultipleBatchesFromBackup,
   replaceBatchEntries,
   copyFromBatch,
+  subscribeEntriesForBatches,
 } = await import('@/services/mbgAdminService');
+const { subscriptionManager } = await import('@/services/subscriptionManager');
 
 const batchPaths = () => [...fake.store.keys()].filter((p) => p.startsWith('mbg_pm_batches/'));
 const entryPaths = () => [...fake.store.keys()].filter((p) => p.startsWith('mbg_pm_entries/'));
@@ -210,5 +212,38 @@ describe('copyFromBatch', () => {
 
     await expect(copyFromBatch('src', 'dst', 'u1')).rejects.toThrow(/sudah berisi data PM/);
     expect(entryPaths()).toHaveLength(2);
+  });
+});
+
+describe('subscribeEntriesForBatches', () => {
+  type Listener = (snap: { docs: { id: string; data: () => Data }[] }) => void;
+  const subscribe = vi.mocked(subscriptionManager.subscribe);
+  const snapOf = (rows: [string, Data][]) => ({ docs: rows.map(([id, data]) => ({ id, data: () => data })) });
+
+  beforeEach(() => subscribe.mockReset().mockReturnValue(() => {}));
+
+  it('reads only the listed batches, 30 ids per query, and merges once every chunk arrived', () => {
+    const ids = Array.from({ length: 31 }, (_, i) => `b${String(i).padStart(2, '0')}`);
+    const callback = vi.fn();
+    subscribeEntriesForBatches([...ids, 'b00'], callback);
+
+    expect(subscribe).toHaveBeenCalledTimes(2);
+    const [[first, onFirst], [second, onSecond]] = subscribe.mock.calls as unknown as [[{ clauses: { value: string[] }[] }, Listener], [{ clauses: { value: string[] }[] }, Listener]];
+    expect(first.clauses[0].value).toHaveLength(30);
+    expect(second.clauses[0].value).toEqual(['b30']);
+
+    onFirst(snapOf([['e2', { batchId: 'b00', sortOrder: 2 }], ['old', { batchId: 'b01', isBackup: true }]]));
+    expect(callback).not.toHaveBeenCalled();
+    onSecond(snapOf([['e1', { batchId: 'b30', sortOrder: 1 }]]));
+    expect(callback).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: 'e1' }), expect.objectContaining({ id: 'e2' }),
+    ]);
+  });
+
+  it('opens no listener when there are no batches', () => {
+    const callback = vi.fn();
+    subscribeEntriesForBatches([], callback);
+    expect(subscribe).not.toHaveBeenCalled();
+    expect(callback).toHaveBeenCalledWith([]);
   });
 });

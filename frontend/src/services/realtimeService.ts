@@ -42,6 +42,7 @@ import type { Order, OrderStatus } from "@/types/order";
 import type { CourierGPS } from "@/types/courier-gps";
 import type { FileMetadata } from "@/types/file";
 import { subscriptionManager } from "@/services/subscriptionManager";
+import { ORDER_FINISHED_STATUSES } from "@/lib/orderHelpers";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -209,6 +210,25 @@ export function subscribeOrders(
     },
     (err) => {
       console.error("subscribeOrders error:", err);
+      onError?.(err);
+    }
+  );
+}
+
+/**
+ * Orders that are not finished yet. Much smaller than `subscribeOrders()` for
+ * widgets that only care about open work (e.g. the past-deadline dot).
+ */
+export function subscribeOpenOrders(
+  listener: (orders: Order[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const q = query(collection(db, "orders"), where("status", "not-in", ORDER_FINISHED_STATUSES));
+  return subscriptionManager.subscribe(
+    q,
+    (snap) => listener(snap.docs.map(snapshotToOrder)),
+    (err) => {
+      console.error("subscribeOpenOrders error:", err);
       onError?.(err);
     }
   );

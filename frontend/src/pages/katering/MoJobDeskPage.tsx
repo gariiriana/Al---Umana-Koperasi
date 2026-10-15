@@ -45,7 +45,7 @@ import { getJakartaDate } from "@/utils/date";
 import { subscribeOrders } from "@/services/realtimeService";
 import {
   subscribeBatches,
-  subscribeAllEntries,
+  subscribeEntriesForBatches,
 } from "@/services/mbgAdminService";
 import {
   batchCreateJobDesks,
@@ -391,16 +391,6 @@ export function MoJobDeskPage() {
       }
     );
 
-    const unsubEntries = subscribeAllEntries(
-      (entries) => {
-        if (!mounted) return;
-        setMbgEntries(entries);
-      },
-      (err) => {
-        console.error("MO: failed to load MBG entries:", err);
-      }
-    );
-
     const unsubDailyReports = subscribeAllDailyReports(
       (reports) => {
         if (!mounted) return;
@@ -417,10 +407,17 @@ export function MoJobDeskPage() {
       unsubDesks();
       unsubOrders();
       unsubBatches();
-      unsubEntries();
       unsubDailyReports();
     };
   }, []);
+
+  // Only entries of the batches listed above; entries of draft/backup batches are never shown here.
+  const mbgBatchIdsKey = useMemo(() => mbgBatches.map((b) => b.id).sort().join(","), [mbgBatches]);
+  useEffect(() => subscribeEntriesForBatches(
+    mbgBatchIdsKey ? mbgBatchIdsKey.split(",") : [],
+    setMbgEntries,
+    (err) => console.error("MO: failed to load MBG entries:", err)
+  ), [mbgBatchIdsKey]);
 
   // Map of orderId / entryId -> array of existing job desks
   const jobDesksByOrderId = useMemo(() => {
