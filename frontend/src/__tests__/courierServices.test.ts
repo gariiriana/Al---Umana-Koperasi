@@ -56,6 +56,7 @@ vi.mock('firebase/firestore', async (importOriginal) => ({
   runTransaction: fake.runTransaction, arrayUnion: (...union: unknown[]) => ({ union }),
 }));
 
+import { deleteField } from 'firebase/firestore';
 import { completeTaskAndBatch, updateTaskStatus, saveRotatedSchoolDeliveryProof } from '@/services/mbgDeliveryService';
 import { confirmDelivery, dispatchOrder, reassignCourier } from '@/services/orderService';
 import { saveBahanChecklist } from '@/services/mbgBahanService';
@@ -113,14 +114,23 @@ describe('MBG delivery completion using fresh persisted evidence', () => {
 });
 
 describe('saved MBG photo rotations', () => {
-  it('updates both proof copies while retaining capture metadata and descriptions', async () => {
+  it('saves the rotation on the entry while retaining capture metadata and descriptions', async () => {
     const entry = fake.state.documents.get('mbg_pm_entries/school')!;
     Object.assign(entry, { photoSerahTerimaDesc: 'PJ sekolah', photoSerahTerimaTimestamp: '08:00', photoSerahTerimaLocation: 'Sekolah' });
     await saveRotatedSchoolDeliveryProof('school', 'serah_terima', 'handover', 'rotated', 'task');
     expect(fake.transactionUpdate).toHaveBeenCalledWith('mbg_pm_entries/school', { photoSerahTerimaUrl: 'rotated', updatedAt: expect.any(String) });
-    expect(fake.transactionUpdate).toHaveBeenCalledWith('mbg_delivery_tasks/task', { 'schoolProofs.school.photoSerahTerimaUrl': 'rotated', updatedAt: expect.any(String) });
     expect(fake.state.documents.get('mbg_pm_entries/school')).toEqual(expect.objectContaining({
       photoSerahTerimaUrl: 'rotated', photoSerahTerimaDesc: 'PJ sekolah', photoSerahTerimaTimestamp: '08:00', photoSerahTerimaLocation: 'Sekolah',
+    }));
+  });
+  it('drops the stale task mirror instead of growing the shared task document', async () => {
+    fake.state.documents.get('mbg_delivery_tasks/task')!.schoolProofs = { school: { photoSerahTerimaUrl: 'handover' } };
+    await saveRotatedSchoolDeliveryProof('school', 'serah_terima', 'handover', 'rotated', 'task');
+    expect(fake.transactionUpdate).toHaveBeenCalledWith('mbg_delivery_tasks/task', {
+      'schoolProofs.school.photoSerahTerimaUrl': deleteField(), updatedAt: expect.any(String),
+    });
+    expect(fake.transactionUpdate).not.toHaveBeenCalledWith('mbg_delivery_tasks/task', expect.objectContaining({
+      'schoolProofs.school.photoSerahTerimaUrl': 'rotated',
     }));
   });
   it('rejects a replaced photo instead of overwriting newer evidence', async () => {
@@ -132,6 +142,9 @@ describe('saved MBG photo rotations', () => {
     fake.state.documents.get('mbg_delivery_tasks/task')!.schoolProofs = { school: { photoMenuUrl: 'legacy' } };
     await saveRotatedSchoolDeliveryProof('school', 'menu', 'legacy', 'rotated', 'task');
     expect(fake.state.documents.get('mbg_pm_entries/school')?.photoMenuUrl).toBe('rotated');
+    expect(fake.transactionUpdate).toHaveBeenCalledWith('mbg_delivery_tasks/task', {
+      'schoolProofs.school.photoMenuUrl': deleteField(), updatedAt: expect.any(String),
+    });
   });
   it('saves an entry without trying to update a virtual task', async () => {
     await saveRotatedSchoolDeliveryProof('school', 'surat_jalan', 'letter', 'rotated', 'virt-task-driver');

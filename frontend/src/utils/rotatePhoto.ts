@@ -1,3 +1,7 @@
+/** Same longest side as uploaded proof photos, so a rotation never makes the stored photo bigger. */
+const MAX_SIDE = 640;
+const JPEG_QUALITY = 0.8;
+
 /** Rotate from the original each time so preview edits never compound JPEG loss. */
 export async function rotatePhoto(photoUrl: string, quarterTurns: number): Promise<string> {
   const turns = ((quarterTurns % 4) + 4) % 4;
@@ -11,8 +15,9 @@ export async function rotatePhoto(photoUrl: string, quarterTurns: number): Promi
     img.src = photoUrl;
   });
   const canvas = document.createElement('canvas');
-  const width = image.naturalWidth;
-  const height = image.naturalHeight;
+  const scale = Math.min(1, MAX_SIDE / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.round(image.naturalWidth * scale);
+  const height = Math.round(image.naturalHeight * scale);
   canvas.width = turns % 2 ? height : width;
   canvas.height = turns % 2 ? width : height;
   const ctx = canvas.getContext('2d');
@@ -21,9 +26,9 @@ export async function rotatePhoto(photoUrl: string, quarterTurns: number): Promi
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.rotate(turns * Math.PI / 2);
-  ctx.drawImage(image, -width / 2, -height / 2);
+  ctx.drawImage(image, -width / 2, -height / 2, width, height);
   try {
-    return canvas.toDataURL('image/jpeg', 0.92);
+    return canvas.toDataURL('image/jpeg', JPEG_QUALITY);
   } catch {
     throw new Error('Foto tidak bisa diproses. Coba unggah ulang foto dari perangkat.');
   }

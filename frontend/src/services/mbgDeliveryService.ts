@@ -3,7 +3,7 @@
 // ============================================================================
 
 import {
-  collection, doc, updateDoc, addDoc, getDocs, runTransaction, arrayUnion,
+  collection, doc, updateDoc, addDoc, getDocs, runTransaction, arrayUnion, deleteField,
   query, where, orderBy, onSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -22,7 +22,11 @@ export const MBG_PROOF_PHOTO_FIELDS = {
   surat_jalan: 'photoSuratJalanUrl',
 } as const;
 
-/** Replace only image pixels, preserving descriptions, capture time and geotags. */
+/**
+ * Replace only image pixels, preserving descriptions, capture time and geotags.
+ * The rotated photo lives on the entry only: one task mirrors every school's photos and
+ * can already sit near Firestore's 1 MiB limit, so its stale copy is dropped instead.
+ */
 export async function saveRotatedSchoolDeliveryProof(
   entryId: string,
   proofType: MbgProofType,
@@ -37,14 +41,15 @@ export async function saveRotatedSchoolDeliveryProof(
     const entrySnapshot = await transaction.get(entryRef);
     const taskSnapshot = taskRef ? await transaction.get(taskRef) : null;
     if (!entrySnapshot.exists()) throw new Error('Data sekolah tidak ditemukan.');
-    const currentPhoto = entrySnapshot.data()[field] || taskSnapshot?.data()?.schoolProofs?.[entryId]?.[field];
+    const mirroredPhoto = taskSnapshot?.data()?.schoolProofs?.[entryId]?.[field];
+    const currentPhoto = entrySnapshot.data()[field] || mirroredPhoto;
     if (currentPhoto !== originalPhotoUrl) {
       throw new Error('Foto sudah berubah. Tutup editor lalu buka ulang foto terbaru.');
     }
     const updatedAt = new Date().toISOString();
     transaction.update(entryRef, { [field]: rotatedPhotoUrl, updatedAt });
-    if (taskRef) {
-      transaction.update(taskRef, { [`schoolProofs.${entryId}.${field}`]: rotatedPhotoUrl, updatedAt });
+    if (taskRef && mirroredPhoto) {
+      transaction.update(taskRef, { [`schoolProofs.${entryId}.${field}`]: deleteField(), updatedAt });
     }
   });
 }
