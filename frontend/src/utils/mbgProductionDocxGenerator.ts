@@ -26,8 +26,8 @@ import type {
   MbgProductionDailyReport,
   MbgPortionDailyData,
 } from '@/types/mbg';
-import { getAutoRekapTotals, isSummaryOrCategoryRow } from '@/utils/mbgPmFilter';
-import { enrichPmEntryWithMaster, createDefaultOfficialPmEntries } from '@/constants/mbgConstants';
+import { getAutoRekapTotals } from '@/utils/mbgPmFilter';
+import { resolveEffectivePmEntries } from '@/constants/mbgConstants';
 
 
 export interface MbgProductionDocxData {
@@ -313,15 +313,7 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
   const docChildren: (Paragraph | Table)[] = [];
 
   // Pre-calculate canonical PM entries and total portions so all headers match exactly
-  const initialRawValidEntries = (entries || []).filter((e) => !isSummaryOrCategoryRow(e.institutionName));
-  const isInitialCrippled =
-    initialRawValidEntries.length === 0 ||
-    initialRawValidEntries.some((e) => e.institutionName.toLowerCase().includes('balita 1-5 tahun') || e.institutionName.toLowerCase().includes('bumil ds.')) ||
-    (initialRawValidEntries.length > 0 && initialRawValidEntries.every((e) => (e.qtPorsiKecilL || 0) === 0 && (e.qtPorsiBesarL || 0) === 0 && (e.qtGuruL || 0) === 0));
-
-  const canonicalEntries: MbgPmEntry[] = isInitialCrippled
-    ? (createDefaultOfficialPmEntries(batch.id || '') as unknown as MbgPmEntry[])
-    : initialRawValidEntries.map((e) => enrichPmEntryWithMaster(e));
+  const canonicalEntries = resolveEffectivePmEntries(entries, batch.id || '');
 
   const canonicalOverallTotals = getAutoRekapTotals(canonicalEntries);
   const canonicalTotalPorsi = canonicalOverallTotals.jumlah > 0 ? canonicalOverallTotals.jumlah : (batch.totalJumlah || 2767);
@@ -431,17 +423,7 @@ export async function generateMbgProductionDocx(data: MbgProductionDocxData): Pr
   // ==========================================================================
   // HALAMAN 1 (FOTO 1): REKAPITULASI PENERIMA MANFAAT
   // ==========================================================================
-  const rawValidEntries = (entries || []).filter((e) => !isSummaryOrCategoryRow(e.institutionName));
-
-  // Check if entries are crippled (e.g. empty, or contains "Balita 1-5 Tahun", or all L/P numbers are zero)
-  const isCrippledEntries =
-    rawValidEntries.length === 0 ||
-    rawValidEntries.some((e) => e.institutionName.toLowerCase().includes('balita 1-5 tahun') || e.institutionName.toLowerCase().includes('bumil ds.')) ||
-    (rawValidEntries.length > 0 && rawValidEntries.every((e) => (e.qtPorsiKecilL || 0) === 0 && (e.qtPorsiBesarL || 0) === 0 && (e.qtGuruL || 0) === 0));
-
-  const effectiveEntries: MbgPmEntry[] = isCrippledEntries
-    ? (createDefaultOfficialPmEntries(batch.id || '') as unknown as MbgPmEntry[])
-    : rawValidEntries.map((e) => enrichPmEntryWithMaster(e));
+  const effectiveEntries = canonicalEntries;
 
   const schoolEntries = effectiveEntries.filter((e) => e.institutionType !== 'posyandu');
   const posyanduEntries = effectiveEntries.filter((e) => e.institutionType === 'posyandu');

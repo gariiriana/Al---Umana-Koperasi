@@ -80,38 +80,64 @@ export interface AutoRekapTotals {
   jumlah: number;
 }
 
+export type PmRekapRow = Omit<AutoRekapTotals, 'jumlah'>;
+
+/**
+ * One row of the AUTO REKAP table, as Admin MBG shows it. On a posyandu row the
+ * Porsi Besar columns hold bumil/busui (also mirrored in qtPorsiBesarL/P), so
+ * they are counted once, on the P side of the total.
+ */
+export function getPmRekapRow(entry: MbgPmEntry): PmRekapRow {
+  const isPos = entry.institutionType === 'posyandu';
+  const porsiKecilL = entry.qtPorsiKecilL || 0;
+  const porsiKecilP = entry.qtPorsiKecilP || 0;
+  const bumil = entry.qtBumil ?? (isPos ? entry.qtPorsiBesarL || 0 : 0);
+  const busui = entry.qtBusui ?? (isPos ? entry.qtPorsiBesarP || 0 : 0);
+  const porsiBesarL = isPos ? bumil : (entry.qtPorsiBesarL || 0);
+  const porsiBesarP = isPos ? busui : (entry.qtPorsiBesarP || 0);
+  const guruL = entry.qtGuruL || 0;
+  const guruP = entry.qtGuruP || 0;
+  const tendikL = entry.qtTendikL || 0;
+  const tendikP = entry.qtTendikP || 0;
+
+  const totalL = isPos ? porsiKecilL : (porsiKecilL + porsiBesarL);
+  const totalP = isPos ? (porsiKecilP + bumil + busui) : (porsiKecilP + porsiBesarP);
+
+  return {
+    porsiKecilL,
+    porsiKecilP,
+    porsiBesarL,
+    porsiBesarP,
+    totalL,
+    totalP,
+    totalSiswa: totalL + totalP,
+    guruL,
+    guruP,
+    tendikL,
+    tendikP,
+    totalStaf: guruL + guruP + tendikL + tendikP,
+  };
+}
+
 export function getAutoRekapTotals(entries: MbgPmEntry[]): AutoRekapTotals {
   return entries
     .filter((entry) => !entry.isSekolahLibur && !isSummaryOrCategoryRow(entry.institutionName))
     .reduce(
       (total, entry) => {
-        const isPos = entry.institutionType === 'posyandu';
-        const porsiKecilL = entry.qtPorsiKecilL || 0;
-        const porsiKecilP = entry.qtPorsiKecilP || 0;
-        const bumil = entry.qtBumil ?? (isPos ? entry.qtPorsiBesarL || 0 : 0);
-        const busui = entry.qtBusui ?? (isPos ? entry.qtPorsiBesarP || 0 : 0);
-        const porsiBesarL = isPos ? bumil : (entry.qtPorsiBesarL || 0);
-        const porsiBesarP = isPos ? busui : (entry.qtPorsiBesarP || 0);
-        const guruL = entry.qtGuruL || 0;
-        const guruP = entry.qtGuruP || 0;
-        const tendikL = entry.qtTendikL || 0;
-        const tendikP = entry.qtTendikP || 0;
+        const row = getPmRekapRow(entry);
 
-        const rowTotalL = isPos ? porsiKecilL : (porsiKecilL + porsiBesarL);
-        const rowTotalP = isPos ? (porsiKecilP + bumil + busui) : (porsiKecilP + porsiBesarP);
-
-        total.porsiKecilL += porsiKecilL;
-        total.porsiKecilP += porsiKecilP;
-        total.porsiBesarL += porsiBesarL;
-        total.porsiBesarP += porsiBesarP;
-        total.totalL += rowTotalL;
-        total.totalP += rowTotalP;
-        total.totalSiswa += (rowTotalL + rowTotalP);
-        total.guruL += guruL;
-        total.guruP += guruP;
-        total.tendikL += tendikL;
-        total.tendikP += tendikP;
-        total.totalStaf += (guruL + guruP + tendikL + tendikP);
+        total.porsiKecilL += row.porsiKecilL;
+        total.porsiKecilP += row.porsiKecilP;
+        total.porsiBesarL += row.porsiBesarL;
+        total.porsiBesarP += row.porsiBesarP;
+        total.totalL += row.totalL;
+        total.totalP += row.totalP;
+        total.totalSiswa += row.totalSiswa;
+        total.guruL += row.guruL;
+        total.guruP += row.guruP;
+        total.tendikL += row.tendikL;
+        total.tendikP += row.tendikP;
+        total.totalStaf += row.totalStaf;
         total.jumlah += entry.jumlah || 0;
         return total;
       },

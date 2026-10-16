@@ -1,5 +1,6 @@
 import informasiBahanData from './informasiBahanPangan.json';
 import akgReferenceData from './akgReference.json';
+import { isSummaryOrCategoryRow } from '@/utils/mbgPmFilter';
 
 // ============================================================================
 // MBG Constants — Labels, Templates, and Configuration
@@ -446,6 +447,33 @@ export function createDefaultOfficialPmEntries(
       updatedAt: new Date().toISOString(),
     };
   });
+}
+
+/**
+ * The PM rows that Produksi MBG and its PDF/DOCX exports show for a batch.
+ * Admin MBG's entries are used as entered; the official master only stands in
+ * when the batch has no usable rows (none at all, the old aggregate
+ * "Balita 1-5 Tahun" / "Bumil Ds." import, or no L/P split on any row).
+ * Never decide by row count: the admin adds and removes institutions.
+ */
+export function resolveEffectivePmEntries(
+  entries: import('../types/mbg').MbgPmEntry[],
+  batchId: string,
+  createdBy: string = 'system'
+): import('../types/mbg').MbgPmEntry[] {
+  const validEntries = (entries || []).filter((e) => !isSummaryOrCategoryRow(e.institutionName));
+  const hasNoUsableRows =
+    validEntries.length === 0 ||
+    validEntries.some((e) => {
+      const name = e.institutionName.toLowerCase();
+      return name.includes('balita 1-5 tahun') || name.includes('bumil ds.');
+    }) ||
+    validEntries.every((e) => (e.qtPorsiKecilL || 0) === 0 && (e.qtPorsiBesarL || 0) === 0 && (e.qtGuruL || 0) === 0);
+
+  if (hasNoUsableRows) {
+    return createDefaultOfficialPmEntries(batchId, createdBy) as unknown as import('../types/mbg').MbgPmEntry[];
+  }
+  return validEntries.map((e) => enrichPmEntryWithMaster(e));
 }
 
 import type { MbgDayMenu } from '@/types/mbg';

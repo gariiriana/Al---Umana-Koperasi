@@ -34,7 +34,7 @@ import { parseProductionSheetRows, parsePenerimaManfaatSheet, createEmptyReport 
 import { parsePesananBahanSheet } from '@/utils/pesananBahanSheetParser';
 import { updateBatchStatus, updateBatch, updateBatchCookingStatus } from '@/services/mbgAdminService';
 import { getJakartaDate } from '@/utils/date';
-import { isSummaryOrCategoryRow } from '@/utils/mbgPmFilter';
+import { getAutoRekapTotals, getPmRekapRow, isSummaryOrCategoryRow } from '@/utils/mbgPmFilter';
 import {
   MBG_BATCH_STATUS_CONFIG,
   NUTRIENTS_LIST,
@@ -44,7 +44,7 @@ import {
   getBahanPanganInfo,
   MBG_AKG_REFERENCE,
   DEFAULT_WEEKLY_SCHEDULE,
-  enrichPmEntryWithMaster,
+  resolveEffectivePmEntries,
   createDefaultOfficialPmEntries,
 } from '@/constants/mbgConstants';
 
@@ -128,37 +128,6 @@ interface ConfirmModalState {
 const standarPorsi: StandarPorsi[] = [];
 const standarResep: StandarResep[] = [];
 
-function getAutoRekapTotals(entries: MbgPmEntry[]) {
-  return entries.filter((entry) => !entry.isSekolahLibur && !isSummaryOrCategoryRow(entry.institutionName)).reduce(
-    (total, entry) => {
-      const porsiKecilL = entry.qtPorsiKecilL || 0;
-      const porsiKecilP = entry.qtPorsiKecilP || 0;
-      const porsiBesarL = entry.qtPorsiBesarL || 0;
-      const porsiBesarP = entry.qtPorsiBesarP || 0;
-      const bumil = entry.qtBumil || 0;
-      const busui = entry.qtBusui || 0;
-      const guruL = entry.qtGuruL || 0;
-      const guruP = entry.qtGuruP || 0;
-      const tendikL = entry.qtTendikL || 0;
-      const tendikP = entry.qtTendikP || 0;
-
-      total.porsiKecilL += porsiKecilL;
-      total.porsiKecilP += porsiKecilP;
-      total.porsiBesarL += porsiBesarL;
-      total.porsiBesarP += porsiBesarP;
-      total.totalL += porsiKecilL + porsiBesarL;
-      total.totalP += porsiKecilP + porsiBesarP + bumil + busui;
-      total.guruL += guruL;
-      total.guruP += guruP;
-      total.tendikL += tendikL;
-      total.tendikP += tendikP;
-      total.jumlah += entry.jumlah || 0;
-      return total;
-    },
-    { porsiKecilL: 0, porsiKecilP: 0, porsiBesarL: 0, porsiBesarP: 0, totalL: 0, totalP: 0, guruL: 0, guruP: 0, tendikL: 0, tendikP: 0, jumlah: 0 }
-  );
-}
-
 export function MbgProductionPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -190,7 +159,6 @@ export function MbgProductionPage() {
   const [confirmModal, setConfirmModal] = useState<ConfirmModalState | null>(null);
   const [confirmModalLoading, setConfirmModalLoading] = useState(false);
   const [showPmInfoModal, setShowPmInfoModal] = useState(false);
-  const [syncingPm, setSyncingPm] = useState(false);
 
   // Google Sheets & Excel Import States
   const [showSheetsImportModal, setShowSheetsImportModal] = useState(false);
@@ -610,35 +578,11 @@ export function MbgProductionPage() {
 
 
 
-  // Raw valid entries from Firestore (excluding headers/summaries)
-  const rawValidEntries = useMemo(
-    () => entries.filter((e) => !isSummaryOrCategoryRow(e.institutionName)),
-    [entries]
+  // Admin MBG's PM rows — the same rows the PDF/DOCX exports print.
+  const effectivePmEntries = useMemo(
+    () => resolveEffectivePmEntries(entries, selectedBatchId || '', user?.uid || 'system'),
+    [entries, selectedBatchId, user?.uid]
   );
-
-  // Check if current batch has crippled PM data (e.g. only 24 items, or contains aggregate Posyandu names, or all gender zeros)
-  const isBatchPmCrippled = useMemo(() => {
-    if (rawValidEntries.length === 0) return false;
-    return (
-      rawValidEntries.length !== 30 ||
-      rawValidEntries.some(
-        (e) =>
-          e.institutionName.toLowerCase().includes('balita 1-5 tahun') ||
-          e.institutionName.toLowerCase().includes('bumil ds.')
-      ) ||
-      rawValidEntries.every(
-        (e) => (e.qtPorsiKecilL || 0) === 0 && (e.qtPorsiBesarL || 0) === 0 && (e.qtGuruL || 0) === 0
-      )
-    );
-  }, [rawValidEntries]);
-
-  // Effective entries: guaranteed to always match Photo 4 (17 schools + 13 posyandu Cempaka 1-13 = 2.775 Porsi)
-  const effectivePmEntries = useMemo(() => {
-    if (rawValidEntries.length === 0 || isBatchPmCrippled) {
-      return createDefaultOfficialPmEntries(selectedBatchId || '', user?.uid || 'system') as unknown as MbgPmEntry[];
-    }
-    return rawValidEntries.map((e) => enrichPmEntryWithMaster(e));
-  }, [rawValidEntries, isBatchPmCrippled, selectedBatchId, user?.uid]);
 
   // Perhitungan totals format DATA PENERIMA MANFAAT (Sekolah, Posyandu, Gabungan)
   const schoolAutoRekapTotals = useMemo(
@@ -664,24 +608,10 @@ export function MbgProductionPage() {
     );
   }, [effectivePmEntries, pmTableSearch]);
 
-  // Handler to manually restore and sync official 30 PM institutions into Firestore
-  const handleRestoreOfficialPm = async () => {
-    if (!selectedBatchId) return;
-    try {
-      setSyncingPm(true);
-      const officialEntries = createDefaultOfficialPmEntries(selectedBatchId, user?.uid || 'system');
-      await replaceBatchEntries(selectedBatchId, officialEntries, { preserveBatchStatus: true });
-      showToast({
-        message: 'Data Penerima Manfaat berhasil disinkronkan resmi (17 Sekolah + 13 Posyandu = 2.775 Porsi)!',
-        variant: 'success',
-      });
-    } catch (err) {
-      console.error('Failed to restore official PM entries:', err);
-      showToast({ message: 'Gagal menyinkronkan data PM', variant: 'error' });
-    } finally {
-      setSyncingPm(false);
-    }
-  };
+  const posyanduPmCount = useMemo(
+    () => effectivePmEntries.filter((entry) => entry.institutionType === 'posyandu').length,
+    [effectivePmEntries]
+  );
 
   // Group PM entries by petugas (with deduplication by institutionName)
   const groupedEntries = useMemo(() => {
@@ -2903,16 +2833,6 @@ export function MbgProductionPage() {
                           <span className="text-emerald-900 bg-emerald-100/70 border border-emerald-300 px-3 py-1.5 rounded-xl shadow-2xs font-black">
                             Total Alokasi: {autoRekapTotals.jumlah.toLocaleString('id-ID')} Porsi
                           </span>
-                          <button
-                            type="button"
-                            onClick={handleRestoreOfficialPm}
-                            disabled={syncingPm}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
-                            title="Sinkronkan data PM batch ini sesuai master resmi 17 Sekolah + 13 Posyandu (2.775 Porsi)"
-                          >
-                            {syncingPm ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                            <span>Sinkronkan Data PM Lengkap</span>
-                          </button>
                         </div>
                       </div>
 
@@ -2996,10 +2916,7 @@ export function MbgProductionPage() {
                                         );
                                       }
 
-                                      const totalL = (entry.qtPorsiKecilL || 0) + (entry.qtPorsiBesarL || 0);
-                                      const totalP = (entry.qtPorsiKecilP || 0) + (entry.qtPorsiBesarP || 0) + (entry.qtBumil || 0) + (entry.qtBusui || 0);
-                                      const totalSiswa = totalL + totalP;
-                                      const totalStaf = (entry.qtGuruL || 0) + (entry.qtGuruP || 0) + (entry.qtTendikL || 0) + (entry.qtTendikP || 0);
+                                      const { porsiBesarL, porsiBesarP, totalL, totalP, totalSiswa, totalStaf } = getPmRekapRow(entry);
 
                                       return (
                                         <tr key={entry.id} className="border-b border-slate-200 text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors">
@@ -3015,8 +2932,8 @@ export function MbgProductionPage() {
                                           </td>
                                           <td className="border-r border-slate-200 p-1 text-center">{entry.qtPorsiKecilL || '—'}</td>
                                           <td className="border-r border-slate-200 p-1 text-center">{entry.qtPorsiKecilP || '—'}</td>
-                                          <td className="border-r border-slate-200 p-1 text-center">{entry.qtPorsiBesarL || '—'}</td>
-                                          <td className="border-r border-slate-200 p-1 text-center">{entry.qtPorsiBesarP || '—'}</td>
+                                          <td className="border-r border-slate-200 p-1 text-center">{porsiBesarL || '—'}</td>
+                                          <td className="border-r border-slate-200 p-1 text-center">{porsiBesarP || '—'}</td>
                                           <td className="border-r border-slate-200 bg-slate-50 px-2 py-1 text-center font-bold text-slate-700">{totalL || '—'}</td>
                                           <td className="border-r border-slate-200 bg-slate-50 px-2 py-1 text-center font-bold text-slate-700">{totalP || '—'}</td>
                                           <td className="border-r border-slate-300 bg-slate-100 px-2 py-1 text-center font-black text-slate-900">{totalSiswa || '—'}</td>
@@ -5561,15 +5478,15 @@ export function MbgProductionPage() {
                 <ul className="space-y-1.5 text-emerald-900/90 pl-1">
                   <li className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-600"></span>
-                    <span><strong>17 Sekolah</strong> (SPS Cempaka, TK, SD, SMP, MTs, SMA, SMK): <strong>2.247 Porsi</strong></span>
+                    <span><strong>{effectivePmEntries.length - posyanduPmCount} Sekolah</strong>: <strong>{schoolAutoRekapTotals.jumlah.toLocaleString('id-ID')} Porsi</strong></span>
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-purple-600"></span>
-                    <span><strong>13 Posyandu</strong> (Cempaka 1 s/d 13): <strong>528 Porsi</strong></span>
+                    <span><strong>{posyanduPmCount} Posyandu</strong>: <strong>{posyanduAutoRekapTotals.jumlah.toLocaleString('id-ID')} Porsi</strong></span>
                   </li>
                   <li className="flex items-center gap-2 font-black text-emerald-950 pt-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-                    <span>Grand Total Resmi: <strong>2.775 Porsi</strong></span>
+                    <span>Grand Total Resmi: <strong>{autoRekapTotals.jumlah.toLocaleString('id-ID')} Porsi</strong></span>
                   </li>
                 </ul>
               </div>
@@ -5589,7 +5506,7 @@ export function MbgProductionPage() {
                   </div>
                   <div className="bg-white p-2 rounded-xl border border-slate-200">
                     <span className="text-slate-400 block font-medium">Export PDF &amp; Word (DOCX)</span>
-                    <span className="font-bold text-slate-800">Format Resmi 30 Lembaga</span>
+                    <span className="font-bold text-slate-800">Format Resmi {effectivePmEntries.length} Lembaga</span>
                   </div>
                 </div>
               </div>
@@ -5602,18 +5519,6 @@ export function MbgProductionPage() {
                 className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-xs transition-colors cursor-pointer"
               >
                 Tutup
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowPmInfoModal(false);
-                  handleRestoreOfficialPm();
-                }}
-                disabled={syncingPm}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>Sinkronkan Master PM</span>
               </button>
             </div>
           </div>
