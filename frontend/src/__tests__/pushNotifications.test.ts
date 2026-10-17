@@ -54,9 +54,20 @@ describe("notifikasi task Super Admin", () => {
   it("task baru ke pemilik task, submit ke super_admin", () => {
     notifyTaskAssigned("uid-joko", "Rekap stok", "2026-10-12T15:00");
     expect(notify.mock.calls[0][0]).toEqual(["uid-joko"]);
+    expect(notify.mock.calls[0][1].title).toBe("Task baru dari Super Admin");
     expect(notify.mock.calls[0][1].link).toBe("/performance");
     notifyTaskSubmitted("Rekap stok", "Joko");
     expect(notify.mock.calls[1][0]).toEqual(["super_admin"]);
+    expect(notify.mock.calls[1][1].link).toBe("/super-admin/control-center");
+  });
+
+  it("task unit dari Kepala Unit, submit hanya ke Kepala Unit pemberinya", () => {
+    notifyTaskAssigned("uid-inas", "Rekap stok", "2026-10-12T15:00", "fish_n_kids");
+    expect(notify.mock.calls[0][0]).toEqual(["uid-inas"]);
+    expect(notify.mock.calls[0][1].title).toBe("Task baru dari Kepala Unit Fish n Kids");
+    notifyTaskSubmitted("Rekap stok", "Inas", "uid-prianka");
+    expect(notify.mock.calls[1][0]).toEqual(["uid-prianka"]);
+    expect(notify.mock.calls[1][1].link).toBe("/unit/control-center");
   });
 });
 

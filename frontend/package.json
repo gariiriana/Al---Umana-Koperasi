@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:rules": "vitest run --no-file-parallelism src/__tests__/courierRules.test.ts src/__tests__/jobDeskRules.test.ts src/__tests__/notificationRules.test.ts"
+    "test:rules": "vitest run --no-file-parallelism src/__tests__/courierRules.test.ts src/__tests__/jobDeskRules.test.ts src/__tests__/notificationRules.test.ts src/__tests__/unitRules.test.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.13.3",

@@ -134,6 +134,50 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'developer';
     }
 
+    // -------------------------------------------------------------------
+    // Unit Usaha (Fish n Kids, Kasma Tani, Toko Santri, …)
+    // -------------------------------------------------------------------
+    // Kepala Unit (`users.unitId` = unit yang dipimpin) hanya memberi task
+    // dan memantau anggota unitnya sendiri. Anggota tercatat di
+    // `users.unitIds`; satu orang boleh anggota beberapa unit. Mirrors
+    // frontend/src/constants/units.ts.
+    function isKepalaUnit() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && getUserRole() == 'kepala_unit';
+    }
+
+    function isUnitRole() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && getUserRole() in ['kepala_unit', 'tim_unit'];
+    }
+
+    function myUnitId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('unitId', '');
+    }
+
+    // Pemanggil adalah Kepala Unit dari `unitId`.
+    function leadsUnit(unitId) {
+      return isKepalaUnit() && unitId is string && unitId != '' && unitId == myUnitId();
+    }
+
+    // `uid` anggota tim `unitId`, jadi boleh menerima task unit itu.
+    function isUnitMember(uid, unitId) {
+      return uid is string
+        && exists(/databases/$(database)/documents/users/$(uid))
+        && unitId in get(/databases/$(database)/documents/users/$(uid)).data.get('unitIds', []);
+    }
+
+    // Kepala Unit dan anggota timnya boleh saling mengirim notifikasi task.
+    function sharesUnitWith(uid) {
+      return uid is string
+        && exists(/databases/$(database)/documents/users/$(uid))
+        && ((isKepalaUnit() && isUnitMember(uid, myUnitId()))
+          || (get(/databases/$(database)/documents/users/$(uid)).data.get('role', '') == 'kepala_unit'
+            && isUnitMember(request.auth.uid, get(/databases/$(database)/documents/users/$(uid)).data.get('unitId', ''))));
+    }
+
     function isMbgManager() { return isAdmin() || isSuperAdmin() || isAdminMbg() || isProduksiMbg() || isProduksiMbg2(); }
     function isMbgDeliveryTeam() { return isMbgManager() || isDistribusiMbg() || isKurirMbg(); }
     function isMbgStaff() { return isAdmin() || isDeveloper() || isSuperAdmin() || isAnyMbg() || isMoKatering() || isCoMoKatering(); }
@@ -409,14 +453,19 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     // Rules for profile syncing, registration, and role escalation prevention.
     match /users/{userId} {
-      allow get: if request.auth != null && (request.auth.uid == userId || isOrderStaff() || isSuperAdmin());
-      allow list: if isOrderStaff() || isSuperAdmin();
+      // Kepala Unit hanya melihat profil anggota unitnya (query unitIds array-contains).
+      allow get: if request.auth != null && (request.auth.uid == userId || isOrderStaff() || isSuperAdmin()
+        || (isKepalaUnit() && myUnitId() in resource.data.get('unitIds', [])));
+      allow list: if isOrderStaff() || isSuperAdmin()
+        || (isKepalaUnit() && myUnitId() in resource.data.get('unitIds', []));
 
       // Allow users to register/setup their own profile on first login/registration
       allow create: if request.auth != null
         && request.auth.uid == userId
         && request.resource.data.role == 'pelanggan'
-        && request.resource.data.email == request.auth.token.email;
+        && request.resource.data.email == request.auth.token.email
+        // Keanggotaan unit hanya diberikan admin, tidak bisa diisi sendiri saat daftar.
+        && !request.resource.data.keys().hasAny(['unitId', 'unitIds', 'unitPositions']);
 
       // Allow users to edit their own profile, but do not allow them to escalate/modify their own role
       allow update: if request.auth != null
@@ -443,12 +492,21 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    // Task dari Super Admin = satu-satunya sumber KPI (ketepatan waktu submit).
-    // Submit bersifat final: hanya pemilik task, sekali, dengan jam server
-    // (submittedAt == request.time) agar waktu submit tidak bisa dimanipulasi.
+    // Task dari Super Admin / Kepala Unit = satu-satunya sumber KPI (ketepatan
+    // waktu submit). Submit bersifat final: hanya pemilik task, sekali, dengan
+    // jam server (submittedAt == request.time) agar waktu submit tidak bisa
+    // dimanipulasi. Task unit membawa `unitId`; Kepala Unit hanya melihat dan
+    // membuat task unitnya sendiri, untuk anggota unitnya saja.
     match /ad_hoc_tasks/{taskId} {
-      allow read: if request.auth != null && (resource.data.assigneeId == request.auth.uid || isSuperAdmin());
-      allow create: if isSuperAdmin()
+      allow read: if request.auth != null && (resource.data.assigneeId == request.auth.uid || isSuperAdmin()
+        || leadsUnit(resource.data.get('unitId', '')));
+      allow create: if (isSuperAdmin()
+          || (leadsUnit(request.resource.data.get('unitId', ''))
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.assigneeId != request.auth.uid
+            && isUnitMember(request.resource.data.assigneeId, request.resource.data.unitId)
+            && request.resource.data.keys().hasOnly(['assigneeId', 'assigneeNameSnapshot', 'roleSnapshot', 'divisionSnapshot',
+              'unitId', 'title', 'instructions', 'deadline', 'createdBy', 'status', 'createdAt', 'updatedAt'])))
         && request.resource.data.status == 'pending'
         && request.resource.data.deadline is string
         && request.resource.data.deadline.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$');
@@ -474,7 +532,8 @@ service cloud.firestore {
         function parentTask() {
           return get(/databases/$(database)/documents/ad_hoc_tasks/$(taskId)).data;
         }
-        allow read: if request.auth != null && (isSuperAdmin() || parentTask().assigneeId == request.auth.uid);
+        allow read: if request.auth != null && (isSuperAdmin() || parentTask().assigneeId == request.auth.uid
+          || leadsUnit(parentTask().get('unitId', '')));
         allow create, update: if request.auth != null
           && parentTask().assigneeId == request.auth.uid
           && parentTask().get('submittedAt', null) == null
@@ -521,8 +580,11 @@ service cloud.firestore {
       // Staf internal boleh memberi notifikasi ke siapa saja; pelanggan hanya
       // ke admin (pesanan baru) atau ke dirinya sendiri (notifikasi uji).
       allow create: if request.auth != null && isValidNotification() && (
-        isOrderStaff() || isDeveloper()
-        || request.resource.data.recipientId in ['admin', request.auth.uid]
+        request.resource.data.recipientId in ['admin', request.auth.uid]
+        // Akun unit: hanya Kepala Unit ↔ anggota timnya (task baru / disubmit).
+        // Akun unit tidak dicek sebagai staf: rantai helper staf yang semuanya
+        // false melewati batas 1000 ekspresi rules.
+        || (isUnitRole() ? sharesUnitWith(request.resource.data.recipientId) : (isOrderStaff() || isDeveloper()))
       );
       // Penerima boleh menandai dibaca, baik notifikasi pribadi (uid) maupun
       // notifikasi untuk role-nya. Status dibaca notifikasi role berlaku untuk

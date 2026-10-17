@@ -7,7 +7,7 @@ import { deadlineMillis } from "@/utils/taskKpi";
 import { EVIDENCE_ORIGINAL_MAX_BYTES, splitIntoChunks } from "@/utils/evidencePhoto";
 import { notifyTaskAssigned, notifyTaskSubmitted } from "./flowNotifications";
 
-export type Division = "katering" | "mbg" | "general";
+export type Division = "katering" | "mbg" | "general" | "unit";
 
 export interface RoleAssignment {
   id: string; userId: string; role: string; division: Division; effectiveFrom?: unknown;
@@ -33,6 +33,8 @@ export interface AdHocTask {
   evidencePhotoBytes?: number;
   evidencePhotoType?: string;
   evidencePhotoName?: string;
+  /** Task dari Kepala Unit: unit asal task. Kosong = task dari Super Admin. */
+  unitId?: string;
   status: string; createdBy: string; createdAt?: unknown; submittedAt?: unknown;
 }
 
@@ -47,13 +49,17 @@ export const subscribeMyAdHocTasks = (userId: string, onData: (items: AdHocTask[
   onSnapshot(query(collection(db, "ad_hoc_tasks"), where("assigneeId", "==", userId)), (s) => onData(mapDocs<AdHocTask>(s)), onError);
 export const subscribeAllAdHocTasks = (onData: (items: AdHocTask[]) => void, onError?: (error: Error) => void) =>
   onSnapshot(collection(db, "ad_hoc_tasks"), (s) => onData(mapDocs<AdHocTask>(s)), onError);
+/** Kepala Unit: hanya task unitnya (rules menolak query tanpa filter unit). */
+export const subscribeUnitAdHocTasks = (unitId: string, onData: (items: AdHocTask[]) => void, onError?: (error: Error) => void) =>
+  onSnapshot(query(collection(db, "ad_hoc_tasks"), where("unitId", "==", unitId)), (s) => onData(mapDocs<AdHocTask>(s)), onError);
 
-export async function createAdHocTask(input: Pick<AdHocTask, "assigneeId" | "assigneeNameSnapshot" | "roleSnapshot" | "divisionSnapshot" | "title" | "instructions" | "deadline" | "createdBy">): Promise<void> {
+export async function createAdHocTask(input: Pick<AdHocTask, "assigneeId" | "assigneeNameSnapshot" | "roleSnapshot" | "divisionSnapshot" | "title" | "instructions" | "deadline" | "createdBy" | "unitId">): Promise<void> {
   if (!input.deadline || !/T\d{2}:\d{2}$/.test(input.deadline) || Number.isNaN(deadlineMillis(input.deadline))) {
     throw new Error("Deadline wajib diisi lengkap (tanggal dan jam).");
   }
-  await addDoc(collection(db, "ad_hoc_tasks"), { ...input, status: "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-  notifyTaskAssigned(input.assigneeId, input.title, input.deadline);
+  const { unitId, ...task } = input;
+  await addDoc(collection(db, "ad_hoc_tasks"), { ...task, ...(unitId ? { unitId } : {}), status: "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  notifyTaskAssigned(input.assigneeId, input.title, input.deadline, unitId);
 }
 
 /** Foto asli yang sudah diunggah ke evidence_chunks. */
@@ -117,7 +123,8 @@ export async function submitAdHocTask(taskId: string, evidenceNote: string, evid
     });
     return task;
   });
-  notifyTaskSubmitted(submitted.title, submitted.assigneeNameSnapshot);
+  // Task unit dilaporkan ke Kepala Unit pemberinya, bukan ke semua Super Admin.
+  notifyTaskSubmitted(submitted.title, submitted.assigneeNameSnapshot, submitted.unitId ? submitted.createdBy : undefined);
 }
 
 /** Super Admin: atur atas nama siapa akun ini (kosong = hapus). */

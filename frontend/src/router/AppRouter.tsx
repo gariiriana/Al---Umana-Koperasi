@@ -89,6 +89,7 @@ const MbgArchivePage = safeLazy(() => import("@/pages/mbg/MbgArchivePage").then(
 const MbgPersiapanPage = safeLazy(() => import("@/pages/mbg/MbgPersiapanPage").then(module => ({ default: module.MbgPersiapanPage })));
 const PerformancePage = safeLazy(() => import("@/pages/PerformancePage").then(module => ({ default: module.PerformancePage })));
 const SuperAdminControlCenterPage = safeLazy(() => import("@/pages/SuperAdminControlCenterPage").then(module => ({ default: module.SuperAdminControlCenterPage })));
+const UnitControlCenterPage = safeLazy(() => import("@/pages/SuperAdminControlCenterPage").then(module => ({ default: module.UnitControlCenterPage })));
 const DeveloperControlCenterPage = safeLazy(() => import("@/pages/DeveloperControlCenterPage").then(module => ({ default: module.DeveloperControlCenterPage })));
 
 import {
@@ -795,8 +796,9 @@ function RoutesTree() {
         }
       />
       <Route path="/mbg/checklist-bahan" element={<Navigate to="/mbg/persiapan" replace />} />
-      <Route path="/performance" element={<Protected><ShelledRoute pageTitle="Performa Saya" allowedRoles={["admin", "monitoring", "tim_produksi", "distribusi", "produksi_1", "distribusi_1", "mo_katering", "co_mo_katering", "admin_mbg", "produksi_mbg", "dokumentasi_produksiMBG", "distribusi_mbg", "MBG2", "mbg2", "produksi_mbg_2", "distribusi_mbg_2"]}><PerformancePage /></ShelledRoute></Protected>} />
+      <Route path="/performance" element={<Protected><ShelledRoute pageTitle="Performa Saya" allowedRoles={["admin", "monitoring", "tim_produksi", "distribusi", "produksi_1", "distribusi_1", "mo_katering", "co_mo_katering", "admin_mbg", "produksi_mbg", "dokumentasi_produksiMBG", "distribusi_mbg", "MBG2", "mbg2", "produksi_mbg_2", "distribusi_mbg_2", "kepala_unit", "tim_unit"]}><PerformancePage /></ShelledRoute></Protected>} />
       <Route path="/super-admin/control-center" element={<Protected><ShelledRoute pageTitle="SDM Performance Control Center" allowedRoles={["super_admin", "developer"]}><SuperAdminControlCenterPage /></ShelledRoute></Protected>} />
+      <Route path="/unit/control-center" element={<Protected><ShelledRoute pageTitle="KPI & Task Unit" allowedRoles={["kepala_unit"]}><UnitControlCenterPage /></ShelledRoute></Protected>} />
       <Route path="/developer/control-center" element={<Protected><ShelledRoute pageTitle="Developer Control Center" allowedRoles={["developer"]}><DeveloperControlCenterPage /></ShelledRoute></Protected>} />
 
       {/* Legacy redirects */}

@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { FileSpreadsheet, Plus, Search } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth, type UserProfile } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import {
-  changeUserRole, createAdHocTask, setAccountHolderName, subscribeAllAdHocTasks,
-  type AdHocTask,
+  changeUserRole, createAdHocTask, setAccountHolderName, subscribeAllAdHocTasks, subscribeUnitAdHocTasks,
+  type AdHocTask, type Division,
 } from "@/services/performanceService";
 import { AccountNamesTable } from "@/components/kpi/AccountNamesTable";
 import { accountNameHint, personName } from "@/utils/personName";
-import { ALL_ROLES, KPI_EXCLUDED_ROLES } from "@/constants/roles";
+import { ALL_ROLES, KPI_EXCLUDED_ROLES, UNIT_ROLES } from "@/constants/roles";
+import { unitName, unitPositionLabel } from "@/constants/units";
 import { AssessmentPanel, StatusPill, SummaryStrip, TaskDetail } from "@/components/kpi/TaskKpiWidgets";
 import { SidePanel } from "@/components/ui/SidePanel";
 import { PeriodSelect } from "@/components/ui/PeriodSelect";
@@ -26,13 +27,13 @@ import {
 
 /** `name` = nama orang pemegang akun (holderName), jatuh ke nama akun kalau belum diisi. */
 type Staff = UserProfile & { uid: string; name: string };
-type Division = "katering" | "mbg" | "general";
 type Tab = "task" | "kpi" | "akun";
 const CUSTOMER_ROLES = ["pelanggan", "customer"];
 type StatusFilter = "semua" | TaskKpiStatus;
 
 const divisionFor = (role: string): Division =>
-  role.includes("mbg") || role === "MBG2" || role === "mbg2"
+  UNIT_ROLES.includes(role) ? "unit"
+    : role.includes("mbg") || role === "MBG2" || role === "mbg2"
     ? "mbg" : ["admin", "monitoring", "super_admin"].includes(role) ? "general" : "katering";
 
 const inputCls = "rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]";
@@ -40,7 +41,11 @@ const btnPrimary = "inline-flex items-center gap-1.5 rounded-lg bg-[#FBBF24] px-
 const btnSecondary = "inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3.5 py-2 text-sm font-semibold text-[#374151] hover:bg-[#F9FAFB] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
 const th = "px-4 py-2.5 text-left text-xs font-semibold text-[#6B7280]";
 
-export function SuperAdminControlCenterPage() {
+/**
+ * Control Center KPI & Task. Tanpa `unitId`: Super Admin, seluruh staf koperasi
+ * (akun unit usaha tidak ikut). Dengan `unitId`: Kepala Unit, hanya tim unit itu.
+ */
+export function SuperAdminControlCenterPage({ unitId }: { unitId?: string }) {
   const { user } = useAuth();
   const { showToast } = useToast();
   const now = useNow();
@@ -61,18 +66,33 @@ export function SuperAdminControlCenterPage() {
   const [error, setError] = useState("");
 
   // Akun tanpa displayName (mis. baru dibuat) diberi nama cadangan supaya pencarian/sort tidak crash.
-  useEffect(() => onSnapshot(collection(db, "users"), (s) => setStaff(s.docs.map((d) => {
-    const data = d.data() as Partial<Staff>;
-    return { ...data, uid: d.id, displayName: data.displayName || data.email || "Tanpa Nama", role: data.role ?? "", name: personName(data) } as Staff;
-  })), (e) => setError(e.message)), []);
-  useEffect(() => subscribeAllAdHocTasks(setTasks, (e) => setError(e.message)), []);
+  // Kepala Unit hanya boleh membaca anggota unitnya (dijaga rules), jadi query-nya per unit.
+  useEffect(() => {
+    const users = unitId ? query(collection(db, "users"), where("unitIds", "array-contains", unitId)) : collection(db, "users");
+    return onSnapshot(users, (s) => setStaff(s.docs.map((d) => {
+      const data = d.data() as Partial<Staff>;
+      return { ...data, uid: d.id, displayName: data.displayName || data.email || "Tanpa Nama", role: data.role ?? "", name: personName(data) } as Staff;
+    }).filter((s) => unitId || !UNIT_ROLES.includes(s.role))), (e) => setError(e.message));
+  }, [unitId]);
+  useEffect(() => {
+    const onError = (e: Error) => setError(e.message);
+    // Task unit usaha dipantau Kepala Unit masing-masing, bukan di Control Center Super Admin.
+    return unitId ? subscribeUnitAdHocTasks(unitId, setTasks, onError)
+      : subscribeAllAdHocTasks((all) => setTasks(all.filter((t) => !t.unitId)), onError);
+  }, [unitId]);
 
   const periode = monthLabel(month);
   const kpiStaff = useMemo(() => staff.filter((s) => !KPI_EXCLUDED_ROLES.includes(s.role)), [staff]);
   const staffById = useMemo(() => new Map(staff.map((s) => [s.uid, s])), [staff]);
   const nameOf = useCallback((t: AdHocTask) => staffById.get(t.assigneeId)?.name ?? t.assigneeNameSnapshot, [staffById]);
   const internalAccounts = useMemo(() => staff.filter((s) => !CUSTOMER_ROLES.includes(s.role)), [staff]);
-  const roleOf = useCallback((t: AdHocTask) => staffById.get(t.assigneeId)?.role ?? t.roleSnapshot, [staffById]);
+  // Unit: dikelompokkan per jabatan di unit itu (Anggota Utama/Pengabdian); Super Admin: per role akun.
+  const groupOf = useCallback((p: Staff) => (unitId ? p.unitPositions?.[unitId] ?? "" : p.role), [unitId]);
+  const groupLabel = useCallback((group: string) => (unitId ? unitPositionLabel(group) : roleLabel(group)), [unitId]);
+  const groupOfTask = useCallback((t: AdHocTask) => {
+    const person = staffById.get(t.assigneeId);
+    return person ? groupOf(person) : unitId ? "" : t.roleSnapshot;
+  }, [staffById, groupOf, unitId]);
 
   const monthTasks = useMemo(() => tasks.filter((t) => taskMonthKey(t) === month), [tasks, month]);
   const tasksByUser = useMemo(() => {
@@ -97,18 +117,18 @@ export function SuperAdminControlCenterPage() {
   }, [monthTasks, statusFilter, taskSearch, now, nameOf]);
 
   // ── Rekap KPI ──
-  const kpiRoles = useMemo(() => [...new Set(kpiStaff.map((s) => s.role))].sort((a, b) => roleLabel(a).localeCompare(roleLabel(b))), [kpiStaff]);
+  const kpiRoles = useMemo(() => [...new Set(kpiStaff.map(groupOf))].sort((a, b) => groupLabel(a).localeCompare(groupLabel(b))), [kpiStaff, groupOf, groupLabel]);
   const kpiRows = useMemo(() => {
     const q = personSearch.trim().toLowerCase();
     return kpiStaff
-      .filter((p) => roleFilter === "semua" || p.role === roleFilter)
+      .filter((p) => roleFilter === "semua" || groupOf(p) === roleFilter)
       .filter((p) => !q || p.name.toLowerCase().includes(q) || p.displayName.toLowerCase().includes(q))
       .map((p) => {
         const summary = summarizeTasks(tasksByUser.get(p.uid) ?? [], now);
         return { person: p, summary, assessment: assessKpi(summary, p.name, periode) };
       })
       .sort((a, b) => (b.assessment.nilai ?? -1) - (a.assessment.nilai ?? -1) || b.summary.total - a.summary.total || a.person.name.localeCompare(b.person.name, "id"));
-  }, [kpiStaff, roleFilter, personSearch, tasksByUser, now, periode]);
+  }, [kpiStaff, roleFilter, groupOf, personSearch, tasksByUser, now, periode]);
 
   // ── Panel ──
   const selectedTask = useMemo(() => tasks.find((t) => t.id === selectedTaskId) ?? null, [tasks, selectedTaskId]);
@@ -120,7 +140,8 @@ export function SuperAdminControlCenterPage() {
 
   const openPerson = (uid: string) => { setSelectedPersonId(uid); setNewRole(staffById.get(uid)?.role ?? ""); };
 
-  const assignees: TaskAssignee[] = useMemo(() => kpiStaff.map((p) => ({ uid: p.uid, displayName: p.name, role: p.role })), [kpiStaff]);
+  // `role` di sini hanya untuk pengelompokan di modal; role akun asli diambil lagi saat task dibuat.
+  const assignees: TaskAssignee[] = useMemo(() => kpiStaff.map((p) => ({ uid: p.uid, displayName: p.name, role: groupOf(p) })), [kpiStaff, groupOf]);
   const doSaveHolder = async (uid: string, holderName: string) => {
     try {
       await setAccountHolderName(uid, holderName);
@@ -133,7 +154,8 @@ export function SuperAdminControlCenterPage() {
   };
   const doCreate = async ({ assignee, title, instructions, deadline }: { assignee: TaskAssignee; title: string; instructions: string; deadline: string }) => {
     if (!user) throw new Error("Sesi login sudah berakhir.");
-    await createAdHocTask({ assigneeId: assignee.uid, assigneeNameSnapshot: assignee.displayName, roleSnapshot: assignee.role, divisionSnapshot: divisionFor(assignee.role), title, instructions, deadline, createdBy: user.uid });
+    const role = staffById.get(assignee.uid)?.role ?? assignee.role;
+    await createAdHocTask({ assigneeId: assignee.uid, assigneeNameSnapshot: assignee.displayName, roleSnapshot: role, divisionSnapshot: divisionFor(role), title, instructions, deadline, createdBy: user.uid, unitId });
     showToast({ message: `Task terkirim ke ${assignee.displayName}`, variant: "success" });
     const key = deadline.slice(0, 7);
     if (key !== month) setMonth(key);
@@ -147,7 +169,7 @@ export function SuperAdminControlCenterPage() {
   };
   const sheetFor = (uid: string, list: AdHocTask[]): KpiPersonSheet => {
     const p = staffById.get(uid);
-    return { name: p?.name || list[0]?.assigneeNameSnapshot || "Tanpa Nama", role: roleLabel(p?.role || list[0]?.roleSnapshot || "-"), tasks: list };
+    return { name: p?.name || list[0]?.assigneeNameSnapshot || "Tanpa Nama", role: p ? groupLabel(groupOf(p)) : roleLabel(list[0]?.roleSnapshot || "-"), tasks: list };
   };
   const doExport = (people: KpiPersonSheet[]) => { try { exportKpiExcel(people, month, now); setError(""); } catch (e) { setError(e instanceof Error ? e.message : "Gagal export Excel."); } };
 
@@ -157,8 +179,10 @@ export function SuperAdminControlCenterPage() {
       {/* Header */}
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#111827]">KPI & Task</h1>
-          <p className="mt-0.5 text-sm text-[#6B7280]">Beri task ke personel dan pantau ketepatan waktu penyelesaiannya.</p>
+          <h1 className="text-2xl font-bold text-[#111827]">{unitId ? `KPI & Task Unit ${unitName(unitId)}` : "KPI & Task"}</h1>
+          <p className="mt-0.5 text-sm text-[#6B7280]">
+            {unitId ? "Beri task ke tim unitmu dan pantau ketepatan waktu penyelesaiannya." : "Beri task ke personel dan pantau ketepatan waktu penyelesaiannya."}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <PeriodSelect value={month} onChange={setMonth} today={today} />
@@ -184,7 +208,8 @@ export function SuperAdminControlCenterPage() {
 
       {/* Tabs */}
       <div className="mt-6 flex gap-6 border-b border-[#E5E7EB]">
-        {([["task", `Daftar Task`, monthTasks.length], ["kpi", "Rekap KPI per Orang", kpiStaff.length], ["akun", "Akun & Nama", internalAccounts.length]] as const).map(([key, label, n]) => (
+        {([["task", `Daftar Task`, monthTasks.length], ["kpi", "Rekap KPI per Orang", kpiStaff.length], ["akun", "Akun & Nama", internalAccounts.length]] as const)
+          .filter(([key]) => !unitId || key !== "akun").map(([key, label, n]) => (
           <button key={key} type="button" onClick={() => setTab(key)}
             className={`-mb-px border-b-2 pb-2.5 text-sm font-semibold transition-colors cursor-pointer ${tab === key ? "border-[#111827] text-[#111827]" : "border-transparent text-[#6B7280] hover:text-[#111827]"}`}>
             {label} <span className="ml-1 text-xs font-medium text-[#9CA3AF]">{n}</span>
@@ -244,7 +269,7 @@ export function SuperAdminControlCenterPage() {
                         </td>
                         <td className="hidden px-4 py-3 align-top md:table-cell">
                           <p className="text-sm text-[#111827]">{nameOf(t)}</p>
-                          <p className="text-xs text-[#6B7280]">{roleLabel(roleOf(t))}</p>
+                          <p className="text-xs text-[#6B7280]">{groupLabel(groupOfTask(t))}</p>
                         </td>
                         <td className="hidden whitespace-nowrap px-4 py-3 align-top text-sm text-[#374151] md:table-cell">{formatDeadline(t.deadline)}</td>
                         <td className="hidden whitespace-nowrap px-4 py-3 align-top text-sm text-[#374151] lg:table-cell">
@@ -269,8 +294,8 @@ export function SuperAdminControlCenterPage() {
             <p className="text-sm text-[#6B7280]">Nilai = 70% ketepatan waktu + 20% penyelesaian + 10% keterlambatan. Klik nama untuk detail.</p>
             <div className="flex gap-2">
               <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className={`${inputCls} cursor-pointer`}>
-                <option value="semua">Semua role</option>
-                {kpiRoles.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
+                <option value="semua">{unitId ? "Semua jabatan" : "Semua role"}</option>
+                {kpiRoles.map((r) => <option key={r} value={r}>{groupLabel(r)}</option>)}
               </select>
               <label className="relative flex-1 sm:flex-none">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
@@ -300,7 +325,7 @@ export function SuperAdminControlCenterPage() {
                     <td className="px-4 py-3">
                       <p className="text-sm font-semibold text-[#111827]">{person.name}</p>
                       <p className="text-xs text-[#6B7280]">
-                        {roleLabel(person.role)}
+                        {groupLabel(groupOf(person))}
                         {accountNameHint(person) && <span className="text-[#9CA3AF]"> · akun {accountNameHint(person)}</span>}
                       </p>
                     </td>
@@ -334,7 +359,7 @@ export function SuperAdminControlCenterPage() {
       {/* ── Panel: detail orang ── */}
       <SidePanel open={!!selectedPerson && !!personAssessment} onClose={() => setSelectedPersonId(null)}
         title={selectedPerson?.name ?? ""}
-        subtitle={selectedPerson ? `${roleLabel(selectedPerson.role)}${accountNameHint(selectedPerson) ? ` · akun ${accountNameHint(selectedPerson)}` : ""} · ${periode}` : ""}
+        subtitle={selectedPerson ? `${groupLabel(groupOf(selectedPerson))}${accountNameHint(selectedPerson) ? ` · akun ${accountNameHint(selectedPerson)}` : ""} · ${periode}` : ""}
         footer={selectedPerson && (
           <div className="flex justify-end gap-2">
             <button type="button" className={btnSecondary} disabled={personTasks.length === 0} onClick={() => doExport([sheetFor(selectedPerson.uid, personTasks)])}>
@@ -371,30 +396,41 @@ export function SuperAdminControlCenterPage() {
               )}
             </section>
 
-            <section>
-              <h3 className="mb-2 text-sm font-semibold text-[#111827]">Pindahkan role</h3>
-              <div className="flex gap-2">
-                <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className={`${inputCls} flex-1 cursor-pointer`}>
-                  {(ALL_ROLES as readonly string[]).filter((r) => !["customer", "pelanggan", "super_admin"].includes(r)).map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
-                </select>
-                <button type="button" onClick={doChangeRole} className={btnSecondary}
-                  disabled={busy || newRole === selectedPerson.role || selectedPerson.uid === user?.uid}>
-                  Simpan
-                </button>
-              </div>
-            </section>
+            {!unitId && (
+              <section>
+                <h3 className="mb-2 text-sm font-semibold text-[#111827]">Pindahkan role</h3>
+                <div className="flex gap-2">
+                  <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className={`${inputCls} flex-1 cursor-pointer`}>
+                    {(ALL_ROLES as readonly string[]).filter((r) => !["customer", "pelanggan", "super_admin"].includes(r)).map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
+                  </select>
+                  <button type="button" onClick={doChangeRole} className={btnSecondary}
+                    disabled={busy || newRole === selectedPerson.role || selectedPerson.uid === user?.uid}>
+                    Simpan
+                  </button>
+                </div>
+              </section>
+            )}
           </div>
         )}
       </SidePanel>
 
       {/* ── Panel: detail task ── */}
       <SidePanel open={!!selectedTask} onClose={() => setSelectedTaskId(null)}
-        title={selectedTask?.title ?? ""} subtitle={selectedTask ? `${nameOf(selectedTask)} · ${roleLabel(roleOf(selectedTask))}` : ""}>
+        title={selectedTask?.title ?? ""} subtitle={selectedTask ? `${nameOf(selectedTask)} · ${groupLabel(groupOfTask(selectedTask))}` : ""}>
         {selectedTask && <TaskDetail task={selectedTask} now={now} />}
       </SidePanel>
 
       <CreateTaskModal open={createFor !== undefined} onClose={() => setCreateFor(undefined)}
-        people={assignees} defaultAssigneeId={createFor} roleLabel={roleLabel} onCreate={doCreate} />
+        people={assignees} defaultAssigneeId={createFor} roleLabel={groupLabel} onCreate={doCreate} />
     </div>
   );
+}
+
+/** Kepala Unit: Control Center yang sama, hanya untuk tim unit yang dipimpinnya. */
+export function UnitControlCenterPage() {
+  const { profile } = useAuth();
+  if (!profile?.unitId) {
+    return <p className="mx-auto max-w-xl px-4 py-14 text-center text-sm text-[#6B7280]">Akun ini belum terhubung ke unit mana pun. Hubungi admin.</p>;
+  }
+  return <SuperAdminControlCenterPage unitId={profile.unitId} />;
 }

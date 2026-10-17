@@ -70,6 +70,8 @@ export function AppShell({
     distribusi: "Distribusi",
     monitoring: "Monitoring",
     kurir: "Kurir",
+    kepala_unit: "Kepala Unit",
+    tim_unit: "Tim Unit",
   };
 
   return (

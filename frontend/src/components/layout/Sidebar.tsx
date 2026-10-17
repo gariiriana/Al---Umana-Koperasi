@@ -44,6 +44,7 @@ const LABELS_DICT = {
     "/mbg/distribution": "Distribusi MBG",
     "/mbg/persiapan": "Persiapan",
     "/mbg/delivery": "Kurir MBG",
+    "/unit/control-center": "KPI & Task Unit",
     "/performance": "Performa Saya",
     "/super-admin/control-center": "Control Center SDM",
     "/developer/control-center": "Developer Control",
@@ -70,6 +71,7 @@ const LABELS_DICT = {
     "/mbg/distribution": "MBG Distribution",
     "/mbg/persiapan": "Preparation",
     "/mbg/delivery": "MBG Delivery",
+    "/unit/control-center": "Unit KPI & Tasks",
     "/performance": "My Performance",
     "/super-admin/control-center": "SDM Control Center",
     "/developer/control-center": "Developer Control",
@@ -124,6 +126,9 @@ const roleBadge: Record<string, string> = {
   dokumentasi_produksiMBG: "Dokumentasi MBG",
   distribusi_mbg: "Distribusi MBG",
   kurir_mbg: "Kurir MBG",
+  // Unit usaha
+  kepala_unit: "Kepala Unit",
+  tim_unit: "Tim Unit",
 };
 
 export function Sidebar({

@@ -12,6 +12,7 @@ import {
   ShoppingCart,
   Truck,
   Trophy,
+  Users,
   UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
@@ -47,6 +48,8 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/mbg/distribution", label: "Distribusi MBG", icon: ClipboardCheck },
   { to: "/mbg/persiapan", label: "Persiapan", icon: ClipboardCheck },
   { to: "/mbg/delivery", label: "Kurir MBG", icon: Truck },
+  // --- Unit usaha ---
+  { to: "/unit/control-center", label: "KPI & Task Unit", icon: Users },
   { to: "/performance", label: "Performa Saya", icon: Trophy },
   { to: "/super-admin/control-center", label: "Control Center SDM", icon: ShieldCheck },
   { to: "/developer/control-center", label: "Developer Control", icon: ShieldCheck },
@@ -86,6 +89,7 @@ export const MOBILE_SHORT_LABELS: Record<string, string> = {
   "/mbg/distribution": "Distribusi",
   "/mbg/persiapan": "Persiapan",
   "/mbg/delivery": "Kurir",
+  "/unit/control-center": "KPI Unit",
   "/performance": "Performa",
   "/super-admin/control-center": "KPI",
   "/developer/control-center": "Developer",

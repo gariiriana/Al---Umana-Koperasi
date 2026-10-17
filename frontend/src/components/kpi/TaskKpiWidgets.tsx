@@ -5,6 +5,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { loadEvidenceOriginal, type AdHocTask } from "@/services/performanceService";
+import { unitName } from "@/constants/units";
 import { formatBytes } from "@/utils/evidencePhoto";
 import {
   KPI_STATUS_LABEL, formatDeadline, formatDuration, formatWib, lateMinutes, taskKpiStatus, toMillis,
@@ -93,6 +94,7 @@ export function TaskDetail({ task, now, assigneeName }: { task: AdHocTask; now: 
   const submitted = toMillis(task.submittedAt);
   const rows: [string, ReactNode][] = [
     ...(assigneeName ? [["Untuk", assigneeName] as [string, ReactNode]] : []),
+    ...(task.unitId ? [["Unit", unitName(task.unitId)] as [string, ReactNode]] : []),
     ["Status", <StatusPill status={status} />],
     ["Deadline", formatDeadline(task.deadline)],
     ["Disubmit", Number.isNaN(submitted) ? "Belum submit" : formatWib(submitted)],

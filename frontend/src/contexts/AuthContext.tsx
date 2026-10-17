@@ -28,9 +28,16 @@ export interface UserProfile {
   role: "admin" | "tim_produksi" | "distribusi" | "monitoring" | "kurir" | "pelanggan"
     | "produksi_1" | "distribusi_1" | "produksi_2" | "distribusi_2" | "mo_katering" | "co_mo_katering"
     | "admin_mbg" | "produksi_mbg" | "distribusi_mbg" | "kurir_mbg"
-    | "MBG2" | "mbg2" | "produksi_mbg_2" | "distribusi_mbg_2" | "dokumentasi_produksiMBG" | "super_admin" | "developer";
+    | "MBG2" | "mbg2" | "produksi_mbg_2" | "distribusi_mbg_2" | "dokumentasi_produksiMBG" | "super_admin" | "developer"
+    | "kepala_unit" | "tim_unit";
   /** Nama orang yang memegang akun ini, diisi Super Admin (akun dipakai per role). */
   holderName?: string;
+  /** Kepala Unit: unit usaha yang dipimpin (lihat constants/units.ts). */
+  unitId?: string;
+  /** Unit tempat akun ini menjadi anggota tim (menerima task Kepala Unit-nya). */
+  unitIds?: string[];
+  /** Jabatan per unit anggota, mis. { toko_santri: "anggota_utama" }. */
+  unitPositions?: Record<string, string>;
   createdAt?: unknown;
   /** Optional delivery address saved during checkout for auto-fill. */
   savedDeliveryAddress?: string;

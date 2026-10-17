@@ -9,6 +9,7 @@
 
 import { getDocFromCache, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { unitName } from "@/constants/units";
 import { notifyQuietly, type NotificationType } from "./notificationWriter";
 import type { MbgBatchStatus, MbgProductionCookingStatus } from "@/types/mbg";
 
@@ -96,19 +97,23 @@ export function notifyJobDeskReviewed(context: JobDeskContext, approved: boolean
 }
 
 // ---------------------------------------------------------------------------
-// Task Super Admin (KPI)
+// Task Super Admin / Kepala Unit (KPI)
 // ---------------------------------------------------------------------------
 
-export function notifyTaskAssigned(assigneeId: string, title: string, deadline?: string): void {
+/** `unitId` diisi untuk task dari Kepala Unit. */
+export function notifyTaskAssigned(assigneeId: string, title: string, deadline?: string, unitId?: string): void {
   const due = deadline ? new Date(deadline) : null;
   const dueText = due && !Number.isNaN(due.getTime())
     ? ` · deadline ${due.toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
     : "";
-  send([assigneeId], "task", "Task baru dari Super Admin", `${title}${dueText}`, "/performance");
+  const from = unitId ? `Kepala Unit ${unitName(unitId)}` : "Super Admin";
+  send([assigneeId], "task", `Task baru dari ${from}`, `${title}${dueText}`, "/performance");
 }
 
-export function notifyTaskSubmitted(title: string, assigneeName?: string): void {
-  send(["super_admin"], "task", `${assigneeName || "Petugas"} mengirim task`, title, "/super-admin/control-center");
+/** Task unit → uid Kepala Unit pemberi task; task Super Admin → semua Super Admin. */
+export function notifyTaskSubmitted(title: string, assigneeName?: string, kepalaUnitUid?: string): void {
+  send([kepalaUnitUid ?? "super_admin"], "task", `${assigneeName || "Petugas"} mengirim task`, title,
+    kepalaUnitUid ? "/unit/control-center" : "/super-admin/control-center");
 }
 
 // ---------------------------------------------------------------------------

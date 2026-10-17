@@ -19,6 +19,8 @@ import { useNow } from "@/hooks/useNow";
 import { getJakartaDate } from "@/utils/date";
 import { personName } from "@/utils/personName";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
+import { UNIT_ROLES } from "@/constants/roles";
+import { unitName } from "@/constants/units";
 import {
   assessKpi, deadlineMillis, formatDeadline, formatDuration, isSubmitted, monthLabel, summarizeTasks, taskKpiStatus, taskMonthKey,
 } from "@/utils/taskKpi";
@@ -59,6 +61,7 @@ export function PerformancePage() {
   }, [user]);
 
   const name = profile ? personName(profile) : "Tim Al Umana";
+  const taskSource = profile && UNIT_ROLES.includes(profile.role) ? "Kepala Unit" : "Super Admin";
   const periode = monthLabel(month);
   const monthTasks = useMemo(() => tasks.filter((t) => taskMonthKey(t) === month).sort((a, b) => (a.deadline ?? "").localeCompare(b.deadline ?? "")), [tasks, month]);
   const openTasks = useMemo(() => tasks.filter((t) => !isSubmitted(t) && taskMonthKey(t) !== null).sort((a, b) => (a.deadline ?? "").localeCompare(b.deadline ?? "")), [tasks]);
@@ -105,7 +108,7 @@ export function PerformancePage() {
     <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <h1 className="text-2xl font-bold text-[#111827]">Performa Saya</h1>
-        <p className="mt-0.5 text-sm text-[#6B7280]">Halo, {name}. KPI kamu dihitung dari ketepatan waktu submit task dari Super Admin.</p>
+        <p className="mt-0.5 text-sm text-[#6B7280]">Halo, {name}. KPI kamu dihitung dari ketepatan waktu submit task dari {taskSource}.</p>
       </div>
       <PeriodSelect value={month} onChange={setMonth} today={today} />
     </header>
@@ -125,6 +128,7 @@ export function PerformancePage() {
                   <p className="text-sm font-semibold text-[#111827]">{t.title}</p>
                   <p className="mt-0.5 line-clamp-1 text-xs text-[#6B7280]">{t.instructions}</p>
                   <p className="mt-1 text-xs">
+                    {t.unitId && <span className="mr-2 font-semibold text-[#374151]">{unitName(t.unitId)}</span>}
                     <span className="text-[#374151]">Deadline {formatDeadline(t.deadline)}</span>
                     <span className={`ml-2 font-semibold ${left.late ? "text-[#B91C1C]" : left.urgent ? "text-[#B45309]" : "text-[#6B7280]"}`}>{left.text}</span>
                   </p>
@@ -151,7 +155,7 @@ export function PerformancePage() {
             <h3 className="text-sm font-semibold text-[#111827]">Task {periode}</h3>
           </div>
           {monthTasks.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-[#6B7280]">Belum ada task dari Super Admin untuk {periode}.</p>
+            <p className="px-4 py-8 text-center text-sm text-[#6B7280]">Belum ada task dari {taskSource} untuk {periode}.</p>
           ) : (
             <ul className="max-h-[420px] divide-y divide-[#F3F4F6] overflow-y-auto">
               {monthTasks.map((t) => (

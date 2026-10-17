@@ -198,7 +198,27 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/mbg/delivery",
     "/mbg/persiapan",
   ],
+
+  // ==========================================================================
+  // Unit Usaha (Fish n Kids, Kasma Tani, Toko Santri, …) — lihat constants/units.ts
+  // ==========================================================================
+
+  /**
+   * Kepala Unit: memberi task dan memantau task & KPI anggota unitnya sendiri.
+   * Performa Saya tetap ada untuk task dari unit lain tempat ia menjadi anggota.
+   */
+  kepala_unit: ["/unit/control-center"],
+
+  /** Tim Unit: mengerjakan task dari Kepala Unit-nya (menu Performa Saya). */
+  tim_unit: [],
 };
+
+/**
+ * Role unit usaha. Tidak masuk ALL_ROLES: akun unit butuh `unitId`/`unitIds`,
+ * jadi tidak boleh dibuat lewat dropdown "Pindahkan role" Super Admin, dan
+ * notifikasinya selalu per uid (tidak ada broadcast role ke Worker push).
+ */
+export const UNIT_ROLES: readonly string[] = ["kepala_unit", "tim_unit"];
 
 /**
  * Role yang tidak pernah diberi task oleh Super Admin, jadi tidak punya KPI:
@@ -240,6 +260,8 @@ export const ADMIN_SHELL_ROLES = [
   "mbg2",
   "produksi_mbg_2",
   "distribusi_mbg_2",
+  "kepala_unit",
+  "tim_unit",
 ] as const;
 
 export const ALL_ROLES = [
@@ -297,4 +319,7 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   mbg2: "/katering/jobdesk",
   produksi_mbg_2: "/katering/jobdesk",
   distribusi_mbg_2: "/katering/jobdesk",
+  // Unit usaha
+  kepala_unit: "/unit/control-center",
+  tim_unit: "/performance",
 };
