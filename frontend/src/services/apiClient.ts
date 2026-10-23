@@ -100,6 +100,7 @@ export async function apiRequest<T = unknown>(
       }
       return await parseResponse<T>(res);
     } catch (err) {
+      if (err instanceof ApiError && err.status < 500) throw err;
       lastError = err;
       if (attempt < maxRetries) {
         attempt += 1;

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 import { initializeTestEnvironment, assertFails, assertSucceeds, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
+import { Bytes, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 
 // Run with `npm run test:rules` inside the Firebase emulator; ordinary unit tests skip this suite.
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('unit usaha: Kepala Unit hanya mengelola timnya sendiri', () => {
@@ -117,6 +117,23 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('unit usaha: Kepala Unit h
     await assertFails(updateDoc(doc(dbAs('prianka'), 'ad_hoc_tasks', 't_inas'), { deadline: '2027-01-01T17:00' }));
     await assertSucceeds(submit('inas', 't_inas'));
     await assertSucceeds(submit('nabila', 't_nabila'));
+  });
+
+  it('isolates upload chunks, validates their IDs, and freezes them after submission', async () => {
+    const uploadId = 'abcdefghijklmnopqrst';
+    const chunk = { index: 0, total: 1, data: Bytes.fromUint8Array(new Uint8Array([1, 2])), uploadedBy: 'inas', createdAt: serverTimestamp() };
+    const ref = doc(dbAs('inas'), 'ad_hoc_tasks', 't_inas', 'evidence_chunks', `${uploadId}_0`);
+    await assertSucceeds(setDoc(ref, chunk));
+    await assertSucceeds(setDoc(doc(dbAs('inas'), 'ad_hoc_tasks', 't_inas', 'evidence_chunks', '0'), chunk));
+    await assertFails(setDoc(doc(dbAs('fuza'), 'ad_hoc_tasks', 't_inas', 'evidence_chunks', `${uploadId}_0`), { ...chunk, uploadedBy: 'fuza' }));
+    await assertFails(setDoc(doc(dbAs('inas'), 'ad_hoc_tasks', 't_inas', 'evidence_chunks', `${uploadId}_1`), chunk));
+    await assertFails(setDoc(doc(dbAs('inas'), 'ad_hoc_tasks', 't_inas', 'evidence_chunks', 'invalid_0'), chunk));
+    const submission = { status: 'submitted', evidenceNote: 'Selesai', submittedAt: serverTimestamp(), evidencePhotoUploadId: uploadId, evidencePhotoChunks: 1, evidencePhotoBytes: 2 };
+    await assertFails(updateDoc(doc(dbAs('inas'), 'ad_hoc_tasks', 't_inas'), { ...submission, evidencePhotoUploadId: 'invalid' }));
+    await assertSucceeds(updateDoc(doc(dbAs('inas'), 'ad_hoc_tasks', 't_inas'), submission));
+    await assertFails(setDoc(ref, chunk));
+    await assertSucceeds(getDoc(doc(dbAs('prianka'), 'ad_hoc_tasks', 't_inas', 'evidence_chunks', `${uploadId}_0`)));
+    await assertFails(getDoc(doc(dbAs('mahdi'), 'ad_hoc_tasks', 't_inas', 'evidence_chunks', `${uploadId}_0`)));
   });
 
   it('Kepala Unit melihat foto bukti task unitnya saja', async () => {

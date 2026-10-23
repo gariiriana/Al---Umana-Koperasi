@@ -2,7 +2,7 @@
 // Foto bukti task — foto asli ≤ 10 MB disimpan utuh di Firestore
 // ============================================================================
 // Dokumen Firestore maksimal 1 MB, jadi foto asli dipotong per EVIDENCE_CHUNK_BYTES
-// ke ad_hoc_tasks/{id}/evidence_chunks/{0..11} (tipe Bytes). Dokumen task hanya
+// ke ad_hoc_tasks/{id}/evidence_chunks/{uploadId}_{0..11} (tipe Bytes). Dokumen task hanya
 // menyimpan pratinjau kecil (data URL) supaya daftar task tetap ringan.
 
 /** Ukuran file foto asli terbesar yang boleh diunggah. */

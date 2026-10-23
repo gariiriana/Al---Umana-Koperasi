@@ -33,6 +33,7 @@ export interface AdHocTask {
   evidencePhotoBytes?: number;
   evidencePhotoType?: string;
   evidencePhotoName?: string;
+  evidencePhotoUploadId?: string;
   /** Task dari Kepala Unit: unit asal task. Kosong = task dari Super Admin. */
   unitId?: string;
   status: string; createdBy: string; createdAt?: unknown; submittedAt?: unknown;
@@ -64,6 +65,7 @@ export async function createAdHocTask(input: Pick<AdHocTask, "assigneeId" | "ass
 
 /** Foto asli yang sudah diunggah ke evidence_chunks. */
 export interface EvidenceOriginal {
+  uploadId: string;
   chunks: number;
   bytes: number;
   type: string;
@@ -79,20 +81,22 @@ export async function uploadEvidenceOriginal(taskId: string, file: File, onProgr
   if (!uid) throw new Error("Sesi login sudah berakhir.");
   if (file.size > EVIDENCE_ORIGINAL_MAX_BYTES) throw new Error("Foto maksimal 10 MB.");
   const parts = splitIntoChunks(new Uint8Array(await file.arrayBuffer()));
+  const uploadId = doc(collection(db, "ad_hoc_tasks", taskId, "evidence_chunks")).id;
   for (let i = 0; i < parts.length; i++) {
-    await setDoc(doc(db, "ad_hoc_tasks", taskId, "evidence_chunks", String(i)), {
+    await setDoc(doc(db, "ad_hoc_tasks", taskId, "evidence_chunks", `${uploadId}_${i}`), {
       index: i, total: parts.length, data: Bytes.fromUint8Array(parts[i]), uploadedBy: uid, createdAt: serverTimestamp(),
     });
     onProgress?.((i + 1) / parts.length);
   }
-  return { chunks: parts.length, bytes: file.size, type: file.type || "image/jpeg", name: file.name || "foto-bukti.jpg" };
+  return { uploadId, chunks: parts.length, bytes: file.size, type: file.type || "image/jpeg", name: file.name || "foto-bukti.jpg" };
 }
 
 /** Gabungkan kembali foto asli dari evidence_chunks. */
-export async function loadEvidenceOriginal(task: Pick<AdHocTask, "id" | "evidencePhotoChunks" | "evidencePhotoType">): Promise<Blob> {
+export async function loadEvidenceOriginal(task: Pick<AdHocTask, "id" | "evidencePhotoChunks" | "evidencePhotoType" | "evidencePhotoUploadId">): Promise<Blob> {
   const total = task.evidencePhotoChunks ?? 0;
   if (total <= 0) throw new Error("Task ini tidak punya foto asli.");
-  const snaps = await Promise.all(Array.from({ length: total }, (_, i) => getDoc(doc(db, "ad_hoc_tasks", task.id, "evidence_chunks", String(i)))));
+  // Older submissions use numeric chunk IDs; new uploads each have their own namespace.
+  const snaps = await Promise.all(Array.from({ length: total }, (_, i) => getDoc(doc(db, "ad_hoc_tasks", task.id, "evidence_chunks", task.evidencePhotoUploadId ? `${task.evidencePhotoUploadId}_${i}` : String(i)))));
   const parts = snaps.map((s, i) => {
     const data = s.exists() ? s.get("data") : null;
     if (!(data instanceof Bytes)) throw new Error(`Bagian foto ${i + 1} dari ${total} tidak ditemukan.`);
@@ -118,6 +122,7 @@ export async function submitAdHocTask(taskId: string, evidenceNote: string, evid
       ...(original ? {
         evidencePhotoChunks: original.chunks, evidencePhotoBytes: original.bytes,
         evidencePhotoType: original.type, evidencePhotoName: original.name,
+        evidencePhotoUploadId: original.uploadId,
       } : {}),
       submittedAt: serverTimestamp(), updatedAt: serverTimestamp(),
     });

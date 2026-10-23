@@ -52,11 +52,21 @@ export function PerformancePage() {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [tasksError, setTasksError] = useState("");
+  const [rolesError, setRolesError] = useState("");
+  const [tasksLoading, setTasksLoading] = useState(true);
+  const savingRef = useRef(false);
+  const photoRequest = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    setTasks([]); setRoles([]); setTasksError(""); setRolesError(""); setTasksLoading(!!user);
     if (!user) return;
-    const cleanups = [subscribeMyAdHocTasks(user.uid, setTasks), subscribeRoleAssignments(user.uid, setRoles)];
+    const cleanups = [subscribeMyAdHocTasks(user.uid, (items) => {
+      setTasks(items); setTasksError(""); setTasksLoading(false);
+    }, () => {
+      setTasksError("Gagal memuat task. Muat ulang halaman untuk mencoba lagi."); setTasksLoading(false);
+    }), subscribeRoleAssignments(user.uid, setRoles, () => setRolesError("Gagal memuat riwayat role. Muat ulang halaman untuk mencoba lagi."))];
     return () => cleanups.forEach((unsubscribe) => unsubscribe());
   }, [user]);
 
@@ -69,24 +79,27 @@ export function PerformancePage() {
   const assessment = useMemo(() => assessKpi(summary, name, periode), [summary, name, periode]);
   const detailTask = useMemo(() => tasks.find((t) => t.id === detailTaskId) ?? null, [tasks, detailTaskId]);
 
-  const closeSubmit = () => { setSubmitTask(null); setEvidence(""); setPhoto(null); setError(""); };
+  const resetSubmit = () => { photoRequest.current++; setPhotoBusy(false); setSubmitTask(null); setEvidence(""); setPhoto(null); setError(""); };
+  const closeSubmit = () => { if (!savingRef.current) resetSubmit(); };
   useEscapeLayer(!!submitTask, () => { if (!saving) closeSubmit(); });
 
   const pickPhoto = async (file?: File) => {
     if (!file) return;
+    const request = ++photoRequest.current;
     setPhotoBusy(true);
     setError("");
-    try { setPhoto(await prepareEvidencePhoto(file)); }
-    catch (err) { setError(err instanceof Error ? err.message : "Gagal memproses foto."); }
-    finally { setPhotoBusy(false); }
+    try { const prepared = await prepareEvidencePhoto(file); if (request === photoRequest.current) setPhoto(prepared); }
+    catch (err) { if (request === photoRequest.current) setError(err instanceof Error ? err.message : "Gagal memproses foto."); }
+    finally { if (request === photoRequest.current) setPhotoBusy(false); }
   };
 
   const submit = async () => {
-    if (!submitTask || !evidence.trim() || photoBusy) return;
+    if (!submitTask || !evidence.trim() || photoBusy || savingRef.current) return;
     if (photo && !navigator.onLine) {
       setError("Sedang offline. Foto asli butuh koneksi untuk diunggah — coba lagi setelah online.");
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     setError("");
     try {
@@ -97,9 +110,9 @@ export function PerformancePage() {
       }
       await submitAdHocTask(submitTask.id, evidence.trim(), photo?.dataUrl, original);
       showToast({ message: `"${submitTask.title}" sudah disubmit`, variant: "success" });
-      closeSubmit();
+      resetSubmit();
     } catch (err) { setError(err instanceof Error ? err.message : "Gagal submit task."); }
-    finally { setSaving(false); setUploadProgress(null); }
+    finally { savingRef.current = false; setSaving(false); setUploadProgress(null); }
   };
 
   const submitLate = submitTask ? now > deadlineMillis(submitTask.deadline) : false;
@@ -116,7 +129,9 @@ export function PerformancePage() {
     {/* Perlu dikerjakan */}
     <section>
       <h2 className="mb-2 text-sm font-semibold text-[#111827]">Perlu dikerjakan <span className="ml-1 text-xs font-medium text-[#9CA3AF]">{openTasks.length}</span></h2>
-      {openTasks.length === 0 ? (
+      {tasksError ? <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{tasksError}</p>
+      : tasksLoading ? <p role="status" className="p-4 text-sm text-gray-500">Memuat task...</p>
+      : openTasks.length === 0 ? (
         <p className="rounded-xl border border-dashed border-[#E5E7EB] bg-white px-4 py-6 text-center text-sm text-[#6B7280]">Tidak ada task yang perlu dikerjakan.</p>
       ) : (
         <ul className="divide-y divide-[#F3F4F6] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
@@ -144,6 +159,7 @@ export function PerformancePage() {
       )}
     </section>
 
+    {rolesError && <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{rolesError}</p>}
     {/* Rekap bulan */}
     <section className="space-y-3">
       <h2 className="text-sm font-semibold text-[#111827]">Rekap {periode}</h2>
@@ -208,7 +224,7 @@ export function PerformancePage() {
             <h2 className="text-base font-bold text-[#111827]">Submit task</h2>
             <p className="text-sm text-[#6B7280] truncate">{submitTask.title}</p>
           </div>
-          <button type="button" onClick={closeSubmit} aria-label="Tutup" className="rounded-lg p-1.5 text-[#6B7280] hover:bg-[#F3F4F6] cursor-pointer"><X className="h-5 w-5" /></button>
+          <button type="button" onClick={closeSubmit} disabled={saving} aria-label="Tutup" className="rounded-lg p-1.5 text-[#6B7280] hover:bg-[#F3F4F6] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"><X className="h-5 w-5" /></button>
         </header>
 
         <div className="space-y-4 px-5 py-4">
@@ -256,7 +272,7 @@ export function PerformancePage() {
         </div>
 
         <footer className="flex justify-end gap-2 border-t border-[#E5E7EB] px-5 py-3">
-          <button type="button" onClick={closeSubmit} className="rounded-lg px-4 py-2 text-sm font-semibold text-[#374151] hover:bg-[#F3F4F6] cursor-pointer">Batal</button>
+          <button type="button" onClick={closeSubmit} disabled={saving} className="rounded-lg px-4 py-2 text-sm font-semibold text-[#374151] hover:bg-[#F3F4F6] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Batal</button>
           <button type="button" disabled={saving || photoBusy || !evidence.trim()} onClick={submit}
             className="rounded-lg bg-[#FBBF24] px-4 py-2 text-sm font-bold text-[#111827] hover:bg-[#F59E0B] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
             {uploadProgress !== null ? `Mengunggah ${Math.round(uploadProgress * 100)}%…` : saving ? "Mengirim…" : "Submit Selesai"}

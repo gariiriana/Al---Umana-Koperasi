@@ -233,7 +233,7 @@ service cloud.firestore {
       return request.auth != null && getUserRole() in ['kurir', 'kurir_katering'];
     }
     function isOrderEditor() {
-      return isOrderStaff() && !(getUserRole() in ['kurir', 'kurir_katering', 'kurir_mbg']);
+      return isAdmin() || isSuperAdmin() || isTimProduksi() || isDistribusi() || isMoKatering() || isCoMoKatering();
     }
     function isAssignedCateringCourier() {
       return isCateringCourier() && resource.data.get('assignedCourierId', '') == request.auth.uid;
@@ -313,20 +313,50 @@ service cloud.firestore {
     // Authenticated users can read, create, and update orders.
     // Only admins can delete.
     match /orders/{orderId} {
-      allow get, list: if isOrderEditor() || isAssignedCateringCourier()
+      function customerUpdate() {
+        let d = request.resource.data;
+        let changed = d.diff(resource.data).affectedKeys();
+        return request.auth != null && resource.data.customerId == request.auth.uid
+          && d.customerId == resource.data.customerId && (
+            changed.hasOnly(['customerName', 'recipientName', 'recipientPhone', 'recipientNotes', 'deliveryAddress', 'updatedAt'])
+            || (resource.data.status in ['DELIVERED', 'COMPLETED'] && d.status == 'COMPLETED'
+              && changed.hasOnly(['status', 'customerConfirmedAt', 'updatedAt']))
+            || (resource.data.status == 'COMPLETED' && d.rating is int && d.rating >= 1 && d.rating <= 5
+              && changed.hasOnly(['rating', 'review', 'reviewPhotoId', 'reviewedAt', 'updatedAt']))
+            || (resource.data.status in ['AWAITING_PAYMENT_PROOF', 'PAYMENT_REJECTED']
+              && d.status == 'AWAITING_PAYMENT_APPROVAL' && d.paymentStatus == 'awaiting_approval'
+              && d.paymentProofFileId is string && d.paymentProofFileId.matches('^payment_proofs/[^/]+$')
+              && get(/databases/$(database)/documents/payment_proofs/$(d.paymentProofFileId.split('/')[1])).data.uploadedBy == request.auth.uid
+              && get(/databases/$(database)/documents/payment_proofs/$(d.paymentProofFileId.split('/')[1])).data.orderId == orderId
+              && get(/databases/$(database)/documents/payment_proofs/$(d.paymentProofFileId.split('/')[1])).data.status == 'completed'
+              && changed.hasOnly(['status', 'paymentStatus', 'paymentProofFileId', 'updatedAt']))
+          );
+      }
+      // Storefront checkout still writes directly until it moves to a server. Only the
+      // fields createOrder() writes are allowed, and the starting payment state must
+      // match the payment method, so a customer cannot forge a paid or approved order.
+      function customerCreate() {
+        let d = request.resource.data;
+        return request.auth != null && d.customerId == request.auth.uid
+          && d.keys().hasOnly(['customerId', 'customerName', 'items', 'deliveryAddress', 'deliveryTime',
+            'paymentMethod', 'promoCode', 'discountAmount', 'status', 'paymentStatus', 'createdAt', 'updatedAt'])
+          && d.items is list && d.items.size() > 0
+          && (!('discountAmount' in d) || (d.discountAmount is number && d.discountAmount >= 0))
+          && ((d.paymentMethod == 'cod' && d.status == 'CONFIRMED' && !('paymentStatus' in d))
+            || (d.paymentMethod in ['bank_transfer', 'e_wallet'] && d.status == 'AWAITING_PAYMENT_PROOF'
+              && d.paymentStatus == 'awaiting_proof'));
+      }
+      allow get, list: if isOrderEditor() || isAssignedCateringCourier() || (request.auth != null && getUserRole() == 'monitoring')
         || (request.auth != null && resource.data.customerId == request.auth.uid);
-      // Allow list for authenticated users OR unauthenticated (public invoice page).
-      // The invoiceToken acts as a secret URL — knowing it grants read access.
-      // Note: request.query.filters is not a valid Firestore Rules API,
-      // so we allow unauthenticated list on this collection safely because:
-      // 1. The invoiceToken is a random UUID (unguessable)
-      // 2. Listing without a filter still requires knowing document structure
-      allow create: if isOrderEditor()
-        || (request.auth != null && request.resource.data.customerId == request.auth.uid);
-      allow update: if isOrderEditor() || isCourierOrderUpdate()
-        || (request.auth != null && resource.data.customerId == request.auth.uid
-          && request.resource.data.customerId == resource.data.customerId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['customerName', 'recipientName', 'recipientPhone', 'recipientNotes', 'deliveryAddress', 'paymentProofId', 'updatedAt']));
+      allow create: if isAdmin() || isSuperAdmin() || customerCreate();
+      allow update: if isAdmin() || isSuperAdmin()
+        || (isOrderEditor()
+          && (request.resource.data.status == resource.data.status || !(resource.data.status in ['AWAITING_PAYMENT_PROOF', 'AWAITING_PAYMENT_APPROVAL', 'PAYMENT_REJECTED']))
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'customerId', 'paymentMethod', 'paymentStatus', 'paymentApprovedBy', 'paymentApprovedAt',
+          'paymentRejectedBy', 'paymentRejectedAt', 'paymentRejectionReason', 'totalPrice', 'discountAmount', 'promoCode', 'items',
+          'invoiceToken', 'invoiceSignedAt', 'invoiceSignatureData', 'manualValidation', 'additionalFee', 'paymentDueDate']))
+        || isCourierOrderUpdate() || customerUpdate();
       allow delete: if isAdmin();
     }
 
@@ -416,17 +446,22 @@ service cloud.firestore {
     // (Requirement 7.7, 11.5).
     match /payment_proofs/{fileId} {
       allow read: if request.auth != null && (isAdmin() || resource.data.uploadedBy == request.auth.uid);
+      // A proof starts as "uploading"; it can only become "completed" after its chunks are written.
       allow create: if request.auth != null
         && request.resource.data.uploadedBy == request.auth.uid
-        && request.resource.data.status in ["uploading", "completed", "failed"];
+        && request.resource.data.status == "uploading";
       allow update: if request.auth != null
         && resource.data.uploadedBy == request.auth.uid
+        && request.resource.data.uploadedBy == resource.data.uploadedBy
+        && request.resource.data.orderId == resource.data.orderId
+        && resource.data.status != 'completed'
         && request.resource.data.status in ["uploading", "completed", "failed"];
       allow delete: if false;
 
       match /chunks/{chunkId} {
         allow read: if request.auth != null && (isAdmin() || isOwnPaymentProof(fileId));
-        allow create, update: if request.auth != null && isOwnPaymentProof(fileId);
+        allow create, update: if request.auth != null && isOwnPaymentProof(fileId)
+          && get(/databases/$(database)/documents/payment_proofs/$(fileId)).data.status != 'completed';
         allow delete: if false;
       }
     }
@@ -454,9 +489,11 @@ service cloud.firestore {
     // Rules for profile syncing, registration, and role escalation prevention.
     match /users/{userId} {
       // Kepala Unit hanya melihat profil anggota unitnya (query unitIds array-contains).
-      allow get: if request.auth != null && (request.auth.uid == userId || isOrderStaff() || isSuperAdmin()
+      allow get: if request.auth != null && (request.auth.uid == userId || isOrderStaff() || isSuperAdmin() || getUserRole() == 'monitoring'
         || (isKepalaUnit() && myUnitId() in resource.data.get('unitIds', [])));
+      // Monitoring may list staff profiles (queries filter by role), never customer profiles.
       allow list: if isOrderStaff() || isSuperAdmin()
+        || (request.auth != null && getUserRole() == 'monitoring' && !(resource.data.role in ['pelanggan', 'customer']))
         || (isKepalaUnit() && myUnitId() in resource.data.get('unitIds', []));
 
       // Allow users to register/setup their own profile on first login/registration
@@ -523,11 +560,13 @@ service cloud.firestore {
           && (!('evidencePhotoChunks' in request.resource.data) || (request.resource.data.evidencePhotoChunks is int
             && request.resource.data.evidencePhotoChunks >= 1 && request.resource.data.evidencePhotoChunks <= 12
             && request.resource.data.evidencePhotoBytes is int && request.resource.data.evidencePhotoBytes <= 10485760))
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'evidenceNote', 'evidencePhoto', 'evidencePhotoChunks', 'evidencePhotoBytes', 'evidencePhotoType', 'evidencePhotoName', 'submittedAt', 'updatedAt']));
+          && (!('evidencePhotoUploadId' in request.resource.data) || (request.resource.data.evidencePhotoUploadId is string
+            && request.resource.data.evidencePhotoUploadId.matches('^[a-zA-Z0-9]{20}$')))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'evidenceNote', 'evidencePhoto', 'evidencePhotoChunks', 'evidencePhotoBytes', 'evidencePhotoType', 'evidencePhotoName', 'evidencePhotoUploadId', 'submittedAt', 'updatedAt']));
       allow delete: if false;
 
       // Potongan biner foto asli. Firestore membatasi dokumen 1 MB, jadi foto ≤ 10 MB
-      // disimpan sebagai 0..11 dokumen berisi Bytes ≤ 921.600 byte.
+      // ID baru: {uploadId}_{0..11}; ID numerik lama tetap didukung.
       match /evidence_chunks/{chunkId} {
         function parentTask() {
           return get(/databases/$(database)/documents/ad_hoc_tasks/$(taskId)).data;
@@ -537,9 +576,12 @@ service cloud.firestore {
         allow create, update: if request.auth != null
           && parentTask().assigneeId == request.auth.uid
           && parentTask().get('submittedAt', null) == null
-          && chunkId.matches('^([0-9]|1[01])$')
+          && chunkId.matches('^([a-zA-Z0-9]{20}_)?([0-9]|1[01])$')
           && request.resource.data.keys().hasOnly(['index', 'total', 'data', 'uploadedBy', 'createdAt'])
-          && request.resource.data.index == int(chunkId)
+          && request.resource.data.index is int
+          && request.resource.data.index >= 0 && request.resource.data.index < request.resource.data.total
+          && (chunkId == string(request.resource.data.index)
+            || chunkId.matches('^[a-zA-Z0-9]{20}_' + string(request.resource.data.index) + '$'))
           && request.resource.data.total is int && request.resource.data.total >= 1 && request.resource.data.total <= 12
           && request.resource.data.data is bytes
           && request.resource.data.data.size() <= 921600
@@ -640,7 +682,20 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /reviews/{reviewId} {
       allow read: if true;
-      allow create, update: if request.auth != null;
+      function validReview() {
+        let d = request.resource.data;
+        let order = get(/databases/$(database)/documents/orders/$(reviewId)).data;
+        return request.auth != null && d.customerId == request.auth.uid
+          && d.orderId == reviewId && order.customerId == request.auth.uid && order.status == 'COMPLETED'
+          && d.rating is int && d.rating >= 1 && d.rating <= 5
+          && d.review is string && d.review.size() <= 5000
+          // Testimonials sort by createdAt; a client clock is accepted, a date far in the future is not.
+          && d.createdAt is timestamp && d.createdAt > request.time - duration.value(1, 'h')
+          && d.createdAt < request.time + duration.value(1, 'h')
+          && d.keys().hasOnly(['orderId', 'customerId', 'customerName', 'rating', 'review', 'reviewPhotoId', 'createdAt']);
+      }
+      allow create: if validReview();
+      allow update: if validReview() && resource.data.customerId == request.auth.uid;
       allow delete: if isAdmin();
     }
 

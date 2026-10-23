@@ -129,6 +129,8 @@ export function OrdersPage() {
   const { profile } = useAuth();
   const [searchParams] = useSearchParams();
   const isMonitoring = profile?.role === "monitoring";
+  // Payment status and manual validation are admin decisions; Firestore rules reject them for MO roles.
+  const canManagePayment = profile?.role === "admin";
   const [orders, setOrders] = useState<Order[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "ALL">(() => {
@@ -1666,7 +1668,7 @@ export function OrdersPage() {
 
                       {/* Status Pembayaran */}
                       <td className="py-4 px-4 whitespace-nowrap">
-                        {isMonitoring ? (
+                        {!canManagePayment ? (
                           <span
                             className={`inline-block text-xs font-bold rounded-lg px-2.5 py-1.5 border ${
                               o.paymentStatus === "SUDAH_DIBAYAR"
@@ -1784,7 +1786,7 @@ export function OrdersPage() {
                               {copiedOrderId === o.id ? "Tersalin!" : "Link"}
                             </button>
 
-                            {!isMonitoring && !isSigned && !isManuallyValidated && (
+                            {canManagePayment && !isSigned && !isManuallyValidated && (
                               <button
                                 onClick={() => setValidationTargetId(o.id)}
                                 className="text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg p-1.5 transition-all text-xs font-bold"
@@ -2164,7 +2166,7 @@ export function OrdersPage() {
                 <div className="flex flex-col gap-1 pt-1 border-t border-[#F3F4F6]">
                   <div className="flex flex-wrap items-center justify-between gap-1">
                     <div className="flex items-center gap-1">
-                      {isMonitoring ? (
+                      {!canManagePayment ? (
                         <span
                           className={`inline-block text-[8px] font-extrabold rounded-md px-1 py-0.5 border ${
                             o.paymentStatus === "SUDAH_DIBAYAR"
@@ -2331,7 +2333,7 @@ export function OrdersPage() {
                         </span>
                       </button>
 
-                      {!isSigned && !isManuallyValidated && (
+                      {canManagePayment && !isSigned && !isManuallyValidated && (
                         <button
                           onClick={() => setValidationTargetId(o.id)}
                           className="flex-1 text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg h-8 transition-all text-[10px] font-bold flex items-center justify-center gap-1"
