@@ -5,8 +5,13 @@ compatibility_date = "2026-09-22"
 # Jangan hapus variabel yang mungkin ditambahkan lewat dashboard saat deploy.
 keep_vars = true
 routes = [
-  { pattern = "koperasi-alumana.com/api/public/invoices/*", zone_name = "koperasi-alumana.com" }
+  { pattern = "koperasi-alumana.com/api/public/invoices/*", zone_name = "koperasi-alumana.com" },
+  { pattern = "koperasi-alumana.com/api/orders", zone_name = "koperasi-alumana.com" }
 ]
+
+# Simpan log Worker (dashboard Cloudflare → Workers → al-umana-invoice-api → Logs).
+[observability]
+enabled = true
 
 [vars]
 FIREBASE_PROJECT_ID = "al-umana-koperasi"

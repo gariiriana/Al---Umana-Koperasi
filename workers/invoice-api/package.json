@@ -1,0 +1,9 @@
+{
+  "name": "al-umana-invoice-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test checkout.test.mjs",
+    "deploy": "npx wrangler@4 deploy"
+  }
+}

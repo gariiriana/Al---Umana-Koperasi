@@ -26,7 +26,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('security boundaries', () 
     });
   });
 
-  // Mirrors the document createOrder() writes from the storefront checkout.
+  // The shape the old in-browser checkout wrote; storefront orders now come from the checkout Worker.
   const checkout = (paymentMethod: string, extra: Record<string, unknown> = {}) => ({
     customerId: 'buyer', customerName: 'Buyer', deliveryAddress: 'Jl. Pesantren', deliveryTime: '2026-10-24 12:00',
     items: [{ itemId: 'food', itemName: 'Nasi', quantity: 1, price: 8000 }], paymentMethod, promoCode: '', discountAmount: 0,
@@ -35,22 +35,15 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('security boundaries', () 
     ...extra,
   });
 
-  it('accepts the storefront checkout document and rejects forged payment state', async () => {
+  it('lets only admins write orders directly; customers go through the checkout server', async () => {
     const place = (id: string, data: Record<string, unknown>, uid = 'buyer') => setDoc(doc(db(uid), 'orders', id), data);
-    await assertSucceeds(place('cod', checkout('cod')));
-    await assertSucceeds(place('transfer', checkout('bank_transfer')));
-    await assertSucceeds(place('wallet', checkout('e_wallet')));
+    await assertFails(place('cod', checkout('cod')));
+    await assertFails(place('transfer', checkout('bank_transfer')));
     await assertFails(place('forged', { customerId: 'buyer', status: 'CONFIRMED', paymentStatus: 'approved' }));
-    await assertFails(place('paid-transfer', checkout('bank_transfer', { status: 'CONFIRMED' })));
-    await assertFails(place('approved', checkout('bank_transfer', { paymentStatus: 'approved' })));
-    await assertFails(place('cod-paid', checkout('cod', { paymentStatus: 'SUDAH_DIBAYAR' })));
     await assertFails(place('priced', checkout('cod', { totalPrice: 1 })));
-    await assertFails(place('validated', checkout('cod', { manualValidation: { validatedBy: 'buyer' } })));
-    await assertFails(place('invoice', checkout('cod', { invoiceToken: 'x' })));
-    await assertFails(place('negative', checkout('cod', { discountAmount: -5000 })));
-    await assertFails(place('empty', checkout('cod', { items: [] })));
-    await assertFails(place('someone-else', checkout('cod', { customerId: 'other' })));
     await assertFails(place('by-production', checkout('cod'), 'production'));
+    await assertFails(place('by-mo', checkout('cod'), 'mo'));
+    await assertSucceeds(place('by-admin', checkout('cod', { totalPrice: 20000 }), 'admin'));
   });
 
   it('denies forged payment approval and stock changes', async () => {

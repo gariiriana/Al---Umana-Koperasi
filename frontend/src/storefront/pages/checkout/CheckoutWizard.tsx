@@ -8,7 +8,8 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { subscribeToCart, computeCartTotal, CartLineItem, removeLineItem, setLineNotes, setLineQuantity, MAX_LINE_QUANTITY } from "@/services/cartService";
-import { createOrder, createAdminOrder, PaymentMethod } from "@/services/orderService";
+import { createOrder, createAdminOrder, generateUUID, PaymentMethod } from "@/services/orderService";
+import { ApiError } from "@/services/apiClient";
 import type { OrderType, OrderLineItem } from "@/types/order";
 import { formatIDR } from "@/lib/format";
 import type { ReverseGeoResult } from "@/components/MapLocationPicker";
@@ -20,6 +21,7 @@ const MapLocationPicker = lazy(() =>
   import("@/components/MapLocationPicker").then((m) => ({ default: m.MapLocationPicker }))
 );
 
+// Display only: the order is charged what workers/invoice-api/checkout.js computes, so keep both in sync.
 const DELIVERY_FEE = 10000;
 const SERVICE_FEE = 2000;
 
@@ -238,6 +240,8 @@ export function CheckoutWizard() {
   // Payment Step Fields
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [submittingOrder, setSubmittingOrder] = useState(false);
+  // Reused when the customer retries (e.g. after a timeout), so the server never makes a second order.
+  const [checkoutRequestId] = useState(generateUUID);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [outOfStockItems, setOutOfStockItems] = useState<string[]>([]);
 
@@ -977,10 +981,8 @@ export function CheckoutWizard() {
 
     const itemsPayload = checkoutItems.map((item) => ({
       itemId: item.itemId,
-      itemName: item.itemName,
       quantity: item.quantity,
       notes: item.notes || "",
-      imageUrl: item.imageUrl || "",
     }));
 
     // Parse Google Maps URL coordinates if present
@@ -1001,6 +1003,7 @@ export function CheckoutWizard() {
     }
 
     const payload = {
+      requestId: checkoutRequestId,
       customerName: customerName.trim(),
       deliveryAddress: address.trim(),
       deliveryTime: "",
@@ -1009,7 +1012,6 @@ export function CheckoutWizard() {
       deliveryLat: parsedLat,
       deliveryLng: parsedLng,
       promoCode: appliedPromo?.code || undefined,
-      discountAmount: promoDiscount || undefined,
     };
 
     // Set 15-second timeout for the creation request per Requirement 6.2 / 6.8
@@ -1036,10 +1038,11 @@ export function CheckoutWizard() {
       Promise.all(purchasedItemIds.map((itemId) => removeLineItem(user.uid, itemId)))
         .catch((e) => console.error("Failed to clear cart:", e));
 
-      if (paymentMethod === "cod") {
+      // The server's order (status, prices) decides where to go, not the local form state.
+      if (order.status === "CONFIRMED") {
         // COD goes CONFIRMED immediately
         navigate(
-          `/checkout/confirmation?orderId=${encodeURIComponent(order.id)}&name=${encodeURIComponent(customerName)}&address=${encodeURIComponent(address)}&total=${grandTotal}`
+          `/checkout/confirmation?orderId=${encodeURIComponent(order.id)}&name=${encodeURIComponent(order.customerName || customerName)}&address=${encodeURIComponent(order.deliveryAddress || address)}&total=${order.totalPrice}`
         );
       } else {
         // Bank transfer / E-wallet goes AWAITING_PAYMENT_PROOF
@@ -1047,15 +1050,14 @@ export function CheckoutWizard() {
       }
     } catch (err: unknown) {
       requestCompleted = true;
-      const e = err as { message?: string; status?: number; code?: string; outOfStockItems?: string[] };
-      if (e.message === "TIMEOUT") {
+      if (err instanceof Error && err.message === "TIMEOUT") {
         setSubmitError(t.timeoutError);
-      } else if (e.status === 409 && e.code === "OUT_OF_STOCK") {
-        // Out of stock returns to cart view per Requirement 6.5
-        setOutOfStockItems(e.outOfStockItems || []);
+      } else if (err instanceof ApiError && err.code === "OUT_OF_STOCK") {
+        // Out of stock returns to cart view per Requirement 6.5; details carry the item ids.
+        setOutOfStockItems((err.details || []).map((d) => d.field));
         setSubmitError(t.outOfStockMsg);
       } else {
-        setSubmitError(e.message || t.generalError);
+        setSubmitError((err instanceof Error && err.message) || t.generalError);
       }
     } finally {
       setSubmittingOrder(false);

@@ -1,9 +1,10 @@
 /**
- * Public invoice endpoint for Cloudflare Workers.
+ * Public invoice endpoint and storefront checkout for Cloudflare Workers.
  *
  * The Worker keeps Firestore `orders` private. It accepts only a random
  * invoice token, returns a deliberately narrow invoice view, and allows one
- * PNG signature to be submitted for an unsigned invoice.
+ * PNG signature to be submitted for an unsigned invoice. POST /api/orders
+ * places a signed-in customer's order with server-side prices (checkout.js).
  *
  * Required Worker secrets/variables:
  *   FIREBASE_PROJECT_ID     Firebase / GCP project ID
@@ -12,7 +13,10 @@
  *   ALLOWED_ORIGIN          public frontend origin, e.g. https://<site>.web.app
  */
 
-const TOKEN_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { CheckoutError, handleCheckout, verifyIdToken } from "./checkout.js";
+import { decodeValue, encodeValue } from "./firestore-values.js";
+
+const TOKEN_PATTERN =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_SIGNATURE_LENGTH = 700_000;
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const FIRESTORE_SCOPE = "https://www.googleapis.com/auth/datastore";
@@ -101,29 +105,6 @@ async function firestoreRequest(env, path, options = {}) {
   return response;
 }
 
-function decodeValue(value) {
-  if ("nullValue" in value) return null;
-  if ("stringValue" in value) return value.stringValue;
-  if ("integerValue" in value) return Number(value.integerValue);
-  if ("doubleValue" in value) return value.doubleValue;
-  if ("booleanValue" in value) return value.booleanValue;
-  if ("timestampValue" in value) return value.timestampValue;
-  if ("arrayValue" in value) return (value.arrayValue.values || []).map(decodeValue);
-  if ("mapValue" in value) {
-    return Object.fromEntries(Object.entries(value.mapValue.fields || {}).map(([key, item]) => [key, decodeValue(item)]));
-  }
-  return null;
-}
-
-function encodeValue(value) {
-  if (value === null) return { nullValue: null };
-  if (typeof value === "string") return { stringValue: value };
-  if (typeof value === "number") return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value };
-  if (typeof value === "boolean") return { booleanValue: value };
-  if (Array.isArray(value)) return { arrayValue: { values: value.map(encodeValue) } };
-  return { mapValue: { fields: Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encodeValue(item)])) } };
-}
-
 async function findInvoice(env, token) {
   const response = await firestoreRequest(env, "documents:runQuery", {
     method: "POST",
@@ -170,7 +151,7 @@ function corsHeaders(request, env) {
   return {
     "access-control-allow-origin": origin || env.ALLOWED_ORIGIN || "https://al-umana-koperasi.web.app",
     "access-control-allow-methods": "GET, POST, OPTIONS",
-    "access-control-allow-headers": "content-type",
+    "access-control-allow-headers": "authorization, content-type, idempotency-key",
     "access-control-max-age": "86400",
     vary: "Origin",
   };
@@ -183,6 +164,24 @@ function json(body, status, cors) {
   });
 }
 
+async function checkout(request, env, cors) {
+  if (request.method !== "POST") return json({ error: { code: "METHOD_NOT_ALLOWED", message: "use POST" } }, 405, cors);
+  try {
+    const { status, body } = await handleCheckout(request, {
+      documents: `projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`,
+      firestore: (path, body) => firestoreRequest(env, path, { method: "POST", body: JSON.stringify(body) }),
+      verifyIdToken: (token) => verifyIdToken(token, env.FIREBASE_PROJECT_ID),
+    });
+    return json(body, status, cors);
+  } catch (error) {
+    if (error instanceof CheckoutError) {
+      return json({ error: { code: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) } }, error.status, cors);
+    }
+    console.error("checkout failed", error instanceof Error ? error.message : "unknown");
+    return json({ error: { code: "INTERNAL_ERROR", message: "Checkout sedang bermasalah. Coba lagi sebentar." } }, 500, cors);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const cors = corsHeaders(request, env);
@@ -190,6 +189,7 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
 
     const url = new URL(request.url);
+    if (url.pathname === "/api/orders") return checkout(request, env, cors);
     const match = url.pathname.match(/^\/api\/public\/invoices\/([^/]+)(\/sign)?$/);
     if (!match || !TOKEN_PATTERN.test(match[1])) {
       return json({ error: { code: "NOT_FOUND", message: "invoice not found" } }, 404, cors);

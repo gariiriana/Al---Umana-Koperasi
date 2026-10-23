@@ -332,23 +332,11 @@ service cloud.firestore {
               && changed.hasOnly(['status', 'paymentStatus', 'paymentProofFileId', 'updatedAt']))
           );
       }
-      // Storefront checkout still writes directly until it moves to a server. Only the
-      // fields createOrder() writes are allowed, and the starting payment state must
-      // match the payment method, so a customer cannot forge a paid or approved order.
-      function customerCreate() {
-        let d = request.resource.data;
-        return request.auth != null && d.customerId == request.auth.uid
-          && d.keys().hasOnly(['customerId', 'customerName', 'items', 'deliveryAddress', 'deliveryTime',
-            'paymentMethod', 'promoCode', 'discountAmount', 'status', 'paymentStatus', 'createdAt', 'updatedAt'])
-          && d.items is list && d.items.size() > 0
-          && (!('discountAmount' in d) || (d.discountAmount is number && d.discountAmount >= 0))
-          && ((d.paymentMethod == 'cod' && d.status == 'CONFIRMED' && !('paymentStatus' in d))
-            || (d.paymentMethod in ['bank_transfer', 'e_wallet'] && d.status == 'AWAITING_PAYMENT_PROOF'
-              && d.paymentStatus == 'awaiting_proof'));
-      }
       allow get, list: if isOrderEditor() || isAssignedCateringCourier() || (request.auth != null && getUserRole() == 'monitoring')
         || (request.auth != null && resource.data.customerId == request.auth.uid);
-      allow create: if isAdmin() || isSuperAdmin() || customerCreate();
+      // Storefront orders are created by the checkout Worker (workers/invoice-api/checkout.js),
+      // which prices them and takes the stock; customers cannot write orders directly.
+      allow create: if isAdmin() || isSuperAdmin();
       allow update: if isAdmin() || isSuperAdmin()
         || (isOrderEditor()
           && (request.resource.data.status == resource.data.status || !(resource.data.status in ['AWAITING_PAYMENT_PROOF', 'AWAITING_PAYMENT_APPROVAL', 'PAYMENT_REJECTED']))

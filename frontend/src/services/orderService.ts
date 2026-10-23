@@ -36,6 +36,7 @@ import {
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
+import { api } from "@/services/apiClient";
 import { archiveAndDelete } from "@/services/developerRecycleBinService";
 import { currentUser } from "@/services/authService";
 import type { CourierReassignment, KitchenSignature, Order, OrderLineItem, OrderStatus, OrderType, PaymentStatus } from "@/types/order";
@@ -45,15 +46,26 @@ import { pushNotification, shortOrderId } from "./notificationWriter";
 /** Payment method identifiers accepted by the order creation. */
 export type PaymentMethod = "cod" | "bank_transfer" | "e_wallet";
 
+/**
+ * What the customer chose. Prices, discount, fees, stock and payment state are
+ * decided by the checkout Worker (workers/invoice-api/checkout.js).
+ */
 export interface CreateOrderPayload {
+  /** One per checkout attempt; retries with the same id never create a second order. */
+  requestId: string;
   customerName: string;
   deliveryAddress: string;
   deliveryTime: string;
-  items: OrderLineItem[];
+  items: Pick<OrderLineItem, "itemId" | "quantity" | "notes">[];
   paymentMethod: PaymentMethod;
   promoCode?: string;
-  discountAmount?: number;
+  deliveryLat?: number;
+  deliveryLng?: number;
 }
+
+// The checkout Worker only runs on the main domain, so other hosts (web.app) call it cross-origin.
+const CHECKOUT_API_BASE: string =
+  import.meta.env.VITE_CHECKOUT_API_BASE_URL ?? (import.meta.env.PROD ? "https://koperasi-alumana.com" : "");
 
 export interface ListOrdersFilter {
   status?: OrderStatus;
@@ -242,8 +254,9 @@ function snapshotToOrders(snap: QuerySnapshot<DocumentData>): Order[] {
 }
 
 /**
- * Create a new order. The customer ID is taken from the auth token.
- * Validates stock and reduces it in a transaction.
+ * Place a storefront order through the checkout Worker, which prices it, takes
+ * the stock and writes it in one Firestore transaction. Rejects with ApiError
+ * (e.g. OUT_OF_STOCK with the item ids in `details`, PROMO_UNAVAILABLE).
  */
 export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
   const user = currentUser();
@@ -251,43 +264,15 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
     throw new Error("Unauthorized to create order");
   }
 
-  const colRef = collection(db, "orders");
-  const orderDocRef = doc(colRef);
-  const now = new Date();
-  const orderData: Record<string, unknown> = {
-    customerId: user.uid,
-    customerName: payload.customerName,
-    items: payload.items,
-    deliveryAddress: payload.deliveryAddress,
-    deliveryTime: payload.deliveryTime,
-    paymentMethod: payload.paymentMethod,
-    promoCode: payload.promoCode || "",
-    discountAmount: payload.discountAmount || 0,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  if (payload.paymentMethod === "cod") {
-    orderData.status = "CONFIRMED";
-  } else {
-    orderData.status = "AWAITING_PAYMENT_PROOF";
-    orderData.paymentStatus = "awaiting_proof";
+  const { requestId, ...body } = payload;
+  const data = await api.post<(DocumentData & { id?: unknown }) | string | undefined>(`${CHECKOUT_API_BASE}/api/orders`, body, {
+    headers: { "Idempotency-Key": requestId },
+  });
+  // A host without the Worker answers with the app's HTML instead of an order.
+  if (!data || typeof data !== "object" || typeof data.id !== "string" || !data.id) {
+    throw new Error("Server pesanan tidak merespons dengan benar. Coba lagi beberapa saat lagi.");
   }
-
-  // Pure direct write: INSTANT (< 100ms), 0 reads, no 429 quota delays
-  await setDoc(orderDocRef, cleanUndefined(orderData));
-
-  // Atomic stock decrement without reads
-  for (const item of payload.items) {
-    if (!item.itemId) continue;
-    const itemRef = doc(db, "inventory", item.itemId);
-    updateDoc(itemRef, {
-      quantity: increment(-item.quantity),
-      updatedAt: now.toISOString(),
-    }).catch((e) => console.warn("[createOrder] Stock decrement warning:", e));
-  }
-
-  const order = localDataToOrder(orderDocRef.id, orderData);
+  const order = localDataToOrder(data.id, data);
 
   // Trigger WhatsApp notification asynchronously
   if (order.status !== "DELIVERY_FAILED") {
@@ -1322,7 +1307,7 @@ export interface CreateAdminOrderPayload {
   customerName?: string;
 }
 
-function generateUUID(): string {
+export function generateUUID(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     try {
       return crypto.randomUUID();
