@@ -227,6 +227,8 @@ interface MbgDateGroup {
   hari: string;
   batch?: MbgPmBatch;
   entries: MbgPmEntry[];
+  /** False until this batch's PM rows have been read; `entries` is empty meanwhile. */
+  entriesLoaded: boolean;
   totalPortions: number;
   totalInstitusi: number;
   totalSchools: number;
@@ -265,6 +267,7 @@ export function MoJobDeskPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [mbgBatches, setMbgBatches] = useState<MbgPmBatch[]>([]);
   const [mbgEntries, setMbgEntries] = useState<MbgPmEntry[]>([]);
+  const [mbgEntriesLoadedKey, setMbgEntriesLoadedKey] = useState("");
   const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
   const [loading, setLoading] = useState(true);
   const jobDeskSync = useJobDeskSync(jobDesks, !loading);
@@ -412,12 +415,30 @@ export function MoJobDeskPage() {
   }, []);
 
   // Only entries of the batches listed above; entries of draft/backup batches are never shown here.
-  const mbgBatchIdsKey = useMemo(() => mbgBatches.map((b) => b.id).sort().join(","), [mbgBatches]);
+  // Entry docs carry the couriers' base64 delivery photos (~5 MB per delivered batch), so reading
+  // every active batch made the MO wait for ~100 MB before any row appeared. Only batches being
+  // planned (today onward, the form's date) or opened are read; other cards use the batch totals.
+  const mbgEntryBatchIdsKey = useMemo(
+    () =>
+      mbgBatches
+        .filter((b) => {
+          const d = extractDateOnly(b.tanggal);
+          return d >= todayStr || d === selectedOperationalDate || !!expandedDates[`mbg-${b.id}`];
+        })
+        .map((b) => b.id)
+        .sort()
+        .join(","),
+    [mbgBatches, todayStr, selectedOperationalDate, expandedDates]
+  );
   useEffect(() => subscribeEntriesForBatches(
-    mbgBatchIdsKey ? mbgBatchIdsKey.split(",") : [],
-    setMbgEntries,
+    mbgEntryBatchIdsKey ? mbgEntryBatchIdsKey.split(",") : [],
+    (entries) => {
+      setMbgEntries(entries);
+      setMbgEntriesLoadedKey(mbgEntryBatchIdsKey);
+    },
     (err) => console.error("MO: failed to load MBG entries:", err)
-  ), [mbgBatchIdsKey]);
+  ), [mbgEntryBatchIdsKey]);
+  const loadedEntryBatchIds = useMemo(() => new Set(mbgEntriesLoadedKey.split(",")), [mbgEntriesLoadedKey]);
 
   // Map of orderId / entryId -> array of existing job desks
   const jobDesksByOrderId = useMemo(() => {
@@ -591,6 +612,7 @@ export function MoJobDeskPage() {
         hari: getHariFromDate(date),
         batch: item.batch,
         entries: item.entries,
+        entriesLoaded: loadedEntryBatchIds.has(item.batch.id),
         totalPortions: totalPortions || item.batch?.totalJumlah || 0,
         totalInstitusi: totalInstitusiCount,
         totalSchools: totalInstitusiCount,
@@ -602,7 +624,7 @@ export function MoJobDeskPage() {
     });
 
     return groups.sort((a, b) => b.date.localeCompare(a.date));
-  }, [mbgBatches, mbgEntries, jobDesks, allDailyReports]);
+  }, [mbgBatches, mbgEntries, loadedEntryBatchIds, jobDesks, allDailyReports]);
 
   // Ringkasan menu & porsi MBG untuk tanggal yang sedang disusun di formulir
   const activeMbgFormSummary = useMemo(() => {
@@ -796,6 +818,11 @@ export function MoJobDeskPage() {
   const handleGenerateMbgJobDesksForDate = useCallback(
     (group: MbgDateGroup) => {
       setSelectedOperationalDate(group.date);
+      // Without the PM rows the delivery rows would silently be left out.
+      if (!group.entriesLoaded) {
+        alert("Rincian institusi tanggal ini masih dimuat. Tunggu sebentar, lalu tekan lagi.");
+        return;
+      }
       const targetDate = group.date;
       const targetHari = group.hari || getHariFromDate(targetDate);
       const batch = group.batch;
@@ -1232,7 +1259,7 @@ export function MoJobDeskPage() {
   // Overall Statistics
   const stats = useMemo(() => {
     const totalOrders = orders.length;
-    const totalMbgEntries = mbgEntries.length || mbgBatches.reduce((sum, b) => sum + (b.totalInstitusi || 0), 0);
+    const totalMbgEntries = mbgDateGroups.reduce((sum, g) => sum + g.totalInstitusi, 0);
     const totalCateringDates = cateringDateGroups.length;
     const totalMbgDates = mbgDateGroups.length;
     const unassignedCateringDates = cateringDateGroups.filter((g) => !g.isAssigned).length;
@@ -1257,7 +1284,7 @@ export function MoJobDeskPage() {
       pendingReviewDesks,
       approvedDesks,
     };
-  }, [orders, mbgEntries, mbgBatches, cateringDateGroups, mbgDateGroups, jobDesks]);
+  }, [orders, cateringDateGroups, mbgDateGroups, jobDesks]);
 
   if (loading) {
     return (
@@ -1706,7 +1733,9 @@ export function MoJobDeskPage() {
                           <div className="p-4 sm:p-5 bg-white space-y-3 divide-y divide-slate-100">
                             {group.entries.length === 0 ? (
                               <div className="py-6 text-center text-xs text-slate-500 bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
-                                Belum ada rincian institusi yang diinput oleh Admin MBG untuk batch tanggal ini.
+                                {group.entriesLoaded
+                                  ? "Belum ada rincian institusi yang diinput oleh Admin MBG untuk batch tanggal ini."
+                                  : "Memuat rincian institusi…"}
                               </div>
                             ) : (
                               group.entries.map((entry, idx) => {
@@ -1895,7 +1924,11 @@ export function MoJobDeskPage() {
                 </div>
               </div>
 
-              {activeMbgFormSummary.group.entries.length === 0 ? (
+              {!activeMbgFormSummary.group.entriesLoaded ? (
+                <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  Memuat rincian institusi…
+                </p>
+              ) : activeMbgFormSummary.group.entries.length === 0 ? (
                 <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                   Rincian institusi untuk tanggal ini belum diinput Admin MBG, jadi baris pengantaran belum bisa dibuat otomatis.
                 </p>
