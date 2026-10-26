@@ -1761,6 +1761,18 @@ export function MbgProductionPage() {
     return null;
   };
 
+  // Produksi hanya memuat batch yang sudah dikirim Admin MBG (bukan DRAFT). Import menurut
+  // tanggal tab bisa mendarat di batch Draft: datanya tersimpan, tetapi memilih batch itu
+  // langsung dibatalkan auto-pilih batch sehingga tabel tetap menampilkan batch lama.
+  const notifyImportToDraftBatch = (label: string, sheetName: string, tanggal: string) => {
+    setShowSheetsImportModal(false);
+    showToast({
+      message: `${label} (${sheetName}) sudah tersimpan ke Batch ${tanggal}, tetapi batch itu belum dikirim Admin MBG (masih Draft) sehingga belum tampil di Produksi. Minta Admin MBG mengirim PM batch ${tanggal}; datanya akan muncul setelah itu.`,
+      variant: 'info',
+      durationMs: 15000,
+    });
+  };
+
   const handleImportPenerimaManfaatSheet = async (sheetName = 'Penerima Manfaat') => {
     if (!sheetWorkbook) return;
 
@@ -1870,7 +1882,8 @@ export function MbgProductionPage() {
         existingEntries.length > 0 ||
         (targetBatch && targetBatch.totalJumlah != null && targetBatch.totalJumlah > 0);
 
-      if (totalPorsiFromReport > 0 && !batchAlreadyHasPmEntries) {
+      const promotedToProduction = totalPorsiFromReport > 0 && !batchAlreadyHasPmEntries;
+      if (promotedToProduction) {
         await updateBatch(targetBatchId, {
           totalJumlah: totalPorsiFromReport,
           totalSiswaBalita: (parsedReport.porsiKecil?.pmCount || 0) + (parsedReport.porsiBesar?.pmCount || 0) + (parsedReport.porsiBalita?.pmCount || 0),
@@ -1901,7 +1914,11 @@ export function MbgProductionPage() {
 
       const savedReportId = await saveDailyReport(existingReport?.id || null, reportToSave);
 
-      setDailyReport({ id: savedReportId, ...reportToSave });
+      // Laporan batch Draft tidak boleh tertempel ke batch yang sedang dibuka.
+      const targetShown = promotedToProduction || batches.some((b) => b.id === targetBatchId);
+      if (targetShown) {
+        setDailyReport({ id: savedReportId, ...reportToSave });
+      }
 
       // DO NOT overwrite PM entries if the batch already has entries from Admin MBG!
       // Admin MBG is the single source of truth for Penerima Manfaat.
@@ -1926,6 +1943,11 @@ export function MbgProductionPage() {
         if (importedPmEntries.length > 0) {
           await replaceBatchEntries(targetBatchId, importedPmEntries, { preserveBatchStatus: true });
         }
+      }
+
+      if (!targetShown) {
+        notifyImportToDraftBatch('Laporan Harian', sheetName, targetBatchTanggal);
+        return;
       }
 
       setSelectedBatchId(targetBatchId);
@@ -1979,13 +2001,32 @@ export function MbgProductionPage() {
         return;
       }
 
-      const targetBatchTanggal = !useCurrentBatch && !sheetDate && finalParsed.tanggal ? finalParsed.tanggal : fallbackTanggal;
+      let targetBatchTanggal = !useCurrentBatch && !sheetDate && finalParsed.tanggal ? finalParsed.tanggal : fallbackTanggal;
       let targetBatchId = useCurrentBatch ? (importTargetBatch?.id || selectedBatchId || '') : '';
       if (!targetBatchId) {
+        // Produksi hanya bisa membuka batch yang sudah dikirim Admin MBG. Batch tanggal ini
+        // yang masih Draft (atau belum dibuat) tidak akan pernah tampil di tabel, jadi
+        // tawarkan batch yang sedang dibuka sebagai gantinya.
         const existingBatch = batches.find((b) => b.tanggal === targetBatchTanggal);
-        targetBatchId = existingBatch
-          ? existingBatch.id
-          : await createBatch(targetBatchTanggal, user?.uid || 'user', false, weeklySchedule);
+        const openBatch = importTargetBatch || (selectedBatch ? { id: selectedBatch.id, tanggal: selectedBatch.tanggal } : null);
+        if (existingBatch) {
+          targetBatchId = existingBatch.id;
+        } else if (
+          openBatch &&
+          window.confirm(
+            `Batch ${targetBatchTanggal} belum dikirim Admin MBG (masih Draft atau belum dibuat), jadi tidak bisa dibuka di Produksi.\n\nImport Daftar Pesanan Bahan ke batch yang sedang dibuka (${openBatch.tanggal})?`
+          )
+        ) {
+          targetBatchId = openBatch.id;
+          targetBatchTanggal = openBatch.tanggal;
+        } else {
+          showToast({
+            message: `Import dibatalkan. Batch ${targetBatchTanggal} belum dikirim Admin MBG, jadi Daftar Pesanan Bahan-nya tidak bisa tampil di Produksi. Minta Admin MBG mengirim PM batch ${targetBatchTanggal} dulu, lalu import ulang.`,
+            variant: 'error',
+            durationMs: 15000,
+          });
+          return;
+        }
       }
 
       await saveDailyReportPesananBahan(
