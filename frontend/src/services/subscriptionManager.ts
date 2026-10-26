@@ -38,6 +38,7 @@ import {
   type DocumentData,
   type Query,
   type QuerySnapshot,
+  type SnapshotListenOptions,
   type Unsubscribe,
 } from "firebase/firestore";
 
@@ -58,6 +59,8 @@ interface ManagedSubscription<T = DocumentData> {
   key: string;
   /** The Firestore query being listened to. */
   query: Query<T>;
+  /** Listen options; part of the key, so listeners with other options are never shared. */
+  options: SnapshotListenOptions;
   /** All active consumers of this query. */
   subscribers: Set<Subscriber<T>>;
   /** The underlying Firestore unsubscribe function. */
@@ -139,9 +142,12 @@ class SubscriptionManager {
   subscribe<T = DocumentData>(
     q: Query<T>,
     onChange: SnapshotListener<T>,
-    onError?: ErrorListener
+    onError?: ErrorListener,
+    options: SnapshotListenOptions = {}
   ): Unsubscribe {
-    const key = queryKey(q);
+    const key = options.includeMetadataChanges
+      ? `${queryKey(q)}|includeMetadataChanges`
+      : queryKey(q);
     const subscriber: Subscriber<T> = { onChange, onError };
 
     let managed = this.registry.get(key) as
@@ -160,7 +166,7 @@ class SubscriptionManager {
       }
     } else {
       // First consumer for this query — create the Firestore listener.
-      managed = this.createManagedSubscription(key, q, subscriber);
+      managed = this.createManagedSubscription(key, q, options, subscriber);
       this.registry.set(key, managed);
     }
 
@@ -201,6 +207,7 @@ class SubscriptionManager {
   private createManagedSubscription<T>(
     key: string,
     q: Query<T>,
+    options: SnapshotListenOptions,
     firstSubscriber: Subscriber<T>
   ): ManagedSubscription<T> {
     const subscribers = new Set<Subscriber<T>>([firstSubscriber]);
@@ -208,6 +215,7 @@ class SubscriptionManager {
     const managed: ManagedSubscription<T> = {
       key,
       query: q,
+      options,
       subscribers,
       firestoreUnsub: () => {}, // placeholder, replaced below
       latestSnapshot: null,
@@ -224,6 +232,7 @@ class SubscriptionManager {
   ): Unsubscribe {
     return onSnapshot(
       managed.query,
+      managed.options,
       (snapshot) => {
         managed.latestSnapshot = snapshot;
         managed.backoffAttempt = 0; // reset on success

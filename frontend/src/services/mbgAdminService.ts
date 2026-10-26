@@ -364,36 +364,29 @@ export function subscribeAllEntries(
 }
 
 /**
- * Entries of the given batches only (Firestore `in` takes 30 values, so ids are chunked).
- * The callback fires once every chunk has delivered, then on each change.
+ * One batch's PM rows, plus whether the server has confirmed them. `confirmed` is false while
+ * the rows come only from this device's cache: offline, or the download is still running.
+ * An empty unconfirmed result therefore never means "Admin MBG entered no rows".
  */
-export function subscribeEntriesForBatches(
-  batchIds: string[],
-  callback: (entries: MbgPmEntry[]) => void,
+export function subscribeEntriesConfirmed(
+  batchId: string,
+  callback: (entries: MbgPmEntry[], confirmed: boolean) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
-  const ids = [...new Set(batchIds)].sort();
-  if (!ids.length) {
-    callback([]);
-    return () => {};
-  }
-  const chunks: string[][] = [];
-  for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
-  const parts = new Map<number, MbgPmEntry[]>();
-  const unsubs = chunks.map((chunk, index) => subscriptionManager.subscribe(
-    query(collection(db, ENTRIES_COLLECTION), where('batchId', 'in', chunk)),
+  const q = query(collection(db, ENTRIES_COLLECTION), where('batchId', '==', batchId));
+  return subscriptionManager.subscribe(
+    q,
     (snapshot) => {
-      parts.set(index, snapshot.docs
+      const entries = snapshot.docs
         .map((d) => ({ id: d.id, ...d.data() }) as MbgPmEntry)
-        .filter((e) => !e.isBackup));
-      if (parts.size < chunks.length) return;
-      const entries = [...parts.values()].flat();
+        .filter((e) => !e.isBackup);
       entries.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-      callback(entries);
+      callback(entries, !snapshot.metadata.fromCache);
     },
-    (error) => onError?.(error)
-  ));
-  return () => unsubs.forEach((unsub) => unsub());
+    (error) => onError?.(error),
+    // Without metadata changes the server confirming already-cached rows raises no event.
+    { includeMetadataChanges: true }
+  );
 }
 
 function cleanUndefined<T>(obj: T): T {

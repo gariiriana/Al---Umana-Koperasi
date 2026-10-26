@@ -7,7 +7,7 @@
 // 3. Draft & distribute structured Excel job desks per date for Joko, Shifa, Dwi, and Wandi
 // 4. Track operational progress & CO_MO reviews across both divisions in real time
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Plus,
@@ -45,7 +45,7 @@ import { getJakartaDate } from "@/utils/date";
 import { subscribeOrders } from "@/services/realtimeService";
 import {
   subscribeBatches,
-  subscribeEntriesForBatches,
+  subscribeEntriesConfirmed,
 } from "@/services/mbgAdminService";
 import {
   batchCreateJobDesks,
@@ -141,6 +141,36 @@ function resolveMbgDataFromProduction(
   return { report, combinedMenu };
 }
 
+/**
+ * Portions Admin MBG set for one institution (its Jumlah column, which includes the planned
+ * extras), falling back to the category columns for rows without it.
+ */
+function mbgEntryPortions(entry: MbgPmEntry): number {
+  return (
+    entry.jumlah ||
+    (entry.qtSiswaBalita || 0) + (entry.qtGuruKader || 0) + (entry.qtBumilBusui || 0) + (entry.qtPobiaNasi || 0)
+  );
+}
+
+/**
+ * When Admin MBG entered a batch: the label as Arsip PM's "Diinput" writes it
+ * (e.g. "25 Okt 2026, 15.37", WIB) and the Jakarta date for searching.
+ */
+function mbgInputTime(createdAt?: string): { label: string; date: string } {
+  const at = createdAt ? new Date(createdAt) : null;
+  if (!at || Number.isNaN(at.getTime())) return { label: "", date: "" };
+  return {
+    label: at.toLocaleString("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium", timeStyle: "short" }),
+    date: getJakartaDate(at),
+  };
+}
+
+/** Shown while a batch's PM rows are not on screen yet; never claims Admin MBG entered none. */
+function mbgRowsLoadingText(group: MbgDateGroup): string {
+  if (group.entriesFailed) return "Rincian institusi gagal dimuat. Mencoba lagi otomatis…";
+  return group.totalInstitusi ? `Memuat rincian ${group.totalInstitusi} institusi…` : "Memuat rincian institusi…";
+}
+
 /** A submission stays visible while CO_MO is reviewing it. */
 function hasJobDeskSubmission(jd: CateringJobDesk): boolean {
   return (
@@ -226,9 +256,16 @@ interface MbgDateGroup {
   date: string;
   hari: string;
   batch?: MbgPmBatch;
+  /** PM rows read so far; may be empty or only cached on this phone until `entriesConfirmed`. */
   entries: MbgPmEntry[];
-  /** False until this batch's PM rows have been read; `entries` is empty meanwhile. */
-  entriesLoaded: boolean;
+  /** True once the server confirmed `entries`; only then may an empty list mean "not entered". */
+  entriesConfirmed: boolean;
+  /** The last read failed; the listener is retrying by itself. */
+  entriesFailed: boolean;
+  /** When Admin MBG entered the batch, as Arsip PM shows it ("Diinput"). */
+  inputLabel: string;
+  /** Jakarta date (YYYY-MM-DD) Admin MBG entered the batch, for searching. */
+  inputDate: string;
   totalPortions: number;
   totalInstitusi: number;
   totalSchools: number;
@@ -266,8 +303,12 @@ export function MoJobDeskPage() {
   const [jobDesks, setJobDesks] = useState<CateringJobDesk[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [mbgBatches, setMbgBatches] = useState<MbgPmBatch[]>([]);
-  const [mbgEntries, setMbgEntries] = useState<MbgPmEntry[]>([]);
-  const [mbgEntriesLoadedKey, setMbgEntriesLoadedKey] = useState("");
+  // PM rows per batch id, and whether the server confirmed them (see subscribeEntriesConfirmed).
+  const [mbgEntriesByBatch, setMbgEntriesByBatch] = useState<
+    Record<string, { entries: MbgPmEntry[]; confirmed: boolean; failed?: boolean }>
+  >({});
+  // Batch whose job desk was asked for before its PM rows arrived; the form opens once they do.
+  const [pendingMbgBatchId, setPendingMbgBatchId] = useState<string | null>(null);
   const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
   const [loading, setLoading] = useState(true);
   const jobDeskSync = useJobDeskSync(jobDesks, !loading);
@@ -416,29 +457,71 @@ export function MoJobDeskPage() {
 
   // Only entries of the batches listed above; entries of draft/backup batches are never shown here.
   // Entry docs carry the couriers' base64 delivery photos (~5 MB per delivered batch), so reading
-  // every active batch made the MO wait for ~100 MB before any row appeared. Only batches being
-  // planned (today onward, the form's date) or opened are read; other cards use the batch totals.
+  // every active batch made the MO wait for ~100 MB before any row appeared. Only batches still to
+  // be delivered (after today) are read up front; today's and older batches are read once the MO
+  // opens one, drafts its date or asks for its job desk. Card totals come from the batch itself.
+  const draftHasMbgRows = useMemo(() => rows.some((r) => r.division === "mbg"), [rows]);
   const mbgEntryBatchIdsKey = useMemo(
     () =>
       mbgBatches
         .filter((b) => {
           const d = extractDateOnly(b.tanggal);
-          return d >= todayStr || d === selectedOperationalDate || !!expandedDates[`mbg-${b.id}`];
+          return (
+            d > todayStr ||
+            (activeTab === "form" && draftHasMbgRows && d === selectedOperationalDate) ||
+            b.id === pendingMbgBatchId ||
+            !!expandedDates[`mbg-${b.id}`]
+          );
         })
         .map((b) => b.id)
         .sort()
         .join(","),
-    [mbgBatches, todayStr, selectedOperationalDate, expandedDates]
+    [mbgBatches, todayStr, activeTab, draftHasMbgRows, selectedOperationalDate, pendingMbgBatchId, expandedDates]
   );
-  useEffect(() => subscribeEntriesForBatches(
-    mbgEntryBatchIdsKey ? mbgEntryBatchIdsKey.split(",") : [],
-    (entries) => {
-      setMbgEntries(entries);
-      setMbgEntriesLoadedKey(mbgEntryBatchIdsKey);
-    },
-    (err) => console.error("MO: failed to load MBG entries:", err)
-  ), [mbgEntryBatchIdsKey]);
-  const loadedEntryBatchIds = useMemo(() => new Set(mbgEntriesLoadedKey.split(",")), [mbgEntriesLoadedKey]);
+  // One listener per batch, so a heavy delivered batch never holds back the others. Listeners are
+  // added and removed one at a time: re-subscribing every batch on each change would turn rows
+  // that were already confirmed back into "loading".
+  const mbgEntryListeners = useRef(new Map<string, () => void>());
+  useEffect(() => {
+    const wanted = new Set(mbgEntryBatchIdsKey ? mbgEntryBatchIdsKey.split(",") : []);
+    const listeners = mbgEntryListeners.current;
+    const dropped: string[] = [];
+    listeners.forEach((unsubscribe, batchId) => {
+      if (wanted.has(batchId)) return;
+      unsubscribe();
+      listeners.delete(batchId);
+      dropped.push(batchId);
+    });
+    if (dropped.length) {
+      setMbgEntriesByBatch((prev) => {
+        const next = { ...prev };
+        dropped.forEach((batchId) => delete next[batchId]);
+        return next;
+      });
+    }
+    wanted.forEach((batchId) => {
+      if (listeners.has(batchId)) return;
+      listeners.set(batchId, subscribeEntriesConfirmed(
+        batchId,
+        (entries, confirmed) => setMbgEntriesByBatch((prev) => ({ ...prev, [batchId]: { entries, confirmed } })),
+        (err) => {
+          // The listener retries by itself; until then the card says so instead of "loading".
+          console.error("MO: failed to load MBG entries:", err);
+          setMbgEntriesByBatch((prev) => ({
+            ...prev,
+            [batchId]: { entries: prev[batchId]?.entries ?? [], confirmed: false, failed: true },
+          }));
+        }
+      ));
+    });
+  }, [mbgEntryBatchIdsKey]);
+  useEffect(() => {
+    const listeners = mbgEntryListeners.current;
+    return () => {
+      listeners.forEach((unsubscribe) => unsubscribe());
+      listeners.clear();
+    };
+  }, []);
 
   // Map of orderId / entryId -> array of existing job desks
   const jobDesksByOrderId = useMemo(() => {
@@ -567,64 +650,50 @@ export function MoJobDeskPage() {
   const mbgDateGroups = useMemo<MbgDateGroup[]>(() => {
     // Satu kartu per batch (sama seperti Arsip PM Aktif di Admin MBG), sehingga batch
     // bertanggal sama tidak digabung dan porsinya tidak tertumpuk.
-    const map = new Map<string, { date: string; batch: MbgPmBatch; entries: MbgPmEntry[] }>();
-
     const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 
-    for (const batch of mbgBatches) {
-      const d = extractDateOnly(batch.tanggal);
-      if (!isIsoDate(d)) continue;
-      map.set(batch.id, { date: d, batch, entries: [] });
-    }
-
-    for (const entry of mbgEntries) {
-      // Data PM milik batch yang tidak aktif (Draft/backup/terhapus) tidak ditampilkan
-      const item = map.get(entry.batchId);
-      if (item) item.entries.push(entry);
-    }
-
     const groups: MbgDateGroup[] = [];
-    map.forEach((item) => {
-      const date = item.date;
-      let totalPortions = 0;
-      for (const entry of item.entries) {
-        totalPortions +=
-          (entry.qtSiswaBalita || 0) +
-          (entry.qtGuruKader || 0) +
-          (entry.qtBumilBusui || 0) +
-          (entry.qtPobiaNasi || 0);
-      }
-      if (!totalPortions && item.batch) {
-        totalPortions = item.batch.totalJumlah || 0;
-      }
+    for (const batch of mbgBatches) {
+      const date = extractDateOnly(batch.tanggal);
+      if (!isIsoDate(date)) continue;
+      const loaded = mbgEntriesByBatch[batch.id];
+      const entries = loaded?.entries ?? [];
+
+      // The batch's own totals, the same numbers Admin MBG's Arsip PM shows, so a card reads
+      // the same whether or not its rows have been downloaded.
+      const totalPortions =
+        batch.totalJumlah || entries.reduce((sum, e) => sum + (e.isSekolahLibur ? 0 : mbgEntryPortions(e)), 0);
+      const totalInstitusiCount = batch.totalInstitusi || entries.length;
 
       const dateJobDesks = jobDesks
         .filter((jd) => jd.tanggal === date && jd.division === "mbg")
         .sort((a, b) => compareJobDeskTime(a.startTime, b.startTime));
 
-      const totalInstitusiCount = item.entries.length || item.batch?.totalInstitusi || 0;
-
       // Ambil data menu langsung dari Produksi MBG
-      const prodData = resolveMbgDataFromProduction(date, item.batch?.id, allDailyReports);
+      const prodData = resolveMbgDataFromProduction(date, batch.id, allDailyReports);
+      const input = mbgInputTime(batch.createdAt);
 
       groups.push({
         date,
         hari: getHariFromDate(date),
-        batch: item.batch,
-        entries: item.entries,
-        entriesLoaded: loadedEntryBatchIds.has(item.batch.id),
-        totalPortions: totalPortions || item.batch?.totalJumlah || 0,
+        batch,
+        entries,
+        entriesConfirmed: !!loaded?.confirmed,
+        entriesFailed: !!loaded?.failed,
+        inputLabel: input.label,
+        inputDate: input.date,
+        totalPortions,
         totalInstitusi: totalInstitusiCount,
         totalSchools: totalInstitusiCount,
-        menuName: resolveMbgMenuName(date, item.batch, item.entries, prodData.combinedMenu),
+        menuName: resolveMbgMenuName(date, batch, entries, prodData.combinedMenu),
         dailyReport: prodData.report,
         jobDesks: dateJobDesks,
         isAssigned: dateJobDesks.length > 0,
       });
-    });
+    }
 
     return groups.sort((a, b) => b.date.localeCompare(a.date));
-  }, [mbgBatches, mbgEntries, loadedEntryBatchIds, jobDesks, allDailyReports]);
+  }, [mbgBatches, mbgEntriesByBatch, jobDesks, allDailyReports]);
 
   // Ringkasan menu & porsi MBG untuk tanggal yang sedang disusun di formulir
   const activeMbgFormSummary = useMemo(() => {
@@ -679,7 +748,12 @@ export function MoJobDeskPage() {
 
       if (dateSearchQuery.trim()) {
         const q = dateSearchQuery.toLowerCase();
-        const dateMatch = g.date.toLowerCase().includes(q) || g.hari.toLowerCase().includes(q);
+        // Like Arsip PM's date search: the delivery date or the day Admin MBG entered the batch.
+        const dateMatch =
+          g.date.toLowerCase().includes(q) ||
+          g.hari.toLowerCase().includes(q) ||
+          g.inputDate.includes(q) ||
+          g.inputLabel.toLowerCase().includes(q);
         const entryMatch = g.entries.some(
           (e) =>
             (e.institutionName || "").toLowerCase().includes(q) ||
@@ -818,11 +892,13 @@ export function MoJobDeskPage() {
   const handleGenerateMbgJobDesksForDate = useCallback(
     (group: MbgDateGroup) => {
       setSelectedOperationalDate(group.date);
-      // Without the PM rows the delivery rows would silently be left out.
-      if (!group.entriesLoaded) {
-        alert("Rincian institusi tanggal ini masih dimuat. Tunggu sebentar, lalu tekan lagi.");
+      // Without the server's PM rows the delivery rows would silently be left out, or built from
+      // an incomplete copy on this phone. Wait for them; the effect below continues from here.
+      if (!group.entriesConfirmed) {
+        setPendingMbgBatchId(group.batch?.id ?? null);
         return;
       }
+      setPendingMbgBatchId(null);
       const targetDate = group.date;
       const targetHari = group.hari || getHariFromDate(targetDate);
       const batch = group.batch;
@@ -868,11 +944,7 @@ export function MoJobDeskPage() {
 
       // Row 3+: Pengantaran MBG per Institusi (Default bergantian: Dwi & Wandi)
       entries.forEach((entry, idx) => {
-        const entryPortions =
-          (entry.qtSiswaBalita || 0) +
-          (entry.qtGuruKader || 0) +
-          (entry.qtBumilBusui || 0) +
-          (entry.qtPobiaNasi || 0);
+        const entryPortions = mbgEntryPortions(entry);
 
         const assignedPic: PicShortName = idx % 2 === 0 ? "Dwi" : "Wandi";
 
@@ -926,6 +998,19 @@ export function MoJobDeskPage() {
     },
     [computeKeyId]
   );
+
+  // Continue a job desk that was asked for before its PM rows had arrived (see above).
+  useEffect(() => {
+    if (!pendingMbgBatchId) return;
+    const group = mbgDateGroups.find((g) => g.batch?.id === pendingMbgBatchId);
+    if (!group) setPendingMbgBatchId(null); // moved to backup or deleted meanwhile
+    else if (group.entriesConfirmed) handleGenerateMbgJobDesksForDate(group);
+  }, [pendingMbgBatchId, mbgDateGroups, handleGenerateMbgJobDesksForDate]);
+
+  // Leaving for the results or archive tab drops a job desk that is still waiting for its rows.
+  useEffect(() => {
+    if (activeTab === "table" || activeTab === "archive") setPendingMbgBatchId(null);
+  }, [activeTab]);
 
   // Manually sort draft rows in Tab 2 by date and start time (earliest morning first)
   const handleSortRowsByTime = useCallback(() => {
@@ -1666,6 +1751,7 @@ export function MoJobDeskPage() {
                 <div className="space-y-4">
                   {filteredMbgDateGroups.map((group) => {
                     const isExpanded = !!expandedDates[`mbg-${group.batch?.id || group.date}`];
+                    const isPending = !!group.batch && pendingMbgBatchId === group.batch.id;
                     return (
                       <div
                         key={group.batch?.id || group.date}
@@ -1699,6 +1785,11 @@ export function MoJobDeskPage() {
                                 <strong className="text-emerald-700">{group.totalPortions} Porsi Makanan</strong> •{" "}
                                 <span>{group.totalInstitusi || group.totalSchools} Institusi / Lembaga</span>
                               </p>
+                              {group.inputLabel && (
+                                <p className="text-[11px] font-bold text-emerald-700 mt-0.5">
+                                  Diinput Admin MBG: {group.inputLabel}
+                                </p>
+                              )}
                             </div>
                           </div>
 
@@ -1720,10 +1811,20 @@ export function MoJobDeskPage() {
                             <button
                               type="button"
                               onClick={() => handleGenerateMbgJobDesksForDate(group)}
+                              aria-busy={isPending}
                               className="h-11 sm:h-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs cursor-pointer transition-all active:scale-95"
                             >
-                              <Sparkles className="h-3.5 w-3.5" />
-                              <span><span className="sm:hidden">Susun Job Desk</span><span className="hidden sm:inline">🥛 Susun Job Desk MBG Tanggal Ini</span></span>
+                              {isPending ? (
+                                <>
+                                  <span className="h-3.5 w-3.5 rounded-full border-2 border-white/60 border-t-transparent animate-spin" aria-hidden="true" />
+                                  <span>Memuat rincian…</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  <span><span className="sm:hidden">Susun Job Desk</span><span className="hidden sm:inline">🥛 Susun Job Desk MBG Tanggal Ini</span></span>
+                                </>
+                              )}
                             </button>
                           </div>
                         </div>
@@ -1733,17 +1834,13 @@ export function MoJobDeskPage() {
                           <div className="p-4 sm:p-5 bg-white space-y-3 divide-y divide-slate-100">
                             {group.entries.length === 0 ? (
                               <div className="py-6 text-center text-xs text-slate-500 bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
-                                {group.entriesLoaded
+                                {group.entriesConfirmed
                                   ? "Belum ada rincian institusi yang diinput oleh Admin MBG untuk batch tanggal ini."
-                                  : "Memuat rincian institusi…"}
+                                  : mbgRowsLoadingText(group)}
                               </div>
                             ) : (
                               group.entries.map((entry, idx) => {
-                              const entryPortions =
-                                (entry.qtSiswaBalita || 0) +
-                                (entry.qtGuruKader || 0) +
-                                (entry.qtBumilBusui || 0) +
-                                (entry.qtPobiaNasi || 0);
+                              const entryPortions = mbgEntryPortions(entry);
 
                               return (
                                 <div
@@ -1924,9 +2021,9 @@ export function MoJobDeskPage() {
                 </div>
               </div>
 
-              {!activeMbgFormSummary.group.entriesLoaded ? (
+              {activeMbgFormSummary.group.entries.length === 0 && !activeMbgFormSummary.group.entriesConfirmed ? (
                 <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                  Memuat rincian institusi…
+                  {mbgRowsLoadingText(activeMbgFormSummary.group)}
                 </p>
               ) : activeMbgFormSummary.group.entries.length === 0 ? (
                 <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">

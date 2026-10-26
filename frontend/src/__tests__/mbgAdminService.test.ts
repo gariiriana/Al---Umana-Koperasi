@@ -98,7 +98,7 @@ const {
   restoreMultipleBatchesFromBackup,
   replaceBatchEntries,
   copyFromBatch,
-  subscribeEntriesForBatches,
+  subscribeEntriesConfirmed,
 } = await import('@/services/mbgAdminService');
 const { subscriptionManager } = await import('@/services/subscriptionManager');
 
@@ -215,35 +215,43 @@ describe('copyFromBatch', () => {
   });
 });
 
-describe('subscribeEntriesForBatches', () => {
-  type Listener = (snap: { docs: { id: string; data: () => Data }[] }) => void;
+describe('subscribeEntriesConfirmed', () => {
+  type Listener = (snap: { docs: { id: string; data: () => Data }[]; metadata: { fromCache: boolean } }) => void;
+  type Call = [{ clauses: { field: string; value: unknown }[] }, Listener, unknown, { includeMetadataChanges?: boolean }];
   const subscribe = vi.mocked(subscriptionManager.subscribe);
-  const snapOf = (rows: [string, Data][]) => ({ docs: rows.map(([id, data]) => ({ id, data: () => data })) });
+  const snapOf = (rows: [string, Data][], fromCache: boolean) => ({
+    docs: rows.map(([id, data]) => ({ id, data: () => data })),
+    metadata: { fromCache },
+  });
 
   beforeEach(() => subscribe.mockReset().mockReturnValue(() => {}));
 
-  it('reads only the listed batches, 30 ids per query, and merges once every chunk arrived', () => {
-    const ids = Array.from({ length: 31 }, (_, i) => `b${String(i).padStart(2, '0')}`);
-    const callback = vi.fn();
-    subscribeEntriesForBatches([...ids, 'b00'], callback);
+  it('reads one batch and hears the server confirm rows that were already cached', () => {
+    subscribeEntriesConfirmed('b1', vi.fn());
 
-    expect(subscribe).toHaveBeenCalledTimes(2);
-    const [[first, onFirst], [second, onSecond]] = subscribe.mock.calls as unknown as [[{ clauses: { value: string[] }[] }, Listener], [{ clauses: { value: string[] }[] }, Listener]];
-    expect(first.clauses[0].value).toHaveLength(30);
-    expect(second.clauses[0].value).toEqual(['b30']);
-
-    onFirst(snapOf([['e2', { batchId: 'b00', sortOrder: 2 }], ['old', { batchId: 'b01', isBackup: true }]]));
-    expect(callback).not.toHaveBeenCalled();
-    onSecond(snapOf([['e1', { batchId: 'b30', sortOrder: 1 }]]));
-    expect(callback).toHaveBeenLastCalledWith([
-      expect.objectContaining({ id: 'e1' }), expect.objectContaining({ id: 'e2' }),
-    ]);
+    expect(subscribe).toHaveBeenCalledTimes(1);
+    const [q, , , options] = subscribe.mock.calls[0] as unknown as Call;
+    expect(q.clauses).toEqual([{ field: 'batchId', value: 'b1' }]);
+    expect(options).toEqual({ includeMetadataChanges: true });
   });
 
-  it('opens no listener when there are no batches', () => {
+  it('marks cached rows unconfirmed and server rows confirmed, sorted and without backup rows', () => {
     const callback = vi.fn();
-    subscribeEntriesForBatches([], callback);
-    expect(subscribe).not.toHaveBeenCalled();
-    expect(callback).toHaveBeenCalledWith([]);
+    subscribeEntriesConfirmed('b1', callback);
+    const [, onChange] = subscribe.mock.calls[0] as unknown as Call;
+
+    // Offline or still downloading: an empty cache result is not "no rows entered".
+    onChange(snapOf([], true));
+    expect(callback).toHaveBeenLastCalledWith([], false);
+
+    onChange(snapOf([
+      ['e2', { batchId: 'b1', sortOrder: 2 }],
+      ['old', { batchId: 'b1', isBackup: true }],
+      ['e1', { batchId: 'b1', sortOrder: 1 }],
+    ], false));
+    expect(callback).toHaveBeenLastCalledWith(
+      [expect.objectContaining({ id: 'e1' }), expect.objectContaining({ id: 'e2' })],
+      true,
+    );
   });
 });
