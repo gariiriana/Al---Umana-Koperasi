@@ -3,6 +3,7 @@ import { AppRouter } from "@/router/AppRouter";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { syncSecureTime } from "@/services/secureTimeService";
+import { AppUpdatePrompt } from "@/components/ui/AppUpdatePrompt";
 
 function App() {
   useEffect(() => {
@@ -44,6 +45,7 @@ function App() {
     <LanguageProvider>
       <ToastProvider>
         <AppRouter />
+        <AppUpdatePrompt />
       </ToastProvider>
     </LanguageProvider>
   );

@@ -2,11 +2,16 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/app.css";
 import App from "./App.tsx";
+import { registerSW } from "virtual:pwa-register";
 import { startFirestoreAutoResync } from "./services/firestoreResync";
 import { captureInstallPrompt } from "./services/installPrompt";
+import { watchAppUpdates } from "./services/appUpdate";
 
 // Simpan event "pasang aplikasi" sedini mungkin untuk tombol Pasang di kartu notifikasi.
 captureInstallPrompt();
+
+// Daftarkan service worker; versi baru menunggu klik "Perbarui" (AppUpdatePrompt).
+watchAppUpdates(registerSW);
 
 // Sambungkan ulang listener Firestore saat aplikasi kembali dibuka / sinyal kembali,
 // supaya data realtime (mis. submit job desk) tidak macet di cache.
@@ -21,7 +26,8 @@ window.addEventListener("vite:preloadError", (event) => {
   window.location.reload();
 });
 
-// Auto-reload when a new Service Worker takes control (PWA update)
+// Reload when a new Service Worker takes control: after "Perbarui" here, or in another tab,
+// so no tab keeps running the old bundle against the new worker.
 if ("serviceWorker" in navigator) {
   let refreshing = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {

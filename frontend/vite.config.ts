@@ -10,7 +10,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: "autoUpdate",
+      // Versi baru menunggu sampai pengguna menekan "Perbarui" (src/components/ui/AppUpdatePrompt).
+      // main.tsx mendaftarkan service worker sendiri lewat virtual:pwa-register.
+      registerType: "prompt",
+      injectRegister: false,
       includeAssets: ["logo.png", "icons/*.png"],
       // Satu-satunya manifest aplikasi (dulu ada public/manifest.json ganda yang
       // terbaca duluan oleh browser). Ikon dibuat oleh scripts/pwa/generate-pwa-icons.ps1.
@@ -41,10 +44,11 @@ export default defineConfig({
         ],
       },
       workbox: {
-        skipWaiting: true,
+        // Tanpa skipWaiting: worker baru menunggu pesan SKIP_WAITING dari tombol "Perbarui".
         clientsClaim: true,
-        // Handler push & klik notifikasi (public/push-sw.js) ikut di service worker yang sama.
-        importScripts: ["/push-sw.js"],
+        // Handler push & klik notifikasi (public/push-sw.js) ikut di service worker yang sama;
+        // public/update-sw.js mengambil alih langsung dari versi lama yang belum punya popup.
+        importScripts: ["/push-sw.js", "/update-sw.js"],
         // Cache static assets (fonts, css, js)
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
