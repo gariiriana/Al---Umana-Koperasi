@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getPlatformProxy } from "wrangler";
+import { handleRequest } from "../src/worker.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -47,4 +48,26 @@ export async function addEmployee(env, over = {}) {
   const row = { uid: "u1", name: "Budi", email: "budi@absen.test", role: "absen_karyawan", faceRequired: true, createdAt: T0, createdBy: "admin", ...over };
   await insertEmployee(env.DB, row);
   return row;
+}
+
+// Deps with a token that is simply the uid; tests override what they need.
+export const fakeDeps = (over = {}) => ({
+  verifyToken: async (token) => (token ? { uid: token, claims: {} } : null),
+  now: () => T0,
+  country: () => null,
+  ...over,
+});
+
+export async function call(env, deps, method, path, { token, body, origin } = {}) {
+  const headers = {};
+  if (token) headers.authorization = `Bearer ${token}`;
+  if (origin) headers.origin = origin;
+  if (body !== undefined) headers["content-type"] = "application/json";
+  const response = await handleRequest(new Request(`http://localhost/api/absensi${path}`, {
+    method, headers, body: body === undefined ? undefined : JSON.stringify(body),
+  }), env, deps);
+  const text = await response.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch { data = text; }
+  return { status: response.status, headers: response.headers, data };
 }
