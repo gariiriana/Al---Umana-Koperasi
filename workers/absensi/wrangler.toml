@@ -1,0 +1,38 @@
+name = "al-umana-absensi"
+account_id = "42957b053de047bdb5d17c57be5bda9b"
+main = "src/worker.js"
+compatibility_date = "2026-09-22"
+compatibility_flags = ["nodejs_compat"]
+routes = [
+  { pattern = "koperasi-alumana.com/api/absensi/*", zone_name = "koperasi-alumana.com" }
+]
+
+# Tutup shift yang lupa clock out, hapus selfie > 90 hari, buang challenge kedaluwarsa.
+[triggers]
+crons = ["0 * * * *"]
+
+[observability]
+enabled = true
+
+[vars]
+FIREBASE_PROJECT_ID = "al-umana-koperasi"
+ALLOWED_ORIGIN = "https://koperasi-alumana.com"
+RP_ID = "koperasi-alumana.com"
+EXPECTED_ORIGIN = "https://koperasi-alumana.com"
+ENFORCE_COUNTRY = "ID"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "absensi"
+database_id = "00000000-0000-0000-0000-000000000001" # diganti saat rilis produksi
+migrations_dir = "migrations/db"
+
+[[d1_databases]]
+binding = "PHOTOS"
+database_name = "absensi_foto"
+database_id = "00000000-0000-0000-0000-000000000002" # diganti saat rilis produksi
+migrations_dir = "migrations/photos"
+
+# Encrypted secrets (never in this file or the repository):
+#   npx wrangler secret put FIREBASE_CLIENT_EMAIL
+#   npx wrangler secret put FIREBASE_PRIVATE_KEY
