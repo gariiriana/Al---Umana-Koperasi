@@ -6,7 +6,7 @@
 import { verifyIdToken } from "./auth.js";
 import { AbsensiError, corsHeaders, errorResponse, json } from "./http.js";
 import { createAuthUser, setAuthDisabled, setClaims } from "./identity.js";
-import { activate, activateOptions, getMe, getRiwayat } from "./handlers/karyawan.js";
+import { absen, absenOptions, activate, activateOptions, getMe, getRiwayat } from "./handlers/karyawan.js";
 import { registrationOptions, verifyAuthentication, verifyRegistration } from "./passkey.js";
 
 const PREFIX = "/api/absensi";
@@ -16,6 +16,8 @@ const ROUTES = [
   ["GET", /^\/riwayat$/, getRiwayat],
   ["POST", /^\/activate\/options$/, activateOptions],
   ["POST", /^\/activate$/, activate],
+  ["POST", /^\/absen\/options$/, absenOptions],
+  ["POST", /^\/absen$/, absen],
 ];
 
 export async function handleRequest(request, env, deps) {
