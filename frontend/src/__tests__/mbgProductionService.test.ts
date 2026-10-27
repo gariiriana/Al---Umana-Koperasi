@@ -21,10 +21,12 @@ import {
   addCustomTkpiEntry,
   subscribeCustomTkpiEntries,
 } from "@/services/mbgProductionService";
+import { subscriptionManager } from "@/services/subscriptionManager";
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  subscriptionManager.clear();
 });
 
 describe("mbgProductionService - Custom TKPI Entries", () => {
@@ -62,7 +64,8 @@ describe("mbgProductionService - Custom TKPI Entries", () => {
       mockCollection.mockReturnValue({ path: "mbg_custom_tkpi" });
       mockQuery.mockReturnValue(mockQueryRef);
 
-      mockOnSnapshot.mockImplementation((_q, callback) => {
+      mockOnSnapshot.mockImplementation((_q, arg2, arg3) => {
+        const callback = typeof arg2 === "function" ? arg2 : arg3;
         callback({
           docs: mockEntries.map((item) => ({
             id: item.id,
@@ -77,9 +80,15 @@ describe("mbgProductionService - Custom TKPI Entries", () => {
 
       expect(mockCollection).toHaveBeenCalledWith(expect.any(Object), "mbg_custom_tkpi");
       expect(mockQuery).toHaveBeenCalledWith({ path: "mbg_custom_tkpi" });
-      expect(mockOnSnapshot).toHaveBeenCalledWith(mockQueryRef, expect.any(Function), undefined);
+      expect(mockOnSnapshot).toHaveBeenCalledWith(
+        mockQueryRef,
+        expect.any(Object),
+        expect.any(Function),
+        expect.any(Function)
+      );
       expect(mockCallback).toHaveBeenCalledWith(mockEntries);
-      expect(unsubscribe()).toBe("unsubscribed");
+      expect(typeof unsubscribe).toBe("function");
+      unsubscribe();
     });
   });
 });

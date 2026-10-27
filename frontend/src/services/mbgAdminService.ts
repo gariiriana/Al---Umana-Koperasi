@@ -9,6 +9,7 @@ import {
   updateDoc,
   query,
   where,
+  limit,
   onSnapshot,
   writeBatch,
   runTransaction,
@@ -345,9 +346,13 @@ export async function getBatchEntries(batchId: string): Promise<MbgPmEntry[]> {
 export function subscribeAllEntries(
   callback: (entries: MbgPmEntry[]) => void,
   onError?: (error: Error) => void,
-  includeBackup = false
+  includeBackup = false,
+  options?: { limitCount?: number }
 ): Unsubscribe {
-  const q = query(collection(db, ENTRIES_COLLECTION));
+  const limitCount = options?.limitCount;
+  const q = limitCount && limitCount > 0
+    ? query(collection(db, ENTRIES_COLLECTION), limit(limitCount))
+    : query(collection(db, ENTRIES_COLLECTION));
   return subscriptionManager.subscribe(
     q,
     (snapshot) => {

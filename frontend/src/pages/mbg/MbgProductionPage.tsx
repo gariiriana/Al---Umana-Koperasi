@@ -382,7 +382,9 @@ export function MbgProductionPage() {
         clearTimeout(timer);
         console.error('Error loading all entries:', err);
         setLoadingArchive(false);
-      }
+      },
+      false,
+      { limitCount: 300 }
     );
     return () => {
       clearTimeout(timer);
