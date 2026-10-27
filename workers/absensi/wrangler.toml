@@ -24,13 +24,13 @@ ENFORCE_COUNTRY = "ID"
 [[d1_databases]]
 binding = "DB"
 database_name = "absensi"
-database_id = "00000000-0000-0000-0000-000000000001" # diganti saat rilis produksi
+database_id = "88c2e9e1-864b-4634-803c-e845277c9f57"
 migrations_dir = "migrations/db"
 
 [[d1_databases]]
 binding = "PHOTOS"
 database_name = "absensi_foto"
-database_id = "00000000-0000-0000-0000-000000000002" # diganti saat rilis produksi
+database_id = "2b49fede-a163-4f97-b411-804e264f99fb"
 migrations_dir = "migrations/photos"
 
 # Encrypted secrets (never in this file or the repository):
