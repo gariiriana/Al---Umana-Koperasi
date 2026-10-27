@@ -656,7 +656,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
               </div>
             ) : (
               <div className="flex items-center gap-2 font-bold text-white text-xs">
-                <Link to="/login" className="hover:opacity-85">{t.login}</Link>
+                <Link to="/masuk" className="hover:opacity-85">{t.login}</Link>
               </div>
             )}
           </div>
@@ -918,7 +918,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 font-bold text-white">
-                    <Link to="/login" className="hover:opacity-85">{t.login}</Link>
+                    <Link to="/masuk" className="hover:opacity-85">{t.login}</Link>
                   </div>
                 )}
               </div>

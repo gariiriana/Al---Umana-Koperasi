@@ -1,6 +1,6 @@
 // Klien Worker absensi (/api/absensi/*). Tidak memakai Firestore sama sekali.
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/browser";
-import { absensiAuth } from "@/absensi/firebaseAbsensi";
+import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
 import type {
   AbsenKind, AbsenOptions, AbsenResult, AbsensiRole, ActivateOptions, AreaView, EmployeeView, HariIniRow,
   LocationInput, Me, RekapRow, ShiftView,
@@ -24,7 +24,7 @@ export class AbsensiApiError extends Error {
 
 async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
-  const token = await absensiAuth.currentUser?.getIdToken();
+  const token = await getAbsensiAuth().currentUser?.getIdToken();
   if (token) headers.set("authorization", `Bearer ${token}`);
   if (init.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json");
   try {

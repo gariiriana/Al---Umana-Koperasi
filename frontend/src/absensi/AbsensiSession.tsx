@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut as firebaseSignOut, type User } from "firebase/auth";
-import { absensiAuth } from "@/absensi/firebaseAbsensi";
+import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
 import { AbsensiApiError, getMe } from "@/absensi/api";
 import type { Me, ShiftStatus } from "@/absensi/types";
 
@@ -34,11 +34,11 @@ export function AbsensiSessionProvider({ children }: { children: ReactNode }) {
       const code = err instanceof AbsensiApiError ? err.code : "INTERNAL";
       setMe(null);
       setError(code);
-      if (SIGN_OUT_CODES.has(code)) await firebaseSignOut(absensiAuth);
+      if (SIGN_OUT_CODES.has(code)) await firebaseSignOut(getAbsensiAuth());
     }
   }, []);
 
-  useEffect(() => onAuthStateChanged(absensiAuth, async (next) => {
+  useEffect(() => onAuthStateChanged(getAbsensiAuth(), async (next) => {
     setUser(next);
     if (next) {
       setLoading(true);
@@ -52,7 +52,7 @@ export function AbsensiSessionProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (email: string, password: string) => {
     setError(null);
     try {
-      await signInWithEmailAndPassword(absensiAuth, email.trim(), password);
+      await signInWithEmailAndPassword(getAbsensiAuth(), email.trim(), password);
     } catch {
       throw new AbsensiApiError("LOGIN_GAGAL", 401);
     }
@@ -60,7 +60,7 @@ export function AbsensiSessionProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AbsensiSessionValue>(() => ({
     user, me, loading, error, signIn,
-    signOut: () => firebaseSignOut(absensiAuth),
+    signOut: () => firebaseSignOut(getAbsensiAuth()),
     setStatus: (status) => setMe((current) => (current ? { ...current, status } : current)),
     reloadMe: loadMe,
   }), [user, me, loading, error, signIn, loadMe]);
@@ -68,6 +68,7 @@ export function AbsensiSessionProvider({ children }: { children: ReactNode }) {
   return <AbsensiSessionContext.Provider value={value}>{children}</AbsensiSessionContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAbsensiSession(): AbsensiSessionValue {
   const value = useContext(AbsensiSessionContext);
   if (!value) throw new Error("useAbsensiSession must be used inside AbsensiSessionProvider");

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getIdToken = vi.hoisted(() => vi.fn(async () => "token-abc"));
-vi.mock("@/absensi/firebaseAbsensi", () => ({ absensiAuth: { currentUser: { getIdToken } } }));
+vi.mock("@/absensi/firebaseAbsensi", () => ({ getAbsensiAuth: () => ({ currentUser: { getIdToken } }) }));
 
 import { AbsensiApiError, absensiFetch, getMe } from "@/absensi/api";
 
