@@ -11,6 +11,7 @@ const MESSAGES: Record<string, string> = {
   IZIN_KAMERA: "Izin kamera ditolak. Buka pengaturan situs di browser, izinkan Kamera, lalu coba lagi.",
   KAMERA_TIDAK_ADA: "Kamera depan tidak ditemukan di perangkat ini.",
   WAJAH_TIDAK_COCOK: "Wajah belum cocok. Cari cahaya terang dan lepas masker, lalu coba lagi.",
+  MODEL_WAJAH_GAGAL: "Pengenal wajah gagal dimuat. Cek internet lalu coba lagi.",
   PASSKEY_DIBATALKAN: "Konfirmasi sidik jari dibatalkan.",
   PASSKEY_TIDAK_DIDUKUNG: "Browser ini belum mendukung sidik jari/Face ID. Pakai Chrome atau Safari terbaru.",
   PASSKEY_TIDAK_DIKENAL: "HP ini belum terdaftar. Minta admin absensi reset HP kamu.",
