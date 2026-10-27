@@ -51,7 +51,18 @@ export default defineConfig({
         importScripts: ["/push-sw.js", "/update-sw.js"],
         // Cache static assets (fonts, css, js)
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // Pustaka pengenal wajah absensi (±1,3 MB) hanya untuk karyawan, jadi tidak ikut precache.
+        globIgnores: ["**/face-api*.js"],
         runtimeCaching: [
+          {
+            // Nama file ber-hash, jadi aman CacheFirst.
+            urlPattern: /\/assets\/face-api[^/]*\.js$/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "face-api-lib",
+              expiration: { maxEntries: 4, maxAgeSeconds: 31536000 },
+            },
+          },
           {
             // Google Fonts
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,

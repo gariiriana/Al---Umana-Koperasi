@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AbsensiSessionProvider, useAbsensiSession } from "@/absensi/AbsensiSession";
 import { AbsensiLoginPage } from "@/absensi/pages/AbsensiLoginPage";
+import { AktivasiPage } from "@/absensi/pages/AktivasiPage";
 import { messageFor } from "@/absensi/messages";
 import type { AbsensiRole } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
@@ -39,7 +40,7 @@ function RequireAbsensi({ role, children }: { role?: AbsensiRole; children: Reac
   return <>{children}</>;
 }
 
-// Diganti halaman asli di Task 12 (aktivasi), 13 (beranda), dan 14 (admin).
+// Diganti halaman asli di Task 13 (beranda) dan 14 (admin).
 function PageInProgress({ title }: { title: string }) {
   const { signOut } = useAbsensiSession();
   return (
@@ -65,7 +66,7 @@ export function AbsensiRoutes() {
         <Route index element={<RequireAbsensi><AbsensiHome /></RequireAbsensi>} />
         <Route
           path="aktivasi"
-          element={<RequireAbsensi role="absen_karyawan"><PageInProgress title="Aktivasi" /></RequireAbsensi>}
+          element={<RequireAbsensi role="absen_karyawan"><AktivasiPage /></RequireAbsensi>}
         />
         <Route
           path="admin/:tab"
