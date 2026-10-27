@@ -1,0 +1,7 @@
+# Salin ke .dev.vars untuk `npm run dev` (lokal saja, emulator Firebase Auth project demo-*).
+FIREBASE_PROJECT_ID=demo-alumana
+AUTH_EMULATOR_HOST=127.0.0.1:9099
+ALLOWED_ORIGIN=http://localhost:5174
+RP_ID=localhost
+EXPECTED_ORIGIN=http://localhost:5174
+ENFORCE_COUNTRY=

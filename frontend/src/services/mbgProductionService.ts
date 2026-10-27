@@ -4,9 +4,10 @@
 
 import {
   collection, doc, addDoc, updateDoc,
-  query, where, onSnapshot, getDocs, writeBatch, type Unsubscribe,
+  query, where, getDocs, writeBatch, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { subscriptionManager } from './subscriptionManager';
 import { archiveAndDelete, archiveSnapshotsAndDelete } from '@/services/developerRecycleBinService';
 import type { MbgNutritionEntry, MbgCookingSession, MbgCookingPhoto, MbgProductionDailyReport } from '@/types/mbg';
 
@@ -24,7 +25,7 @@ export function subscribeNutrition(
     collection(db, NUTRITION_COLLECTION),
     where('batchId', '==', batchId)
   );
-  return onSnapshot(q, (snap) => {
+  return subscriptionManager.subscribe(q, (snap) => {
     const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgNutritionEntry));
     entries.sort((a, b) => (a.menuItemName || '').localeCompare(b.menuItemName || ''));
     callback(entries);
@@ -55,7 +56,7 @@ export function subscribeCookingSessions(
     collection(db, COOKING_COLLECTION),
     where('batchId', '==', batchId)
   );
-  return onSnapshot(q, (snap) => {
+  return subscriptionManager.subscribe(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgCookingSession)));
   }, onError);
 }
@@ -148,7 +149,7 @@ export function subscribeCustomTkpiEntries(
   onError?: (error: Error) => void
 ): () => void {
   const q = query(collection(db, CUSTOM_TKPI_COLLECTION));
-  return onSnapshot(q, (snap) => {
+  return subscriptionManager.subscribe(q, (snap) => {
     const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as unknown as Record<string, unknown>);
     callback(entries);
   }, onError);
@@ -175,7 +176,7 @@ export function subscribeCustomRecipes(
   onError?: (error: Error) => void
 ): () => void {
   const q = query(collection(db, CUSTOM_RECIPES_COLLECTION));
-  return onSnapshot(q, (snap) => {
+  return subscriptionManager.subscribe(q, (snap) => {
     const recipes = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as unknown as Record<string, unknown>);
     callback(recipes);
   }, onError);
@@ -193,7 +194,7 @@ export function subscribeRecipeAdjustments(
     collection(db, RECIPE_ADJUSTMENTS_COLLECTION),
     where('batchId', '==', batchId)
   );
-  return onSnapshot(q, (snap) => {
+  return subscriptionManager.subscribe(q, (snap) => {
     const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     callback(list);
   }, onError);
@@ -235,7 +236,7 @@ export function subscribeDailyReport(
     collection(db, DAILY_REPORTS_COLLECTION),
     where('batchId', '==', batchId)
   );
-  return onSnapshot(q, (snap) => {
+  return subscriptionManager.subscribe(q, (snap) => {
     if (snap.empty) {
       callback(null);
     } else {
@@ -253,8 +254,8 @@ export function subscribeAllDailyReports(
   callback: (reports: MbgProductionDailyReport[]) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
-  const q = collection(db, DAILY_REPORTS_COLLECTION);
-  return onSnapshot(q, (snap) => {
+  const q = query(collection(db, DAILY_REPORTS_COLLECTION));
+  return subscriptionManager.subscribe(q, (snap) => {
     const list: MbgProductionDailyReport[] = [];
     snap.forEach((doc) => {
       list.push({ id: doc.id, ...doc.data() } as MbgProductionDailyReport);

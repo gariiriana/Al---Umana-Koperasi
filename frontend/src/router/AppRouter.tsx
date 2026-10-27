@@ -19,7 +19,9 @@ import {
 import { StorefrontLayout } from "@/storefront/layouts/StorefrontLayout";
 import { HomePage } from "@/storefront/pages/HomePage";
 import { subscribeNotifications } from "@/services/notificationService";
-import { isPushActiveOnThisDevice } from "@/services/pushService";
+import { isPushActiveOnThisDevice, isStandalone } from "@/services/pushService";
+import { useAbsensiAuthUser } from "@/absensi/authUser";
+import { rootTarget } from "@/router/rootTarget";
 import { PushNotificationCenter } from "@/components/notifications/PushNotificationCenter";
 
 // Helper function to auto-retry and auto-reload on dynamic import chunk loading failures (e.g. after new deployments)
@@ -45,6 +47,8 @@ function safeLazy<T extends React.ComponentType<unknown>>(
 }
 
 const LoginPage = safeLazy(() => import("@/pages/LoginPage").then(module => ({ default: module.LoginPage })));
+const MasukPage = safeLazy(() => import("@/pages/MasukPage").then(module => ({ default: module.MasukPage })));
+const AbsensiRoutes = safeLazy(() => import("@/absensi/AbsensiRoutes").then(module => ({ default: module.AbsensiRoutes })));
 const ForgotPasswordPage = safeLazy(() => import("@/pages/ForgotPasswordPage").then(module => ({ default: module.ForgotPasswordPage })));
 const DashboardPage = safeLazy(() => import("@/pages/DashboardPage").then(module => ({ default: module.DashboardPage })));
 const OrdersPage = safeLazy(() => import("@/pages/OrdersPage").then(module => ({ default: module.OrdersPage })));
@@ -128,20 +132,24 @@ function PublicRoute({ children }: ProtectedProps) {
 /**
  * Renders the root route (`/`). Authenticated admin-shell roles get
  * redirected to their dashboard; everyone else (including unauthenticated
- * visitors and customers) sees the storefront homepage.
+ * visitors and customers) sees the storefront homepage. The installed PWA
+ * also weighs the Absensi session and may open the /masuk door instead
+ * (see rootTarget).
  */
 function RootRoute() {
   const { profile, loading } = useAuth();
-  if (loading) {
+  const standalone = isStandalone();
+  const absensi = useAbsensiAuthUser(standalone);
+  if (loading || absensi.loading) {
     return <LoadingScreen message="Memuat..." />;
   }
-  if (profile && ROLE_DEFAULT_REDIRECT[profile.role] && ROLE_DEFAULT_REDIRECT[profile.role] !== "/") {
-    return (
-      <Navigate
-        to={ROLE_DEFAULT_REDIRECT[profile.role]}
-        replace
-      />
-    );
+  const target = rootTarget({
+    standalone,
+    kasmaRole: profile?.role ?? null,
+    absensiSignedIn: absensi.user !== null,
+  });
+  if (target) {
+    return <Navigate to={target} replace />;
   }
   return (
     <StorefrontLayout>
@@ -303,6 +311,10 @@ function RoutesTree() {
         path="/register"
         element={<Navigate to="/login" replace />}
       />
+      {/* Pintu masuk: KASMA JOB atau Absensi */}
+      <Route path="/masuk" element={<MasukPage />} />
+      {/* Absensi punya sesi Firebase sendiri; tidak lewat Protected/AuthContext. */}
+      <Route path="/absensi/*" element={<AbsensiRoutes />} />
       <Route
         path="/forgot-password"
         element={

@@ -46,6 +46,7 @@ import { subscribeOrders } from "@/services/realtimeService";
 import {
   subscribeBatches,
   subscribeEntriesConfirmed,
+  getMenuForDate,
 } from "@/services/mbgAdminService";
 import {
   batchCreateJobDesks,
@@ -212,6 +213,14 @@ function resolveMbgMenuName(
     return uniqueEntryMenus.join(", ");
   }
 
+  // 4. Jadwal Master Mingguan MBG untuk tanggal tersebut (mencegah menu kosong saat Produksi belum input)
+  if (_date) {
+    const { menuItems } = getMenuForDate(_date);
+    if (menuItems && menuItems.length > 0) {
+      return menuItems.join(", ");
+    }
+  }
+
   return "Menu MBG";
 }
 
@@ -311,8 +320,20 @@ export function MoJobDeskPage() {
   const [pendingMbgBatchId, setPendingMbgBatchId] = useState<string | null>(null);
   const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncAlert, setSyncAlert] = useState<string | null>(null);
   const jobDeskSync = useJobDeskSync(jobDesks, !loading);
   const [activeTab, setActiveTab] = useState<"dates" | "form" | "table" | "archive">(() => (restoredDraft ? "form" : "dates"));
+
+  const handleSyncError = useCallback((err: Error) => {
+    const msg = err?.message || "";
+    if (msg.includes("resource-exhausted") || msg.includes("Quota exceeded") || msg.includes("quota")) {
+      setSyncAlert("⚠️ Kuota pembacaan Firestore harian terlampaui (Resource Exhausted). Menampilkan data dari penyimpanan lokal perangkat. Data baru akan disinkronkan otomatis setelah kuota pulih.");
+    } else if (!navigator.onLine || msg.includes("offline") || msg.includes("unavailable")) {
+      setSyncAlert("📡 Mode Offline / Terputus: Menampilkan data cache lokal perangkat.");
+    } else if (msg.includes("permission-denied") || msg.includes("Missing or insufficient permissions")) {
+      setSyncAlert("🔒 Akses Ditolak (Security Rules): Akun tidak memiliki izin untuk membaca data ini.");
+    }
+  }, []);
 
   // Division switcher in Tab 1 (Date-Centric Handover)
   const [handoverDivision, setHandoverDivision] = useState<"katering" | "mbg">(() => restoredDraft?.division ?? "katering");
@@ -410,8 +431,13 @@ export function MoJobDeskPage() {
       },
       (err) => {
         console.error("MO: failed to load job desks:", err);
-        if (mounted) setLoading(false);
-      }
+        if (mounted) {
+          setLoading(false);
+          handleSyncError(err);
+        }
+      },
+      undefined,
+      { limitCount: 300 }
     );
 
     const unsubOrders = subscribeOrders(
@@ -421,17 +447,22 @@ export function MoJobDeskPage() {
       },
       (err) => {
         console.error("MO: failed to load orders:", err);
-      }
+        handleSyncError(err);
+      },
+      200
     );
 
     const unsubBatches = subscribeBatches(
       (batches) => {
         if (!mounted) return;
-        // Sama dengan Arsip PM Aktif: hanya batch yang sudah disubmit Admin MBG (bukan Draft, bukan backup)
-        setMbgBatches(batches.filter((b) => !b.isBackup && b.status !== "DRAFT"));
+        // Tampilkan batch yang sudah disubmit atau batch draft yang sudah memiliki input porsi (bukan backup)
+        setMbgBatches(
+          batches.filter((b) => !b.isBackup && (b.status !== "DRAFT" || (b.totalJumlah && b.totalJumlah > 0)))
+        );
       },
       (err) => {
         console.error("MO: failed to load MBG batches:", err);
+        handleSyncError(err);
       }
     );
 
@@ -442,6 +473,7 @@ export function MoJobDeskPage() {
       },
       (err) => {
         console.error("MO: failed to load daily reports from Produksi MBG:", err);
+        handleSyncError(err);
       }
     );
 
@@ -453,7 +485,7 @@ export function MoJobDeskPage() {
       unsubBatches();
       unsubDailyReports();
     };
-  }, []);
+  }, [handleSyncError]);
 
   // Only entries of the batches listed above; entries of draft/backup batches are never shown here.
   // Entry docs carry the couriers' base64 delivery photos (~5 MB per delivered batch), so reading
@@ -1402,6 +1434,22 @@ export function MoJobDeskPage() {
       {activeTab !== "form" && (
         <div className="space-y-6">
       <JobDeskSyncStatus state={jobDeskSync.state} checkedAt={jobDeskSync.checkedAt} onSync={jobDeskSync.syncNow} />
+
+      {syncAlert && (
+        <div className="bg-amber-500/10 border border-amber-500/30 text-amber-900 rounded-xl p-3.5 text-xs font-semibold flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>{syncAlert}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSyncAlert(null)}
+            className="p-1 hover:bg-amber-200/50 rounded-lg text-amber-800 transition-colors cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {/* ========================================================================= */}
       {/* HERO HEADER */}
       {/* ========================================================================= */}
@@ -1770,6 +1818,11 @@ export function MoJobDeskPage() {
                                 <h3 className="text-[15px] sm:text-base font-extrabold text-slate-900 leading-snug">
                                   {group.hari}, {formatIndoDate(group.date)}
                                 </h3>
+                                {group.batch?.status === "DRAFT" && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-300">
+                                    Draft Admin MBG
+                                  </span>
+                                )}
                                 {group.isAssigned ? (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                                     <CheckCircle2 className="h-3 w-3" /> Job Desk MBG Lengkap ({group.jobDesks.length} Tugas)

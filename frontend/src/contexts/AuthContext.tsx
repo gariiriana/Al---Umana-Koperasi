@@ -12,6 +12,7 @@ import { getRedirectResult } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 
 import { db, auth } from "@/lib/firebase";
+import { ABSENSI_ACCOUNT_NOTICE, isAbsensiAccount } from "@/services/absensiAccount";
 import {
   onAuthStateChanged,
   signIn as authSignIn,
@@ -69,6 +70,10 @@ export interface AuthContextValue {
   cancelSignOut: () => void;
   /** Confirms the sign-out, hides the dialog, and triggers actual sign-out. */
   confirmSignOut: () => Promise<void>;
+  /** Set when an Absensi account was signed out of KASMA JOB; shown on the login page. */
+  accountNotice: string | null;
+  /** Hides `accountNotice`. */
+  clearAccountNotice: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -86,6 +91,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
+  const [accountNotice, setAccountNotice] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -101,8 +107,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       });
 
     let unsubscribeSnapshot: (() => void) | null = null;
+    // Bumped per auth event; a claim check that finishes after a newer event is dropped.
+    let authEvent = 0;
 
-    const unsubscribeAuth = onAuthStateChanged((nextUser) => {
+    const unsubscribeAuth = onAuthStateChanged(async (nextUser) => {
       // Clean up previous snapshot listener if active
       if (unsubscribeSnapshot) {
         try {
@@ -113,9 +121,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
         unsubscribeSnapshot = null;
       }
 
+      const thisEvent = ++authEvent;
+
       if (nextUser) {
+        // Absensi accounts never get a KASMA JOB session, so no users/{uid} read or
+        // auto-provisioned "pelanggan" profile.
+        const absensiAccount = await isAbsensiAccount(nextUser);
+        if (thisEvent !== authEvent) return;
+        if (absensiAccount) {
+          setAccountNotice(ABSENSI_ACCOUNT_NOTICE);
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+          await authSignOut();
+          return;
+        }
+
         setUser(nextUser);
-        
+
         // Subscribe to Firestore user profile document
         const userDocRef = doc(db, "users", nextUser.uid);
         unsubscribeSnapshot = onSnapshot(
@@ -164,6 +187,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     });
 
     return () => {
+      authEvent++;
       unsubscribeAuth();
       if (unsubscribeSnapshot) {
         try {
@@ -206,8 +230,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await authSignOut();
         navigate("/login");
       },
+      accountNotice,
+      clearAccountNotice: () => setAccountNotice(null),
     }),
-    [user, profile, loading, isSignOutConfirmOpen, navigate]
+    [user, profile, loading, isSignOutConfirmOpen, accountNotice, navigate]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

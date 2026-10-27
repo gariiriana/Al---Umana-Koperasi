@@ -7,6 +7,8 @@ import { db, auth } from "@/lib/firebase";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/contexts/AuthContext";
+import { ABSENSI_ACCOUNT_NOTICE, isAbsensiAccount } from "@/services/absensiAccount";
+import { signOut as authSignOut } from "@/services/authService";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
 
@@ -40,7 +42,7 @@ const DICTIONARY = {
 } as const;
 
 export function LoginPage() {
-  const { signIn } = useAuth();
+  const { signIn, accountNotice, clearAccountNotice } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { lang } = useLanguage();
@@ -57,6 +59,7 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    clearAccountNotice();
 
     if (!turnstileToken) {
       setError(
@@ -73,7 +76,13 @@ export function LoginPage() {
       
       const loggedUser = auth.currentUser;
       let role = "pelanggan";
-      
+
+      // Absensi accounts sign in through /absensi/login, never here.
+      if (loggedUser && (await isAbsensiAccount(loggedUser))) {
+        await authSignOut();
+        throw new Error(ABSENSI_ACCOUNT_NOTICE);
+      }
+
       if (loggedUser) {
         // Fetch user profile from Firestore to check their role before redirecting
         const userDocRef = doc(db, "users", loggedUser.uid);
@@ -212,12 +221,12 @@ export function LoginPage() {
               </div>
             </div>
 
-            {error && (
+            {(error ?? accountNotice) && (
               <p
                 role="alert"
                 className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#EF4444]"
               >
-                {error}
+                {error ?? accountNotice}
               </p>
             )}
 

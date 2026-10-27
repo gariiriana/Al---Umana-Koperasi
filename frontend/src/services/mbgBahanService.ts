@@ -10,12 +10,12 @@ import {
   updateDoc,
   query,
   where,
-  onSnapshot,
   getDocs,
   writeBatch,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { subscriptionManager } from './subscriptionManager';
 import { archiveAndDelete, archiveSnapshotsAndDelete } from '@/services/developerRecycleBinService';
 import type {
   MbgBahanDocumentation,
@@ -58,7 +58,7 @@ export function subscribeBahanDocumentation(
     where('batchId', '==', batchId)
   );
 
-  return onSnapshot(q, (snap) => {
+  return subscriptionManager.subscribe(q, (snap) => {
     if (snap.empty) {
       callback(null);
     } else {
@@ -76,8 +76,8 @@ export function subscribeAllBahanDocumentation(
   callback: (list: MbgBahanDocumentation[]) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
-  const q = collection(db, BAHAN_DOCS_COLLECTION);
-  return onSnapshot(q, (snap) => {
+  const q = query(collection(db, BAHAN_DOCS_COLLECTION));
+  return subscriptionManager.subscribe(q, (snap) => {
     const list: MbgBahanDocumentation[] = [];
     snap.forEach((d) => {
       list.push({ id: d.id, ...d.data() } as MbgBahanDocumentation);
@@ -168,7 +168,7 @@ export function subscribeBahanChecklist(
     where('batchId', '==', batchId)
   );
 
-  return onSnapshot(q, (snap) => {
+  return subscriptionManager.subscribe(q, (snap) => {
     if (snap.empty) {
       callback(null);
     } else {
@@ -186,8 +186,8 @@ export function subscribeAllBahanChecklist(
   callback: (list: MbgBahanChecklistForm[]) => void,
   onError?: (error: Error) => void
 ): Unsubscribe {
-  const q = collection(db, BAHAN_CHECKLIST_COLLECTION);
-  return onSnapshot(q, (snap) => {
+  const q = query(collection(db, BAHAN_CHECKLIST_COLLECTION));
+  return subscriptionManager.subscribe(q, (snap) => {
     const list: MbgBahanChecklistForm[] = [];
     snap.forEach((d) => {
       list.push({ id: d.id, ...d.data() } as MbgBahanChecklistForm);

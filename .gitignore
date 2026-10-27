@@ -69,3 +69,7 @@ tmp/
 # WhatsApp Web.js session and cache
 wa-gateway/.wwebjs_auth/
 wa-gateway/.wwebjs_cache/
+
+# Absensi worker local secrets & copied face models
+.dev.vars
+frontend/public/models/

@@ -10,6 +10,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   serverTimestamp,
   getDocs,
   Timestamp,
@@ -313,13 +314,17 @@ export async function rejectJobDesk(
 // Real-time Subscriptions
 // ---------------------------------------------------------------------------
 
-/** Subscribe to all job desks (for CO_MO and MO overview), optionally filtered by division. */
+/** Subscribe to all job desks (for CO_MO and MO overview), optionally filtered by division and limit. */
 export function subscribeAllJobDesks(
   onData: (jobDesks: CateringJobDesk[]) => void,
   onError?: (error: Error) => void,
-  division?: JobDeskDivision
+  division?: JobDeskDivision,
+  options?: { limitCount?: number }
 ): () => void {
-  const q = query(collection(db, COLLECTION), orderBy("tanggal", "desc"));
+  const limitCount = options?.limitCount ?? 300;
+  const q = limitCount > 0
+    ? query(collection(db, COLLECTION), orderBy("tanggal", "desc"), limit(limitCount))
+    : query(collection(db, COLLECTION), orderBy("tanggal", "desc"));
 
   return subscriptionManager.subscribe(
     q,

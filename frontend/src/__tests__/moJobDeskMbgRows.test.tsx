@@ -36,6 +36,7 @@ vi.mock('@/services/mbgAdminService', () => ({
     fake.listeners.set(batchId, { onData, onError });
     return () => fake.listeners.delete(batchId);
   },
+  getMenuForDate: () => ({ menuItems: [], dayMenu: null, menuKeringanItems: [] }),
 }));
 // "Today" is Monday 26 October 2026, the day of the report.
 vi.mock('@/utils/date', async (importOriginal) => {

@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
@@ -51,7 +51,18 @@ export default defineConfig({
         importScripts: ["/push-sw.js", "/update-sw.js"],
         // Cache static assets (fonts, css, js)
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // Pustaka pengenal wajah absensi (±1,3 MB) hanya untuk karyawan, jadi tidak ikut precache.
+        globIgnores: ["**/face-api*.js"],
         runtimeCaching: [
+          {
+            // Nama file ber-hash, jadi aman CacheFirst.
+            urlPattern: /\/assets\/face-api[^/]*\.js$/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "face-api-lib",
+              expiration: { maxEntries: 4, maxAgeSeconds: 31536000 },
+            },
+          },
           {
             // Google Fonts
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
@@ -71,6 +82,17 @@ export default defineConfig({
             options: {
               cacheName: "firestore-cache",
               expiration: { maxEntries: 50, maxAgeSeconds: 60 * 5 },
+            },
+          },
+          {
+            // Model pengenal wajah absensi (±7 MB, disalin scripts/copy-face-models.mjs):
+            // tidak ikut precache, diunduh sekali saat dipakai lalu disimpan.
+            urlPattern: /\/models\/.*/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "face-models",
+              expiration: { maxEntries: 20, maxAgeSeconds: 31536000 },
+              cacheableResponse: { statuses: [0, 200] },
             },
           },
           {
@@ -98,6 +120,10 @@ export default defineConfig({
   server: {
     port: 5174,
     host: true,
+    // Worker absensi lokal (`wrangler dev` di workers/absensi), sama-origin seperti produksi.
+    proxy: { "/api/absensi": "http://127.0.0.1:8787" },
+    // Logika area/tanggal/challenge dipakai bersama Worker: workers/absensi/shared.
+    fs: { allow: [searchForWorkspaceRoot(process.cwd()), path.resolve(__dirname, "../workers/absensi/shared")] },
   },
 
   // ── Scalability: Build Optimizations ──
