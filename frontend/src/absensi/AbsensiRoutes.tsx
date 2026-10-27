@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
+import { AdminLayout } from "@/absensi/admin/AdminLayout";
 import { AbsensiSessionProvider, useAbsensiSession } from "@/absensi/AbsensiSession";
 import { AbsensiLoginPage } from "@/absensi/pages/AbsensiLoginPage";
 import { AktivasiPage } from "@/absensi/pages/AktivasiPage";
@@ -41,16 +42,6 @@ function RequireAbsensi({ role, children }: { role?: AbsensiRole; children: Reac
   return <>{children}</>;
 }
 
-// Diganti halaman admin asli di Task 14.
-function PageInProgress({ title }: { title: string }) {
-  const { signOut } = useAbsensiSession();
-  return (
-    <AbsensiScreen title={title} message="Halaman ini sedang dibuat.">
-      <Button variant="secondary" onClick={() => void signOut()}>Keluar</Button>
-    </AbsensiScreen>
-  );
-}
-
 function AbsensiHome() {
   const { me } = useAbsensiSession();
   if (me?.role === "admin_absensi") return <Navigate to="/absensi/admin/hari-ini" replace />;
@@ -69,9 +60,10 @@ export function AbsensiRoutes() {
           path="aktivasi"
           element={<RequireAbsensi role="absen_karyawan"><AktivasiPage /></RequireAbsensi>}
         />
+        <Route path="admin" element={<Navigate to="/absensi/admin/hari-ini" replace />} />
         <Route
           path="admin/:tab"
-          element={<RequireAbsensi role="admin_absensi"><PageInProgress title="Admin Absensi" /></RequireAbsensi>}
+          element={<RequireAbsensi role="admin_absensi"><AdminLayout /></RequireAbsensi>}
         />
         <Route path="*" element={<Navigate to="/absensi" replace />} />
       </Routes>
