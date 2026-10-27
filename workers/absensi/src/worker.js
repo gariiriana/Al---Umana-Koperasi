@@ -6,6 +6,8 @@
 import { verifyIdToken } from "./auth.js";
 import { AbsensiError, corsHeaders, errorResponse, json } from "./http.js";
 import { createAuthUser, setAuthDisabled, setClaims } from "./identity.js";
+import { runCron } from "./cron.js";
+import { createKaryawan, getArea, getFoto, getHariIni, getRekap, listKaryawan, patchKaryawan, putArea } from "./handlers/admin.js";
 import { absen, absenOptions, activate, activateOptions, getMe, getRiwayat } from "./handlers/karyawan.js";
 import { registrationOptions, verifyAuthentication, verifyRegistration } from "./passkey.js";
 
@@ -18,6 +20,14 @@ const ROUTES = [
   ["POST", /^\/activate$/, activate],
   ["POST", /^\/absen\/options$/, absenOptions],
   ["POST", /^\/absen$/, absen],
+  ["GET", /^\/admin\/hari-ini$/, getHariIni],
+  ["GET", /^\/admin\/rekap$/, getRekap],
+  ["GET", /^\/admin\/foto\/([\w-]{1,64})$/, getFoto],
+  ["GET", /^\/admin\/karyawan$/, listKaryawan],
+  ["POST", /^\/admin\/karyawan$/, createKaryawan],
+  ["PATCH", /^\/admin\/karyawan\/([\w-]{1,128})$/, patchKaryawan],
+  ["GET", /^\/admin\/area$/, getArea],
+  ["PUT", /^\/admin\/area$/, putArea],
 ];
 
 export async function handleRequest(request, env, deps) {
@@ -60,5 +70,8 @@ export function realDeps(env) {
 export default {
   fetch(request, env) {
     return handleRequest(request, env, realDeps(env));
+  },
+  scheduled(_event, env, ctx) {
+    ctx.waitUntil(runCron(env, Date.now()).then((result) => console.log("absensi cron", JSON.stringify(result))));
   },
 };
