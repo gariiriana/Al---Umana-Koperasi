@@ -240,6 +240,18 @@ export function LoginPage() {
               {t.signInBtn}
             </Button>
 
+            <div className="pt-2 text-center space-y-1">
+              <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-neutral-400">
+                Mau clock in / out karyawan?{" "}
+                <Link
+                  to="/masuk"
+                  className="font-bold text-amber-300 hover:text-amber-400 hover:underline"
+                >
+                  Pilih Pintu Masuk
+                </Link>
+              </p>
+            </div>
+
 
           </form>
         </div>
