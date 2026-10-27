@@ -3,6 +3,7 @@ import { Navigate, NavLink, useParams } from "react-router-dom";
 import { AreaTab } from "@/absensi/admin/AreaTab";
 import { HariIniTab } from "@/absensi/admin/HariIniTab";
 import { KaryawanTab } from "@/absensi/admin/KaryawanTab";
+import { RekapTab } from "@/absensi/admin/RekapTab";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
 import { Button } from "@/components/ui/Button";
 
@@ -26,8 +27,7 @@ function TabContent({ tab }: { tab: TabId }) {
     case "area":
       return <AreaTab />;
     case "rekap":
-      // Diganti RekapTab di Task 15.
-      return <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-300">Rekap sedang dibuat.</p>;
+      return <RekapTab />;
   }
 }
 

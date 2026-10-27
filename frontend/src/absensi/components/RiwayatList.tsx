@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 
 import { getRiwayat } from "@/absensi/api";
 import { errorMessage } from "@/absensi/errorMessage";
-import { formatBulan, formatDurasi, formatJam, formatTanggalPendek, recentBulan } from "@/absensi/logic/format";
+import { SHIFT_STATUS_LABEL, formatBulan, formatDurasi, formatJam, formatTanggalPendek, recentBulan } from "@/absensi/logic/format";
 import type { ShiftStatusName, ShiftView } from "@/absensi/types";
 
-const STATUS_LABEL: Record<ShiftStatusName, { text: string; className: string }> = {
-  selesai: { text: "Lengkap", className: "bg-emerald-500/15 text-emerald-300" },
-  terbuka: { text: "Belum clock out", className: "bg-amber-400/15 text-amber-300" },
-  lupa_pulang: { text: "Tidak clock out", className: "bg-orange-500/15 text-orange-300" },
+const STATUS_STYLE: Record<ShiftStatusName, string> = {
+  selesai: "bg-emerald-500/15 text-emerald-300",
+  terbuka: "bg-amber-400/15 text-amber-300",
+  lupa_pulang: "bg-orange-500/15 text-orange-300",
 };
 
 export interface RiwayatListProps {
@@ -72,27 +72,26 @@ export function RiwayatList({ bulan, onBulanChange, reloadKey = 0 }: RiwayatList
 
       {rows && rows.length > 0 && (
         <ul className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-white/5">
-          {rows.map((row) => {
-            const label = STATUS_LABEL[row.status];
-            return (
-              <li key={row.id} className="flex items-center justify-between gap-3 px-4 py-3 font-['Hanken_Grotesk',system-ui,sans-serif]">
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-white">{formatTanggalPendek(row.workDate)}</p>
-                  <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-bold ${label.className}`}>{label.text}</span>
-                </div>
-                <div className="text-right text-sm text-neutral-200">
-                  <p>
-                    <span>{formatJam(row.masukAt)}</span>
-                    {" – "}
-                    <span>{row.pulangAt !== null ? formatJam(row.pulangAt) : "—"}</span>
-                  </p>
-                  <p className="text-xs text-neutral-400">
-                    <span>{row.durationMin !== null ? formatDurasi(row.durationMin) : "—"}</span>
-                  </p>
-                </div>
-              </li>
-            );
-          })}
+          {rows.map((row) => (
+            <li key={row.id} className="flex items-center justify-between gap-3 px-4 py-3 font-['Hanken_Grotesk',system-ui,sans-serif]">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-white">{formatTanggalPendek(row.workDate)}</p>
+                <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-bold ${STATUS_STYLE[row.status]}`}>
+                  {SHIFT_STATUS_LABEL[row.status]}
+                </span>
+              </div>
+              <div className="text-right text-sm text-neutral-200">
+                <p>
+                  <span>{formatJam(row.masukAt)}</span>
+                  {" – "}
+                  <span>{row.pulangAt !== null ? formatJam(row.pulangAt) : "—"}</span>
+                </p>
+                <p className="text-xs text-neutral-400">
+                  <span>{row.durationMin !== null ? formatDurasi(row.durationMin) : "—"}</span>
+                </p>
+              </div>
+            </li>
+          ))}
         </ul>
       )}
     </section>

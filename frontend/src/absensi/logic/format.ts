@@ -1,5 +1,6 @@
 // Format jam/tanggal/durasi untuk karyawan; semua dalam WIB, sama dengan tanggal kerja Worker.
 import { workDateWIB } from "../../../../workers/absensi/shared/time.js";
+import type { ShiftStatusName } from "@/absensi/types";
 
 const WIB_OFFSET_MS = 7 * 3600_000;
 const BULAN_PENDEK = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -60,3 +61,10 @@ export function recentBulan(nowMs: number, count = 12): string[] {
     return `${Math.floor(index / 12)}-${pad((index % 12) + 1)}`;
   });
 }
+
+/** Label status shift di riwayat dan rekap. */
+export const SHIFT_STATUS_LABEL: Record<ShiftStatusName, string> = {
+  selesai: "Lengkap",
+  terbuka: "Belum clock out",
+  lupa_pulang: "Tidak clock out",
+};
