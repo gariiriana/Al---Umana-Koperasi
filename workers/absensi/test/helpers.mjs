@@ -71,3 +71,13 @@ export async function call(env, deps, method, path, { token, body, origin } = {}
   try { data = JSON.parse(text); } catch { data = text; }
   return { status: response.status, headers: response.headers, data };
 }
+
+// A 2 KB byte string with a JPEG header, enough for decodeJpeg.
+export const JPEG_BASE64 = Buffer.from(Uint8Array.from({ length: 2000 }, (_, i) => (i < 3 ? [0xff, 0xd8, 0xff][i] : i % 251))).toString("base64");
+
+// Passkey fake: a registration verifies when response.ok is true.
+export const fakeWebauthn = {
+  registrationOptions: async ({ challenge, userName }) => ({ challenge: Buffer.from(challenge).toString("base64url"), user: { name: userName } }),
+  verifyRegistration: async ({ response }) =>
+    response?.ok === true ? { credentialId: response.id, publicKey: "pk", counter: 0, transports: ["internal"] } : null,
+};

@@ -6,13 +6,16 @@
 import { verifyIdToken } from "./auth.js";
 import { AbsensiError, corsHeaders, errorResponse, json } from "./http.js";
 import { createAuthUser, setAuthDisabled, setClaims } from "./identity.js";
-import { getMe, getRiwayat } from "./handlers/karyawan.js";
+import { activate, activateOptions, getMe, getRiwayat } from "./handlers/karyawan.js";
+import { registrationOptions, verifyAuthentication, verifyRegistration } from "./passkey.js";
 
 const PREFIX = "/api/absensi";
 
 const ROUTES = [
   ["GET", /^\/me$/, getMe],
   ["GET", /^\/riwayat$/, getRiwayat],
+  ["POST", /^\/activate\/options$/, activateOptions],
+  ["POST", /^\/activate$/, activate],
 ];
 
 export async function handleRequest(request, env, deps) {
@@ -42,6 +45,7 @@ export function realDeps(env) {
   return {
     verifyToken: (token) => verifyIdToken(token, env),
     now: () => Date.now(),
+    webauthn: { registrationOptions, verifyRegistration, verifyAuthentication },
     identity: {
       createAuthUser: (input) => createAuthUser(env, input),
       setClaims: (uid, claims) => setClaims(env, uid, claims),
