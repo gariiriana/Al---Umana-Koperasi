@@ -6,6 +6,8 @@ interface ImportMetaEnv {
   readonly VITE_INVOICE_API_BASE_URL?: string;
   /** Asal Worker checkout POST /api/orders (default produksi: https://koperasi-alumana.com). */
   readonly VITE_CHECKOUT_API_BASE_URL?: string;
+  /** Asal Worker absensi; kosong = path relatif /api/absensi (proxy Vite saat lokal). */
+  readonly VITE_ABSENSI_API_BASE_URL?: string;
   /** Asal Worker push (default produksi: https://koperasi-alumana.com). */
   readonly VITE_PUSH_API_BASE_URL?: string;
   /** Opsional: kunci publik Web Push sendiri; kosong = kunci bawaan FCM. */

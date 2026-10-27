@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
@@ -74,6 +74,17 @@ export default defineConfig({
             },
           },
           {
+            // Model pengenal wajah absensi (±7 MB, disalin scripts/copy-face-models.mjs):
+            // tidak ikut precache, diunduh sekali saat dipakai lalu disimpan.
+            urlPattern: /\/models\/.*/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "face-models",
+              expiration: { maxEntries: 20, maxAgeSeconds: 31536000 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
             // App pages - NetworkFirst so users always get latest deployed version
             urlPattern: ({ request }) => request.mode === "navigate",
             handler: "NetworkFirst",
@@ -98,6 +109,10 @@ export default defineConfig({
   server: {
     port: 5174,
     host: true,
+    // Worker absensi lokal (`wrangler dev` di workers/absensi), sama-origin seperti produksi.
+    proxy: { "/api/absensi": "http://127.0.0.1:8787" },
+    // Logika area/tanggal/challenge dipakai bersama Worker: workers/absensi/shared.
+    fs: { allow: [searchForWorkspaceRoot(process.cwd()), path.resolve(__dirname, "../workers/absensi/shared")] },
   },
 
   // ── Scalability: Build Optimizations ──

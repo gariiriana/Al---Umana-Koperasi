@@ -31,16 +31,7 @@ import {
   type Analytics,
 } from 'firebase/analytics';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
-
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
-};
+import { firebaseConfig, useEmulators } from './firebaseConfig';
 
 // Fail fast in development if required keys are missing — easier to debug
 // than the cryptic errors thrown later by individual Firebase SDKs.
@@ -72,7 +63,6 @@ export const db: Firestore = initializeFirestore(app, {
 
 // Mode audit lokal (`vite --mode emulator`, lihat .env.emulator): Auth & Firestore
 // Emulator dengan project demo-*, jadi tidak pernah menyentuh data produksi.
-const useEmulators = import.meta.env.DEV && import.meta.env.VITE_USE_EMULATORS === 'true';
 if (useEmulators) {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
