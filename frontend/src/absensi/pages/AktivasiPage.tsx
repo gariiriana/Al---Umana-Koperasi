@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { checkLocation } from "../../../../workers/absensi/shared/geo.js";
-import { AbsensiApiError, activate, activateOptions } from "@/absensi/api";
+import { activate, activateOptions } from "@/absensi/api";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
 import { SelfieCapture, type SelfieResult } from "@/absensi/components/SelfieCapture";
-import { DeviceError } from "@/absensi/device/errors";
 import { getBestPosition } from "@/absensi/device/gps";
 import { createPasskey } from "@/absensi/device/passkey";
 import { blobToBase64 } from "@/absensi/device/selfie";
 import { setDeviceMarker } from "@/absensi/deviceMarker";
+import { errorMessage } from "@/absensi/errorMessage";
 import { messageFor } from "@/absensi/messages";
 import type { ActivateOptions, LocationInput } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
@@ -18,12 +18,6 @@ const CONSENT_TEXT = "Foto wajah saya dipakai untuk absensi dan hanya bisa dilih
 
 type Step = "persetujuan" | "lokasi" | "foto" | "passkey";
 const STEP_NUMBER: Record<Step, number> = { persetujuan: 1, lokasi: 2, foto: 3, passkey: 4 };
-
-function errorText(err: unknown): string {
-  if (err instanceof DeviceError) return messageFor(err.code);
-  if (err instanceof AbsensiApiError) return messageFor(err.code, err.details);
-  return messageFor("INTERNAL");
-}
 
 /** Aktivasi pertama: persetujuan → lokasi → foto acuan → passkey → simpan di Worker. */
 export function AktivasiPage() {
@@ -53,7 +47,7 @@ export function AktivasiPage() {
       setLocation(fix);
       setStep("foto");
     } catch (err) {
-      setError(errorText(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -67,7 +61,7 @@ export function AktivasiPage() {
     try {
       setOptions(await activateOptions());
     } catch (err) {
-      setError(errorText(err));
+      setError(errorMessage(err));
     }
   }, []);
 
@@ -93,7 +87,7 @@ export function AktivasiPage() {
       await reloadMe();
       navigate("/absensi", { replace: true });
     } catch (err) {
-      setError(errorText(err));
+      setError(errorMessage(err));
       // Challenge sudah terpakai atau kedaluwarsa; minta yang baru untuk percobaan berikutnya.
       void activateOptions().then(setOptions, () => setOptions(null));
     } finally {

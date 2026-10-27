@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AbsensiSessionProvider, useAbsensiSession } from "@/absensi/AbsensiSession";
 import { AbsensiLoginPage } from "@/absensi/pages/AbsensiLoginPage";
 import { AktivasiPage } from "@/absensi/pages/AktivasiPage";
+import { BerandaPage } from "@/absensi/pages/BerandaPage";
 import { messageFor } from "@/absensi/messages";
 import type { AbsensiRole } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
@@ -40,7 +41,7 @@ function RequireAbsensi({ role, children }: { role?: AbsensiRole; children: Reac
   return <>{children}</>;
 }
 
-// Diganti halaman asli di Task 13 (beranda) dan 14 (admin).
+// Diganti halaman admin asli di Task 14.
 function PageInProgress({ title }: { title: string }) {
   const { signOut } = useAbsensiSession();
   return (
@@ -54,7 +55,7 @@ function AbsensiHome() {
   const { me } = useAbsensiSession();
   if (me?.role === "admin_absensi") return <Navigate to="/absensi/admin/hari-ini" replace />;
   if (me && !me.activated) return <Navigate to="/absensi/aktivasi" replace />;
-  return <PageInProgress title="Beranda" />;
+  return <BerandaPage />;
 }
 
 /** Semua rute /absensi/*; sesinya terpisah dari AuthContext KASMA JOB. */
