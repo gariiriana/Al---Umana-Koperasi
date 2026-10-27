@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FACE_MATCH_THRESHOLD } from "../../../../workers/absensi/shared/constants.js";
-import { averageEar, createBlinkDetector } from "@/absensi/device/eyes";
-import { detectSingleFace, faceDistance, loadFaceModels } from "@/absensi/device/face";
+import { averageEar, createBlinkDetector, createHeadTurnDetector } from "@/absensi/device/eyes";
+import { detectSingleFace, faceDistance, loadFaceModels, type FaceDetection } from "@/absensi/device/face";
 import { captureJpeg } from "@/absensi/device/selfie";
 import { messageFor } from "@/absensi/messages";
 import { Button } from "@/components/ui/Button";
@@ -30,15 +30,17 @@ function cameraErrorCode(err: unknown): string {
   return name === "NotAllowedError" || name === "SecurityError" ? "IZIN_KAMERA" : "KAMERA_TIDAK_ADA";
 }
 
-/** Kamera depan; mode acuan/match baru mengambil foto setelah satu kedipan terdeteksi. */
+/** Kamera depan; mengambil foto lewat kedip, tengok kiri/kanan, atau tombol ambil foto. */
 export function SelfieCapture({ mode, reference = null, onDone, onCancel }: SelfieCaptureProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [phase, setPhase] = useState<Phase>("starting");
   const [hint, setHint] = useState("Menyalakan kamera...");
   const [error, setError] = useState<string | null>(null);
+  const [hasFace, setHasFace] = useState(false);
   // Naik setiap "Coba lagi" supaya loop deteksi dimulai ulang.
   const [attempt, setAttempt] = useState(0);
   const [cameraReady, setCameraReady] = useState(false);
+  const lastFaceRef = useRef<FaceDetection | null>(null);
 
   const onDoneRef = useRef(onDone);
   const referenceRef = useRef(reference);
@@ -72,6 +74,20 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
     };
   }, []);
 
+  const handleCapture = useCallback(async (face: { descriptor: number[] }) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const jpeg = await captureJpeg(video);
+    const ref = referenceRef.current;
+    const distance = mode === "match" && ref ? faceDistance(face.descriptor, ref) : null;
+    if (distance !== null && distance >= FACE_MATCH_THRESHOLD) {
+      setPhase("mismatch");
+      setError(messageFor("WAJAH_TIDAK_COCOK"));
+      return;
+    }
+    onDoneRef.current({ jpeg, descriptor: face.descriptor, distance });
+  }, [mode]);
+
   useEffect(() => {
     if (!cameraReady) return undefined;
     if (mode === "photo") {
@@ -83,6 +99,7 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const blink = createBlinkDetector();
+    const headTurn = createHeadTurnDetector();
 
     const tick = async () => {
       const video = videoRef.current;
@@ -92,23 +109,25 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
         if (stopped) return;
         if (face.kind === "none") {
           blink.reset();
+          headTurn.reset();
+          lastFaceRef.current = null;
+          setHasFace(false);
           setHint("Hadapkan wajah ke kamera");
         } else if (face.kind === "many") {
           blink.reset();
+          headTurn.reset();
+          lastFaceRef.current = null;
+          setHasFace(false);
           setHint("Pastikan hanya satu wajah di kamera");
         } else {
-          setHint("Kedipkan mata sekali");
-          if (blink.push(averageEar(face.landmarks))) {
-            const jpeg = await captureJpeg(video);
-            if (stopped) return;
-            const ref = referenceRef.current;
-            const distance = mode === "match" && ref ? faceDistance(face.descriptor, ref) : null;
-            if (distance !== null && distance >= FACE_MATCH_THRESHOLD) {
-              setPhase("mismatch");
-              setError(messageFor("WAJAH_TIDAK_COCOK"));
-              return;
-            }
-            onDoneRef.current({ jpeg, descriptor: face.descriptor, distance });
+          lastFaceRef.current = face;
+          setHasFace(true);
+          setHint("Tengok kiri / kanan sedikit, atau tekan Ambil Foto");
+          const isTurn = headTurn.push(face.landmarks);
+          const isBlink = blink.push(averageEar(face.landmarks));
+          if (isTurn || isBlink) {
+            setHint("Wajah terverifikasi!");
+            await handleCapture(face);
             return;
           }
         }
@@ -120,6 +139,7 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
 
     setPhase("starting");
     setError(null);
+    setHasFace(false);
     setHint("Menyiapkan pengenal wajah...");
     loadFaceModels()
       .then(() => {
@@ -138,7 +158,7 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
       stopped = true;
       clearTimeout(timer);
     };
-  }, [cameraReady, mode, attempt]);
+  }, [cameraReady, mode, attempt, handleCapture]);
 
   const takePhoto = useCallback(async () => {
     const video = videoRef.current;
@@ -167,7 +187,20 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
         </p>
       )}
 
-      <div className="flex justify-center gap-2">
+      <div className="flex flex-wrap justify-center gap-2">
+        {phase === "detecting" && hasFace && (
+          <Button
+            variant="primary"
+            onClick={() => {
+              const face = lastFaceRef.current;
+              if (face && face.kind === "one") {
+                void handleCapture(face);
+              }
+            }}
+          >
+            Ambil foto
+          </Button>
+        )}
         {phase === "ready" && (
           <Button variant="primary" onClick={() => void takePhoto()}>Ambil foto</Button>
         )}

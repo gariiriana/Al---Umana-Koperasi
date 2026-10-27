@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { averageEar, createBlinkDetector, eyeAspectRatio } from "@/absensi/device/eyes";
+import { averageEar, createBlinkDetector, createHeadTurnDetector, eyeAspectRatio, getHeadYawRatio } from "@/absensi/device/eyes";
 
 // p1..p6 seperti landmark 68 titik: sudut luar, 2 titik atas, sudut dalam, 2 titik bawah.
 const eye = (open: number, dx = 0) => [
@@ -52,3 +52,32 @@ describe("createBlinkDetector", () => {
     expect(detector.push(0.3)).toBe(false);
   });
 });
+
+describe("getHeadYawRatio & createHeadTurnDetector", () => {
+  const makeLandmarks = (noseX: number) => {
+    const pts = Array.from({ length: 68 }, () => ({ x: 50, y: 50 }));
+    pts[0] = { x: 0, y: 50 }; // rahang kiri
+    pts[16] = { x: 100, y: 50 }; // rahang kanan
+    pts[30] = { x: noseX, y: 50 }; // hidung
+    return pts;
+  };
+
+  it("menghitung yaw ratio dengan benar", () => {
+    expect(getHeadYawRatio(makeLandmarks(50))).toBeCloseTo(0.5, 5);
+    expect(getHeadYawRatio(makeLandmarks(20))).toBeCloseTo(0.2, 5);
+    expect(getHeadYawRatio(makeLandmarks(80))).toBeCloseTo(0.8, 5);
+  });
+
+  it("mendeteksi gerakan menoleh dari tengah ke samping", () => {
+    const detector = createHeadTurnDetector();
+    expect(detector.push(makeLandmarks(50))).toBe(false); // tengah
+    expect(detector.push(makeLandmarks(20))).toBe(true); // menoleh samping
+  });
+
+  it("mendeteksi gerakan menoleh dari samping ke tengah", () => {
+    const detector = createHeadTurnDetector();
+    expect(detector.push(makeLandmarks(20))).toBe(false); // samping
+    expect(detector.push(makeLandmarks(50))).toBe(true); // kembali ke tengah
+  });
+});
+

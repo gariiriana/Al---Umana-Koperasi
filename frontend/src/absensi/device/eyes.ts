@@ -24,7 +24,7 @@ export interface BlinkDetector {
   reset(): void;
 }
 
-export function createBlinkDetector({ closeBelow = 0.21, openAbove = 0.25 } = {}): BlinkDetector {
+export function createBlinkDetector({ closeBelow = 0.22, openAbove = 0.24 } = {}): BlinkDetector {
   // Kedip baru dihitung setelah mata terlihat terbuka dulu.
   let state: "unknown" | "open" | "closed" = "unknown";
   return {
@@ -39,6 +39,58 @@ export function createBlinkDetector({ closeBelow = 0.21, openAbove = 0.25 } = {}
     },
     reset() {
       state = "unknown";
+    },
+  };
+}
+
+/** Menghitung rasio posisi hidung terhadap lebar rahang wajah (0.5 = hadap depan). */
+export function getHeadYawRatio(landmarks68: Point[]): number {
+  if (!landmarks68 || landmarks68.length < 68) return 0.5;
+  const noseX = landmarks68[30].x;
+  const jawLeft = landmarks68[0].x;
+  const jawRight = landmarks68[16].x;
+  const minX = Math.min(jawLeft, jawRight);
+  const maxX = Math.max(jawLeft, jawRight);
+  const span = maxX - minX;
+  if (span <= 0) return 0.5;
+  return (noseX - minX) / span;
+}
+
+export interface HeadTurnDetector {
+  /** Return true saat terdeteksi gerakan menoleh ke kiri/kanan. */
+  push(landmarks68: Point[]): boolean;
+  reset(): void;
+}
+
+export function createHeadTurnDetector({ centerMin = 0.42, centerMax = 0.58, sideThreshold = 0.08 } = {}): HeadTurnDetector {
+  let hasCentered = false;
+  let hasTurned = false;
+  return {
+    push(landmarks68) {
+      const ratio = getHeadYawRatio(landmarks68);
+      const isCenter = ratio >= centerMin && ratio <= centerMax;
+      const isSide = ratio < (centerMin - sideThreshold) || ratio > (centerMax + sideThreshold);
+
+      if (isCenter) {
+        if (hasTurned) {
+          hasTurned = false;
+          hasCentered = false;
+          return true;
+        }
+        hasCentered = true;
+      } else if (isSide) {
+        if (hasCentered) {
+          hasCentered = false;
+          hasTurned = false;
+          return true;
+        }
+        hasTurned = true;
+      }
+      return false;
+    },
+    reset() {
+      hasCentered = false;
+      hasTurned = false;
     },
   };
 }
