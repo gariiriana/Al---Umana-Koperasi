@@ -4,7 +4,9 @@
 export const DEFAULT_TOLERANCE_M = 15;
 export const MAX_TOLERANCE_M = 50;
 
-export const MAX_ACCURACY_M = 50;
+// Di dalam gedung beton / data center / dapur atau A-GPS WiFi, akurasi browser umumnya 50–200 m.
+// Batas luar poligon tetap dikunci ketat oleh `Math.min(accuracy, area.toleranceM)` (maks 50 m).
+export const MAX_ACCURACY_M = 300;
 export const GOOD_ACCURACY_M = 15;
 export const GPS_SAMPLE_MS = 10_000;
 

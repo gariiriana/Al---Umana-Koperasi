@@ -12,6 +12,7 @@ import {
   RefreshCcw,
 } from "lucide-react";
 
+import { checkLocation } from "../../../../workers/absensi/shared/geo.js";
 import { workDateWIB } from "../../../../workers/absensi/shared/time.js";
 import { getRiwayat } from "@/absensi/api";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
@@ -80,7 +81,7 @@ function Beranda({
   const [reloadKey, setReloadKey] = useState(0);
 
   const online = useOnlineStatus();
-  const { gpsConnected } = useAmbientGps();
+  const { gpsConnected, fix: ambientFix } = useAmbientGps();
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
@@ -140,7 +141,16 @@ function Beranda({
   };
 
   const title = flow.kind === "pulang" ? "Clock Out" : "Clock In";
-  const areaLabel = me.areas[0]?.name ?? "KOPERASI AL UMANAA";
+  const areaLabel = useMemo(() => {
+    if (ambientFix && me.areas.length > 0) {
+      const zone = checkLocation(ambientFix, me.areas);
+      if (zone.ok) {
+        const matched = me.areas.find((a) => a.id === zone.areaId);
+        if (matched) return matched.name;
+      }
+    }
+    return me.areas[0]?.name ?? "KOPERASI AL UMANAA";
+  }, [ambientFix, me.areas]);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900">

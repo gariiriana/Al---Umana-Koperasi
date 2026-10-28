@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { MapPin, MapPinOff, Wifi, WifiOff } from "lucide-react";
 
+import { MAX_ACCURACY_M } from "../../../../workers/absensi/shared/constants.js";
 import { subscribeGpsPosition, type GpsFix } from "@/absensi/device/gps";
+
+/** Apakah fix GPS memenuhi batas akurasi untuk absensi (konsisten dengan checkLocation). */
+// eslint-disable-next-line react-refresh/only-export-components
+export function isGpsUsable(fix: GpsFix | null): boolean {
+  return fix !== null && Number.isFinite(fix.accuracy) && fix.accuracy > 0 && fix.accuracy <= MAX_ACCURACY_M;
+}
 
 /** Memantau status koneksi internet browser secara reaktif. */
 // eslint-disable-next-line react-refresh/only-export-components
@@ -31,7 +38,7 @@ export function useAmbientGps(): { gpsConnected: boolean; fix: GpsFix | null } {
     );
     return unsubscribe;
   }, []);
-  return { gpsConnected: fix !== null, fix };
+  return { gpsConnected: isGpsUsable(fix), fix };
 }
 
 /** Dua ikon status vertikal (Pin Lokasi + WiFi) seperti pada kartu Beranda dan layar peta. */
@@ -53,7 +60,7 @@ export function SignalStatusPill({
       className={wrapper}
       aria-label={`Status GPS ${gpsConnected ? "terhubung" : "belum terhubung"}, internet ${online ? "terhubung" : "terputus"}`}
     >
-      <span title={gpsConnected ? "GPS Terhubung" : "GPS Belum Terhubung"}>
+      <span title={gpsConnected ? "GPS Terhubung" : "GPS Belum Akurat / Belum Terhubung"}>
         {gpsConnected ? (
           <MapPin className="h-5 w-5 text-emerald-600" aria-hidden="true" />
         ) : (
@@ -70,4 +77,3 @@ export function SignalStatusPill({
     </div>
   );
 }
-

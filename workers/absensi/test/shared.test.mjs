@@ -38,12 +38,13 @@ describe("geo", () => {
   it("checkLocation", () => {
     const A = [{ id: "a", name: "SPPG", polygon: SQ, toleranceM: 15, active: true }];
     assert.deepEqual(checkLocation({ ...PIN, accuracy: 10 }, A), { ok: true, areaId: "a", distanceM: 0 });
+    assert.equal(checkLocation({ ...PIN, accuracy: 86 }, A).ok, true); // indoor WiFi/A-GPS inside polygon
     assert.equal(checkLocation({ ...north(10), accuracy: 12 }, A).ok, true); // min(12,15) >= 10
     const r = checkLocation({ ...north(10), accuracy: 5 }, A); // min(5,15) < 10
     assert.equal(r.code, "DI_LUAR_AREA");
     assert.ok(Math.abs(r.distanceM - 10) < 0.5);
-    assert.equal(checkLocation({ ...north(20), accuracy: 30 }, A).code, "DI_LUAR_AREA"); // capped at 15
-    assert.equal(checkLocation({ ...PIN, accuracy: 51 }, A).code, "GPS_LEMAH");
+    assert.equal(checkLocation({ ...north(20), accuracy: 86 }, A).code, "DI_LUAR_AREA"); // still capped at toleranceM=15
+    assert.equal(checkLocation({ ...PIN, accuracy: 301 }, A).code, "GPS_LEMAH");
     assert.equal(checkLocation({ ...PIN, accuracy: 0 }, A).code, "GPS_LEMAH");
     assert.equal(checkLocation({ ...PIN, accuracy: 10 }, [{ ...A[0], active: false }]).code, "AREA_BELUM_ADA");
     assert.equal(checkLocation({ ...PIN, accuracy: 10 }, [{ ...A[0], id: "far", polygon: FAR }, A[0]]).areaId, "a");

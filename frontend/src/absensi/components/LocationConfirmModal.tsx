@@ -5,7 +5,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 import { checkLocation } from "../../../../workers/absensi/shared/geo.js";
-import { SignalStatusPill, useOnlineStatus } from "@/absensi/components/SignalStatusPill";
+import { SignalStatusPill, isGpsUsable, useOnlineStatus } from "@/absensi/components/SignalStatusPill";
 import { subscribeGpsPosition, type GpsFix } from "@/absensi/device/gps";
 import { messageFor } from "@/absensi/messages";
 import type { AbsenKind, AreaView, LocationInput } from "@/absensi/types";
@@ -131,7 +131,7 @@ export function LocationConfirmModal({
       <div className="relative flex-1 overflow-hidden bg-neutral-50">
         {/* Floating Pill Sinyal & GPS di Kanan Atas */}
         <div className="absolute right-3 top-3 z-[1000]">
-          <SignalStatusPill gpsConnected={fix !== null} online={online} floating />
+          <SignalStatusPill gpsConnected={isGpsUsable(fix)} online={online} floating />
         </div>
 
         {!fix ? (
