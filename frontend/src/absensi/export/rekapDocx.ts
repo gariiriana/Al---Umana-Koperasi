@@ -16,15 +16,13 @@ import {
 import { workDateWIB } from "../../../../workers/absensi/shared/time.js";
 import { formatJam, formatTanggalPanjang } from "@/absensi/logic/format";
 import { rekapFileName, rekapTables, type RekapMeta } from "@/absensi/export/rekapData";
-import type { RekapRow } from "@/absensi/types";
+import type { AbsensiRequestView, RekapRow } from "@/absensi/types";
 
-// A4 dalam DXA (1440 = 1 inci); docx menukar lebar/tinggi untuk landscape.
 const A4_WIDTH = 11906;
 const A4_HEIGHT = 16838;
 const MARGIN = 1000;
 const CONTENT_WIDTH = A4_HEIGHT - 2 * MARGIN;
 
-/** Lebar kolom proporsional yang jumlahnya pas dengan lebar halaman. */
 function widths(weights: number[]): number[] {
   const total = weights.reduce((a, b) => a + b, 0);
   const result = weights.map((w) => Math.floor((w / total) * CONTENT_WIDTH));
@@ -41,9 +39,9 @@ function table(rows: string[][], weights: number[]): Table {
       tableHeader: rowIndex === 0,
       children: cells.map((cell, col) => new TableCell({
         width: { size: columnWidths[col], type: WidthType.DXA },
-        shading: rowIndex === 0 ? { type: ShadingType.CLEAR, color: "auto", fill: "F3F4F6" } : undefined,
+        shading: rowIndex === 0 ? { type: ShadingType.CLEAR, color: "auto", fill: "FEF3C7" } : undefined,
         margins: { top: 60, bottom: 60, left: 100, right: 100 },
-        children: [new Paragraph({ children: [new TextRun({ text: cell, bold: rowIndex === 0, size: 20 })] })],
+        children: [new Paragraph({ children: [new TextRun({ text: cell, bold: rowIndex === 0, size: 19 })] })],
       })),
     })),
   });
@@ -51,8 +49,12 @@ function table(rows: string[][], weights: number[]): Table {
 
 const line = (text: string) => new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text, size: 22 })] });
 
-export function buildRekapDocument(rows: RekapRow[], meta: RekapMeta): Document {
-  const { summary, detailByEmployee } = rekapTables(rows);
+export function buildRekapDocument(
+  rows: RekapRow[],
+  meta: RekapMeta,
+  requests: AbsensiRequestView[] = [],
+): Document {
+  const { summary, detailByEmployee } = rekapTables(rows, requests, { from: meta.from, to: meta.to });
   const printedAt = `${formatTanggalPanjang(workDateWIB(meta.printedAt))} ${formatJam(meta.printedAt)} WIB`;
 
   return new Document({
@@ -71,10 +73,9 @@ export function buildRekapDocument(rows: RekapRow[], meta: RekapMeta): Document 
         line(`Periode: ${formatTanggalPanjang(meta.from)} – ${formatTanggalPanjang(meta.to)}`),
         line(`Dicetak oleh: ${meta.printedBy} · ${printedAt}`),
         new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240 }, children: [new TextRun("Ringkasan")] }),
-        table(summary, [4, 2, 2, 3]),
+        table(summary, [4, 2, 1.5, 1.5, 1.5, 2, 2, 3]),
         new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240 }, children: [new TextRun("Detail per karyawan")] }),
         ...detailByEmployee.flatMap((employee) => [
-          // keepNext: nama karyawan tidak terpisah dari tabelnya di pergantian halaman.
           new Paragraph({ heading: HeadingLevel.HEADING_3, keepNext: true, spacing: { before: 200 }, children: [new TextRun(employee.name)] }),
           table(employee.rows, [3, 2, 2, 2, 2, 4]),
         ]),
@@ -83,8 +84,12 @@ export function buildRekapDocument(rows: RekapRow[], meta: RekapMeta): Document 
   });
 }
 
-export async function downloadRekapDocx(rows: RekapRow[], meta: RekapMeta): Promise<void> {
-  const blob = await Packer.toBlob(buildRekapDocument(rows, meta));
+export async function downloadRekapDocx(
+  rows: RekapRow[],
+  meta: RekapMeta,
+  requests: AbsensiRequestView[] = [],
+): Promise<void> {
+  const blob = await Packer.toBlob(buildRekapDocument(rows, meta, requests));
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

@@ -9,7 +9,7 @@ import { useAbsensiSession } from "@/absensi/AbsensiSession";
 import { AbsensiApiError } from "@/absensi/api";
 import { messageFor } from "@/absensi/messages";
 
-/** Login pintu Absensi; tampilannya mengikuti LoginPage KASMA JOB. */
+/** Login pintu Absensi dengan tema Putih + Kuning Khas selaras Beranda & Admin Absensi. */
 export function AbsensiLoginPage() {
   const session = useAbsensiSession();
   const [email, setEmail] = useState("");
@@ -47,32 +47,30 @@ export function AbsensiLoginPage() {
   const shownError = error ?? (session.error ? messageFor(session.error) : null);
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
-      <video
-        src="https://www.alumanaa.com/wp-content/uploads/2020/03/Hero-Video-Compressed.mp4"
-        className="absolute inset-0 h-full w-full object-cover"
-        autoPlay
-        muted
-        loop
-        playsInline
-        aria-hidden="true"
-      />
-      <div className="absolute inset-0 bg-gradient-to-br from-[#111827]/80 via-[#1c1005]/70 to-[#78350F]/60" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#F8FAFC] px-4 py-8">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 rounded-b-[3rem] bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 shadow-xs" />
+      <div className="pointer-events-none absolute -right-16 -top-16 h-60 w-60 rounded-full bg-white/25" />
+      <div className="pointer-events-none absolute left-8 top-28 h-44 w-44 rounded-full bg-amber-300/35" />
 
       <div className="relative z-10 w-full max-w-md">
-        <div className="rounded-3xl border border-white/10 bg-[#111827]/40 p-4 shadow-[0_24px_50px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl sm:p-8">
-          <div className="mb-6 text-center">
+        <div className="rounded-3xl border border-amber-200/80 bg-white p-6 shadow-[0_24px_50px_-14px_rgba(17,24,39,0.16)] sm:p-8">
+          <div className="mb-5 text-center">
             <img
               src="/logo.png"
               alt="Pondok Pesantren Modern Al Umanaa"
-              className="mx-auto h-20 object-contain drop-shadow-md"
+              className="mx-auto h-18 object-contain"
             />
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="border-t border-white/10 pt-4">
-              <h2 className="font-['Manrope',system-ui,sans-serif] text-xl font-bold text-white">Masuk Absensi</h2>
-              <p className="mt-1 font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-300">
+            <div className="border-t border-amber-100 pt-4 text-center">
+              <span className="inline-block rounded-full bg-amber-100 px-3 py-0.5 text-[11px] font-extrabold text-amber-800">
+                Portal Kehadiran
+              </span>
+              <h2 className="mt-1.5 font-['Manrope',system-ui,sans-serif] text-xl font-extrabold text-neutral-900">
+                Masuk Absensi
+              </h2>
+              <p className="mt-1 font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-500">
                 Pakai akun absensi dari admin.
               </p>
             </div>
@@ -86,7 +84,7 @@ export function AbsensiLoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               leftIcon={<Mail className="h-4 w-4" />}
               placeholder="nama@absen.alumana.id"
-              containerClassName="[&>label]:!text-neutral-200 [&>label]:!font-semibold"
+              containerClassName="[&>label]:!text-neutral-700 [&>label]:!font-bold"
             />
 
             <Input
@@ -98,12 +96,12 @@ export function AbsensiLoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               leftIcon={<Lock className="h-4 w-4" />}
               placeholder="••••••••"
-              containerClassName="[&>label]:!text-neutral-200 [&>label]:!font-semibold"
+              containerClassName="[&>label]:!text-neutral-700 [&>label]:!font-bold"
               rightIcon={
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="text-[#6B7280] hover:text-[#374151] focus:outline-none"
+                  className="text-neutral-500 hover:text-neutral-800 focus:outline-none"
                   aria-label="Toggle password visibility"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -111,7 +109,7 @@ export function AbsensiLoginPage() {
               }
             />
 
-            <div className="flex w-full justify-center overflow-hidden py-2">
+            <div className="flex w-full justify-center overflow-hidden py-1">
               <div className="origin-center scale-90 transition-transform min-[370px]:scale-95 min-[400px]:scale-100">
                 <Turnstile
                   ref={turnstileRef}
@@ -119,13 +117,16 @@ export function AbsensiLoginPage() {
                   onSuccess={(token) => setTurnstileToken(token)}
                   onExpire={() => setTurnstileToken(null)}
                   onError={() => setTurnstileToken(null)}
-                  options={{ theme: "dark" }}
+                  options={{ theme: "light" }}
                 />
               </div>
             </div>
 
             {shownError && (
-              <p role="alert" className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#EF4444]">
+              <p
+                role="alert"
+                className="rounded-2xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 font-['Hanken_Grotesk',system-ui,sans-serif] text-sm font-semibold text-rose-700"
+              >
                 {shownError}
               </p>
             )}
@@ -143,7 +144,7 @@ export function AbsensiLoginPage() {
             <div className="text-center">
               <Link
                 to="/masuk"
-                className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs font-bold text-amber-300 hover:text-amber-400 hover:underline"
+                className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs font-extrabold text-amber-700 hover:text-amber-800 hover:underline"
               >
                 Pilih pintu lain
               </Link>

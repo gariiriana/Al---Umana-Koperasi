@@ -56,9 +56,6 @@ async function main() {
 
   await checkStackAlive();
 
-  // --------------------------------------------------------------------------
-  // Langkah 1: Seed admin
-  // --------------------------------------------------------------------------
   console.log("Langkah 1: Seed akun admin...");
   try {
     execFileSync(
@@ -72,7 +69,7 @@ async function main() {
         "--name",
         ADMIN.name,
       ],
-      { stdio: "pipe", encoding: "utf8" }
+      { stdio: "pipe", encoding: "utf8" },
     );
     console.log("   ✓ Akun admin siap");
   } catch (err) {
@@ -80,7 +77,6 @@ async function main() {
     process.exit(1);
   }
 
-  // Launch browser with fake media stream and location permissions
   const launchArgs = [
     "--use-fake-ui-for-media-stream",
     "--use-fake-device-for-media-stream",
@@ -117,7 +113,6 @@ async function main() {
 
   const page = await context.newPage();
 
-  // Setup CDP Virtual Authenticator for WebAuthn passkey
   const cdp = await context.newCDPSession(page);
   await cdp.send("WebAuthn.enable");
   await cdp.send("WebAuthn.addVirtualAuthenticator", {
@@ -131,9 +126,6 @@ async function main() {
   });
 
   try {
-    // ------------------------------------------------------------------------
-    // Langkah 2: Login admin, konfigurasi area & buat karyawan
-    // ------------------------------------------------------------------------
     console.log("Langkah 2: Login admin & konfigurasi area + karyawan...");
     await page.goto(`${BASE_URL}/absensi/login`);
     await page.waitForFunction(() => typeof window.__absensiEmulatorSignIn === "function");
@@ -143,7 +135,6 @@ async function main() {
 
     await page.waitForURL("**/absensi/admin**", { timeout: 10000 });
 
-    // Simpan area persegi ±0.0002° di sekitar pin & buat karyawan via API
     await page.evaluate(
       async ({ pin, emp }) => {
         const token = await window.__absensiAuth?.currentUser?.getIdToken();
@@ -160,7 +151,6 @@ async function main() {
           { lat: pin.lat - 0.0002, lng: pin.lng - 0.0002 },
         ];
 
-        // PUT Area
         const areaRes = await fetch("/api/absensi/admin/area", {
           method: "PUT",
           headers,
@@ -177,7 +167,6 @@ async function main() {
         });
         if (!areaRes.ok) throw new Error(`Gagal PUT /admin/area: ${areaRes.status}`);
 
-        // POST Karyawan (abaikan 409 jika sudah pernah ada)
         const empRes = await fetch("/api/absensi/admin/karyawan", {
           method: "POST",
           headers,
@@ -193,13 +182,10 @@ async function main() {
           throw new Error(`Gagal POST /admin/karyawan: ${empRes.status}`);
         }
       },
-      { pin: AREA_PIN, emp: EMPLOYEE }
+      { pin: AREA_PIN, emp: EMPLOYEE },
     );
     console.log("   ✓ Area & akun karyawan siap");
 
-    // ------------------------------------------------------------------------
-    // Langkah 3: Login karyawan & aktivasi (mode photo)
-    // ------------------------------------------------------------------------
     console.log("Langkah 3: Login karyawan & aktivasi HP...");
     await page.goto(`${BASE_URL}/absensi/login`);
     await page.waitForFunction(() => typeof window.__absensiEmulatorSignIn === "function");
@@ -209,95 +195,76 @@ async function main() {
 
     await page.waitForURL("**/absensi/aktivasi**", { timeout: 10000 });
 
-    // Cek persetujuan
     const checkbox = page.locator('input[type="checkbox"]');
     await checkbox.check();
     await page.getByRole("button", { name: "Lanjut" }).click();
 
-    // Mode foto: tunggu tombol ambil foto
     const ambilFotoBtn = page.getByRole("button", { name: "Ambil foto" });
     await ambilFotoBtn.waitFor({ state: "visible", timeout: 15000 });
     await ambilFotoBtn.click();
 
-    // Mode passkey: daftarkan sidik jari
-    const daftarPasskeyBtn = page.getByRole("button", {
-      name: /Daftarkan sidik jari/i,
-    });
+    const daftarPasskeyBtn = page.getByRole("button", { name: /Daftarkan sidik jari/i });
     await daftarPasskeyBtn.waitFor({ state: "visible", timeout: 10000 });
     await daftarPasskeyBtn.click();
 
-    // Tunggu redirect ke Beranda
     await page.waitForURL("**/absensi", { timeout: 15000 });
     console.log("   ✓ Aktivasi karyawan berhasil");
 
-    // ------------------------------------------------------------------------
-    // Langkah 4: Clock In
-    // ------------------------------------------------------------------------
-    console.log("Langkah 4: Melakukan Clock In...");
-    const clockInBtn = page.getByRole("button", { name: "Clock In" });
-    await clockInBtn.click();
+    console.log("Langkah 4: Melakukan Clock In (Peta Google Maps -> Selfie -> Passkey)...");
+    await page.getByRole("button", { name: "Clock In" }).click();
 
-    // Tunggu selfie
+    const lanjutClockInBtn = page.getByRole("button", { name: "Lanjutkan Clock In" });
+    await lanjutClockInBtn.waitFor({ state: "visible", timeout: 10000 });
+    await page.getByText(/Di Dalam Zona/i).waitFor({ state: "visible", timeout: 10000 });
+    await lanjutClockInBtn.click();
+
     const selfieClockInBtn = page.getByRole("button", { name: "Ambil foto" });
     await selfieClockInBtn.waitFor({ state: "visible", timeout: 15000 });
     await selfieClockInBtn.click();
 
-    // Konfirmasi passkey
-    const confirmPasskeyBtn = page.getByRole("button", {
-      name: /Konfirmasi sidik jari/i,
-    });
+    const confirmPasskeyBtn = page.getByRole("button", { name: /Konfirmasi sidik jari/i });
     await confirmPasskeyBtn.waitFor({ state: "visible", timeout: 10000 });
     await confirmPasskeyBtn.click();
 
-    // Tunggu status tombol berubah menjadi "✓ Sudah clock in"
     const sudahClockInBtn = page.getByRole("button", { name: /Sudah clock in/i });
     await sudahClockInBtn.waitFor({ state: "visible", timeout: 15000 });
     console.log("   ✓ Clock In berhasil");
 
-    // ------------------------------------------------------------------------
-    // Langkah 5: Clock Out
-    // ------------------------------------------------------------------------
-    console.log("Langkah 5: Melakukan Clock Out...");
-    const clockOutBtn = page.getByRole("button", { name: "Clock Out" });
-    await clockOutBtn.click();
+    console.log("Langkah 5: Melakukan Clock Out (Peta Google Maps -> Selfie -> Passkey)...");
+    await page.getByRole("button", { name: "Clock Out" }).click();
+
+    const lanjutClockOutBtn = page.getByRole("button", { name: "Lanjutkan Clock Out" });
+    await lanjutClockOutBtn.waitFor({ state: "visible", timeout: 10000 });
+    await lanjutClockOutBtn.click();
 
     const selfieClockOutBtn = page.getByRole("button", { name: "Ambil foto" });
     await selfieClockOutBtn.waitFor({ state: "visible", timeout: 15000 });
     await selfieClockOutBtn.click();
 
-    const confirmPasskeyOutBtn = page.getByRole("button", {
-      name: /Konfirmasi sidik jari/i,
-    });
+    const confirmPasskeyOutBtn = page.getByRole("button", { name: /Konfirmasi sidik jari/i });
     await confirmPasskeyOutBtn.waitFor({ state: "visible", timeout: 10000 });
     await confirmPasskeyOutBtn.click();
 
-    const sudahClockOutBtn = page.getByRole("button", {
-      name: /Sudah clock out/i,
-    });
+    const sudahClockOutBtn = page.getByRole("button", { name: /Sudah clock out/i });
     await sudahClockOutBtn.waitFor({ state: "visible", timeout: 15000 });
     console.log("   ✓ Clock Out berhasil");
 
-    // ------------------------------------------------------------------------
-    // Langkah 6: Verifikasi riwayat memuat "Lengkap"
-    // ------------------------------------------------------------------------
-    console.log("Langkah 6: Memeriksa riwayat absen...");
-    const statusLengkap = page.getByText("Lengkap").first();
-    await statusLengkap.waitFor({ state: "visible", timeout: 10000 });
-    console.log("   ✓ Riwayat memuat status 'Lengkap'");
+    console.log("Langkah 6: Memeriksa halaman kedua 'Lihat Selengkapnya' (Kalender & Ringkasan)...");
+    await page.getByRole("link", { name: /Lihat Selengkapnya/i }).click();
+    await page.waitForURL("**/absensi/riwayat", { timeout: 10000 });
+    await page.getByText("Kalender Absensi").waitFor({ state: "visible", timeout: 10000 });
+    await page.getByText("Ringkasan Kehadiran").waitFor({ state: "visible", timeout: 10000 });
+    console.log("   ✓ Halaman Kalender Absensi & Ringkasan Kehadiran tampil");
 
-    // ------------------------------------------------------------------------
-    // Langkah 7: Tombol Clock In tidak bisa ditekan
-    // ------------------------------------------------------------------------
     console.log("Langkah 7: Memeriksa tombol Clock In nonaktif...");
+    await page.getByRole("button", { name: "Kembali ke Beranda" }).click();
+    await page.waitForURL("**/absensi", { timeout: 10000 });
     const isDisabled = await sudahClockInBtn.isDisabled();
     if (!isDisabled) {
       throw new Error("Tombol Clock In seharusnya nonaktif setelah clock out");
     }
     console.log("   ✓ Tombol Clock In terkunci dan tidak bisa ditekan lagi hari ini");
 
-    // ------------------------------------------------------------------------
-    // Langkah 8: Admin Rekap export Excel & Word
-    // ------------------------------------------------------------------------
     console.log("Langkah 8: Memeriksa export rekap Excel & Word di akun Admin...");
     await page.goto(`${BASE_URL}/absensi/login`);
     await page.waitForFunction(() => typeof window.__absensiEmulatorSignIn === "function");
@@ -307,15 +274,12 @@ async function main() {
 
     await page.waitForURL("**/absensi/admin**", { timeout: 10000 });
 
-    // Buka tab Rekap (NavLink = role link)
     const tabRekap = page.getByRole("link", { name: "Rekap" });
     await tabRekap.click();
 
-    // Klik tombol Tampilkan
     const tampilkanBtn = page.getByRole("button", { name: "Tampilkan" });
     await tampilkanBtn.click();
 
-    // Unduh Excel
     const [downloadExcel] = await Promise.all([
       page.waitForEvent("download", { timeout: 15000 }),
       page.getByRole("button", { name: "Export Excel" }).click(),
@@ -324,7 +288,6 @@ async function main() {
     console.log(`   ✓ File Excel berhasil diunduh: ${excelName}`);
     if (!excelName.endsWith(".xlsx")) throw new Error(`Nama file salah: ${excelName}`);
 
-    // Unduh Word
     const [downloadWord] = await Promise.all([
       page.waitForEvent("download", { timeout: 15000 }),
       page.getByRole("button", { name: "Export Word" }).click(),

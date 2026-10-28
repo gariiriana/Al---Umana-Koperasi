@@ -28,16 +28,18 @@ export function AbsensiSessionProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const authEventRef = useRef(0);
 
-  const loadMe = useCallback(async () => {
+  const loadMe = useCallback(async (): Promise<string | null> => {
     try {
       const data = await getMe();
       setMe(data);
       setError(null);
+      return null;
     } catch (err) {
       const code = err instanceof AbsensiApiError ? err.code : "INTERNAL";
       setMe(null);
       setError(code);
       if (SIGN_OUT_CODES.has(code)) await firebaseSignOut(getAbsensiAuth());
+      return code;
     }
   }, []);
 
@@ -56,19 +58,38 @@ export function AbsensiSessionProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     setError(null);
+    const prevUid = getAbsensiAuth().currentUser?.uid ?? null;
+    let nextUid: string;
     try {
-      await signInWithEmailAndPassword(getAbsensiAuth(), email.trim(), password);
+      const cred = await signInWithEmailAndPassword(getAbsensiAuth(), email.trim(), password);
+      nextUid = cred.user.uid;
     } catch {
       throw new AbsensiApiError("LOGIN_GAGAL", 401);
     }
-  }, []);
+
+    // Jika sesi Firebase Auth sudah aktif dengan UID yang sama (mis. /me sebelumnya gagal),
+    // onAuthStateChanged tidak terpanggil ulang sehingga kita wajib memuat /me di sini.
+    if (prevUid === nextUid) {
+      setLoading(true);
+      try {
+        const errCode = await loadMe();
+        if (errCode) throw new AbsensiApiError(errCode, 503);
+      } finally {
+        setLoading(false);
+      }
+    }
+  }, [loadMe]);
+
+  const reloadMe = useCallback(async () => {
+    await loadMe();
+  }, [loadMe]);
 
   const value = useMemo<AbsensiSessionValue>(() => ({
     user, me, loading, error, signIn,
     signOut: () => firebaseSignOut(getAbsensiAuth()),
     setStatus: (status) => setMe((current) => (current ? { ...current, status } : current)),
-    reloadMe: loadMe,
-  }), [user, me, loading, error, signIn, loadMe]);
+    reloadMe,
+  }), [user, me, loading, error, signIn, reloadMe]);
 
   return <AbsensiSessionContext.Provider value={value}>{children}</AbsensiSessionContext.Provider>;
 }

@@ -8,14 +8,14 @@ import { errorMessage } from "@/absensi/errorMessage";
 import type { AreaView } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
 
-const text = "font-['Hanken_Grotesk',system-ui,sans-serif]";
-const field = `${text} w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white`;
-const fieldLabel = `${text} block space-y-1 text-xs font-bold text-neutral-300`;
+const field =
+  "w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-sm text-neutral-900 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-200";
+const fieldLabel = "block space-y-1 text-xs font-bold text-neutral-700";
 
 const NEW_AREA = -1;
 const DEFAULT_AREA_NAME = "SPPG Sukabumi Gunungguruh Kebonmanggu";
 
-/** Area absen: gambar poligon gedung di peta satelit, atur toleransi dan status aktif. */
+/** Area absen: gambar poligon zona kantor di peta Google Maps/Satelit, atur toleransi dan status aktif. */
 export function AreaTab() {
   const [areas, setAreas] = useState<AreaView[] | null>(null);
   const [selected, setSelected] = useState(NEW_AREA);
@@ -56,7 +56,6 @@ export function AreaTab() {
     setSaving(true);
     setError(null);
     setNotice(null);
-    // PUT mengganti seluruh daftar: area lain dikirim apa adanya, area yang diedit diganti.
     const targetId = selected === NEW_AREA ? crypto.randomUUID() : areas[selected].id;
     const entry = { id: targetId, name: name.trim(), polygon: polygon.points, toleranceM, active };
     const list: Array<Omit<AreaView, "id"> & { id?: string }> = areas.map((area) => ({ ...area }));
@@ -76,29 +75,33 @@ export function AreaTab() {
   };
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-4 rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-['Manrope',system-ui,sans-serif] text-lg font-bold text-white">Area absen</h2>
+        <div>
+          <h2 className="font-['Manrope',system-ui,sans-serif] text-lg font-extrabold text-neutral-900">
+            Area Zona Absensi
+          </h2>
+          <p className="text-xs text-neutral-500">
+            Klik sudut-sudut gedung di peta (minimal 3 titik). Area ini juga ditampilkan ke karyawan saat Clock In / Clock Out.
+          </p>
+        </div>
+
         {areas && (
           <select
             aria-label="Pilih area"
-            className={`${field} w-auto`}
+            className={`${field} sm:w-auto`}
             value={selected}
             onChange={(e) => select(areas, Number(e.target.value))}
           >
             {areas.map((area, i) => (
-              <option key={area.id} value={i} className="text-[#111827]">
+              <option key={area.id} value={i}>
                 {area.name}{area.active ? "" : " (nonaktif)"}
               </option>
             ))}
-            <option value={NEW_AREA} className="text-[#111827]">+ Area baru</option>
+            <option value={NEW_AREA}>+ Area baru</option>
           </select>
         )}
       </div>
-
-      <p className={`${text} text-sm text-neutral-300`}>
-        Klik sudut-sudut gedung di peta (minimal 3 titik). Absen sah di dalam garis, ditambah toleransi.
-      </p>
 
       {areas && (
         <AreaMap
@@ -108,14 +111,16 @@ export function AreaTab() {
         />
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" size="sm" disabled={polygon.points.length === 0} onClick={() => dispatch({ type: "undo" })}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outlined" size="sm" disabled={polygon.points.length === 0} onClick={() => dispatch({ type: "undo" })}>
           Hapus titik terakhir
         </Button>
-        <Button variant="secondary" size="sm" disabled={polygon.points.length === 0} onClick={() => dispatch({ type: "reset" })}>
+        <Button variant="outlined" size="sm" disabled={polygon.points.length === 0} onClick={() => dispatch({ type: "reset" })}>
           Ulang
         </Button>
-        <span className={`${text} self-center text-xs text-neutral-400`}>{polygon.points.length} titik</span>
+        <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">
+          {polygon.points.length} titik poligon
+        </span>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -135,16 +140,25 @@ export function AreaTab() {
           />
         </label>
       </div>
-      <label className={`${text} flex items-center gap-2 text-sm text-neutral-200`}>
-        <input type="checkbox" className="h-4 w-4 accent-amber-400" checked={active} onChange={(e) => setActive(e.target.checked)} />
-        <span>Aktif</span>
+
+      <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-neutral-700">
+        <input type="checkbox" className="h-4 w-4 accent-amber-500" checked={active} onChange={(e) => setActive(e.target.checked)} />
+        <span>Zona Aktif</span>
       </label>
 
-      {error && <p role="alert" className={`${text} text-sm text-[#EF4444]`}>{error}</p>}
-      {notice && <p className={`${text} text-sm text-emerald-300`}>{notice}</p>}
+      {error && (
+        <p role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+          {notice}
+        </p>
+      )}
 
       <Button variant="primary" className="w-full" loading={saving} disabled={!ready} onClick={() => void save()}>
-        Simpan
+        Simpan Area
       </Button>
     </section>
   );

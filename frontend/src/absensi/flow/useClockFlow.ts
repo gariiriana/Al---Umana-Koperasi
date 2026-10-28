@@ -4,7 +4,6 @@ import { payloadChallenge } from "../../../../workers/absensi/shared/binding.js"
 import { checkLocation } from "../../../../workers/absensi/shared/geo.js";
 import { absen, absenOptions } from "@/absensi/api";
 import type { SelfieResult } from "@/absensi/components/SelfieCapture";
-import { getBestPosition } from "@/absensi/device/gps";
 import { signWithPasskey } from "@/absensi/device/passkey";
 import { blobSha256Hex, blobToBase64 } from "@/absensi/device/selfie";
 import { errorMessage } from "@/absensi/errorMessage";
@@ -27,7 +26,8 @@ export interface ClockFlow {
   result: { kind: AbsenKind; serverTime: number } | null;
   /** Challenge sudah terikat ke lokasi + selfie; tombol passkey boleh ditekan. */
   passkeyReady: boolean;
-  start: (kind: AbsenKind) => Promise<void>;
+  start: (kind: AbsenKind) => void;
+  confirmLocation: (fix: LocationInput) => void;
   selfieDone: (selfie: SelfieResult) => Promise<void>;
   confirmPasskey: () => Promise<void>;
   retry: () => void;
@@ -35,7 +35,7 @@ export interface ClockFlow {
 }
 
 /**
- * Lokasi → selfie → challenge dari Worker yang diikat ke lokasi + hash selfie → passkey → absen.
+ * Konfirmasi Peta Lokasi → Selfie → Challenge dari Worker yang diikat ke lokasi + hash selfie → Passkey → Absen.
  * Passkey dipanggil dari tombol (`confirmPasskey`) karena Safari iPhone butuh ketukan pengguna.
  */
 export function useClockFlow({ me, onStatus }: { me: Me; onStatus: (status: ShiftStatus) => void }): ClockFlow {
@@ -63,8 +63,8 @@ export function useClockFlow({ me, onStatus }: { me: Me; onStatus: (status: Shif
     setStep("gagal");
   }, []);
 
-  const start = useCallback(async (nextKind: AbsenKind) => {
-    const token = ++run.current;
+  const start = useCallback((nextKind: AbsenKind) => {
+    run.current++;
     kindRef.current = nextKind;
     locationRef.current = null;
     preparedRef.current = null;
@@ -73,19 +73,18 @@ export function useClockFlow({ me, onStatus }: { me: Me; onStatus: (status: Shif
     setResult(null);
     setPrepared(null);
     setStep("lokasi");
-    try {
-      const fix = await getBestPosition();
-      if (token !== run.current) return;
-      const check = checkLocation(fix, meRef.current.areas);
-      if (!check.ok) {
-        fail(token, messageFor(check.code, { distanceM: check.distanceM }));
-        return;
-      }
-      locationRef.current = fix;
-      setStep("selfie");
-    } catch (err) {
-      fail(token, errorMessage(err));
+  }, []);
+
+  const confirmLocation = useCallback((fix: LocationInput) => {
+    const token = run.current;
+    const check = checkLocation(fix, meRef.current.areas);
+    if (!check.ok) {
+      fail(token, messageFor(check.code, { distanceM: check.distanceM }));
+      return;
     }
+    locationRef.current = fix;
+    setError(null);
+    setStep("selfie");
   }, [fail]);
 
   const selfieDone = useCallback(async (selfie: SelfieResult) => {
@@ -146,7 +145,7 @@ export function useClockFlow({ me, onStatus }: { me: Me; onStatus: (status: Shif
   }, [fail]);
 
   const retry = useCallback(() => {
-    if (kindRef.current) void start(kindRef.current);
+    if (kindRef.current) start(kindRef.current);
   }, [start]);
 
   const cancel = useCallback(() => {
@@ -157,5 +156,17 @@ export function useClockFlow({ me, onStatus }: { me: Me; onStatus: (status: Shif
     setStep("idle");
   }, []);
 
-  return { step, kind, error, result, passkeyReady: prepared !== null, start, selfieDone, confirmPasskey, retry, cancel };
+  return {
+    step,
+    kind,
+    error,
+    result,
+    passkeyReady: prepared !== null,
+    start,
+    confirmLocation,
+    selfieDone,
+    confirmPasskey,
+    retry,
+    cancel,
+  };
 }

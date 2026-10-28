@@ -12,6 +12,10 @@ export const getEmployee = (db, uid) => first(db.prepare("SELECT * FROM employee
 
 export const listEmployees = (db) => all(db.prepare("SELECT * FROM employees ORDER BY name COLLATE NOCASE"));
 
+export const listActiveEmployeesByRole = (db, role) => all(
+  db.prepare("SELECT uid, name, email FROM employees WHERE role = ? AND status = 'aktif' ORDER BY name COLLATE NOCASE").bind(role),
+);
+
 export async function insertEmployee(db, { uid, name, email, role, faceRequired, createdAt, createdBy }) {
   await db.prepare(
     "INSERT INTO employees (uid, name, email, role, face_required, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -105,7 +109,7 @@ export const consumeChallenge = (db, id, uid, purpose, nowMs) => first(db.prepar
 // Shift
 // ---------------------------------------------------------------------------
 
-export const recentShifts = (db, uid, limit = 3) =>
+export const recentShifts = (db, uid, limit = 5) =>
   all(db.prepare("SELECT * FROM shifts WHERE uid = ? ORDER BY masuk_at DESC LIMIT ?").bind(uid, limit));
 
 /** Melempar kalau `(uid, work_date)` sudah ada (indeks unik). */
@@ -146,6 +150,109 @@ export const todayOverview = (db, workDate) => all(db.prepare(
    WHERE e.role = 'absen_karyawan' AND e.status = 'aktif'
    ORDER BY e.name COLLATE NOCASE, s.masuk_at DESC`,
 ).bind(workDate));
+
+// ---------------------------------------------------------------------------
+// Pengajuan (Cuti / Sakit / Izin & Pergantian Shift)
+// ---------------------------------------------------------------------------
+
+const REQUEST_SELECT = `
+  SELECT r.*, e.name AS employee_name, rev.name AS reviewer_name
+  FROM requests r
+  JOIN employees e ON e.uid = r.uid
+  LEFT JOIN employees rev ON rev.uid = r.reviewed_by
+`;
+
+export async function insertRequest(db, {
+  id, uid, kind, leaveType, startDate, endDate, fromShift, toShift, partnerUid, partnerName, reason, createdAt,
+}) {
+  await db.prepare(
+    `INSERT INTO requests (
+       id, uid, kind, leave_type, start_date, end_date, from_shift, to_shift,
+       partner_uid, partner_name, reason, status, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+  ).bind(
+    id, uid, kind, leaveType ?? null, startDate, endDate, fromShift ?? null, toShift ?? null,
+    partnerUid ?? null, partnerName ?? null, reason, createdAt,
+  ).run();
+}
+
+export const getRequestById = (db, id) =>
+  first(db.prepare(`${REQUEST_SELECT} WHERE r.id = ?`).bind(id));
+
+export const listEmployeeRequests = (db, uid, limit = 100) =>
+  all(db.prepare(`${REQUEST_SELECT} WHERE r.uid = ? ORDER BY r.created_at DESC LIMIT ?`).bind(uid, limit));
+
+export const requestsForMonth = (db, uid, bulan) =>
+  all(db.prepare(
+    `${REQUEST_SELECT} WHERE r.uid = ? AND r.start_date <= ? AND r.end_date >= ? ORDER BY r.start_date DESC, r.created_at DESC`,
+  ).bind(uid, `${bulan}-31`, `${bulan}-01`));
+
+export function listAdminRequests(db, { status, limit = 200 } = {}) {
+  if (status && status !== "all") {
+    return all(db.prepare(`${REQUEST_SELECT} WHERE r.status = ? ORDER BY r.created_at DESC LIMIT ?`).bind(status, limit));
+  }
+  return all(db.prepare(`${REQUEST_SELECT} ORDER BY CASE WHEN r.status = 'pending' THEN 0 ELSE 1 END, r.created_at DESC LIMIT ?`).bind(limit));
+}
+
+export async function countPendingRequests(db) {
+  const row = await first(db.prepare("SELECT COUNT(*) AS n FROM requests WHERE status = 'pending'"));
+  return Number(row?.n ?? 0);
+}
+
+export const reviewRequest = (db, id, { status, reviewedBy, reviewedAt, reviewNote }) => changes(db.prepare(
+  `UPDATE requests SET status = ?, reviewed_by = ?, reviewed_at = ?, review_note = ?
+   WHERE id = ? AND status = 'pending'`,
+).bind(status, reviewedBy, reviewedAt, reviewNote ?? null, id));
+
+export function approvedRequestsInRange(db, { from, to, uid }) {
+  const filter = uid ? " AND r.uid = ?" : "";
+  const values = uid ? [to, from, uid] : [to, from];
+  return all(db.prepare(
+    `${REQUEST_SELECT}
+     WHERE r.status = 'approved' AND r.start_date <= ? AND r.end_date >= ?${filter}
+     ORDER BY r.start_date, e.name COLLATE NOCASE`,
+  ).bind(...values));
+}
+
+// ---------------------------------------------------------------------------
+// Notifikasi
+// ---------------------------------------------------------------------------
+
+export async function insertNotifications(db, items) {
+  if (!items || items.length === 0) return;
+  await db.batch(items.map((item) => db.prepare(
+    `INSERT INTO notifications (id, recipient_uid, kind, title, body, request_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    item.id || crypto.randomUUID(),
+    item.recipientUid,
+    item.kind,
+    item.title,
+    item.body,
+    item.requestId ?? null,
+    item.createdAt,
+  )));
+}
+
+export const listNotifications = (db, recipientUid, limit = 50) =>
+  all(db.prepare(
+    "SELECT * FROM notifications WHERE recipient_uid = ? ORDER BY created_at DESC LIMIT ?",
+  ).bind(recipientUid, limit));
+
+export async function countUnreadNotifications(db, recipientUid) {
+  const row = await first(db.prepare(
+    "SELECT COUNT(*) AS n FROM notifications WHERE recipient_uid = ? AND read_at IS NULL",
+  ).bind(recipientUid));
+  return Number(row?.n ?? 0);
+}
+
+export const markNotificationRead = (db, recipientUid, id, nowMs) => changes(db.prepare(
+  "UPDATE notifications SET read_at = ? WHERE id = ? AND recipient_uid = ? AND read_at IS NULL",
+).bind(nowMs, id, recipientUid));
+
+export const markAllNotificationsRead = (db, recipientUid, nowMs) => changes(db.prepare(
+  "UPDATE notifications SET read_at = ? WHERE recipient_uid = ? AND read_at IS NULL",
+).bind(nowMs, recipientUid));
 
 // ---------------------------------------------------------------------------
 // Foto

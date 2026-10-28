@@ -26,6 +26,7 @@ const MESSAGES: Record<string, string> = {
   NEGARA_TIDAK_VALID: "Lokasi jaringan kamu tidak dikenali. Matikan VPN lalu coba lagi.",
   SELFIE_TIDAK_VALID: "Foto tidak terbaca. Ambil foto lagi.",
   DESKRIPTOR_TIDAK_VALID: "Wajah belum terbaca. Ambil foto wajah lagi.",
+  SUDAH_DIPROSES: "Pengajuan ini sudah diproses sebelumnya.",
   CHALLENGE_INVALID: INVALID,
   PAYLOAD_TIDAK_COCOK: INVALID,
   PASSKEY_TIDAK_VALID: INVALID,

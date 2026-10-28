@@ -1,19 +1,25 @@
-// Endpoint untuk akun absensi sendiri: profil, aktivasi, clock in/out, riwayat.
+// Endpoint untuk akun absensi sendiri: profil, aktivasi, clock in/out, riwayat, pengajuan, notifikasi.
 import { payloadChallenge, sha256Hex } from "../../shared/binding.js";
 import { CHALLENGE_TTL_MS, FACE_MATCH_THRESHOLD } from "../../shared/constants.js";
 import { checkLocation } from "../../shared/geo.js";
 import {
-  activateEmployee, closeShift, consumeChallenge, createChallenge, getEmployee, insertPasskey, insertPhoto,
-  insertShift, listAreas, listPasskeys, recentShifts, shiftsForMonth, updatePasskeyCounter,
+  activateEmployee, closeShift, consumeChallenge, countPendingRequests, countUnreadNotifications, createChallenge,
+  getEmployee, getRequestById, insertNotifications, insertPasskey, insertPhoto, insertRequest, insertShift,
+  listActiveEmployeesByRole, listAreas, listEmployeeRequests, listNotifications, listPasskeys,
+  markAllNotificationsRead, markNotificationRead, recentShifts, requestsForMonth, shiftsForMonth, updatePasskeyCounter,
 } from "../db.js";
 import { AbsensiError, decodeJpeg, readJson } from "../http.js";
+import { DAY_MS, LEAVE_LABEL, parseIsoDate, requestDetailSummary, requestKindTitle, toNotificationView, toRequestView } from "../requests.js";
 import { requireEmployee } from "../session.js";
 import { decideAbsen, shiftStatus, toShiftView } from "../shifts.js";
 
 const KINDS = new Set(["masuk", "pulang"]);
+const REQUEST_KINDS = new Set(["cuti", "pergantian_shift"]);
+const LEAVE_TYPES = new Set(["cuti", "sakit", "izin"]);
 
 const BULAN = /^\d{4}-(0[1-9]|1[0-2])$/;
 const DESCRIPTOR_LENGTH = 128;
+const MAX_LEAVE_DAYS = 31;
 
 function randomNonce() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -37,6 +43,12 @@ async function requireInsideArea(ctx, location) {
 export async function meView(ctx, employee) {
   const now = ctx.deps.now();
   const faceRequired = employee.face_required === 1;
+  const [shifts, areas, unreadNotifications, pendingRequests] = await Promise.all([
+    recentShifts(ctx.env.DB, employee.uid),
+    listAreas(ctx.env.DB, { activeOnly: true }),
+    countUnreadNotifications(ctx.env.DB, employee.uid),
+    employee.role === "admin_absensi" ? countPendingRequests(ctx.env.DB) : Promise.resolve(0),
+  ]);
   return {
     uid: employee.uid,
     name: employee.name,
@@ -44,9 +56,11 @@ export async function meView(ctx, employee) {
     role: employee.role,
     faceRequired,
     activated: employee.activated_at !== null,
-    status: shiftStatus(await recentShifts(ctx.env.DB, employee.uid), now),
-    areas: await listAreas(ctx.env.DB, { activeOnly: true }),
+    status: shiftStatus(shifts, now),
+    areas,
     faceDescriptor: faceRequired && employee.face_descriptor ? JSON.parse(employee.face_descriptor) : null,
+    unreadNotifications,
+    pendingRequests,
   };
 }
 
@@ -213,6 +227,115 @@ export async function getRiwayat(ctx) {
   const bulan = ctx.url.searchParams.get("bulan") || "";
   if (!BULAN.test(bulan)) throw new AbsensiError("VALIDATION_ERROR", 400);
   const now = ctx.deps.now();
-  const rows = await shiftsForMonth(ctx.env.DB, employee.uid, bulan);
-  return { rows: rows.map((row) => toShiftView(row, now)) };
+  const [rows, requests] = await Promise.all([
+    shiftsForMonth(ctx.env.DB, employee.uid, bulan),
+    requestsForMonth(ctx.env.DB, employee.uid, bulan),
+  ]);
+  return {
+    rows: rows.map((row) => toShiftView(row, now)),
+    requests: requests.map(toRequestView),
+  };
+}
+
+export async function getRekan(ctx) {
+  const employee = await requireEmployee(ctx, { role: "absen_karyawan" });
+  const coworkers = (await listActiveEmployeesByRole(ctx.env.DB, "absen_karyawan"))
+    .filter((row) => row.uid !== employee.uid)
+    .map((row) => ({ uid: row.uid, name: row.name }));
+  return { coworkers };
+}
+
+export async function listPengajuan(ctx) {
+  const employee = await requireEmployee(ctx, { role: "absen_karyawan" });
+  const rows = await listEmployeeRequests(ctx.env.DB, employee.uid);
+  return { requests: rows.map(toRequestView) };
+}
+
+export async function createPengajuan(ctx) {
+  const employee = await requireEmployee(ctx, { role: "absen_karyawan" });
+  const body = await readJson(ctx.request);
+  if (!REQUEST_KINDS.has(body.kind)) throw new AbsensiError("VALIDATION_ERROR", 400);
+
+  const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+  if (reason.length < 2 || reason.length > 500) throw new AbsensiError("VALIDATION_ERROR", 400);
+
+  let leaveType = null;
+  let startDate;
+  let endDate;
+  let fromShift = null;
+  let toShift = null;
+  let partnerUid = null;
+  let partnerName = null;
+
+  if (body.kind === "cuti") {
+    if (!LEAVE_TYPES.has(body.leaveType)) throw new AbsensiError("VALIDATION_ERROR", 400);
+    leaveType = body.leaveType;
+    startDate = parseIsoDate(body.startDate);
+    endDate = parseIsoDate(body.endDate ?? body.startDate);
+    const spanDays = (Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / DAY_MS + 1;
+    if (spanDays < 1 || spanDays > MAX_LEAVE_DAYS) throw new AbsensiError("VALIDATION_ERROR", 400);
+  } else {
+    startDate = parseIsoDate(body.date ?? body.startDate);
+    endDate = startDate;
+    fromShift = typeof body.fromShift === "string" ? body.fromShift.trim() : "";
+    toShift = typeof body.toShift === "string" ? body.toShift.trim() : "";
+    if (!fromShift || fromShift.length > 100 || !toShift || toShift.length > 100 || fromShift === toShift) {
+      throw new AbsensiError("VALIDATION_ERROR", 400);
+    }
+    if (body.partnerUid) {
+      const partner = await getEmployee(ctx.env.DB, String(body.partnerUid));
+      if (!partner || partner.role !== "absen_karyawan" || partner.status !== "aktif" || partner.uid === employee.uid) {
+        throw new AbsensiError("VALIDATION_ERROR", 400);
+      }
+      partnerUid = partner.uid;
+      partnerName = partner.name;
+    }
+  }
+
+  const now = ctx.deps.now();
+  const id = crypto.randomUUID();
+  await insertRequest(ctx.env.DB, {
+    id, uid: employee.uid, kind: body.kind, leaveType, startDate, endDate,
+    fromShift, toShift, partnerUid, partnerName, reason, createdAt: now,
+  });
+
+  const saved = await getRequestById(ctx.env.DB, id);
+  const admins = await listActiveEmployeesByRole(ctx.env.DB, "admin_absensi");
+  const title = `${requestKindTitle(saved)} Baru`;
+  const detail = requestDetailSummary(saved);
+  await insertNotifications(ctx.env.DB, admins.map((admin) => ({
+    recipientUid: admin.uid,
+    kind: "pengajuan_baru",
+    title,
+    body: `${employee.name} mengajukan ${LEAVE_LABEL[leaveType] ? detail : `pergantian shift (${detail})`} — "${reason}"`,
+    requestId: id,
+    createdAt: now,
+  })));
+
+  return toRequestView(saved);
+}
+
+export async function getNotifikasi(ctx) {
+  const employee = await requireEmployee(ctx);
+  const [unreadCount, rows] = await Promise.all([
+    countUnreadNotifications(ctx.env.DB, employee.uid),
+    listNotifications(ctx.env.DB, employee.uid, 50),
+  ]);
+  return {
+    unreadCount,
+    notifications: rows.map(toNotificationView),
+  };
+}
+
+export async function bacaNotifikasi(ctx) {
+  const employee = await requireEmployee(ctx);
+  const body = await readJson(ctx.request).catch(() => ({}));
+  const now = ctx.deps.now();
+  if (typeof body?.id === "string" && body.id.trim()) {
+    await markNotificationRead(ctx.env.DB, employee.uid, body.id.trim(), now);
+  } else {
+    await markAllNotificationsRead(ctx.env.DB, employee.uid, now);
+  }
+  const unreadCount = await countUnreadNotifications(ctx.env.DB, employee.uid);
+  return { unreadCount };
 }

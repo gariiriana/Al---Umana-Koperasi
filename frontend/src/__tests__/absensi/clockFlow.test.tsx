@@ -23,7 +23,6 @@ vi.mock("@/absensi/api", async (importOriginal) => ({
   absenOptions: mocks.absenOptions,
   absen: mocks.absen,
 }));
-vi.mock("@/absensi/device/gps", () => ({ getBestPosition: vi.fn(async () => mocks.position) }));
 vi.mock("@/absensi/device/passkey", () => ({ signWithPasskey: mocks.signWithPasskey }));
 
 import { useClockFlow } from "@/absensi/flow/useClockFlow";
@@ -62,6 +61,8 @@ beforeEach(() => {
 async function runToPasskey(onStatus = vi.fn()) {
   const hook = renderHook(() => useClockFlow({ me, onStatus }));
   await act(async () => hook.result.current.start("masuk"));
+  expect(hook.result.current.step).toBe("lokasi");
+  await act(async () => hook.result.current.confirmLocation(mocks.position));
   await waitFor(() => expect(hook.result.current.step).toBe("selfie"));
   await act(async () => hook.result.current.selfieDone({ jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: [0.1, 0.2], distance: 0.31 }));
   await waitFor(() => expect(hook.result.current.passkeyReady).toBe(true));
@@ -70,7 +71,7 @@ async function runToPasskey(onStatus = vi.fn()) {
 }
 
 describe("useClockFlow", () => {
-  it("sukses: onStatus menerima status dari Worker lalu step sukses", async () => {
+  it("sukses: mulai di step lokasi → konfirmasi peta → selfie → passkey → status diperbarui", async () => {
     const onStatus = vi.fn();
     const hook = await runToPasskey(onStatus);
     await act(async () => hook.result.current.confirmPasskey());
@@ -86,10 +87,12 @@ describe("useClockFlow", () => {
     });
   });
 
-  it("pra-cek di luar area: gagal dengan DI_LUAR_AREA dan absen tidak dipanggil", async () => {
+  it("pra-cek di luar area saat konfirmasi lokasi: gagal dengan DI_LUAR_AREA dan absen tidak dipanggil", async () => {
     mocks.position = { lat: PIN.lat + 0.001, lng: PIN.lng, accuracy: 8 };
     const hook = renderHook(() => useClockFlow({ me, onStatus: vi.fn() }));
     await act(async () => hook.result.current.start("masuk"));
+    expect(hook.result.current.step).toBe("lokasi");
+    await act(async () => hook.result.current.confirmLocation(mocks.position));
     await waitFor(() => expect(hook.result.current.step).toBe("gagal"));
     expect(hook.result.current.error).toMatch(/^Kamu di luar area absen \(sekitar \d+ m dari gedung\)\.$/);
     expect(mocks.absenOptions).not.toHaveBeenCalled();

@@ -7,8 +7,14 @@ import { verifyIdToken } from "./auth.js";
 import { AbsensiError, corsHeaders, errorResponse, json } from "./http.js";
 import { createAuthUser, setAuthDisabled, setClaims } from "./identity.js";
 import { runCron } from "./cron.js";
-import { createKaryawan, getArea, getFoto, getHariIni, getRekap, listKaryawan, patchKaryawan, putArea } from "./handlers/admin.js";
-import { absen, absenOptions, activate, activateOptions, getMe, getRiwayat } from "./handlers/karyawan.js";
+import {
+  createKaryawan, getArea, getFoto, getHariIni, getRekap, listKaryawan,
+  listPengajuanAdmin, patchKaryawan, putArea, reviewPengajuanAdmin,
+} from "./handlers/admin.js";
+import {
+  absen, absenOptions, activate, activateOptions, bacaNotifikasi,
+  createPengajuan, getMe, getNotifikasi, getRekan, getRiwayat, listPengajuan,
+} from "./handlers/karyawan.js";
 import { registrationOptions, verifyAuthentication, verifyRegistration } from "./passkey.js";
 
 const PREFIX = "/api/absensi";
@@ -16,12 +22,19 @@ const PREFIX = "/api/absensi";
 const ROUTES = [
   ["GET", /^\/me$/, getMe],
   ["GET", /^\/riwayat$/, getRiwayat],
+  ["GET", /^\/rekan$/, getRekan],
+  ["GET", /^\/pengajuan$/, listPengajuan],
+  ["POST", /^\/pengajuan$/, createPengajuan],
+  ["GET", /^\/notifikasi$/, getNotifikasi],
+  ["POST", /^\/notifikasi\/baca$/, bacaNotifikasi],
   ["POST", /^\/activate\/options$/, activateOptions],
   ["POST", /^\/activate$/, activate],
   ["POST", /^\/absen\/options$/, absenOptions],
   ["POST", /^\/absen$/, absen],
   ["GET", /^\/admin\/hari-ini$/, getHariIni],
   ["GET", /^\/admin\/rekap$/, getRekap],
+  ["GET", /^\/admin\/pengajuan$/, listPengajuanAdmin],
+  ["PATCH", /^\/admin\/pengajuan\/([\w-]{1,64})$/, reviewPengajuanAdmin],
   ["GET", /^\/admin\/foto\/([\w-]{1,64})$/, getFoto],
   ["GET", /^\/admin\/karyawan$/, listKaryawan],
   ["POST", /^\/admin\/karyawan$/, createKaryawan],

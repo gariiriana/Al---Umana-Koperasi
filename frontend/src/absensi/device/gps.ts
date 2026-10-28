@@ -17,7 +17,7 @@ export interface GetBestPositionOptions {
 const DEV_GPS_KEY = "absensi:devGps";
 
 // Hanya build dev: localStorage["absensi:devGps"] = "lat,lng,acc" untuk tes di laptop.
-function devFix(): GpsFix | null {
+export function getDevGpsFix(): GpsFix | null {
   if (!import.meta.env.DEV) return null;
   let raw: string | null = null;
   try {
@@ -31,6 +31,47 @@ function devFix(): GpsFix | null {
 }
 
 /**
+ * Mengamati GPS secara kontinu untuk peta konfirmasi lokasi.
+ * Memanggil `onFix` setiap ada posisi valid baru, atau `onError` bila izin ditolak / GPS mati.
+ */
+export function subscribeGpsPosition(
+  onFix: (fix: GpsFix) => void,
+  onError: (code: string) => void,
+  geolocation: Geolocation | undefined = typeof navigator === "undefined" ? undefined : navigator.geolocation,
+): () => void {
+  const dev = getDevGpsFix();
+  if (dev) {
+    const id = setTimeout(() => onFix(dev), 50);
+    return () => clearTimeout(id);
+  }
+  if (!geolocation) {
+    onError("GPS_TIDAK_ADA");
+    return () => {};
+  }
+  let stopped = false;
+  const watchId = geolocation.watchPosition(
+    (position) => {
+      if (stopped) return;
+      const { latitude, longitude, accuracy } = position.coords;
+      if (!verifyGpsLocation(latitude, longitude, accuracy).isValid) {
+        onError("GPS_PALSU");
+        return;
+      }
+      onFix({ lat: latitude, lng: longitude, accuracy });
+    },
+    (error) => {
+      if (stopped) return;
+      onError(error.code === 1 ? "IZIN_LOKASI" : "GPS_TIDAK_ADA");
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15_000 },
+  );
+  return () => {
+    stopped = true;
+    geolocation.clearWatch(watchId);
+  };
+}
+
+/**
  * Mengamati GPS sampai `maxMs` dan mengembalikan fix paling akurat (bukan yang terakhir).
  * Selesai lebih awal begitu akurasi ≤ `goodAccuracyM`.
  */
@@ -39,7 +80,7 @@ export function getBestPosition({
   goodAccuracyM = GOOD_ACCURACY_M,
   geolocation = typeof navigator === "undefined" ? undefined : navigator.geolocation,
 }: GetBestPositionOptions = {}): Promise<GpsFix> {
-  const dev = devFix();
+  const dev = getDevGpsFix();
   if (dev) return Promise.resolve(dev);
 
   return new Promise((resolve, reject) => {

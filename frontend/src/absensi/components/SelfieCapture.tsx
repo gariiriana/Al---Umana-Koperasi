@@ -240,7 +240,7 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
         {phase === "mismatch" && (
           <Button variant="primary" onClick={() => setAttempt((n) => n + 1)}>Coba lagi</Button>
         )}
-        <Button variant="secondary" disabled={capturing} onClick={onCancel}>Batal</Button>
+        <Button variant="outlined" disabled={capturing} onClick={onCancel}>Batal</Button>
       </div>
     </div>
   );

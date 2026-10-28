@@ -31,7 +31,6 @@ export function AktivasiPage() {
   const [photo, setPhoto] = useState<SelfieResult | null>(null);
   const [options, setOptions] = useState<ActivateOptions | null>(null);
 
-  // Area terbaru tanpa membuat ulang `locate` (yang memicu effect langkah).
   const areasRef = useRef(me?.areas ?? []);
   areasRef.current = me?.areas ?? [];
   const locate = useCallback(async () => {
@@ -53,8 +52,6 @@ export function AktivasiPage() {
     }
   }, []);
 
-  // Opsi passkey diambil saat langkah dibuka; tombolnya sendiri memanggil WebAuthn
-  // (Safari iPhone hanya mau memunculkan sidik jari/Face ID dari ketukan pengguna).
   const loadOptions = useCallback(async () => {
     setOptions(null);
     setError(null);
@@ -88,7 +85,6 @@ export function AktivasiPage() {
       navigate("/absensi", { replace: true });
     } catch (err) {
       setError(errorMessage(err));
-      // Challenge sudah terpakai atau kedaluwarsa; minta yang baru untuk percobaan berikutnya.
       void activateOptions().then(setOptions, () => setOptions(null));
     } finally {
       setBusy(false);
@@ -98,34 +94,40 @@ export function AktivasiPage() {
   if (!me) return null;
 
   return (
-    <div className="min-h-screen bg-[#111827] px-4 py-8">
-      <div className="mx-auto w-full max-w-md space-y-5">
-        <div className="flex items-start justify-between gap-3">
+    <div className="min-h-screen bg-[#F8FAFC] font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900">
+      <div className="rounded-b-[2rem] bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 px-4 pb-14 pt-8">
+        <div className="mx-auto flex w-full max-w-md items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs font-bold text-amber-300">
+            <span className="inline-block rounded-full bg-white/80 px-2.5 py-0.5 text-xs font-extrabold text-amber-900">
               Langkah {STEP_NUMBER[step]} dari 4
-            </p>
-            <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-bold text-white">Aktivasi HP</h1>
-            <p className="mt-1 font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-300">
-              Sekali saja di HP ini, dan harus di dalam area kerja.
+            </span>
+            <h1 className="mt-2 font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-neutral-900">
+              Aktivasi HP
+            </h1>
+            <p className="mt-1 text-sm font-medium text-neutral-800/85">
+              Sekali saja di HP ini, dan harus berada di dalam area kerja.
             </p>
           </div>
           {signOut && (
-            <Button variant="secondary" size="sm" onClick={() => void signOut()}>Keluar</Button>
+            <Button variant="outlined" size="sm" className="!bg-white/90" onClick={() => void signOut()}>
+              Keluar
+            </Button>
           )}
         </div>
+      </div>
 
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+      <div className="mx-auto -mt-8 w-full max-w-md space-y-4 px-4 pb-10">
+        <div className="rounded-3xl border border-amber-100 bg-white p-6 shadow-md">
           {step === "persetujuan" && (
-            <div className="space-y-4">
-              <label className="flex items-start gap-3 font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-100">
+            <div className="space-y-5">
+              <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-200/70 bg-amber-50/40 p-4 text-sm text-neutral-800">
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-5 w-5 shrink-0 accent-amber-400"
+                  className="mt-0.5 h-5 w-5 shrink-0 accent-amber-500"
                   checked={consent}
                   onChange={(e) => setConsent(e.target.checked)}
                 />
-                <span>{CONSENT_TEXT}</span>
+                <span className="font-medium leading-relaxed">{CONSENT_TEXT}</span>
               </label>
               <Button variant="primary" className="w-full" disabled={!consent} onClick={() => setStep("lokasi")}>
                 Lanjut
@@ -134,8 +136,8 @@ export function AktivasiPage() {
           )}
 
           {step === "lokasi" && (
-            <div className="space-y-4 text-center">
-              <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-200">
+            <div className="space-y-4 py-4 text-center">
+              <p className="text-sm font-semibold text-neutral-700">
                 {busy ? "Mencari lokasi kamu... (maks. 10 detik)" : "Cek lokasi kamu di area kerja."}
               </p>
               {!busy && error && (
@@ -156,8 +158,8 @@ export function AktivasiPage() {
           )}
 
           {step === "passkey" && (
-            <div className="space-y-4 text-center">
-              <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-200">
+            <div className="space-y-4 py-2 text-center">
+              <p className="text-sm text-neutral-700">
                 Terakhir, daftarkan sidik jari atau Face ID HP ini. Nanti dipakai setiap clock in dan clock out.
               </p>
               <Button
@@ -171,16 +173,16 @@ export function AktivasiPage() {
               </Button>
               <div className="flex flex-wrap justify-center gap-2">
                 {!options && error && (
-                  <Button variant="secondary" onClick={() => void loadOptions()}>Coba lagi</Button>
+                  <Button variant="outlined" onClick={() => void loadOptions()}>Coba lagi</Button>
                 )}
-                <Button variant="secondary" disabled={busy} onClick={() => setStep("foto")}>Ulangi foto</Button>
+                <Button variant="outlined" disabled={busy} onClick={() => setStep("foto")}>Ulangi foto</Button>
               </div>
             </div>
           )}
         </div>
 
         {error && (
-          <p role="alert" className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#EF4444]">
+          <p role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
             {error}
           </p>
         )}

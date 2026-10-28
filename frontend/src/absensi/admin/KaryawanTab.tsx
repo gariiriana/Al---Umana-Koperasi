@@ -7,9 +7,9 @@ import type { AbsensiRole, EmployeeView } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
-const text = "font-['Hanken_Grotesk',system-ui,sans-serif]";
-const field = `${text} w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-neutral-500`;
-const fieldLabel = `${text} block space-y-1 text-xs font-bold text-neutral-300`;
+const field =
+  "w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-200";
+const fieldLabel = "block space-y-1 text-xs font-bold text-neutral-700";
 
 /** Foto acuan dimuat per baris; foto yang sudah lewat masa simpan tampil sebagai teks. */
 function ReferencePhoto({ employee }: { employee: EmployeeView }) {
@@ -39,11 +39,12 @@ function ReferencePhoto({ employee }: { employee: EmployeeView }) {
     };
   }, [photoId]);
 
-  const box = "flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/10 text-center text-[10px] leading-tight text-neutral-400";
-  if (!photoId) return <div className={`${text} ${box}`}>{employee.activated ? "Tanpa foto" : "Belum aktivasi"}</div>;
-  if (state.loading) return <div className={`${text} ${box}`}>Memuat...</div>;
-  if (!state.url) return <div className={`${text} ${box}`}>Foto sudah dihapus</div>;
-  return <img src={state.url} alt={`Foto acuan ${employee.name}`} className="h-16 w-16 shrink-0 rounded-xl object-cover" />;
+  const box =
+    "flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-amber-200/70 bg-amber-50/60 p-1 text-center text-[10px] font-bold leading-tight text-amber-900/70";
+  if (!photoId) return <div className={box}>{employee.activated ? "Tanpa foto" : "Belum aktivasi"}</div>;
+  if (state.loading) return <div className={box}>Memuat...</div>;
+  if (!state.url) return <div className={box}>Foto sudah dihapus</div>;
+  return <img src={state.url} alt={`Foto acuan ${employee.name}`} className="h-16 w-16 shrink-0 rounded-2xl border border-neutral-200 object-cover" />;
 }
 
 /** Kelola akun absensi: tambah, nonaktifkan/aktifkan, reset HP & wajah, atur cek wajah. */
@@ -108,80 +109,116 @@ export function KaryawanTab() {
 
   return (
     <section className="space-y-6">
-      <form onSubmit={submit} className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-        <h2 className="font-['Manrope',system-ui,sans-serif] text-lg font-bold text-white">Tambah karyawan</h2>
-        <label className={fieldLabel}>
-          <span>Nama</span>
-          <input className={field} required value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
-        <label className={fieldLabel}>
-          <span>Email</span>
-          <input className={field} type="email" required autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </label>
-        <label className={fieldLabel}>
-          <span>Password awal</span>
-          <input
-            className={field}
-            type="text"
-            required
-            minLength={MIN_PASSWORD_LENGTH}
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
-        <label className={fieldLabel}>
-          <span>Role</span>
-          <select className={field} value={role} onChange={(e) => setRole(e.target.value as AbsensiRole)}>
-            <option value="absen_karyawan" className="text-[#111827]">Karyawan (absen_karyawan)</option>
-            <option value="admin_absensi" className="text-[#111827]">Admin absensi (admin_absensi)</option>
-          </select>
-        </label>
-        <label className={`${text} flex items-center gap-2 text-sm text-neutral-200`}>
-          <input type="checkbox" className="h-4 w-4 accent-amber-400" checked={noFaceCheck} onChange={(e) => setNoFaceCheck(e.target.checked)} />
+      <form onSubmit={submit} className="space-y-4 rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-xs">
+        <div>
+          <h2 className="font-['Manrope',system-ui,sans-serif] text-lg font-extrabold text-neutral-900">
+            Tambah karyawan
+          </h2>
+          <p className="text-xs text-neutral-500">Buat akun baru untuk staf atau admin absensi.</p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className={fieldLabel}>
+            <span>Nama</span>
+            <input className={field} required value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className={fieldLabel}>
+            <span>Email</span>
+            <input className={field} type="email" required autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
+          <label className={fieldLabel}>
+            <span>Password awal</span>
+            <input
+              className={field}
+              type="text"
+              required
+              minLength={MIN_PASSWORD_LENGTH}
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          <label className={fieldLabel}>
+            <span>Role</span>
+            <select className={field} value={role} onChange={(e) => setRole(e.target.value as AbsensiRole)}>
+              <option value="absen_karyawan">Karyawan (absen_karyawan)</option>
+              <option value="admin_absensi">Admin absensi (admin_absensi)</option>
+            </select>
+          </label>
+        </div>
+
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-neutral-700">
+          <input type="checkbox" className="h-4 w-4 accent-amber-500" checked={noFaceCheck} onChange={(e) => setNoFaceCheck(e.target.checked)} />
           <span>Tanpa cek wajah</span>
         </label>
-        {formError && <p role="alert" className={`${text} text-sm text-[#EF4444]`}>{formError}</p>}
-        <Button type="submit" variant="primary" className="w-full" loading={submitting}>Tambah karyawan</Button>
+
+        {formError && (
+          <p role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700">
+            {formError}
+          </p>
+        )}
+
+        <Button type="submit" variant="primary" className="w-full sm:w-auto" loading={submitting}>
+          Tambah karyawan
+        </Button>
       </form>
 
       <div className="space-y-3">
-        <h2 className="font-['Manrope',system-ui,sans-serif] text-lg font-bold text-white">Daftar karyawan</h2>
-        {error && <p role="alert" className={`${text} text-sm text-[#EF4444]`}>{error}</p>}
-        {employees === null && !error && <p className={`${text} text-sm text-neutral-400`}>Memuat...</p>}
-        {employees?.length === 0 && <p className={`${text} text-sm text-neutral-400`}>Belum ada karyawan.</p>}
+        <h2 className="font-['Manrope',system-ui,sans-serif] text-lg font-extrabold text-neutral-900">
+          Daftar karyawan
+        </h2>
+        {error && (
+          <p role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+            {error}
+          </p>
+        )}
+        {employees === null && !error && <p className="text-sm text-neutral-500">Memuat...</p>}
+        {employees?.length === 0 && <p className="text-sm text-neutral-500">Belum ada karyawan.</p>}
 
         <ul className="space-y-3">
           {employees?.map((employee) => {
             const busy = busyUid === employee.uid;
             return (
-              <li key={employee.uid} className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="flex items-center gap-3">
+              <li key={employee.uid} className="space-y-3.5 rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-xs">
+                <div className="flex items-center gap-3.5">
                   <ReferencePhoto employee={employee} />
-                  <div className={`${text} min-w-0`}>
-                    <p className="truncate text-sm font-bold text-white">{employee.name}</p>
-                    <p className="truncate text-xs text-neutral-400">{employee.email}</p>
-                    <p className="text-xs text-neutral-300">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate font-['Manrope',system-ui,sans-serif] text-base font-extrabold text-neutral-900">
+                        {employee.name}
+                      </p>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                          employee.status === "aktif"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-neutral-200 text-neutral-700"
+                        }`}
+                      >
+                        {employee.status === "aktif" ? "Aktif" : "Nonaktif"}
+                      </span>
+                    </div>
+                    <p className="truncate text-xs text-neutral-500">{employee.email}</p>
+                    <p className="mt-1 text-xs font-semibold text-amber-800">
                       {employee.role === "admin_absensi" ? "Admin absensi" : "Karyawan"} ·{" "}
-                      {employee.status === "aktif" ? "Aktif" : "Nonaktif"} · {employee.activated ? "Sudah aktivasi" : "Belum aktivasi"} ·{" "}
+                      {employee.activated ? "Sudah aktivasi" : "Belum aktivasi"} ·{" "}
                       {employee.faceRequired ? "Cek wajah" : "Tanpa cek wajah"}
                     </p>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 border-t border-neutral-100 pt-3">
                   <Button
-                    variant="secondary"
+                    variant="outlined"
                     size="sm"
                     disabled={busy}
                     onClick={() => void patch(employee, { action: employee.status === "aktif" ? "nonaktifkan" : "aktifkan" })}
                   >
                     {employee.status === "aktif" ? "Nonaktifkan" : "Aktifkan"}
                   </Button>
-                  <Button variant="secondary" size="sm" disabled={busy} onClick={() => setResetTarget(employee)}>
+                  <Button variant="outlined" size="sm" disabled={busy} onClick={() => setResetTarget(employee)}>
                     Reset HP & wajah
                   </Button>
                   <Button
-                    variant="secondary"
+                    variant="outlined"
                     size="sm"
                     disabled={busy}
                     onClick={() => void patch(employee, { action: "set_face_required", faceRequired: !employee.faceRequired })}

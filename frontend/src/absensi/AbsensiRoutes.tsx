@@ -6,6 +6,9 @@ import { AbsensiSessionProvider, useAbsensiSession } from "@/absensi/AbsensiSess
 import { AbsensiLoginPage } from "@/absensi/pages/AbsensiLoginPage";
 import { AktivasiPage } from "@/absensi/pages/AktivasiPage";
 import { BerandaPage } from "@/absensi/pages/BerandaPage";
+import { PengajuanPage } from "@/absensi/pages/PengajuanPage";
+import { ProfilPage } from "@/absensi/pages/ProfilPage";
+import { RiwayatPage } from "@/absensi/pages/RiwayatPage";
 import { messageFor } from "@/absensi/messages";
 import type { AbsensiRole } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
@@ -13,10 +16,10 @@ import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 function AbsensiScreen({ title, message, children }: { title: string; message: string; children?: ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#111827] px-4">
-      <div className="w-full max-w-md space-y-4 rounded-3xl border border-white/10 bg-white/5 p-6 text-center">
-        <h1 className="font-['Manrope',system-ui,sans-serif] text-xl font-bold text-white">{title}</h1>
-        <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-300">{message}</p>
+    <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC] px-4">
+      <div className="w-full max-w-md space-y-4 rounded-3xl border border-amber-200/80 bg-white p-6 text-center shadow-lg">
+        <h1 className="font-['Manrope',system-ui,sans-serif] text-xl font-extrabold text-neutral-900">{title}</h1>
+        <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-600">{message}</p>
         {children}
       </div>
     </div>
@@ -24,7 +27,11 @@ function AbsensiScreen({ title, message, children }: { title: string; message: s
 }
 
 /** Butuh sesi Absensi (dan role tertentu kalau diisi); tanpa sesi → /absensi/login. */
-function RequireAbsensi({ role, children }: { role?: AbsensiRole; children: ReactNode }) {
+function RequireAbsensi({ role, requireActivated = false, children }: {
+  role?: AbsensiRole;
+  requireActivated?: boolean;
+  children: ReactNode;
+}) {
   const { user, me, loading, error, reloadMe, signOut } = useAbsensiSession();
   if (loading) return <LoadingScreen message="Memuat..." />;
   if (!user) return <Navigate to="/absensi/login" replace />;
@@ -33,12 +40,15 @@ function RequireAbsensi({ role, children }: { role?: AbsensiRole; children: Reac
       <AbsensiScreen title="Absensi" message={messageFor(error)}>
         <div className="flex justify-center gap-2">
           <Button variant="primary" onClick={() => void reloadMe()}>Coba lagi</Button>
-          <Button variant="secondary" onClick={() => void signOut()}>Keluar</Button>
+          <Button variant="outlined" onClick={() => void signOut()}>Keluar</Button>
         </div>
       </AbsensiScreen>
     );
   }
   if (role && me.role !== role) return <Navigate to="/absensi" replace />;
+  if (requireActivated && me.role === "absen_karyawan" && !me.activated) {
+    return <Navigate to="/absensi/aktivasi" replace />;
+  }
   return <>{children}</>;
 }
 
@@ -59,6 +69,18 @@ export function AbsensiRoutes() {
         <Route
           path="aktivasi"
           element={<RequireAbsensi role="absen_karyawan"><AktivasiPage /></RequireAbsensi>}
+        />
+        <Route
+          path="riwayat"
+          element={<RequireAbsensi role="absen_karyawan" requireActivated><RiwayatPage /></RequireAbsensi>}
+        />
+        <Route
+          path="persetujuan"
+          element={<RequireAbsensi role="absen_karyawan" requireActivated><PengajuanPage /></RequireAbsensi>}
+        />
+        <Route
+          path="profil"
+          element={<RequireAbsensi role="absen_karyawan" requireActivated><ProfilPage /></RequireAbsensi>}
         />
         <Route path="admin" element={<Navigate to="/absensi/admin/hari-ini" replace />} />
         <Route

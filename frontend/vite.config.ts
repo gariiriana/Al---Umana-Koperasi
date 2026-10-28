@@ -5,162 +5,175 @@ import path from "node:path";
 import { VitePWA } from "vite-plugin-pwa";
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [
-    react(),
-    tailwindcss(),
-    VitePWA({
-      // Versi baru menunggu sampai pengguna menekan "Perbarui" (src/components/ui/AppUpdatePrompt).
-      // main.tsx mendaftarkan service worker sendiri lewat virtual:pwa-register.
-      registerType: "prompt",
-      injectRegister: false,
-      includeAssets: ["logo.png", "icons/*.png"],
-      // Satu-satunya manifest aplikasi (dulu ada public/manifest.json ganda yang
-      // terbaca duluan oleh browser). Ikon dibuat oleh scripts/pwa/generate-pwa-icons.ps1.
-      manifest: {
-        id: "/",
-        name: "Al-Umanaa Koperasi",
-        short_name: "Al-Umanaa",
-        description: "Sistem Order Fulfillment & Delivery Koperasi Al-Umanaa Pesantren",
-        theme_color: "#D97706",
-        background_color: "#FFFFFF",
-        display: "standalone",
-        orientation: "portrait",
-        scope: "/",
-        start_url: "/",
-        lang: "id",
-        categories: ["business", "productivity"],
-        icons: [
-          { src: "/icons/icon-72x72.png", sizes: "72x72", type: "image/png", purpose: "any" },
-          { src: "/icons/icon-96x96.png", sizes: "96x96", type: "image/png", purpose: "any" },
-          { src: "/icons/icon-128x128.png", sizes: "128x128", type: "image/png", purpose: "any" },
-          { src: "/icons/icon-144x144.png", sizes: "144x144", type: "image/png", purpose: "any" },
-          { src: "/icons/icon-152x152.png", sizes: "152x152", type: "image/png", purpose: "any" },
-          { src: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-          { src: "/icons/icon-384x384.png", sizes: "384x384", type: "image/png", purpose: "any" },
-          { src: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-          { src: "/icons/maskable-192x192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
-          { src: "/icons/maskable-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
-        ],
+export default defineConfig(({ mode }) => {
+  // Saat `npx vite --mode emulator`, arahkan ke Worker lokal (`wrangler dev` di 127.0.0.1:8787).
+  // Saat `npm run dev` biasa (terhubung ke Firebase Auth produksi), arahkan ke Worker produksi
+  // kecuali dioverride lewat VITE_ABSENSI_PROXY_TARGET.
+  const absensiProxyTarget =
+    process.env.VITE_ABSENSI_PROXY_TARGET ||
+    (mode === "emulator" ? "http://127.0.0.1:8787" : "https://koperasi-alumana.com");
+
+  return {
+    plugins: [
+      react(),
+      tailwindcss(),
+      VitePWA({
+        // Versi baru menunggu sampai pengguna menekan "Perbarui" (src/components/ui/AppUpdatePrompt).
+        // main.tsx mendaftarkan service worker sendiri lewat virtual:pwa-register.
+        registerType: "prompt",
+        injectRegister: false,
+        includeAssets: ["logo.png", "icons/*.png"],
+        // Satu-satunya manifest aplikasi (dulu ada public/manifest.json ganda yang
+        // terbaca duluan oleh browser). Ikon dibuat oleh scripts/pwa/generate-pwa-icons.ps1.
+        manifest: {
+          id: "/",
+          name: "Al-Umanaa Koperasi",
+          short_name: "Al-Umanaa",
+          description: "Sistem Order Fulfillment & Delivery Koperasi Al-Umanaa Pesantren",
+          theme_color: "#D97706",
+          background_color: "#FFFFFF",
+          display: "standalone",
+          orientation: "portrait",
+          scope: "/",
+          start_url: "/",
+          lang: "id",
+          categories: ["business", "productivity"],
+          icons: [
+            { src: "/icons/icon-72x72.png", sizes: "72x72", type: "image/png", purpose: "any" },
+            { src: "/icons/icon-96x96.png", sizes: "96x96", type: "image/png", purpose: "any" },
+            { src: "/icons/icon-128x128.png", sizes: "128x128", type: "image/png", purpose: "any" },
+            { src: "/icons/icon-144x144.png", sizes: "144x144", type: "image/png", purpose: "any" },
+            { src: "/icons/icon-152x152.png", sizes: "152x152", type: "image/png", purpose: "any" },
+            { src: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+            { src: "/icons/icon-384x384.png", sizes: "384x384", type: "image/png", purpose: "any" },
+            { src: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+            { src: "/icons/maskable-192x192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+            { src: "/icons/maskable-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          ],
+        },
+        workbox: {
+          // Tanpa skipWaiting: worker baru menunggu pesan SKIP_WAITING dari tombol "Perbarui".
+          clientsClaim: true,
+          // Handler push & klik notifikasi (public/push-sw.js) ikut di service worker yang sama;
+          // public/update-sw.js mengambil alih langsung dari versi lama yang belum punya popup.
+          importScripts: ["/push-sw.js", "/update-sw.js"],
+          // Cache static assets (fonts, css, js)
+          globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+          // Pustaka pengenal wajah absensi (±1,3 MB) hanya untuk karyawan, jadi tidak ikut precache.
+          globIgnores: ["**/face-api*.js"],
+          runtimeCaching: [
+            {
+              // Nama file ber-hash, jadi aman CacheFirst.
+              urlPattern: /\/assets\/face-api[^/]*\.js$/i,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "face-api-lib",
+                expiration: { maxEntries: 4, maxAgeSeconds: 31536000 },
+              },
+            },
+            {
+              // Google Fonts
+              urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "google-fonts-cache",
+                expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+            {
+              // Firestore listeners must never fall back to a cached response:
+              // an installed PWA otherwise can show an older order snapshot
+              // than the browser version of the same account.
+              urlPattern: /^https:\/\/firestore\.googleapis\.com\/.*/i,
+              handler: "NetworkOnly",
+              options: {
+                cacheName: "firestore-cache",
+                expiration: { maxEntries: 50, maxAgeSeconds: 60 * 5 },
+              },
+            },
+            {
+              // Model pengenal wajah absensi (±7 MB, disalin scripts/copy-face-models.mjs):
+              // tidak ikut precache, diunduh sekali saat dipakai lalu disimpan.
+              urlPattern: /\/models\/.*/i,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "face-models",
+                expiration: { maxEntries: 20, maxAgeSeconds: 31536000 },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+            {
+              // App pages - NetworkFirst so users always get latest deployed version
+              urlPattern: ({ request }) => request.mode === "navigate",
+              handler: "NetworkFirst",
+              options: {
+                cacheName: "pages-cache",
+                expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 },
+                networkTimeoutSeconds: 5,
+              },
+            },
+          ],
+        },
+        devOptions: {
+          enabled: false, // Set true kalau mau test SW di dev mode
+        },
+      }),
+    ],
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
       },
-      workbox: {
-        // Tanpa skipWaiting: worker baru menunggu pesan SKIP_WAITING dari tombol "Perbarui".
-        clientsClaim: true,
-        // Handler push & klik notifikasi (public/push-sw.js) ikut di service worker yang sama;
-        // public/update-sw.js mengambil alih langsung dari versi lama yang belum punya popup.
-        importScripts: ["/push-sw.js", "/update-sw.js"],
-        // Cache static assets (fonts, css, js)
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-        // Pustaka pengenal wajah absensi (±1,3 MB) hanya untuk karyawan, jadi tidak ikut precache.
-        globIgnores: ["**/face-api*.js"],
-        runtimeCaching: [
-          {
-            // Nama file ber-hash, jadi aman CacheFirst.
-            urlPattern: /\/assets\/face-api[^/]*\.js$/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "face-api-lib",
-              expiration: { maxEntries: 4, maxAgeSeconds: 31536000 },
-            },
-          },
-          {
-            // Google Fonts
-            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "google-fonts-cache",
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Firestore listeners must never fall back to a cached response:
-            // an installed PWA otherwise can show an older order snapshot
-            // than the browser version of the same account.
-            urlPattern: /^https:\/\/firestore\.googleapis\.com\/.*/i,
-            handler: "NetworkOnly",
-            options: {
-              cacheName: "firestore-cache",
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 5 },
-            },
-          },
-          {
-            // Model pengenal wajah absensi (±7 MB, disalin scripts/copy-face-models.mjs):
-            // tidak ikut precache, diunduh sekali saat dipakai lalu disimpan.
-            urlPattern: /\/models\/.*/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "face-models",
-              expiration: { maxEntries: 20, maxAgeSeconds: 31536000 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // App pages - NetworkFirst so users always get latest deployed version
-            urlPattern: ({ request }) => request.mode === "navigate",
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "pages-cache",
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 },
-              networkTimeoutSeconds: 5,
-            },
-          },
-        ],
-      },
-      devOptions: {
-        enabled: false, // Set true kalau mau test SW di dev mode
-      },
-    }),
-  ],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
     },
-  },
-  server: {
-    port: 5174,
-    host: true,
-    // Worker absensi lokal (`wrangler dev` di workers/absensi), sama-origin seperti produksi.
-    proxy: { "/api/absensi": "http://127.0.0.1:8787" },
-    // Logika area/tanggal/challenge dipakai bersama Worker: workers/absensi/shared.
-    fs: { allow: [searchForWorkspaceRoot(process.cwd()), path.resolve(__dirname, "../workers/absensi/shared")] },
-  },
-
-  // ── Scalability: Build Optimizations ──
-  build: {
-    // Target modern browsers for smaller output.
-    target: "es2020",
-
-    // Code splitting: separate vendor chunks from application code.
-    // When app code changes, users only re-download the changed chunks
-    // while cached vendor chunks (React, Firebase, MUI) remain valid.
-    // This reduces cache invalidation surface by ~70%.
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          // React core — rarely changes between deployments.
-          "vendor-react": ["react", "react-dom", "react-router-dom"],
-
-          // Firebase SDK — large bundle, changes very infrequently.
-          "vendor-firebase": ["firebase/app", "firebase/auth", "firebase/firestore"],
-
-          // MUI — another large bundle that changes infrequently.
-          "vendor-mui": ["@mui/material"],
-
-          // Utility libraries — stable, cacheable.
-          "vendor-utils": ["leaflet", "react-leaflet", "motion"],
-
-          // PDF generation — only loaded when generating invoices.
-          "vendor-pdf": ["jspdf", "jspdf-autotable", "html2canvas-pro"],
+    server: {
+      port: 5174,
+      host: true,
+      proxy: {
+        "/api/absensi": {
+          target: absensiProxyTarget,
+          changeOrigin: true,
         },
       },
+      // Logika area/tanggal/challenge dipakai bersama Worker: workers/absensi/shared.
+      fs: { allow: [searchForWorkspaceRoot(process.cwd()), path.resolve(__dirname, "../workers/absensi/shared")] },
     },
 
-    // Enable source maps for production debugging (hidden from users).
-    sourcemap: "hidden",
+    // ── Scalability: Build Optimizations ──
+    build: {
+      // Target modern browsers for smaller output.
+      target: "es2020",
 
-    // Increase chunk size warning limit — our vendor chunks are
-    // intentionally large but individually cacheable.
-    chunkSizeWarningLimit: 1000,
-  },
+      // Code splitting: separate vendor chunks from application code.
+      // When app code changes, users only re-download the changed chunks
+      // while cached vendor chunks (React, Firebase, MUI) remain valid.
+      // This reduces cache invalidation surface by ~70%.
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            // React core — rarely changes between deployments.
+            "vendor-react": ["react", "react-dom", "react-router-dom"],
+
+            // Firebase SDK — large bundle, changes very infrequently.
+            "vendor-firebase": ["firebase/app", "firebase/auth", "firebase/firestore"],
+
+            // MUI — another large bundle that changes infrequently.
+            "vendor-mui": ["@mui/material"],
+
+            // Utility libraries — stable, cacheable.
+            "vendor-utils": ["leaflet", "react-leaflet", "motion"],
+
+            // PDF generation — only loaded when generating invoices.
+            "vendor-pdf": ["jspdf", "jspdf-autotable", "html2canvas-pro"],
+          },
+        },
+      },
+
+      // Enable source maps for production debugging (hidden from users).
+      sourcemap: "hidden",
+
+      // Increase chunk size warning limit — our vendor chunks are
+      // intentionally large but individually cacheable.
+      chunkSizeWarningLimit: 1000,
+    },
+  };
 });

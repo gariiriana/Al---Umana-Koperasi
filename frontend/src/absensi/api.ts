@@ -2,8 +2,9 @@
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/browser";
 import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
 import type {
-  AbsenKind, AbsenOptions, AbsenResult, AbsensiRole, ActivateOptions, AreaView, EmployeeView, HariIniRow,
-  LocationInput, Me, RekapRow, ShiftView,
+  AbsenKind, AbsenOptions, AbsenResult, AbsensiNotificationView, AbsensiRequestView, AbsensiRole,
+  ActivateOptions, AreaView, CoworkerView, EmployeeView, HariIniRow, LeaveType, LocationInput,
+  Me, RekapRow, RequestStatus, ShiftView,
 } from "@/absensi/types";
 
 const BASE = `${import.meta.env.VITE_ABSENSI_API_BASE_URL ?? ""}/api/absensi`;
@@ -52,7 +53,7 @@ export async function absensiFetch<T>(path: string, init: RequestInit = {}): Pro
 const post = <T>(path: string, body: unknown, method = "POST") =>
   absensiFetch<T>(path, { method, body: JSON.stringify(body) });
 
-// --- Karyawan ---------------------------------------------------------------
+// --- Karyawan & Umum --------------------------------------------------------
 
 export const getMe = () => absensiFetch<Me>("/me");
 
@@ -80,7 +81,36 @@ export interface AbsenBody {
 export const absen = (body: AbsenBody) => post<AbsenResult>("/absen", body);
 
 export const getRiwayat = (bulan: string) =>
-  absensiFetch<{ rows: ShiftView[] }>(`/riwayat?bulan=${encodeURIComponent(bulan)}`);
+  absensiFetch<{ rows: ShiftView[]; requests?: AbsensiRequestView[] }>(`/riwayat?bulan=${encodeURIComponent(bulan)}`);
+
+export const getRekan = () => absensiFetch<{ coworkers: CoworkerView[] }>("/rekan");
+
+export const listMyRequests = () => absensiFetch<{ requests: AbsensiRequestView[] }>("/pengajuan");
+
+export type CreateRequestBody =
+  | {
+      kind: "cuti";
+      leaveType: LeaveType;
+      startDate: string;
+      endDate: string;
+      reason: string;
+    }
+  | {
+      kind: "pergantian_shift";
+      date: string;
+      fromShift: string;
+      toShift: string;
+      partnerUid?: string;
+      reason: string;
+    };
+
+export const createRequest = (body: CreateRequestBody) => post<AbsensiRequestView>("/pengajuan", body);
+
+export const getNotifications = () =>
+  absensiFetch<{ unreadCount: number; notifications: AbsensiNotificationView[] }>("/notifikasi");
+
+export const markNotificationsRead = (id?: string) =>
+  post<{ unreadCount: number }>("/notifikasi/baca", id ? { id } : {});
 
 // --- Admin ------------------------------------------------------------------
 
@@ -89,8 +119,16 @@ export const getHariIni = () => absensiFetch<{ date: string; rows: HariIniRow[] 
 export function getRekap(q: { from: string; to: string; uid?: string }) {
   const params = new URLSearchParams({ from: q.from, to: q.to });
   if (q.uid) params.set("uid", q.uid);
-  return absensiFetch<{ rows: RekapRow[] }>(`/admin/rekap?${params}`);
+  return absensiFetch<{ rows: RekapRow[]; requests?: AbsensiRequestView[] }>(`/admin/rekap?${params}`);
 }
+
+export const listAdminRequests = (status: RequestStatus | "all" = "all") =>
+  absensiFetch<{ requests: AbsensiRequestView[]; pendingCount: number }>(
+    `/admin/pengajuan?status=${encodeURIComponent(status)}`,
+  );
+
+export const reviewAdminRequest = (id: string, body: { action: "approve" | "reject"; note?: string }) =>
+  post<AbsensiRequestView>(`/admin/pengajuan/${encodeURIComponent(id)}`, body, "PATCH");
 
 /** Object URL untuk satu foto, atau null kalau sudah dihapus (lewat 90 hari). */
 export async function fetchPhotoUrl(id: string): Promise<string | null> {
