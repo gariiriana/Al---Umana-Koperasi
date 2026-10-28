@@ -5,6 +5,7 @@ import { Check, ChevronRight, Eye, EyeOff, ShieldCheck, Smartphone, X } from "lu
 
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
 import { EmployeeBottomNav } from "@/absensi/components/EmployeeBottomNav";
+import { LogoutConfirmModal } from "@/absensi/components/LogoutConfirmModal";
 import { NotificationBellButton } from "@/absensi/components/NotificationSheet";
 import { hasDeviceMarker } from "@/absensi/deviceMarker";
 import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
@@ -68,6 +69,7 @@ export function ProfilPage() {
   );
 
   const [activeSheet, setActiveSheet] = useState<"edit" | "face" | "password" | "language" | null>(null);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   // State Edit Profil
   const [editName, setEditName] = useState(meta.name);
@@ -289,7 +291,7 @@ export function ProfilPage() {
         {/* Tombol Keluar (Outline Merah sesuai SS 4) */}
         <button
           type="button"
-          onClick={() => void signOut()}
+          onClick={() => setConfirmLogout(true)}
           className="w-full rounded-xl border border-rose-400 bg-white py-3.5 text-center text-sm font-extrabold text-rose-600 shadow-2xs transition hover:bg-rose-50"
         >
           Keluar
@@ -598,6 +600,15 @@ export function ProfilPage() {
           </div>
         </div>
       )}
+
+      <LogoutConfirmModal
+        open={confirmLogout}
+        onCancel={() => setConfirmLogout(false)}
+        onConfirm={() => {
+          setConfirmLogout(false);
+          void signOut();
+        }}
+      />
 
       <EmployeeBottomNav />
     </div>

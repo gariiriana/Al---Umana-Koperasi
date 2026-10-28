@@ -2,11 +2,13 @@
 import { payloadChallenge, sha256Hex } from "../../shared/binding.js";
 import { CHALLENGE_TTL_MS, FACE_MATCH_THRESHOLD } from "../../shared/constants.js";
 import { checkLocation } from "../../shared/geo.js";
+import { workDateWIB } from "../../shared/time.js";
 import {
   activateEmployee, closeShift, consumeChallenge, countPendingRequests, countUnreadNotifications, createChallenge,
-  getEmployee, getRequestById, insertNotifications, insertPasskey, insertPhoto, insertRequest, insertShift,
-  listActiveEmployeesByRole, listAreas, listEmployeeRequests, listNotifications, listPasskeys,
-  markAllNotificationsRead, markNotificationRead, recentShifts, requestsForMonth, shiftsForMonth, updatePasskeyCounter,
+  deletePhoto, deleteShiftsForReset, getEmployee, getRequestById, insertNotifications, insertPasskey, insertPhoto,
+  insertRequest, insertShift, listActiveEmployeesByRole, listAreas, listEmployeeRequests, listNotifications,
+  listPasskeys, markAllNotificationsRead, markNotificationRead, recentShifts, requestsForMonth,
+  resetShiftPulangForSimulasi, shiftsForMonth, updatePasskeyCounter,
 } from "../db.js";
 import { AbsensiError, decodeJpeg, readJson } from "../http.js";
 import { DAY_MS, LEAVE_LABEL, parseIsoDate, requestDetailSummary, requestKindTitle, toNotificationView, toRequestView } from "../requests.js";
@@ -347,4 +349,36 @@ export async function bacaNotifikasi(ctx) {
   }
   const unreadCount = await countUnreadNotifications(ctx.env.DB, employee.uid);
   return { unreadCount };
+}
+
+const SIMULATION_EMAIL = "gariiriana14@gmail.com";
+
+export function isSimulationAccount(employee) {
+  return String(employee?.email || "").trim().toLowerCase() === SIMULATION_EMAIL;
+}
+
+/**
+ * Reset data Clock In / Clock Out khusus untuk akun simulasi/testing (gariiriana14@gmail.com).
+ * Body opsional: `{ target?: "masuk" | "pulang" | "all" }`.
+ */
+export async function resetSimulasi(ctx) {
+  const employee = await requireEmployee(ctx, { role: "absen_karyawan" });
+  if (!isSimulationAccount(employee)) throw new AbsensiError("FORBIDDEN", 403);
+  const body = await readJson(ctx.request).catch(() => ({}));
+  const target = body?.target === "pulang" ? "pulang" : "all";
+  const now = ctx.deps.now();
+  const workDate = workDateWIB(now);
+
+  const result = target === "pulang"
+    ? await resetShiftPulangForSimulasi(ctx.env.DB, employee.uid, workDate)
+    : await deleteShiftsForReset(ctx.env.DB, employee.uid, workDate);
+
+  for (const photoId of result.photoIds) {
+    await deletePhoto(ctx.env.PHOTOS, photoId);
+  }
+
+  return {
+    deletedCount: result.deletedCount,
+    status: shiftStatus(await recentShifts(ctx.env.DB, employee.uid), now),
+  };
 }

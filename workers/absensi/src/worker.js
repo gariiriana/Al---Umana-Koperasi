@@ -13,7 +13,7 @@ import {
 } from "./handlers/admin.js";
 import {
   absen, absenOptions, activate, activateOptions, bacaNotifikasi,
-  createPengajuan, getMe, getNotifikasi, getRekan, getRiwayat, listPengajuan,
+  createPengajuan, getMe, getNotifikasi, getRekan, getRiwayat, listPengajuan, resetSimulasi,
 } from "./handlers/karyawan.js";
 import { registrationOptions, verifyAuthentication, verifyRegistration } from "./passkey.js";
 
@@ -31,6 +31,7 @@ const ROUTES = [
   ["POST", /^\/activate$/, activate],
   ["POST", /^\/absen\/options$/, absenOptions],
   ["POST", /^\/absen$/, absen],
+  ["POST", /^\/reset-simulasi$/, resetSimulasi],
   ["GET", /^\/admin\/hari-ini$/, getHariIni],
   ["GET", /^\/admin\/rekap$/, getRekap],
   ["GET", /^\/admin\/pengajuan$/, listPengajuanAdmin],

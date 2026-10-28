@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { checkLocation } from "../../../../workers/absensi/shared/geo.js";
 import { activate, activateOptions } from "@/absensi/api";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
+import { LogoutConfirmModal } from "@/absensi/components/LogoutConfirmModal";
 import { SelfieCapture, type SelfieResult } from "@/absensi/components/SelfieCapture";
 import { getBestPosition } from "@/absensi/device/gps";
 import { createPasskey } from "@/absensi/device/passkey";
@@ -30,6 +31,7 @@ export function AktivasiPage() {
   const [location, setLocation] = useState<LocationInput | null>(null);
   const [photo, setPhoto] = useState<SelfieResult | null>(null);
   const [options, setOptions] = useState<ActivateOptions | null>(null);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   const areasRef = useRef(me?.areas ?? []);
   areasRef.current = me?.areas ?? [];
@@ -108,11 +110,9 @@ export function AktivasiPage() {
               Sekali saja di HP ini, dan harus berada di dalam area kerja.
             </p>
           </div>
-          {signOut && (
-            <Button variant="outlined" size="sm" className="!bg-white/90" onClick={() => void signOut()}>
-              Keluar
-            </Button>
-          )}
+          <Button variant="outlined" size="sm" className="!bg-white/90" onClick={() => setConfirmLogout(true)}>
+            Keluar
+          </Button>
         </div>
       </div>
 
@@ -187,6 +187,15 @@ export function AktivasiPage() {
           </p>
         )}
       </div>
+
+      <LogoutConfirmModal
+        open={confirmLogout}
+        onCancel={() => setConfirmLogout(false)}
+        onConfirm={() => {
+          setConfirmLogout(false);
+          void signOut();
+        }}
+      />
     </div>
   );
 }

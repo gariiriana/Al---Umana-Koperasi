@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useState } from "react";
+import { Trash2 } from "lucide-react";
 
 import { DEFAULT_TOLERANCE_M, MAX_TOLERANCE_M } from "../../../../workers/absensi/shared/constants.js";
 import { AreaMap } from "@/absensi/admin/AreaMap";
@@ -26,6 +27,8 @@ export function AreaTab() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const select = useCallback((list: AreaView[], index: number) => {
     const area = list[index];
@@ -71,6 +74,26 @@ export function AreaTab() {
       setError(errorMessage(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const removeSelected = async () => {
+    if (!areas || selected === NEW_AREA || !areas[selected]) return;
+    const removedName = areas[selected].name;
+    setDeleting(true);
+    setError(null);
+    setNotice(null);
+    const list = areas.filter((_, i) => i !== selected).map((area) => ({ ...area }));
+    try {
+      const res = await putAreas(list);
+      setAreas(res.areas);
+      select(res.areas, 0);
+      setNotice(`Lokasi "${removedName}" berhasil dihapus.`);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
     }
   };
 
@@ -157,9 +180,68 @@ export function AreaTab() {
         </p>
       )}
 
-      <Button variant="primary" className="w-full" loading={saving} disabled={!ready} onClick={() => void save()}>
-        Simpan Area
-      </Button>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button variant="primary" className="w-full" loading={saving} disabled={!ready || deleting} onClick={() => void save()}>
+          Simpan Area
+        </Button>
+        {areas && selected !== NEW_AREA && areas[selected] && (
+          <button
+            type="button"
+            disabled={saving || deleting}
+            onClick={() => setConfirmDelete(true)}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rose-300 bg-white px-4 py-2.5 text-sm font-extrabold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:shrink-0"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            Hapus Lokasi
+          </button>
+        )}
+      </div>
+
+      {confirmDelete && areas && selected !== NEW_AREA && areas[selected] && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Hapus Lokasi Area"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+          onClick={() => !deleting && setConfirmDelete(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm space-y-4 rounded-3xl border border-rose-100 bg-white p-6 text-center shadow-2xl"
+          >
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+              <Trash2 className="h-7 w-7" aria-hidden="true" />
+            </div>
+            <div>
+              <h3 className="font-['Manrope',system-ui,sans-serif] text-lg font-extrabold text-neutral-900">
+                Hapus Lokasi Area?
+              </h3>
+              <p className="mt-1.5 text-xs leading-relaxed text-neutral-600 sm:text-sm">
+                Lokasi <strong className="text-neutral-900">{areas[selected].name}</strong> akan dihapus dari daftar zona
+                absensi. Karyawan tidak bisa Clock In / Clock Out lagi di lokasi ini.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setConfirmDelete(false)}
+                className="rounded-xl border border-neutral-200 bg-neutral-100 px-4 py-3 text-xs font-extrabold text-neutral-700 transition hover:bg-neutral-200 disabled:opacity-50 sm:text-sm"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => void removeSelected()}
+                className="rounded-xl bg-rose-600 px-4 py-3 text-xs font-extrabold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60 sm:text-sm"
+              >
+                {deleting ? "Menghapus..." : "Ya, Hapus"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -4,7 +4,7 @@ import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
 import type {
   AbsenKind, AbsenOptions, AbsenResult, AbsensiNotificationView, AbsensiRequestView, AbsensiRole,
   ActivateOptions, AreaView, CoworkerView, EmployeeView, HariIniRow, LeaveType, LocationInput,
-  Me, RekapRow, RequestStatus, ShiftView,
+  Me, RekapRow, RequestStatus, ShiftStatus, ShiftView,
 } from "@/absensi/types";
 
 const BASE = `${import.meta.env.VITE_ABSENSI_API_BASE_URL ?? ""}/api/absensi`;
@@ -79,6 +79,9 @@ export interface AbsenBody {
   authentication: AuthenticationResponseJSON;
 }
 export const absen = (body: AbsenBody) => post<AbsenResult>("/absen", body);
+
+export const resetSimulasi = (target: "masuk" | "pulang" | "all" = "all") =>
+  post<{ deletedCount: number; status: ShiftStatus }>("/reset-simulasi", { target });
 
 export const getRiwayat = (bulan: string) =>
   absensiFetch<{ rows: ShiftView[]; requests?: AbsensiRequestView[] }>(`/riwayat?bulan=${encodeURIComponent(bulan)}`);

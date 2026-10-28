@@ -126,6 +126,45 @@ export const closeShift = (db, id, { pulangAt, lat, lng, accuracy, areaId, faceD
    WHERE id = ? AND status = 'terbuka'`,
 ).bind(pulangAt, lat, lng, accuracy, areaId, faceDistance ?? null, photoId, id));
 
+/** Hapus shift hari ini / terbuka (atau shift terakhir) untuk reset simulasi akun testing. */
+export async function deleteShiftsForReset(db, uid, workDate) {
+  let rows = await all(
+    db.prepare("SELECT id, masuk_photo_id, pulang_photo_id FROM shifts WHERE uid = ? AND (work_date = ? OR status = 'terbuka')").bind(uid, workDate),
+  );
+  if (rows.length === 0) {
+    rows = await all(
+      db.prepare("SELECT id, masuk_photo_id, pulang_photo_id FROM shifts WHERE uid = ? ORDER BY masuk_at DESC LIMIT 1").bind(uid),
+    );
+  }
+  if (rows.length === 0) return { deletedCount: 0, photoIds: [] };
+  const photoIds = [];
+  for (const r of rows) {
+    if (r.masuk_photo_id) photoIds.push(r.masuk_photo_id);
+    if (r.pulang_photo_id) photoIds.push(r.pulang_photo_id);
+  }
+  await db.batch(rows.map((r) => db.prepare("DELETE FROM shifts WHERE id = ?").bind(r.id)));
+  return { deletedCount: rows.length, photoIds };
+}
+
+/** Reset hanya data Clock Out (pulang) pada shift hari ini / terakhir agar kembali ke status terbuka (sudah Clock In). */
+export async function resetShiftPulangForSimulasi(db, uid, workDate) {
+  let row = await first(
+    db.prepare("SELECT id, pulang_photo_id FROM shifts WHERE uid = ? AND work_date = ? AND pulang_at IS NOT NULL ORDER BY masuk_at DESC LIMIT 1").bind(uid, workDate),
+  );
+  if (!row) {
+    row = await first(
+      db.prepare("SELECT id, pulang_photo_id FROM shifts WHERE uid = ? AND pulang_at IS NOT NULL ORDER BY masuk_at DESC LIMIT 1").bind(uid),
+    );
+  }
+  if (!row) return { deletedCount: 0, photoIds: [] };
+  await db.prepare(
+    `UPDATE shifts SET pulang_at = NULL, pulang_lat = NULL, pulang_lng = NULL, pulang_accuracy = NULL,
+       pulang_area_id = NULL, pulang_face_distance = NULL, pulang_photo_id = NULL, status = 'terbuka'
+     WHERE id = ?`,
+  ).bind(row.id).run();
+  return { deletedCount: 1, photoIds: row.pulang_photo_id ? [row.pulang_photo_id] : [] };
+}
+
 export const shiftsForMonth = (db, uid, bulan) => all(db.prepare(
   "SELECT * FROM shifts WHERE uid = ? AND work_date BETWEEN ? AND ? ORDER BY work_date DESC",
 ).bind(uid, `${bulan}-01`, `${bulan}-31`));

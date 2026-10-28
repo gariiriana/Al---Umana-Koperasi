@@ -190,7 +190,19 @@ describe("ProfilPage (Karyawan - SS 4)", () => {
     expect(screen.getByRole("button", { name: /Riwayat Absensi Saya/ })).toBeTruthy();
     expect(screen.getByText("Ver. 2.9.3 (94)")).toBeTruthy();
 
+    // Klik Keluar -> muncul pop-up konfirmasi dulu, belum logout
     fireEvent.click(screen.getByRole("button", { name: "Keluar" }));
+    expect(sessionMocks.signOut).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Konfirmasi Keluar" })).toBeTruthy();
+
+    // Batal -> pop-up tertutup, tetap belum logout
+    fireEvent.click(screen.getByRole("button", { name: "Batal" }));
+    expect(screen.queryByRole("dialog", { name: "Konfirmasi Keluar" })).toBeNull();
+    expect(sessionMocks.signOut).not.toHaveBeenCalled();
+
+    // Keluar -> Ya, Keluar -> baru logout
+    fireEvent.click(screen.getByRole("button", { name: "Keluar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ya, Keluar" }));
     expect(sessionMocks.signOut).toHaveBeenCalled();
   });
 });

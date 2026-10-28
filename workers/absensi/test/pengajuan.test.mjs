@@ -12,13 +12,17 @@ describe("pengajuan cuti, pergantian shift, dan notifikasi", () => {
     await addEmployee(env, { uid: "adm", email: "adm@absen.test", name: "Admin Utama", role: "admin_absensi" });
     await addEmployee(env, { uid: "u1", email: "u1@absen.test", name: "Budi Santoso", role: "absen_karyawan" });
     await addEmployee(env, { uid: "u2", email: "u2@absen.test", name: "Siti Aminah", role: "absen_karyawan" });
+    await addEmployee(env, { uid: "gari", email: "gariiriana14@gmail.com", name: "Gari Iriana", role: "absen_karyawan" });
   });
   after(() => dispose());
 
   it("mengembalikan daftar rekan kerja aktif selain diri sendiri", async () => {
     const res = await call(env, deps, "GET", "/rekan", { token: "u1" });
     assert.equal(res.status, 200);
-    assert.deepEqual(res.data.coworkers, [{ uid: "u2", name: "Siti Aminah" }]);
+    assert.deepEqual(res.data.coworkers, [
+      { uid: "gari", name: "Gari Iriana" },
+      { uid: "u2", name: "Siti Aminah" },
+    ]);
   });
 
   it("mengajukan cuti -> notifikasi masuk ke admin -> admin setujui -> notifikasi balik & masuk ke riwayat/hari-ini/rekap", async () => {
@@ -134,6 +138,41 @@ describe("pengajuan cuti, pergantian shift, dan notifikasi", () => {
       token: "u1",
       body: { kind: "pergantian_shift", date: "2026-10-29", fromShift: "Pagi", toShift: "Pagi", reason: "Sama" },
     })).status, 400);
+  });
+
+  it("hanya mengizinkan akun gariiriana14@gmail.com melakukan reset-simulasi (pulang atau all)", async () => {
+    // Akun karyawan biasa ditolak 403
+    const denied = await call(env, deps, "POST", "/reset-simulasi", { token: "u1", body: {} });
+    assert.equal(denied.status, 403);
+
+    // Masukkan shift selesai untuk Gari pada tanggal T0 (2026-10-27)
+    const now = deps.now();
+    await env.DB.prepare(
+      `INSERT INTO shifts (id, uid, work_date, masuk_at, masuk_lat, masuk_lng, masuk_accuracy, masuk_area_id, masuk_photo_id,
+         pulang_at, pulang_lat, pulang_lng, pulang_accuracy, pulang_area_id, pulang_photo_id, status)
+       VALUES (?, 'gari', '2026-10-27', ?, -6.97, 106.92, 10, 'default', 'p-in', ?, -6.97, 106.92, 10, 'default', 'p-out', 'selesai')`,
+    ).bind("shift-gari-1", now - 3600_000, now - 60_000).run();
+
+    // Reset hanya pulang -> kembali ke terbuka
+    const resetPulang = await call(env, deps, "POST", "/reset-simulasi", {
+      token: "gari",
+      body: { target: "pulang" },
+    });
+    assert.equal(resetPulang.status, 200);
+    assert.equal(resetPulang.data.deletedCount, 1);
+    assert.ok(resetPulang.data.status.open);
+    assert.equal(resetPulang.data.status.open.status, "terbuka");
+    assert.equal(resetPulang.data.status.open.pulangAt, null);
+
+    // Reset all -> hapus shift sepenuhnya
+    const resetAll = await call(env, deps, "POST", "/reset-simulasi", {
+      token: "gari",
+      body: { target: "all" },
+    });
+    assert.equal(resetAll.status, 200);
+    assert.equal(resetAll.data.deletedCount, 1);
+    assert.equal(resetAll.data.status.open, null);
+    assert.equal(resetAll.data.status.today, null);
   });
 });
 

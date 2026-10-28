@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Navigate, NavLink, useParams } from "react-router-dom";
 
 import { AreaTab } from "@/absensi/admin/AreaTab";
@@ -6,6 +7,7 @@ import { KaryawanTab } from "@/absensi/admin/KaryawanTab";
 import { PersetujuanTab } from "@/absensi/admin/PersetujuanTab";
 import { RekapTab } from "@/absensi/admin/RekapTab";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
+import { LogoutConfirmModal } from "@/absensi/components/LogoutConfirmModal";
 import { NotificationBellButton } from "@/absensi/components/NotificationSheet";
 import { Button } from "@/components/ui/Button";
 
@@ -40,6 +42,7 @@ function TabContent({ tab }: { tab: TabId }) {
 export function AdminLayout() {
   const { tab } = useParams();
   const { me, signOut } = useAbsensiSession();
+  const [confirmLogout, setConfirmLogout] = useState(false);
   if (!isTab(tab)) return <Navigate to="/absensi/admin/hari-ini" replace />;
 
   const pendingCount = me?.pendingRequests ?? 0;
@@ -70,7 +73,7 @@ export function AdminLayout() {
               variant="outlined"
               size="sm"
               className="!border-neutral-900/20 !bg-white/90 !text-neutral-900 hover:!bg-white"
-              onClick={() => void signOut()}
+              onClick={() => setConfirmLogout(true)}
             >
               Keluar
             </Button>
@@ -105,6 +108,15 @@ export function AdminLayout() {
 
         <TabContent tab={tab} />
       </div>
+
+      <LogoutConfirmModal
+        open={confirmLogout}
+        onCancel={() => setConfirmLogout(false)}
+        onConfirm={() => {
+          setConfirmLogout(false);
+          void signOut();
+        }}
+      />
     </div>
   );
 }
