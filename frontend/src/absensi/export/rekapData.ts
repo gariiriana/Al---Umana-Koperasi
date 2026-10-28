@@ -121,6 +121,8 @@ export function buildUnifiedRekapItems(
       if (shiftDates.has(uidDate) || leaveAdded.has(uidDate)) continue;
       leaveAdded.add(uidDate);
       const leaveType: LeaveType = r.leaveType;
+      const typeTitle = r.leaveSubtype || LEAVE_TYPE_LABEL[leaveType];
+      const partnerSuffix = r.partnerName ? ` (Pengganti: ${r.partnerName})` : "";
       items.push({
         key: `leave-${r.id}-${date}`,
         kind: "leave",
@@ -132,7 +134,7 @@ export function buildUnifiedRekapItems(
         durationMin: null,
         statusLabel: LEAVE_TYPE_LABEL[leaveType],
         badgeTone: leaveType,
-        info: r.reason ? `${LEAVE_TYPE_LABEL[leaveType]}: ${r.reason}` : LEAVE_TYPE_LABEL[leaveType],
+        info: `${r.reason ? `${typeTitle}: ${r.reason}` : typeTitle}${partnerSuffix}`,
         shiftRow: null,
       });
     }

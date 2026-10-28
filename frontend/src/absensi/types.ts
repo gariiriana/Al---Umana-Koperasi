@@ -103,12 +103,14 @@ export interface AbsensiRequestView {
   employeeName: string;
   kind: RequestKind;
   leaveType: LeaveType | null;
+  leaveSubtype?: string | null;
   startDate: string;
   endDate: string;
   fromShift: string | null;
   toShift: string | null;
   partnerUid: string | null;
   partnerName: string | null;
+  attachmentName?: string | null;
   reason: string;
   status: RequestStatus;
   reviewedBy: string | null;

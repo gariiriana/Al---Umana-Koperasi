@@ -19,7 +19,7 @@ const LEAVE_TYPES = new Set(["cuti", "sakit", "izin"]);
 
 const BULAN = /^\d{4}-(0[1-9]|1[0-2])$/;
 const DESCRIPTOR_LENGTH = 128;
-const MAX_LEAVE_DAYS = 31;
+const MAX_LEAVE_DAYS = 120;
 
 function randomNonce() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -260,6 +260,8 @@ export async function createPengajuan(ctx) {
   if (reason.length < 2 || reason.length > 500) throw new AbsensiError("VALIDATION_ERROR", 400);
 
   let leaveType = null;
+  let leaveSubtype = null;
+  let attachmentName = null;
   let startDate;
   let endDate;
   let fromShift = null;
@@ -267,9 +269,24 @@ export async function createPengajuan(ctx) {
   let partnerUid = null;
   let partnerName = null;
 
+  if (body.partnerUid) {
+    const partner = await getEmployee(ctx.env.DB, String(body.partnerUid));
+    if (!partner || partner.role !== "absen_karyawan" || partner.status !== "aktif" || partner.uid === employee.uid) {
+      throw new AbsensiError("VALIDATION_ERROR", 400);
+    }
+    partnerUid = partner.uid;
+    partnerName = partner.name;
+  }
+
   if (body.kind === "cuti") {
     if (!LEAVE_TYPES.has(body.leaveType)) throw new AbsensiError("VALIDATION_ERROR", 400);
     leaveType = body.leaveType;
+    if (typeof body.leaveSubtype === "string" && body.leaveSubtype.trim().length > 0) {
+      leaveSubtype = body.leaveSubtype.trim().slice(0, 150);
+    }
+    if (typeof body.attachmentName === "string" && body.attachmentName.trim().length > 0) {
+      attachmentName = body.attachmentName.trim().slice(0, 200);
+    }
     startDate = parseIsoDate(body.startDate);
     endDate = parseIsoDate(body.endDate ?? body.startDate);
     const spanDays = (Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / DAY_MS + 1;
@@ -282,21 +299,13 @@ export async function createPengajuan(ctx) {
     if (!fromShift || fromShift.length > 100 || !toShift || toShift.length > 100 || fromShift === toShift) {
       throw new AbsensiError("VALIDATION_ERROR", 400);
     }
-    if (body.partnerUid) {
-      const partner = await getEmployee(ctx.env.DB, String(body.partnerUid));
-      if (!partner || partner.role !== "absen_karyawan" || partner.status !== "aktif" || partner.uid === employee.uid) {
-        throw new AbsensiError("VALIDATION_ERROR", 400);
-      }
-      partnerUid = partner.uid;
-      partnerName = partner.name;
-    }
   }
 
   const now = ctx.deps.now();
   const id = crypto.randomUUID();
   await insertRequest(ctx.env.DB, {
-    id, uid: employee.uid, kind: body.kind, leaveType, startDate, endDate,
-    fromShift, toShift, partnerUid, partnerName, reason, createdAt: now,
+    id, uid: employee.uid, kind: body.kind, leaveType, leaveSubtype, startDate, endDate,
+    fromShift, toShift, partnerUid, partnerName, attachmentName, reason, createdAt: now,
   });
 
   const saved = await getRequestById(ctx.env.DB, id);

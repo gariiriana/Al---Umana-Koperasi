@@ -132,7 +132,7 @@ export function PersetujuanTab() {
                       <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-extrabold text-amber-800">
                         {req.kind === "pergantian_shift"
                           ? "Pergantian Shift"
-                          : `Permohonan ${LEAVE_TYPE_LABEL[req.leaveType ?? "cuti"]}`}
+                          : req.leaveSubtype || `Permohonan ${LEAVE_TYPE_LABEL[req.leaveType ?? "cuti"]}`}
                       </span>
                     </div>
                     <p className="mt-1 text-xs font-bold text-neutral-600">
@@ -147,13 +147,28 @@ export function PersetujuanTab() {
                   </span>
                 </div>
 
-                {req.kind === "pergantian_shift" && (
+                {req.kind === "pergantian_shift" ? (
                   <div className="rounded-2xl border border-amber-200/70 bg-amber-50/60 px-3.5 py-2.5 text-xs font-semibold text-amber-950">
                     <p>{req.fromShift} → {req.toShift}</p>
                     {req.partnerName && (
                       <p className="mt-0.5 text-amber-800">Rekan pengganti: {req.partnerName}</p>
                     )}
                   </div>
+                ) : (
+                  (req.partnerName || req.attachmentName) && (
+                    <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                      {req.partnerName && (
+                        <span className="rounded-xl bg-amber-50 px-3 py-1.5 text-amber-900">
+                          Karyawan pengganti: {req.partnerName}
+                        </span>
+                      )}
+                      {req.attachmentName && (
+                        <span className="rounded-xl bg-neutral-100 px-3 py-1.5 text-neutral-700">
+                          Dokumen pendukung: {req.attachmentName}
+                        </span>
+                      )}
+                    </div>
+                  )
                 )}
 
                 <p className="rounded-2xl bg-neutral-50 px-3.5 py-2.5 text-xs text-neutral-700">

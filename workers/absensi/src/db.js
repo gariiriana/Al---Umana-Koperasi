@@ -163,16 +163,18 @@ const REQUEST_SELECT = `
 `;
 
 export async function insertRequest(db, {
-  id, uid, kind, leaveType, startDate, endDate, fromShift, toShift, partnerUid, partnerName, reason, createdAt,
+  id, uid, kind, leaveType, leaveSubtype, startDate, endDate, fromShift, toShift,
+  partnerUid, partnerName, attachmentName, reason, createdAt,
 }) {
   await db.prepare(
     `INSERT INTO requests (
-       id, uid, kind, leave_type, start_date, end_date, from_shift, to_shift,
-       partner_uid, partner_name, reason, status, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+       id, uid, kind, leave_type, leave_subtype, start_date, end_date, from_shift, to_shift,
+       partner_uid, partner_name, attachment_name, reason, status, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
   ).bind(
-    id, uid, kind, leaveType ?? null, startDate, endDate, fromShift ?? null, toShift ?? null,
-    partnerUid ?? null, partnerName ?? null, reason, createdAt,
+    id, uid, kind, leaveType ?? null, leaveSubtype ?? null, startDate, endDate,
+    fromShift ?? null, toShift ?? null,
+    partnerUid ?? null, partnerName ?? null, attachmentName ?? null, reason, createdAt,
   ).run();
 }
 

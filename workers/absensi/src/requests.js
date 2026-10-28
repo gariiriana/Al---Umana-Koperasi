@@ -23,6 +23,7 @@ export const LEAVE_LABEL = {
 
 export function requestKindTitle(row) {
   if (row.kind === "pergantian_shift") return "Pergantian Shift";
+  if (row.leave_subtype) return `Permohonan ${row.leave_subtype}`;
   return `Permohonan ${LEAVE_LABEL[row.leave_type] || "Cuti"}`;
 }
 
@@ -31,9 +32,10 @@ export function requestDetailSummary(row) {
     const partner = row.partner_name ? ` (rekan: ${row.partner_name})` : "";
     return `${row.start_date} · ${row.from_shift} → ${row.to_shift}${partner}`;
   }
-  const label = LEAVE_LABEL[row.leave_type] || "Cuti";
+  const label = row.leave_subtype || LEAVE_LABEL[row.leave_type] || "Cuti";
   const range = row.start_date === row.end_date ? row.start_date : `${row.start_date} s/d ${row.end_date}`;
-  return `${label} (${range})`;
+  const partner = row.partner_name ? ` · Pengganti: ${row.partner_name}` : "";
+  return `${label} (${range})${partner}`;
 }
 
 export const toRequestView = (row) => ({
@@ -42,12 +44,14 @@ export const toRequestView = (row) => ({
   employeeName: row.employee_name ?? "",
   kind: row.kind,
   leaveType: row.leave_type ?? null,
+  leaveSubtype: row.leave_subtype ?? null,
   startDate: row.start_date,
   endDate: row.end_date,
   fromShift: row.from_shift ?? null,
   toShift: row.to_shift ?? null,
   partnerUid: row.partner_uid ?? null,
   partnerName: row.partner_name ?? null,
+  attachmentName: row.attachment_name ?? null,
   reason: row.reason,
   status: row.status,
   reviewedBy: row.reviewed_by ?? null,

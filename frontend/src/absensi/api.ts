@@ -91,8 +91,11 @@ export type CreateRequestBody =
   | {
       kind: "cuti";
       leaveType: LeaveType;
+      leaveSubtype?: string;
       startDate: string;
       endDate: string;
+      partnerUid?: string;
+      attachmentName?: string;
       reason: string;
     }
   | {

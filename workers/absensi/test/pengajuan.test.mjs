@@ -27,14 +27,20 @@ describe("pengajuan cuti, pergantian shift, dan notifikasi", () => {
       body: {
         kind: "cuti",
         leaveType: "cuti",
+        leaveSubtype: "Cuti Besar (Long Service)",
         startDate: "2026-10-27",
         endDate: "2026-10-28",
+        partnerUid: "u2",
+        attachmentName: "surat-cuti.pdf",
         reason: "Acara keluarga di luar kota",
       },
     });
     assert.equal(createRes.status, 200, JSON.stringify(createRes.data));
     assert.equal(createRes.data.status, "pending");
     assert.equal(createRes.data.employeeName, "Budi Santoso");
+    assert.equal(createRes.data.leaveSubtype, "Cuti Besar (Long Service)");
+    assert.equal(createRes.data.partnerName, "Siti Aminah");
+    assert.equal(createRes.data.attachmentName, "surat-cuti.pdf");
     const reqId = createRes.data.id;
 
     // Admin menerima notifikasi pengajuan baru
