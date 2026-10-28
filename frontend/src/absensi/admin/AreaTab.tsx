@@ -57,14 +57,16 @@ export function AreaTab() {
     setError(null);
     setNotice(null);
     // PUT mengganti seluruh daftar: area lain dikirim apa adanya, area yang diedit diganti.
-    const entry = { name: name.trim(), polygon: polygon.points, toleranceM, active };
+    const targetId = selected === NEW_AREA ? crypto.randomUUID() : areas[selected].id;
+    const entry = { id: targetId, name: name.trim(), polygon: polygon.points, toleranceM, active };
     const list: Array<Omit<AreaView, "id"> & { id?: string }> = areas.map((area) => ({ ...area }));
     if (selected === NEW_AREA) list.push(entry);
-    else list[selected] = { ...entry, id: areas[selected].id };
+    else list[selected] = entry;
     try {
       const res = await putAreas(list);
       setAreas(res.areas);
-      select(res.areas, selected === NEW_AREA ? res.areas.length - 1 : selected);
+      const savedIndex = res.areas.findIndex((area) => area.id === targetId);
+      select(res.areas, savedIndex >= 0 ? savedIndex : 0);
       setNotice("Area tersimpan.");
     } catch (err) {
       setError(errorMessage(err));

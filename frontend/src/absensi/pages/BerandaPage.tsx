@@ -29,8 +29,18 @@ function Beranda({ me, setStatus, reloadMe, signOut }: {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
-    return () => clearInterval(id);
-  }, []);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        setNow(Date.now());
+        void reloadMe();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [reloadMe]);
 
   const flow = useClockFlow({ me, onStatus: setStatus });
   const [bulan, setBulan] = useState(() => bulanWIB(Date.now()));
@@ -94,7 +104,7 @@ function Beranda({ me, setStatus, reloadMe, signOut }: {
 
             {flow.step === "selfie" && (
               <SelfieCapture
-                mode={me.faceRequired ? "match" : "photo"}
+                mode={me.faceRequired && me.faceDescriptor ? "match" : "photo"}
                 reference={me.faceDescriptor}
                 onDone={(selfie) => void flow.selfieDone(selfie)}
                 onCancel={cancel}

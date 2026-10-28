@@ -17,9 +17,13 @@ function ReferencePhoto({ employee }: { employee: EmployeeView }) {
   const photoId = employee.referencePhotoId;
 
   useEffect(() => {
-    if (!photoId) return undefined;
+    if (!photoId) {
+      setState({ url: null, loading: false });
+      return undefined;
+    }
     let url: string | null = null;
     let cancelled = false;
+    setState({ url: null, loading: true });
     fetchPhotoUrl(photoId).then(
       (result) => {
         url = result;

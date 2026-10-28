@@ -143,6 +143,12 @@ export async function patchKaryawan(ctx) {
     case "set_face_required":
       if (typeof body.faceRequired !== "boolean") throw invalid();
       await setFaceRequired(ctx.env.DB, uid, body.faceRequired);
+      // Jika cek wajah baru dinyalakan untuk karyawan yang dulu aktivasi tanpa deskriptor wajah,
+      // reset aktivasi agar karyawan merekam wajah acuan saat masuk berikutnya.
+      if (body.faceRequired && target.activated_at !== null && !target.face_descriptor) {
+        const { referencePhotoId } = await resetEmployeeDevice(ctx.env.DB, uid);
+        if (referencePhotoId) await deletePhoto(ctx.env.PHOTOS, referencePhotoId);
+      }
       break;
     default:
       throw invalid();

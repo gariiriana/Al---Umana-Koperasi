@@ -1,7 +1,8 @@
 // Tampilan tombol Clock In / Clock Out dari status Worker (tabel spec 5.3).
+import { OPEN_SHIFT_MAX_MS } from "../../../../workers/absensi/shared/constants.js";
 import { workDateWIB } from "../../../../workers/absensi/shared/time.js";
 import { formatDurasi, formatJam, formatTanggalPendek } from "@/absensi/logic/format";
-import type { ShiftStatus } from "@/absensi/types";
+import type { ShiftStatus, ShiftView } from "@/absensi/types";
 
 export interface ButtonView {
   clockIn: { state: "aktif" | "selesai"; label: string };
@@ -14,14 +15,30 @@ export interface ButtonView {
   lastShiftLine: string | null;
 }
 
+function normalizeShift(s: ShiftView | null, nowMs: number): ShiftView | null {
+  if (!s) return null;
+  if (s.status === "terbuka" && nowMs - s.masukAt > OPEN_SHIFT_MAX_MS) {
+    return { ...s, status: "lupa_pulang" };
+  }
+  return s;
+}
+
 export function buttonState(status: ShiftStatus, nowMs: number): ButtonView {
   const today = workDateWIB(nowMs);
-  const shift = status.open ?? status.today;
+  const rawOpen = normalizeShift(status.open, nowMs);
+  const rawToday = normalizeShift(status.today, nowMs);
+  const openShift = rawOpen?.status === "terbuka" ? rawOpen : null;
+  const todayShift = rawToday?.workDate === today
+    ? rawToday
+    : (rawOpen?.workDate === today ? rawOpen : null);
+  const shift = openShift ?? todayShift;
 
   if (!shift) {
-    const last = status.last;
+    const last = rawToday && rawToday.workDate !== today && rawToday.status !== "terbuka"
+      ? rawToday
+      : normalizeShift(status.last, nowMs);
     const lastShiftLine =
-      last?.status === "selesai" && last.pulangAt !== null && workDateWIB(last.pulangAt) === today
+      last?.status === "selesai" && last.pulangAt !== null && workDateWIB(last.pulangAt) === today && last.workDate !== today
         ? `Shift terakhir: ${formatTanggalPendek(last.workDate)}, ${formatJam(last.masukAt)}–${formatJam(last.pulangAt)} ✓`
         : null;
     return {

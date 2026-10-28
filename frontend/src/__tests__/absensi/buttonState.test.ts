@@ -95,4 +95,28 @@ describe("buttonState (tabel spec 5.3)", () => {
     });
     expect(buttonState({ today: null, open: null, last }, wib("2026-10-27", "06:10")).lastShiftLine).toBeNull();
   });
+
+  it("membuka kembali Clock In saat lewat tengah malam WIB tanpa reload", () => {
+    const yesterdayDone = shift({
+      workDate: "2026-10-26",
+      masukAt: wib("2026-10-26", "07:00"),
+      pulangAt: wib("2026-10-26", "16:00"),
+      status: "selesai",
+      durationMin: 540,
+    });
+    const view = buttonState({ today: yesterdayDone, open: null, last: yesterdayDone }, wib("2026-10-27", "00:05"));
+    expect(view.clockIn).toEqual({ state: "aktif", label: "Clock In" });
+    expect(view.clockOut).toEqual({ state: "nonaktif", label: "Clock in dulu" });
+  });
+
+  it("mengubah shift terbuka yang lewat 20 jam menjadi Tidak clock out secara reaktif", () => {
+    const staleOpen = shift({
+      workDate: "2026-10-27",
+      masukAt: wib("2026-10-27", "01:00"),
+      status: "terbuka",
+    });
+    const view = buttonState({ today: staleOpen, open: staleOpen, last: staleOpen }, wib("2026-10-27", "21:30"));
+    expect(view.clockIn).toEqual({ state: "selesai", label: "✓ Sudah clock in · 01:00" });
+    expect(view.clockOut).toEqual({ state: "tidak_clock_out", label: "Tidak clock out" });
+  });
 });

@@ -8,7 +8,10 @@ export function captureJpeg(
 ): Promise<Blob> {
   const canvas = document.createElement("canvas");
   canvas.width = width;
-  canvas.height = Math.round((video.videoHeight / video.videoWidth) * width);
+  const ratio = video.videoWidth > 0 && video.videoHeight > 0
+    ? video.videoHeight / video.videoWidth
+    : 4 / 3;
+  canvas.height = Math.round(ratio * width);
   const context = canvas.getContext("2d");
   if (!context) return Promise.reject(new Error("Canvas 2D tidak tersedia"));
   context.drawImage(video, 0, 0, canvas.width, canvas.height);

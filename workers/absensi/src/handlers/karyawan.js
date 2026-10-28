@@ -98,8 +98,13 @@ export async function activate(ctx) {
   if (!credential) throw new AbsensiError("PASSKEY_TIDAK_VALID", 400);
 
   const photoId = crypto.randomUUID();
+  try {
+    await insertPasskey(ctx.env.DB, { ...credential, uid: employee.uid, createdAt: now });
+  } catch (err) {
+    if (/UNIQUE/i.test(String(err?.message))) throw new AbsensiError("PASSKEY_TIDAK_VALID", 400);
+    throw err;
+  }
   await insertPhoto(ctx.env.PHOTOS, { id: photoId, uid: employee.uid, kind: "acuan", jpeg, createdAt: now });
-  await insertPasskey(ctx.env.DB, { ...credential, uid: employee.uid, createdAt: now });
   await activateEmployee(ctx.env.DB, employee.uid, { faceDescriptor: descriptor, referencePhotoId: photoId, consentAt: now, activatedAt: now });
   return meView(ctx, await getEmployee(ctx.env.DB, employee.uid));
 }
@@ -179,13 +184,13 @@ export async function absen(ctx) {
   if (env.ENFORCE_COUNTRY && country && country !== env.ENFORCE_COUNTRY) throw new AbsensiError("NEGARA_TIDAK_VALID", 422);
 
   const faceDistance = Number.isFinite(body.faceDistance) ? body.faceDistance : null;
-  if (employee.face_required === 1 && !(faceDistance !== null && faceDistance >= 0 && faceDistance < FACE_MATCH_THRESHOLD)) {
+  const needFace = employee.face_required === 1 && Boolean(employee.face_descriptor);
+  if (needFace && !(faceDistance !== null && faceDistance >= 0 && faceDistance < FACE_MATCH_THRESHOLD)) {
     throw new AbsensiError("WAJAH_TIDAK_COCOK", 422);
   }
 
   const decision = await currentDecision(ctx, employee, kind, now);
   const photoId = crypto.randomUUID();
-  await insertPhoto(env.PHOTOS, { id: photoId, uid: employee.uid, kind: "selfie", jpeg, createdAt: now });
   const fields = { ...location, areaId: area.areaId, faceDistance, photoId };
   if (decision.action === "insert") {
     try {
@@ -197,6 +202,7 @@ export async function absen(ctx) {
   } else if ((await closeShift(env.DB, decision.shiftId, { pulangAt: now, ...fields })) === 0) {
     throw new AbsensiError("BELUM_CLOCK_IN", 409);
   }
+  await insertPhoto(env.PHOTOS, { id: photoId, uid: employee.uid, kind: "selfie", jpeg, createdAt: now });
   await updatePasskeyCounter(env.DB, passkey.credential_id, verified.newCounter, now);
 
   return { serverTime: now, status: shiftStatus(await recentShifts(env.DB, employee.uid), now) };

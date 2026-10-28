@@ -30,6 +30,18 @@ export function usesAuthEmulator(env) {
   return Boolean(env.AUTH_EMULATOR_HOST) && String(env.FIREBASE_PROJECT_ID || "").startsWith("demo-");
 }
 
+async function fetchJwks(jwksFetch) {
+  try {
+    const response = await jwksFetch(SECURETOKEN_JWKS);
+    if (!response.ok) return null;
+    const maxAge = Number(/max-age=(\d+)/.exec(response.headers.get("cache-control") || "")?.[1] || 3600);
+    cachedJwks = { keys: (await response.json()).keys || [], expiresAt: Date.now() + maxAge * 1000 };
+    return cachedJwks;
+  } catch {
+    return null;
+  }
+}
+
 /** Verify a Firebase ID token. Returns {uid, claims} or null. */
 export async function verifyIdToken(token, env, { jwksFetch = fetch } = {}) {
   const projectId = env.FIREBASE_PROJECT_ID;
@@ -50,13 +62,16 @@ export async function verifyIdToken(token, env, { jwksFetch = fetch } = {}) {
   if (header.alg === "none") return usesAuthEmulator(env) ? { uid: payload.sub, claims: payload } : null;
   if (header.alg !== "RS256") return null;
 
+  let refreshed = false;
   if (!cachedJwks || cachedJwks.expiresAt < Date.now()) {
-    const response = await jwksFetch(SECURETOKEN_JWKS);
-    if (!response.ok) return null;
-    const maxAge = Number(/max-age=(\d+)/.exec(response.headers.get("cache-control") || "")?.[1] || 3600);
-    cachedJwks = { keys: (await response.json()).keys || [], expiresAt: Date.now() + maxAge * 1000 };
+    refreshed = true;
+    if (!(await fetchJwks(jwksFetch))) return null;
   }
-  const jwk = cachedJwks.keys.find((k) => k.kid === header.kid);
+  let jwk = cachedJwks.keys.find((k) => k.kid === header.kid);
+  if (!jwk && !refreshed) {
+    if (!(await fetchJwks(jwksFetch))) return null;
+    jwk = cachedJwks.keys.find((k) => k.kid === header.kid);
+  }
   if (!jwk) return null;
   const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
   const valid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, base64UrlDecode(parts[2]),

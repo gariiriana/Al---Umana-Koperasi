@@ -82,6 +82,19 @@ describe("admin endpoints", () => {
     assert.equal(await getPhoto(env.PHOTOS, "ref-u1"), null);
   });
 
+  it("resets activation automatically if faceRequired is enabled for an employee activated without a face descriptor", async () => {
+    await insertPhoto(env.PHOTOS, { id: "ref-u3", uid: "u3", kind: "acuan", jpeg: new Uint8Array([0xff, 0xd8, 0xff]), createdAt: T0 });
+    await activateEmployee(env.DB, "u3", { faceDescriptor: null, referencePhotoId: "ref-u3", consentAt: T0, activatedAt: T0 });
+    await insertPasskey(env.DB, { credentialId: "c-u3", uid: "u3", publicKey: "pk", counter: 0, transports: [], createdAt: T0 });
+    await asAdmin("PATCH", "/admin/karyawan/u3", { action: "set_face_required", faceRequired: false });
+    const reenabled = await asAdmin("PATCH", "/admin/karyawan/u3", { action: "set_face_required", faceRequired: true });
+    assert.equal(reenabled.status, 200);
+    assert.equal(reenabled.data.faceRequired, true);
+    assert.equal(reenabled.data.activated, false);
+    assert.equal((await listPasskeys(env.DB, "u3")).length, 0);
+    assert.equal(await getPhoto(env.PHOTOS, "ref-u3"), null);
+  });
+
   it("deactivates others but never the admin themself", async () => {
     assert.equal((await asAdmin("PATCH", "/admin/karyawan/adm", { action: "nonaktifkan" })).data.error.code, "TIDAK_BISA_DIRI_SENDIRI");
     const res = await asAdmin("PATCH", "/admin/karyawan/u4", { action: "nonaktifkan" });

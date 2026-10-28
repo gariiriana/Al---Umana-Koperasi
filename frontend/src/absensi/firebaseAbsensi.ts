@@ -16,12 +16,22 @@ export function getAbsensiAuth(): Auth {
   if (!absensiAuth) {
     absensiAuth = initializeAuth(initializeApp(firebaseConfig, "absensi"), { persistence: indexedDBLocalPersistence });
     if (useEmulators) connectAuthEmulator(absensiAuth, "http://127.0.0.1:9099", { disableWarnings: true });
+    if (useEmulators && typeof window !== "undefined") {
+      (window as unknown as { __absensiAuth?: Auth }).__absensiAuth = absensiAuth;
+    }
   }
   return absensiAuth;
 }
 
 if (useEmulators && typeof window !== "undefined") {
   // Login cepat untuk skrip uji lokal (tanpa Turnstile), seperti __emulatorSignIn KASMA JOB.
-  (window as unknown as { __absensiEmulatorSignIn?: (email: string, password: string) => Promise<unknown> })
-    .__absensiEmulatorSignIn = (email, password) => signInWithEmailAndPassword(getAbsensiAuth(), email, password);
+  const win = window as unknown as {
+    __absensiAuth?: Auth;
+    __absensiEmulatorSignIn?: (email: string, password: string) => Promise<unknown>;
+  };
+  win.__absensiEmulatorSignIn = (email, password) => {
+    const auth = getAbsensiAuth();
+    win.__absensiAuth = auth;
+    return signInWithEmailAndPassword(auth, email, password);
+  };
 }

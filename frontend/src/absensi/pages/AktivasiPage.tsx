@@ -21,7 +21,7 @@ const STEP_NUMBER: Record<Step, number> = { persetujuan: 1, lokasi: 2, foto: 3, 
 
 /** Aktivasi pertama: persetujuan → lokasi → foto acuan → passkey → simpan di Worker. */
 export function AktivasiPage() {
-  const { me, reloadMe } = useAbsensiSession();
+  const { me, reloadMe, signOut } = useAbsensiSession();
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("persetujuan");
   const [consent, setConsent] = useState(false);
@@ -100,14 +100,19 @@ export function AktivasiPage() {
   return (
     <div className="min-h-screen bg-[#111827] px-4 py-8">
       <div className="mx-auto w-full max-w-md space-y-5">
-        <div>
-          <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs font-bold text-amber-300">
-            Langkah {STEP_NUMBER[step]} dari 4
-          </p>
-          <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-bold text-white">Aktivasi HP</h1>
-          <p className="mt-1 font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-300">
-            Sekali saja di HP ini, dan harus di dalam area kerja.
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs font-bold text-amber-300">
+              Langkah {STEP_NUMBER[step]} dari 4
+            </p>
+            <h1 className="font-['Manrope',system-ui,sans-serif] text-2xl font-bold text-white">Aktivasi HP</h1>
+            <p className="mt-1 font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-300">
+              Sekali saja di HP ini, dan harus di dalam area kerja.
+            </p>
+          </div>
+          {signOut && (
+            <Button variant="secondary" size="sm" onClick={() => void signOut()}>Keluar</Button>
+          )}
         </div>
 
         <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
@@ -164,9 +169,12 @@ export function AktivasiPage() {
               >
                 Daftarkan sidik jari / Face ID
               </Button>
-              {!options && error && (
-                <Button variant="secondary" onClick={() => void loadOptions()}>Coba lagi</Button>
-              )}
+              <div className="flex flex-wrap justify-center gap-2">
+                {!options && error && (
+                  <Button variant="secondary" onClick={() => void loadOptions()}>Coba lagi</Button>
+                )}
+                <Button variant="secondary" disabled={busy} onClick={() => setStep("foto")}>Ulangi foto</Button>
+              </div>
             </div>
           )}
         </div>

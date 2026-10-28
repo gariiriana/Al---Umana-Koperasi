@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FACE_MATCH_THRESHOLD } from "../../../../workers/absensi/shared/constants.js";
-import { averageEar, createBlinkDetector, createHeadTurnDetector } from "@/absensi/device/eyes";
+import { averageEar, createBlinkDetector, createHeadTurnDetector, getHeadYawRatio } from "@/absensi/device/eyes";
 import { detectSingleFace, faceDistance, loadFaceModels, type FaceDetection } from "@/absensi/device/face";
 import { captureJpeg } from "@/absensi/device/selfie";
 import { messageFor } from "@/absensi/messages";
@@ -37,10 +37,13 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
   const [hint, setHint] = useState("Menyalakan kamera...");
   const [error, setError] = useState<string | null>(null);
   const [hasFace, setHasFace] = useState(false);
+  const [capturing, setCapturing] = useState(false);
   // Naik setiap "Coba lagi" supaya loop deteksi dimulai ulang.
   const [attempt, setAttempt] = useState(0);
   const [cameraReady, setCameraReady] = useState(false);
-  const lastFaceRef = useRef<FaceDetection | null>(null);
+  const lastFaceRef = useRef<Extract<FaceDetection, { kind: "one" }> | null>(null);
+  const lastCenteredFaceRef = useRef<Extract<FaceDetection, { kind: "one" }> | null>(null);
+  const stopLoopRef = useRef<() => void>(() => {});
 
   const onDoneRef = useRef(onDone);
   const referenceRef = useRef(reference);
@@ -77,15 +80,25 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
   const handleCapture = useCallback(async (face: { descriptor: number[] }) => {
     const video = videoRef.current;
     if (!video) return;
-    const jpeg = await captureJpeg(video);
-    const ref = referenceRef.current;
-    const distance = mode === "match" && ref ? faceDistance(face.descriptor, ref) : null;
-    if (distance !== null && distance >= FACE_MATCH_THRESHOLD) {
-      setPhase("mismatch");
-      setError(messageFor("WAJAH_TIDAK_COCOK"));
-      return;
+    stopLoopRef.current();
+    setCapturing(true);
+    try {
+      const jpeg = await captureJpeg(video);
+      const centeredDescriptor = lastCenteredFaceRef.current?.descriptor ?? face.descriptor;
+      const ref = referenceRef.current;
+      let distance: number | null = null;
+      if (mode === "match" && ref) {
+        distance = Math.min(faceDistance(face.descriptor, ref), faceDistance(centeredDescriptor, ref));
+      }
+      if (distance !== null && distance >= FACE_MATCH_THRESHOLD) {
+        setPhase("mismatch");
+        setError(messageFor("WAJAH_TIDAK_COCOK"));
+        return;
+      }
+      onDoneRef.current({ jpeg, descriptor: centeredDescriptor, distance });
+    } finally {
+      setCapturing(false);
     }
-    onDoneRef.current({ jpeg, descriptor: face.descriptor, distance });
   }, [mode]);
 
   useEffect(() => {
@@ -98,6 +111,10 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
 
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    stopLoopRef.current = () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
     const blink = createBlinkDetector();
     const headTurn = createHeadTurnDetector();
 
@@ -111,16 +128,22 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
           blink.reset();
           headTurn.reset();
           lastFaceRef.current = null;
+          lastCenteredFaceRef.current = null;
           setHasFace(false);
           setHint("Hadapkan wajah ke kamera");
         } else if (face.kind === "many") {
           blink.reset();
           headTurn.reset();
           lastFaceRef.current = null;
+          lastCenteredFaceRef.current = null;
           setHasFace(false);
           setHint("Pastikan hanya satu wajah di kamera");
         } else {
           lastFaceRef.current = face;
+          const yaw = getHeadYawRatio(face.landmarks);
+          if (yaw >= 0.42 && yaw <= 0.58) {
+            lastCenteredFaceRef.current = face;
+          }
           setHasFace(true);
           setHint("Tengok kiri / kanan sedikit, atau tekan Ambil Foto");
           const isTurn = headTurn.push(face.landmarks);
@@ -134,12 +157,16 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
       } catch {
         // Frame gagal dibaca (mis. video belum siap); coba frame berikutnya.
       }
-      timer = setTimeout(tick, DETECT_EVERY_MS);
+      if (!stopped) {
+        timer = setTimeout(tick, DETECT_EVERY_MS);
+      }
     };
 
     setPhase("starting");
     setError(null);
     setHasFace(false);
+    lastFaceRef.current = null;
+    lastCenteredFaceRef.current = null;
     setHint("Menyiapkan pengenal wajah...");
     loadFaceModels()
       .then(() => {
@@ -163,7 +190,12 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
   const takePhoto = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
-    onDoneRef.current({ jpeg: await captureJpeg(video), descriptor: null, distance: null });
+    setCapturing(true);
+    try {
+      onDoneRef.current({ jpeg: await captureJpeg(video), descriptor: null, distance: null });
+    } finally {
+      setCapturing(false);
+    }
   }, []);
 
   return (
@@ -191,9 +223,10 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
         {phase === "detecting" && hasFace && (
           <Button
             variant="primary"
+            disabled={capturing}
             onClick={() => {
-              const face = lastFaceRef.current;
-              if (face && face.kind === "one") {
+              const face = lastCenteredFaceRef.current ?? lastFaceRef.current;
+              if (face) {
                 void handleCapture(face);
               }
             }}
@@ -202,12 +235,12 @@ export function SelfieCapture({ mode, reference = null, onDone, onCancel }: Self
           </Button>
         )}
         {phase === "ready" && (
-          <Button variant="primary" onClick={() => void takePhoto()}>Ambil foto</Button>
+          <Button variant="primary" disabled={capturing} onClick={() => void takePhoto()}>Ambil foto</Button>
         )}
         {phase === "mismatch" && (
           <Button variant="primary" onClick={() => setAttempt((n) => n + 1)}>Coba lagi</Button>
         )}
-        <Button variant="secondary" onClick={onCancel}>Batal</Button>
+        <Button variant="secondary" disabled={capturing} onClick={onCancel}>Batal</Button>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut as firebaseSignOut, type User } from "firebase/auth";
 import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
 import { AbsensiApiError, getMe } from "@/absensi/api";
@@ -19,17 +19,20 @@ export interface AbsensiSessionValue {
 const AbsensiSessionContext = createContext<AbsensiSessionValue | null>(null);
 
 // Akun yang ditolak Worker tidak boleh tetap login di pintu Absensi.
-const SIGN_OUT_CODES = new Set(["BUKAN_AKUN_ABSENSI", "AKUN_NONAKTIF"]);
+const SIGN_OUT_CODES = new Set(["BUKAN_AKUN_ABSENSI", "AKUN_NONAKTIF", "UNAUTHENTICATED"]);
 
 export function AbsensiSessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const authEventRef = useRef(0);
 
   const loadMe = useCallback(async () => {
     try {
-      setMe(await getMe());
+      const data = await getMe();
+      setMe(data);
+      setError(null);
     } catch (err) {
       const code = err instanceof AbsensiApiError ? err.code : "INTERNAL";
       setMe(null);
@@ -39,10 +42,12 @@ export function AbsensiSessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => onAuthStateChanged(getAbsensiAuth(), async (next) => {
+    const thisEvent = ++authEventRef.current;
     setUser(next);
     if (next) {
       setLoading(true);
       await loadMe();
+      if (thisEvent !== authEventRef.current) return;
     } else {
       setMe(null);
     }

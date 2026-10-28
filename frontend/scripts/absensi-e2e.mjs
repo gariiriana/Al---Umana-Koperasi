@@ -41,7 +41,7 @@ async function checkStackAlive() {
     if (!res.ok && res.status !== 404 && res.status !== 200) {
       throw new Error(`Frontend status: ${res.status}`);
     }
-  } catch (err) {
+  } catch {
     console.error("\n❌ Stack lokal belum aktif!");
     console.error("Pastikan 3 layanan berikut sudah berjalan:");
     console.error("  1. Terminal 1: firebase emulators:start --only auth,firestore --project demo-alumana");
@@ -81,24 +81,23 @@ async function main() {
   }
 
   // Launch browser with fake media stream and location permissions
+  const launchArgs = [
+    "--use-fake-ui-for-media-stream",
+    "--use-fake-device-for-media-stream",
+    "--disable-blink-features=AutomationControlled",
+  ];
   let browser;
   try {
     browser = await chromium.launch({
       channel: "msedge",
       headless: process.env.HEADLESS !== "false",
-      args: [
-        "--use-fake-ui-for-media-stream",
-        "--use-fake-device-for-media-stream",
-      ],
+      args: launchArgs,
     });
   } catch (edgeErr) {
     console.warn("   ⚠️ Gagal membuka Edge, mencoba default Chromium...", edgeErr.message);
     browser = await chromium.launch({
       headless: process.env.HEADLESS !== "false",
-      args: [
-        "--use-fake-ui-for-media-stream",
-        "--use-fake-device-for-media-stream",
-      ],
+      args: launchArgs,
     });
   }
 
@@ -107,6 +106,14 @@ async function main() {
     geolocation: { latitude: AREA_PIN.lat, longitude: AREA_PIN.lng, accuracy: 10 },
     viewport: { width: 440, height: 850 },
   });
+
+  await context.addInitScript(({ lat, lng }) => {
+    try {
+      localStorage.setItem("absensi:devGps", `${lat},${lng},10`);
+    } catch {
+      // ignore
+    }
+  }, AREA_PIN);
 
   const page = await context.newPage();
 
@@ -140,9 +147,10 @@ async function main() {
     await page.evaluate(
       async ({ pin, emp }) => {
         const token = await window.__absensiAuth?.currentUser?.getIdToken();
+        if (!token) throw new Error("Token admin tidak ditemukan di window.__absensiAuth");
         const headers = {
           "content-type": "application/json",
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
+          authorization: `Bearer ${token}`,
         };
 
         const square = [
@@ -153,7 +161,7 @@ async function main() {
         ];
 
         // PUT Area
-        await fetch("/api/absensi/admin/area", {
+        const areaRes = await fetch("/api/absensi/admin/area", {
           method: "PUT",
           headers,
           body: JSON.stringify({
@@ -167,9 +175,10 @@ async function main() {
             ],
           }),
         });
+        if (!areaRes.ok) throw new Error(`Gagal PUT /admin/area: ${areaRes.status}`);
 
-        // POST Karyawan (abaikan jika sudah pernah ada)
-        await fetch("/api/absensi/admin/karyawan", {
+        // POST Karyawan (abaikan 409 jika sudah pernah ada)
+        const empRes = await fetch("/api/absensi/admin/karyawan", {
           method: "POST",
           headers,
           body: JSON.stringify({
@@ -179,7 +188,10 @@ async function main() {
             role: emp.role,
             faceRequired: emp.faceRequired,
           }),
-        }).catch(() => {});
+        });
+        if (!empRes.ok && empRes.status !== 409) {
+          throw new Error(`Gagal POST /admin/karyawan: ${empRes.status}`);
+        }
       },
       { pin: AREA_PIN, emp: EMPLOYEE }
     );
@@ -295,8 +307,8 @@ async function main() {
 
     await page.waitForURL("**/absensi/admin**", { timeout: 10000 });
 
-    // Buka tab Rekap
-    const tabRekap = page.getByRole("button", { name: "Rekap" });
+    // Buka tab Rekap (NavLink = role link)
+    const tabRekap = page.getByRole("link", { name: "Rekap" });
     await tabRekap.click();
 
     // Klik tombol Tampilkan

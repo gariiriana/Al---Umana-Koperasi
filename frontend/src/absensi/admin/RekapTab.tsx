@@ -29,9 +29,13 @@ function ShiftPhoto({ label, photoId }: { label: string; photoId: string | null 
   const [state, setState] = useState<{ url: string | null; loading: boolean }>({ url: null, loading: photoId !== null });
 
   useEffect(() => {
-    if (!photoId) return undefined;
+    if (!photoId) {
+      setState({ url: null, loading: false });
+      return undefined;
+    }
     let url: string | null = null;
     let cancelled = false;
+    setState({ url: null, loading: true });
     fetchPhotoUrl(photoId).then(
       (result) => {
         url = result;
