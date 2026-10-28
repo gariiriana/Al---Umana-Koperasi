@@ -1,2 +1,2 @@
-ALTER TABLE requests ADD COLUMN leave_subtype TEXT;
-ALTER TABLE requests ADD COLUMN attachment_name TEXT;
+ALTER TABLE requests ADD leave_subtype TEXT;
+ALTER TABLE requests ADD attachment_name TEXT;
