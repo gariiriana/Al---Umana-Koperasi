@@ -20,6 +20,7 @@ import {
   type ISectionOptions,
 } from 'docx';
 import type { MbgBahanChecklistForm, MbgBahanDocumentation } from '@/types/mbg';
+import { MBG_BAHAN_DOC_OFFICERS } from '@/constants/mbgConstants';
 import { getBase64ImageWithDimensions } from './mbgDeliveryReportPdfExporter';
 
 function dataUriToUint8Array(dataUri: string): Uint8Array | null {
@@ -428,7 +429,7 @@ export async function exportBahanDocumentationDocx(docData: MbgBahanDocumentatio
         }),
         new TableCell({
           borders: BLACK_BORDER,
-          children: [new Paragraph({ children: [new TextRun({ text: docData.officerName || 'Tim Distribusi', size: 19 })] })],
+          children: [new Paragraph({ children: [new TextRun({ text: MBG_BAHAN_DOC_OFFICERS, size: 19 })] })],
         }),
       ],
     }),

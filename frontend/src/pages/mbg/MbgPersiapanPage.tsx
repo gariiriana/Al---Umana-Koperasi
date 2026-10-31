@@ -26,6 +26,8 @@ export function MbgPersiapanPage() {
   const [allDailyReports, setAllDailyReports] = useState<MbgProductionDailyReport[]>([]);
   const [allForms, setAllForms] = useState<MbgBahanChecklistForm[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  // Batch yang dibuka dari Arsip Dokumentasi tetap bisa dipilih walau tidak lolos filter di bawah.
+  const [archiveBatchId, setArchiveBatchId] = useState<string | null>(null);
 
   useEffect(() => subscribeBatches(setRawBatches), []);
   useEffect(() => subscribeAllDailyReports(setAllDailyReports), []);
@@ -44,6 +46,7 @@ export function MbgPersiapanPage() {
   // or have a production daily report / inspection form
   const batches = useMemo(() => {
     return rawBatches.filter((b) => {
+      if (b.id === archiveBatchId) return true;
       if (b.isBackup) return false;
       // 1. Explicitly submitted to distribution by Produksi MBG
       if (b.submittedToDistribution === true) return true;
@@ -55,7 +58,7 @@ export function MbgPersiapanPage() {
       if (savedFormBatchIds.has(b.id)) return true;
       return false;
     });
-  }, [rawBatches, dailyReportBatchIds, savedFormBatchIds]);
+  }, [rawBatches, dailyReportBatchIds, savedFormBatchIds, archiveBatchId]);
 
   // Synchronize selected batch from the submitted batches list
   useEffect(() => {
@@ -139,7 +142,14 @@ export function MbgPersiapanPage() {
         />
       ) : (
         <div className="max-w-4xl mx-auto pb-16">
-          <MbgBahanDocumentationSection selectedBatch={selectedBatch} dailyReport={dailyReport} />
+          <MbgBahanDocumentationSection
+            selectedBatch={selectedBatch}
+            dailyReport={dailyReport}
+            onSelectBatch={(id) => {
+              setArchiveBatchId(id);
+              setSelectedBatchId(id);
+            }}
+          />
         </div>
       )}
     </div>

@@ -10,9 +10,11 @@ export interface LoadedImageInfo {
 }
 
 // Helper to load image as base64 with natural dimensions (supports transparent PNG & JPEG)
+// `maxDimension` downscales URL images (e.g. 1024px logos) so they do not bloat the PDF.
 export const getBase64ImageWithDimensions = async (
   url: string,
-  format: 'image/png' | 'image/jpeg' = 'image/jpeg'
+  format: 'image/png' | 'image/jpeg' = 'image/jpeg',
+  maxDimension?: number
 ): Promise<LoadedImageInfo | null> => {
   if (!url) return null;
   if (url.startsWith('data:image')) {
@@ -44,12 +46,13 @@ export const getBase64ImageWithDimensions = async (
     });
 
     if (img.complete && img.naturalWidth > 0) {
+      const scale = maxDimension ? Math.min(1, maxDimension / Math.max(img.naturalWidth, img.naturalHeight)) : 1;
       const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         return {
           dataUrl: canvas.toDataURL(format, 0.92),
           width: img.naturalWidth,

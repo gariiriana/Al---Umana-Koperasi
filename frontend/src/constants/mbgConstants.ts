@@ -184,6 +184,9 @@ export const MBG_ROLE_BADGES: Record<string, string> = {
   kurir_mbg: 'Kurir MBG',
 };
 
+/** Penanggung jawab yang dicetak di Dokumentasi Foto Bahan (PDF, Word, dan layar). */
+export const MBG_BAHAN_DOC_OFFICERS = 'Ka SPPG, PLOK dan PLOG';
+
 /** Default empty PM entry for new row creation */
 export function createEmptyPmEntry(batchId: string, petugasId: string, petugasName: string, sortOrder: number): Omit<import('../types/mbg').MbgPmEntry, 'id'> {
   return {

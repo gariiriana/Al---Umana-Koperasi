@@ -897,6 +897,12 @@ service cloud.firestore {
       allow create, update, delete: if isMbgManager() || isDistribusiMbg() || isKurirMbg();
     }
 
+    // Satu foto per dokumen agar arsip di atas tidak melewati batas 1 MiB Firestore.
+    match /mbg_bahan_photos/{photoId} {
+      allow read: if isMbgStaff();
+      allow create, update, delete: if isMbgManager() || isDistribusiMbg() || isKurirMbg();
+    }
+
     // -------------------------------------------------------------------
     // MBG Inspection Forms (form pemeriksaan / cek list bahan makanan)
     // -------------------------------------------------------------------

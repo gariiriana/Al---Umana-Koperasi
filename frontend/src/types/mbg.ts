@@ -713,7 +713,8 @@ export interface MbgBahanPhotoItem {
   namaBahan: string;
   kuantitas?: number;
   satuan?: string;
-  photoUrl?: string; // base64 compressed dataUrl
+  photoUrl?: string; // base64 compressed dataUrl (hanya di memori; arsip lama masih menyimpannya inline)
+  photoId?: string; // ID dokumen foto di koleksi mbg_bahan_photos
   waktuFoto?: string;
   kondisi?: 'baik' | 'rusak' | 'segar';
   catatan?: string;

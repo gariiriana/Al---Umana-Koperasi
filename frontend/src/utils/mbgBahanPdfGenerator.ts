@@ -9,6 +9,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { MbgBahanDocumentation, MbgBahanChecklistForm } from '@/types/mbg';
 import { getBase64ImageWithDimensions } from './mbgDeliveryReportPdfExporter';
+import { MBG_BAHAN_DOC_OFFICERS } from '@/constants/mbgConstants';
 
 /**
  * Format date string into Indonesian locale: e.g. "01 September 2026"
@@ -213,9 +214,9 @@ export async function exportBahanDocumentationPdf(docData: MbgBahanDocumentation
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 14;
 
-  // Header Logos
+  // Header Logos — dimuat sebagai PNG agar latar transparan tidak berubah hitam
   try {
-    const bgnLogo = await getBase64ImageWithDimensions('/logo_badan_gizi.png');
+    const bgnLogo = await getBase64ImageWithDimensions('/logo_badan_gizi.png', 'image/png', 256);
     if (bgnLogo) {
       doc.addImage(bgnLogo.dataUrl, 'PNG', margin, 10, 16, 16);
     }
@@ -224,7 +225,7 @@ export async function exportBahanDocumentationPdf(docData: MbgBahanDocumentation
   }
 
   try {
-    const alumanaLogo = await getBase64ImageWithDimensions('/logo_alumana.png');
+    const alumanaLogo = await getBase64ImageWithDimensions('/logo_alumana.png', 'image/png', 256);
     if (alumanaLogo) {
       doc.addImage(alumanaLogo.dataUrl, 'PNG', pageWidth - margin - 16, 10, 16, 16);
     }
@@ -258,38 +259,43 @@ export async function exportBahanDocumentationPdf(docData: MbgBahanDocumentation
   doc.setFontSize(8.5);
   doc.setTextColor(51, 65, 85);
   doc.text(`Tanggal Batch: ${formatIndoDate(docData.tanggal)}`, margin + 4, 37);
-  doc.text(`Petugas Dokumentasi: ${docData.officerName || 'Tim Distribusi MBG'}`, margin + 4, 43);
+  doc.text(`Petugas Dokumentasi: ${MBG_BAHAN_DOC_OFFICERS}`, margin + 4, 43);
 
   const totalItems = docData.items?.length || 0;
   const withPhotos = (docData.items || []).filter((i) => Boolean(i.photoUrl)).length;
   doc.text(`Total Bahan: ${totalItems} Item`, pageWidth - margin - 4, 37, { align: 'right' });
   doc.text(`Terdokumentasi Foto: ${withPhotos} / ${totalItems}`, pageWidth - margin - 4, 43, { align: 'right' });
 
-  let curY = 52;
   const items = docData.items || [];
 
-  // Card Grid settings: 2 columns per row
-  const colWidth = (pageWidth - (margin * 2) - 8) / 2;
-  const cardHeight = 65;
+  // Card Grid settings: 3 columns per row; a row that does not fit moves to a new page
+  // (3 rows on page 1 under the header, 4 rows on the following pages).
+  const columns = 3;
+  const gap = 5;
+  const rowGap = 4;
+  const colWidth = (pageWidth - (margin * 2) - (gap * (columns - 1))) / columns;
+  const photoBoxHeight = 42;
+  const cardHeight = photoBoxHeight + 18.5;
+  const contentBottom = pageHeight - 14; // footer sits at pageHeight - 8
 
   let pageNum = 1;
+  let cardY = 52;
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    const colIndex = i % 2;
-    const rowIndex = Math.floor((i % 6) / 2); // 3 rows (6 cards) per page
+    const colIndex = i % columns;
 
-    // Check if we need a new page
-    if (i > 0 && i % 6 === 0) {
-      // Draw footer on current page
-      drawPageFooter(doc, pageNum, pageWidth, pageHeight, margin);
-      doc.addPage();
-      pageNum++;
-      curY = 20;
+    if (i > 0 && colIndex === 0) {
+      cardY += cardHeight + rowGap;
+      if (cardY + cardHeight > contentBottom) {
+        drawPageFooter(doc, pageNum, pageWidth, pageHeight, margin);
+        doc.addPage();
+        pageNum++;
+        cardY = 20;
+      }
     }
 
-    const cardX = margin + (colIndex * (colWidth + 8));
-    const cardY = curY + (rowIndex * (cardHeight + 6));
+    const cardX = margin + (colIndex * (colWidth + gap));
 
     // Card frame
     doc.setFillColor(255, 255, 255);
@@ -297,8 +303,7 @@ export async function exportBahanDocumentationPdf(docData: MbgBahanDocumentation
     doc.setLineWidth(0.3);
     doc.roundedRect(cardX, cardY, colWidth, cardHeight, 2, 2, 'FD');
 
-    // Photo Box (Top of card: 40mm height)
-    const photoBoxHeight = 42;
+    // Photo Box (Top of card)
     if (item.photoUrl) {
       try {
         const photoInfo = await getBase64ImageWithDimensions(item.photoUrl, 'image/jpeg');
@@ -330,46 +335,46 @@ export async function exportBahanDocumentationPdf(docData: MbgBahanDocumentation
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       doc.setTextColor(148, 163, 184);
-      doc.text('📷 Belum ada foto', cardX + (colWidth / 2), cardY + (photoBoxHeight / 2), { align: 'center' });
+      doc.text('Belum ada foto', cardX + (colWidth / 2), cardY + (photoBoxHeight / 2), { align: 'center' });
     }
 
     // Divider inside card
     doc.setDrawColor(226, 232, 240);
     doc.line(cardX, cardY + photoBoxHeight, cardX + colWidth, cardY + photoBoxHeight);
 
-    // Card Details (Bottom of card)
-    const textStartY = cardY + photoBoxHeight + 4.5;
+    // Card Details (Bottom of card); each line is clipped to the card width
+    const textX = cardX + 2.5;
+    const textWidth = colWidth - 5;
+    const textStartY = cardY + photoBoxHeight + 4;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
     doc.setTextColor(15, 23, 42);
-    const shortName = item.namaBahan.length > 30 ? `${item.namaBahan.slice(0, 28)}...` : item.namaBahan;
-    doc.text(`${i + 1}. ${shortName}`, cardX + 3, textStartY);
+    doc.text(fitText(doc, `${i + 1}. ${item.namaBahan}`, textWidth), textX, textStartY);
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFontSize(7);
     doc.setTextColor(71, 85, 105);
 
     const qtyStr = item.kuantitas ? `${item.kuantitas} ${item.satuan || ''}` : '-';
     const timeStr = item.waktuFoto || '-';
-    doc.text(`Jumlah: ${qtyStr} | Waktu: ${timeStr}`, cardX + 3, textStartY + 4.5);
+    doc.text(fitText(doc, `Jumlah: ${qtyStr} | Waktu: ${timeStr}`, textWidth), textX, textStartY + 4);
 
     // Condition Badge text
     const isBaik = item.kondisi !== 'rusak';
     doc.setFont('helvetica', 'bold');
     if (isBaik) {
       doc.setTextColor(16, 149, 106); // Emerald
-      doc.text(`Kondisi: Baik / Segar`, cardX + 3, textStartY + 9);
+      doc.text(`Kondisi: Baik / Segar`, textX, textStartY + 8);
     } else {
       doc.setTextColor(220, 38, 38); // Red
-      doc.text(`Kondisi: Rusak / Cacat`, cardX + 3, textStartY + 9);
+      doc.text(`Kondisi: Rusak / Cacat`, textX, textStartY + 8);
     }
 
     if (item.catatan) {
       doc.setFont('helvetica', 'italic');
-      doc.setFontSize(7);
+      doc.setFontSize(6.5);
       doc.setTextColor(100, 116, 139);
-      const noteStr = item.catatan.length > 35 ? `${item.catatan.slice(0, 33)}...` : item.catatan;
-      doc.text(`Catatan: ${noteStr}`, cardX + 3, textStartY + 13.5);
+      doc.text(fitText(doc, `Catatan: ${item.catatan}`, textWidth), textX, textStartY + 12);
     }
   }
 
@@ -379,6 +384,14 @@ export async function exportBahanDocumentationPdf(docData: MbgBahanDocumentation
   // Save PDF
   const cleanDate = (docData.tanggal || 'tanggal').replace(/[^a-zA-Z0-9_-]/g, '_');
   doc.save(`Dokumentasi_Foto_Bahan_MBG_${cleanDate}.pdf`);
+}
+
+/** Potong teks satu baris agar muat di `maxWidth` (mm) dengan font yang sedang aktif. */
+function fitText(doc: jsPDF, text: string, maxWidth: number): string {
+  if (doc.getTextWidth(text) <= maxWidth) return text;
+  let cut = text;
+  while (cut.length > 1 && doc.getTextWidth(`${cut}...`) > maxWidth) cut = cut.slice(0, -1);
+  return `${cut.trimEnd()}...`;
 }
 
 function drawPageFooter(doc: jsPDF, pageNum: number, pageWidth: number, pageHeight: number, margin: number) {

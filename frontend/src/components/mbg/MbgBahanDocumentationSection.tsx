@@ -19,6 +19,7 @@ import {
   History,
   Search,
   Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -33,22 +34,38 @@ import type {
 import {
   subscribeBahanDocumentation,
   subscribeAllBahanDocumentation,
+  subscribeBahanPhotos,
+  attachBahanPhotos,
+  withBahanPhotos,
   saveBahanDocumentation,
   deleteBahanDocumentation,
+  describeBahanSaveError,
   extractIngredientsFromDailyReport,
+  type BahanPhotoMap,
 } from '@/services/mbgBahanService';
 import { exportBahanDocumentationPdf } from '@/utils/mbgBahanPdfGenerator';
 import { exportBahanDocumentationDocx } from '@/utils/mbgBahanDocxGenerator';
 import { compressImageBase64 } from '@/services/mbgDeliveryService';
+import { MBG_BAHAN_DOC_OFFICERS } from '@/constants/mbgConstants';
+
+// Setelan lama 640px / 0.65 menghasilkan rata-rata 43–58 KB per foto di data live;
+// 480px / 0.5 kira-kira separuhnya dan masih cukup tajam untuk kartu PDF/Word.
+const PHOTO_MAX_PX = 480;
+const PHOTO_QUALITY = 0.5;
+// Lewat dari ini tanpa jawaban server, beri tahu petugas bahwa sinyal lambat.
+const SLOW_SAVE_MS = 20_000;
 
 interface MbgBahanDocumentationSectionProps {
   selectedBatch: MbgPmBatch | undefined;
   dailyReport?: MbgProductionDailyReport | null;
+  /** Pindah ke batch arsip yang dipilih, agar simpan ulang menulis ke batch yang benar. */
+  onSelectBatch?: (batchId: string) => void;
 }
 
 export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSectionProps> = ({
   selectedBatch,
   dailyReport,
+  onSelectBatch,
 }) => {
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -56,7 +73,6 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
   const [savedDoc, setSavedDoc] = useState<MbgBahanDocumentation | null>(null);
   const [allDocs, setAllDocs] = useState<MbgBahanDocumentation[]>([]);
   const [items, setItems] = useState<MbgBahanPhotoItem[]>([]);
-  const [officerName, setOfficerName] = useState(user?.displayName || 'Petugas Distribusi MBG');
   const [generalNotes, setGeneralNotes] = useState('');
 
   // Active sub-tab: 'capture' (Foto Bahan) vs 'archive' (Arsip Dokumentasi)
@@ -72,19 +88,27 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
   const [previewPhoto, setPreviewPhoto] = useState<{ url: string; title: string } | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingDocx, setIsExportingDocx] = useState(false);
+  const [photos, setPhotos] = useState<BahanPhotoMap>({});
 
-  // 1. Subscribe to saved document for current batch
+  // 1. Subscribe to saved document (and its photos) for current batch
   useEffect(() => {
+    setSaveError(null);
+    setPhotos({});
     if (!selectedBatch?.id) {
       setSavedDoc(null);
       return;
     }
-    const unsub = subscribeBahanDocumentation(selectedBatch.id, (docData) => {
+    const unsubDoc = subscribeBahanDocumentation(selectedBatch.id, (docData) => {
       setSavedDoc(docData);
     });
-    return () => unsub();
+    const unsubPhotos = subscribeBahanPhotos(selectedBatch.id, setPhotos);
+    return () => {
+      unsubDoc();
+      unsubPhotos();
+    };
   }, [selectedBatch?.id]);
 
   // 2. Subscribe to all saved documents (for archive view)
@@ -114,14 +138,13 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
   // 3. Populate items when batch, savedDoc, or dailyReport changes
   useEffect(() => {
     if (savedDoc) {
-      setItems(savedDoc.items || []);
-      setOfficerName(savedDoc.officerName || user?.displayName || 'Petugas Distribusi MBG');
+      setItems(attachBahanPhotos(savedDoc.items || [], photos));
       setGeneralNotes(savedDoc.notes || '');
       return;
     }
 
     setItems(selectedBatch ? reportItems : []);
-  }, [selectedBatch, savedDoc, reportItems, user?.displayName]);
+  }, [selectedBatch, savedDoc, photos, reportItems]);
 
   // Muat ulang daftar bahan terbaru dari Produksi MBG. Foto, kondisi, dan catatan
   // yang sudah diisi petugas tetap dipertahankan untuk bahan dengan nama yang sama.
@@ -183,8 +206,7 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
       const reader = new FileReader();
       reader.onload = async (event) => {
         const rawUrl = event.target?.result as string;
-        // Compress to ~640x640 with 0.65 quality (well under 25KB)
-        const compressed = await compressImageBase64(rawUrl, 640, 640, 0.65);
+        const compressed = await compressImageBase64(rawUrl, PHOTO_MAX_PX, PHOTO_MAX_PX, PHOTO_QUALITY);
         handleUpdateItem(uploadTargetIndex, {
           photoUrl: compressed,
           waktuFoto: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
@@ -209,7 +231,7 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
       reader.onload = async () => {
         try {
           const dataUrl = reader.result as string;
-          const compressed = await compressImageBase64(dataUrl, 640, 640, 0.65);
+          const compressed = await compressImageBase64(dataUrl, PHOTO_MAX_PX, PHOTO_MAX_PX, PHOTO_QUALITY);
           handleUpdateItem(cameraActiveIndex, {
             photoUrl: compressed,
             waktuFoto: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
@@ -242,7 +264,7 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
       batchId: selectedBatch?.id || '',
       tanggal: selectedBatch?.tanggal || new Date().toISOString().split('T')[0],
       title: `Dokumentasi Foto Bahan MBG ${selectedBatch?.tanggal || ''}`,
-      officerName: officerName || 'Petugas Distribusi MBG',
+      officerName: MBG_BAHAN_DOC_OFFICERS,
       officerRole: 'Distribusi MBG',
       items,
       notes: generalNotes,
@@ -250,7 +272,7 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
       updatedAt: new Date().toISOString(),
       createdBy: user?.uid || 'petugas',
     };
-  }, [selectedBatch, officerName, generalNotes, items, savedDoc, user]);
+  }, [selectedBatch, generalNotes, items, savedDoc, user]);
 
   // Save to Firestore
   const handleSaveDocumentation = async (): Promise<string | null> => {
@@ -258,8 +280,18 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
       showToast({ message: 'Pilih batch terlebih dahulu!', variant: 'error' });
       return null;
     }
+    // Firestore menunggu server sebelum promise selesai; di HP dengan sinyal lemah
+    // ini bisa lama. Data tetap antre di perangkat dan terkirim otomatis saat online.
+    const slowTimer = setTimeout(() => {
+      showToast({
+        message: 'Sinyal lambat, dokumentasi masih dikirim. Biarkan aplikasi tetap terbuka sampai muncul "berhasil disimpan".',
+        variant: 'info',
+        durationMs: 10_000,
+      });
+    }, SLOW_SAVE_MS);
     try {
       setIsSaving(true);
+      setSaveError(null);
       const docId = await saveBahanDocumentation(currentDocData, savedDoc?.id);
       showToast({
         message: 'Dokumentasi bahan berhasil disimpan ke Arsip!',
@@ -268,9 +300,12 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
       return docId;
     } catch (err) {
       console.error('Save documentation error:', err);
-      showToast({ message: 'Gagal menyimpan dokumentasi bahan', variant: 'error' });
+      const message = describeBahanSaveError(err);
+      setSaveError(message);
+      showToast({ message, variant: 'error', durationMs: 10_000 });
       return null;
     } finally {
+      clearTimeout(slowTimer);
       setIsSaving(false);
     }
   };
@@ -284,10 +319,9 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
         ...currentDocData,
         id: docId || savedDoc?.id || 'temp',
       });
-      showToast({
-        message: 'Berhasil mengunduh Dokumentasi Bahan (PDF) & tersimpan ke Arsip!',
-        variant: 'success',
-      });
+      showToast(docId
+        ? { message: 'Berhasil mengunduh Dokumentasi Bahan (PDF) & tersimpan ke Arsip!', variant: 'success' }
+        : { message: 'PDF berhasil diunduh, tetapi BELUM tersimpan ke Arsip. Lihat pesan error di bawah.', variant: 'error', durationMs: 10_000 });
     } catch (err) {
       console.error('Export PDF error:', err);
       showToast({ message: 'Gagal mengunduh PDF', variant: 'error' });
@@ -305,10 +339,9 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
         ...currentDocData,
         id: docId || savedDoc?.id || 'temp',
       });
-      showToast({
-        message: 'Berhasil mengunduh Dokumentasi Bahan (Word DOCX) & tersimpan ke Arsip!',
-        variant: 'success',
-      });
+      showToast(docId
+        ? { message: 'Berhasil mengunduh Dokumentasi Bahan (Word DOCX) & tersimpan ke Arsip!', variant: 'success' }
+        : { message: 'Word berhasil diunduh, tetapi BELUM tersimpan ke Arsip. Lihat pesan error di bawah.', variant: 'error', durationMs: 10_000 });
     } catch (err) {
       console.error('Export DOCX error:', err);
       showToast({ message: 'Gagal mengunduh Word DOCX', variant: 'error' });
@@ -328,6 +361,17 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
         (d.items || []).some((i) => i.namaBahan.toLowerCase().includes(q))
     );
   }, [allDocs, archiveSearch]);
+
+  // Foto arsip ada di koleksi terpisah, jadi dimuat dulu sebelum ekspor.
+  const handleArchiveExport = async (docItem: MbgBahanDocumentation, format: 'pdf' | 'docx') => {
+    try {
+      const full = await withBahanPhotos(docItem);
+      await (format === 'pdf' ? exportBahanDocumentationPdf(full) : exportBahanDocumentationDocx(full));
+    } catch (err) {
+      console.error('Archive export error:', err);
+      showToast({ message: `Gagal mengunduh ${format === 'pdf' ? 'PDF' : 'Word'} arsip`, variant: 'error' });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -410,16 +454,9 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
               </div>
             </div>
 
-            {/* Officer Name edit */}
             <div className="mt-4 pt-3 border-t border-white/10 flex items-center gap-2 text-xs">
               <span className="text-emerald-200 font-medium">Petugas Dokumentasi:</span>
-              <input
-                type="text"
-                value={officerName}
-                onChange={(e) => setOfficerName(e.target.value)}
-                className="bg-white/10 border border-white/20 rounded-lg px-2.5 py-1 text-white text-xs font-bold outline-hidden focus:bg-white/20"
-                placeholder="Nama Petugas"
-              />
+              <span className="font-bold text-white">{MBG_BAHAN_DOC_OFFICERS}</span>
               {savedDoc && (
                 <button
                   type="button"
@@ -651,6 +688,12 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
 
           {/* Action Bar Paling Bawah (Simpan Arsip, Export PDF, Export DOCX) */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm mt-6">
+            {saveError && (
+              <div role="alert" className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-800">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
+                <span>Belum tersimpan ke Arsip. {saveError}</span>
+              </div>
+            )}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
               <div>
                 <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
@@ -734,7 +777,7 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
               ) : (
                 filteredArchive.map((docItem) => {
                   const total = docItem.items?.length || 0;
-                  const photoCount = (docItem.items || []).filter((i) => Boolean(i.photoUrl)).length;
+                  const photoCount = (docItem.items || []).filter((i) => Boolean(i.photoUrl || i.photoId)).length;
                   return (
                     <div
                       key={docItem.id}
@@ -748,7 +791,7 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
-                          Petugas: <span className="font-bold text-slate-700">{docItem.officerName}</span> • Total {total} bahan tercatat
+                          Petugas: <span className="font-bold text-slate-700">{MBG_BAHAN_DOC_OFFICERS}</span> • Total {total} bahan tercatat
                         </p>
                       </div>
 
@@ -756,7 +799,9 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
                         <button
                           type="button"
                           onClick={() => {
-                            setSavedDoc(docItem);
+                            // Simpan selalu menulis ke batch terpilih, jadi pindahkan batch-nya.
+                            if (onSelectBatch) onSelectBatch(docItem.batchId);
+                            else setSavedDoc(docItem);
                             setSubTab('capture');
                             showToast({ message: `Membuka dokumentasi ${docItem.tanggal}`, variant: 'info' });
                           }}
@@ -766,7 +811,7 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
                         </button>
                         <button
                           type="button"
-                          onClick={() => exportBahanDocumentationPdf(docItem)}
+                          onClick={() => handleArchiveExport(docItem, 'pdf')}
                           className="px-2.5 py-1.5 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
                           title="Export PDF"
                         >
@@ -775,7 +820,7 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
                         </button>
                         <button
                           type="button"
-                          onClick={() => exportBahanDocumentationDocx(docItem)}
+                          onClick={() => handleArchiveExport(docItem, 'docx')}
                           className="px-2.5 py-1.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
                           title="Export Word DOCX"
                         >
@@ -786,8 +831,13 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
                           type="button"
                           onClick={async () => {
                             if (window.confirm(`Hapus dokumentasi bahan tanggal ${docItem.tanggal}?`)) {
-                              await deleteBahanDocumentation(docItem.id);
-                              showToast({ message: 'Arsip berhasil dihapus', variant: 'success' });
+                              try {
+                                await deleteBahanDocumentation(docItem.id);
+                                showToast({ message: 'Arsip berhasil dihapus', variant: 'success' });
+                              } catch (err) {
+                                console.error('Delete documentation error:', err);
+                                showToast({ message: 'Gagal menghapus arsip', variant: 'error' });
+                              }
                             }
                           }}
                           className="p-1.5 rounded-lg text-slate-300 hover:text-red-600 cursor-pointer"

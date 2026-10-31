@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:rules": "vitest run --no-file-parallelism src/__tests__/courierRules.test.ts src/__tests__/jobDeskRules.test.ts src/__tests__/notificationRules.test.ts src/__tests__/unitRules.test.ts src/__tests__/securityRules.test.ts",
+    "test:rules": "vitest run --no-file-parallelism src/__tests__/courierRules.test.ts src/__tests__/jobDeskRules.test.ts src/__tests__/notificationRules.test.ts src/__tests__/unitRules.test.ts src/__tests__/securityRules.test.ts src/__tests__/bahanDocumentationRules.test.ts",
     "e2e:absensi": "node scripts/absensi-e2e.mjs"
   },
   "dependencies": {

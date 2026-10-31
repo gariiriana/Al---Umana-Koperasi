@@ -7,6 +7,7 @@ import {
   collection,
   doc,
   addDoc,
+  getDoc,
   updateDoc,
   query,
   where,
@@ -16,9 +17,10 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { subscriptionManager } from './subscriptionManager';
-import { archiveAndDelete, archiveSnapshotsAndDelete } from '@/services/developerRecycleBinService';
+import { archiveAndDelete, archiveSnapshotsAndDelete, stageArchiveAndDelete } from '@/services/developerRecycleBinService';
 import type {
   MbgBahanDocumentation,
+  MbgBahanPhotoItem,
   MbgBahanChecklistForm,
   MbgInspectionFormRow,
   MbgProductionDailyReport,
@@ -26,8 +28,13 @@ import type {
 } from '@/types/mbg';
 
 export const BAHAN_DOCS_COLLECTION = 'mbg_bahan_documentation';
+export const BAHAN_PHOTOS_COLLECTION = 'mbg_bahan_photos';
 export const BAHAN_CHECKLIST_COLLECTION = 'mbg_inspection_forms';
 const DAILY_REPORTS_COLLECTION = 'mbg_daily_reports';
+
+// Firestore menolak dokumen > 1 MiB. Satu foto disimpan per dokumen, jadi
+// batas ini hanya berlaku untuk satu foto, bukan untuk seluruh batch.
+const MAX_PHOTO_CHARS = 900_000;
 
 function cleanUndefinedDeep<T>(obj: T): T {
   if (obj === undefined) return null as unknown as T;
@@ -91,67 +98,182 @@ export function subscribeAllBahanDocumentation(
   }, onError);
 }
 
+/** ID dokumen foto: satu per bahan per batch, aman dipakai sebagai ID Firestore. */
+export function bahanPhotoDocId(batchId: string, itemId: string): string {
+  return `${batchId}_${itemId.replace(/[^A-Za-z0-9_-]/g, '-')}`;
+}
+
+/** Peta ID dokumen foto → dataUrl untuk satu batch. */
+export type BahanPhotoMap = Record<string, string>;
+
+export function subscribeBahanPhotos(
+  batchId: string,
+  callback: (photos: BahanPhotoMap) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  const q = query(collection(db, BAHAN_PHOTOS_COLLECTION), where('batchId', '==', batchId));
+  return subscriptionManager.subscribe(q, (snap) => {
+    const photos: BahanPhotoMap = {};
+    snap.forEach((d) => {
+      photos[d.id] = String(d.data().photoUrl || '');
+    });
+    callback(photos);
+  }, onError);
+}
+
+/** Pasang foto dari koleksi mbg_bahan_photos ke item; foto inline arsip lama tetap dipakai. */
+export function attachBahanPhotos(items: MbgBahanPhotoItem[], photos: BahanPhotoMap): MbgBahanPhotoItem[] {
+  return items.map((item) => {
+    const photoUrl = item.photoId ? photos[item.photoId] : undefined;
+    return photoUrl ? { ...item, photoUrl } : item;
+  });
+}
+
+/** Muat foto sebuah arsip agar bisa diekspor ke PDF/Word. */
+export async function withBahanPhotos<T extends Pick<MbgBahanDocumentation, 'batchId' | 'items'>>(docData: T): Promise<T> {
+  if (!(docData.items || []).some((i) => i.photoId)) return docData;
+  const snap = await getDocs(query(collection(db, BAHAN_PHOTOS_COLLECTION), where('batchId', '==', docData.batchId)));
+  const photos: BahanPhotoMap = {};
+  snap.forEach((d) => {
+    photos[d.id] = String(d.data().photoUrl || '');
+  });
+  return { ...docData, items: attachBahanPhotos(docData.items || [], photos) };
+}
+
+/** Kegagalan simpan yang terdeteksi sebelum data dikirim ke server. */
+export class BahanSaveError extends Error {}
+
+/** Pesan yang bisa dipahami petugas untuk kegagalan simpan dokumentasi bahan. */
+export function describeBahanSaveError(err: unknown): string {
+  if (err instanceof BahanSaveError) return err.message;
+  const code = (err as { code?: string } | null)?.code || '';
+  const message = (err as { message?: string } | null)?.message || '';
+  if (code === 'permission-denied') {
+    return 'Akun ini tidak punya izin menyimpan dokumentasi bahan. Hubungi admin.';
+  }
+  if (code === 'unauthenticated') {
+    return 'Sesi login sudah berakhir. Silakan logout lalu login ulang.';
+  }
+  if (code === 'resource-exhausted') {
+    return 'Kuota harian database sedang habis. Coba simpan lagi setelah pukul 14.00 WIB.';
+  }
+  if (code === 'unavailable' || code === 'deadline-exceeded') {
+    return 'Koneksi internet terputus. Periksa sinyal lalu klik Simpan lagi.';
+  }
+  if (code === 'invalid-argument' || /maximum (allowed )?size|exceeds|too large/i.test(message)) {
+    return 'Data foto terlalu besar untuk disimpan. Ambil ulang foto bahan terakhir lalu simpan lagi.';
+  }
+  return `Gagal menyimpan dokumentasi bahan (${code || message || 'kesalahan tidak dikenal'}).`;
+}
+
 /**
  * Save or update Bahan Documentation.
  * Always resolves to a single unique document per batch to eliminate duplicate entries.
+ * Foto disimpan satu per dokumen di mbg_bahan_photos (bersamaan, dalam satu batch tulis),
+ * sehingga dokumen arsip tetap kecil berapa pun jumlah bahannya.
  */
 export async function saveBahanDocumentation(
   docData: Omit<MbgBahanDocumentation, 'id'>,
   existingId?: string | null
 ): Promise<string> {
-  const cleaned = cleanUndefinedDeep(docData);
   const now = new Date().toISOString();
+  const { batchId } = docData;
 
-  const existingQuery = query(
-    collection(db, BAHAN_DOCS_COLLECTION),
-    where('batchId', '==', docData.batchId)
-  );
-  const snap = await getDocs(existingQuery);
-
-  if (snap.empty) {
-    if (existingId) {
-      await updateDoc(doc(db, BAHAN_DOCS_COLLECTION, existingId), {
-        ...cleaned,
-        updatedAt: now,
-      });
-      return existingId;
-    }
-    const ref = await addDoc(collection(db, BAHAN_DOCS_COLLECTION), {
-      ...cleaned,
-      createdAt: now,
-      updatedAt: now,
-    });
-    return ref.id;
+  const tooLarge = (docData.items || []).find((i) => (i.photoUrl?.length || 0) > MAX_PHOTO_CHARS);
+  if (tooLarge) {
+    throw new BahanSaveError(`Foto "${tooLarge.namaBahan || 'bahan'}" terlalu besar. Ambil ulang foto tersebut lalu simpan lagi.`);
   }
 
-  // If one or more existing documents are found for this batch, update primary and purge duplicates
-  const docs = [...snap.docs].sort((a, b) => {
-    const aTime = String(a.data().updatedAt || a.data().createdAt || '');
-    const bTime = String(b.data().updatedAt || b.data().createdAt || '');
-    return bTime.localeCompare(aTime);
-  });
-
-  const primary = existingId
-    ? docs.find((d) => d.id === existingId) || docs[0]
-    : docs[0];
-
-  const duplicates = docs.filter((d) => d.id !== primary.id);
-  if (duplicates.length > 0) {
-    await archiveSnapshotsAndDelete(duplicates, 'Arsip dokumentasi bahan duplikat dibersihkan');
-  }
+  const [snap, photoSnap] = await Promise.all([
+    getDocs(query(collection(db, BAHAN_DOCS_COLLECTION), where('batchId', '==', batchId))),
+    getDocs(query(collection(db, BAHAN_PHOTOS_COLLECTION), where('batchId', '==', batchId))),
+  ]);
+  const storedPhotos = new Map(photoSnap.docs.map((d) => [d.id, String(d.data().photoUrl || '')]));
 
   const batch = writeBatch(db);
-  batch.update(primary.ref, {
-    ...cleaned,
-    updatedAt: now,
+  const keptPhotoIds = new Set<string>();
+  const items = (docData.items || []).map((original, idx) => {
+    const { photoUrl } = original;
+    const item = { ...original };
+    delete item.photoUrl;
+    delete item.photoId;
+    if (!photoUrl) return item;
+    let photoId = bahanPhotoDocId(batchId, item.id);
+    if (keptPhotoIds.has(photoId)) photoId = bahanPhotoDocId(batchId, `${item.id}-${idx}`);
+    keptPhotoIds.add(photoId);
+    if (storedPhotos.get(photoId) !== photoUrl) {
+      batch.set(doc(db, BAHAN_PHOTOS_COLLECTION, photoId), {
+        batchId,
+        itemId: item.id,
+        photoUrl,
+        updatedAt: now,
+        createdBy: docData.createdBy,
+      });
+    }
+    return { ...item, photoId };
   });
-  await batch.commit();
+  for (const photoId of storedPhotos.keys()) {
+    if (!keptPhotoIds.has(photoId)) batch.delete(doc(db, BAHAN_PHOTOS_COLLECTION, photoId));
+  }
 
-  return primary.id;
+  const cleaned = cleanUndefinedDeep({ ...docData, items });
+
+  let primaryId: string;
+  if (snap.empty) {
+    if (existingId) {
+      batch.update(doc(db, BAHAN_DOCS_COLLECTION, existingId), { ...cleaned, updatedAt: now });
+      primaryId = existingId;
+    } else {
+      const ref = doc(collection(db, BAHAN_DOCS_COLLECTION));
+      batch.set(ref, { ...cleaned, createdAt: now, updatedAt: now });
+      primaryId = ref.id;
+    }
+  } else {
+    // If one or more existing documents are found for this batch, update primary and purge duplicates
+    const docs = [...snap.docs].sort((a, b) => {
+      const aTime = String(a.data().updatedAt || a.data().createdAt || '');
+      const bTime = String(b.data().updatedAt || b.data().createdAt || '');
+      return bTime.localeCompare(aTime);
+    });
+
+    const primary = existingId
+      ? docs.find((d) => d.id === existingId) || docs[0]
+      : docs[0];
+
+    const duplicates = docs.filter((d) => d.id !== primary.id);
+    if (duplicates.length > 0) {
+      await archiveSnapshotsAndDelete(duplicates, 'Arsip dokumentasi bahan duplikat dibersihkan');
+    }
+
+    batch.update(primary.ref, { ...cleaned, updatedAt: now });
+    primaryId = primary.id;
+  }
+
+  await batch.commit();
+  return primaryId;
 }
 
+/** Hapus arsip beserta fotonya (keduanya masuk recycle bin Developer). */
 export async function deleteBahanDocumentation(id: string): Promise<void> {
-  await archiveAndDelete(doc(db, BAHAN_DOCS_COLLECTION, id), 'Arsip dokumentasi bahan dihapus');
+  const source = await getDoc(doc(db, BAHAN_DOCS_COLLECTION, id));
+  if (!source.exists()) return;
+  const batchId = String(source.data().batchId || '');
+  const [siblings, photoSnap] = batchId
+    ? await Promise.all([
+        getDocs(query(collection(db, BAHAN_DOCS_COLLECTION), where('batchId', '==', batchId))),
+        getDocs(query(collection(db, BAHAN_PHOTOS_COLLECTION), where('batchId', '==', batchId))),
+      ])
+    : [null, null];
+  // Foto dipakai bersama per batch; biarkan bila masih ada arsip lain untuk batch ini.
+  const photosStillUsed = siblings?.docs.some((d) => d.id !== id) ?? false;
+  const photos = photosStillUsed || !photoSnap ? [] : photoSnap.docs;
+  if (photos.length === 0) {
+    await archiveAndDelete(source.ref, 'Arsip dokumentasi bahan dihapus');
+    return;
+  }
+  const batch = writeBatch(db);
+  await stageArchiveAndDelete(batch, [source, ...photos], 'Arsip dokumentasi bahan dihapus');
+  await batch.commit();
 }
 
 // ============================================================================
