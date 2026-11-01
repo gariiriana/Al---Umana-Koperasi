@@ -32,6 +32,7 @@ import { export8PageDailyReportPdf } from '@/utils/dailyReportPdfExporter';
 import { exportProductionDocx } from '@/utils/mbgProductionDocxGenerator';
 import { parseProductionSheetRows, parsePenerimaManfaatSheet, createEmptyReport } from '@/utils/productionSheetParser';
 import { parsePesananBahanSheet } from '@/utils/pesananBahanSheetParser';
+import { readSheetsLink } from '@/utils/sheetsLinkReader';
 import { updateBatchStatus, updateBatch, updateBatchCookingStatus } from '@/services/mbgAdminService';
 import { getJakartaDate } from '@/utils/date';
 import { getAutoRekapTotals, getPmRekapRow, isSummaryOrCategoryRow } from '@/utils/mbgPmFilter';
@@ -171,6 +172,8 @@ export function MbgProductionPage() {
   const [sheetWorkbook, setSheetWorkbook] = useState<XLSX.WorkBook | null>(null);
   // Sumber workbook yang sedang terbaca (link/file), ditampilkan agar user yakin tab berasal dari link yang benar
   const [loadedWorkbookSource, setLoadedWorkbookSource] = useState<{ label: string; url: string } | null>(null);
+  // Error baca link/file ditampilkan di dalam modal; toast saja mudah terlewat
+  const [sheetsImportError, setSheetsImportError] = useState<string | null>(null);
   const [importTargetOption, setImportTargetOption] = useState<'current_batch' | 'sheet_date'>('current_batch');
   const [importTargetBatch, setImportTargetBatch] = useState<{ id: string; tanggal: string } | null>(null);
   const [pmImportWeek, setPmImportWeek] = useState<1 | 2 | 3 | 4>(1);
@@ -449,6 +452,7 @@ export function MbgProductionPage() {
     setSheetWorkbook(null);
     setAvailableSheetNames([]);
     setLoadedWorkbookSource(null);
+    setSheetsImportError(null);
   };
 
   const openSheetsImportModal = (mode: 'produksi' | 'bahan') => {
@@ -1653,42 +1657,14 @@ export function MbgProductionPage() {
   const handleFetchGoogleSheets = async () => {
     const inputUrl = (importMode === 'bahan' ? bahanSheetsUrlInput : sheetsUrlInput).trim();
     if (!inputUrl) {
-      showToast({ message: 'Masukkan URL Google Sheets terlebih dahulu!', variant: 'info' });
+      setSheetsImportError('Masukkan URL Google Sheets terlebih dahulu!');
       return;
     }
 
     try {
       setImportingSheets(true);
       resetLoadedWorkbook();
-      let fetchUrl = inputUrl;
-      let sourceLabel = inputUrl;
-
-      // Check if Google Sheets URL
-      const match = fetchUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-      if (match && match[1]) {
-        const spreadsheetId = match[1];
-        // Parameter waktu mencegah browser memakai salinan spreadsheet lama dari cache
-        fetchUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=xlsx&t=${Date.now()}`;
-        sourceLabel = `Google Sheets ID ${spreadsheetId}`;
-      } else if (inputUrl.includes('docs.google.com')) {
-        throw new Error('Link Google Sheets tidak valid. Gunakan link dengan format https://docs.google.com/spreadsheets/d/<ID>/edit');
-      }
-
-      const res = await fetch(fetchUrl, { cache: 'no-store' });
-      if (!res.ok) {
-        throw new Error(`Gagal mengunduh Google Sheets. Status: ${res.status}. Pastikan link spreadsheet dapat diakses publik (Anyone with link).`);
-      }
-      // Spreadsheet privat dibalas halaman login (HTML), bukan file Excel
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('text/html')) {
-        throw new Error('Link tidak bisa dibaca sebagai spreadsheet. Pastikan akses link diatur "Anyone with the link" (siapa saja yang memiliki link).');
-      }
-
-      const arrayBuffer = await res.arrayBuffer();
-      const wb = XLSX.read(arrayBuffer, { type: 'array' });
-      if (!wb.SheetNames.length) {
-        throw new Error('Spreadsheet terbaca tetapi tidak memiliki sheet/tab.');
-      }
+      const { wb, sourceLabel } = await readSheetsLink(inputUrl);
       setSheetWorkbook(wb);
       setLoadedWorkbookSource({ label: sourceLabel, url: inputUrl });
 
@@ -1698,8 +1674,7 @@ export function MbgProductionPage() {
       showToast({ message: `Spreadsheet berhasil dibaca! Ditemukan ${sheetNames.length} sheet/tab aktif. Silakan pilih sheet yang ingin di-import.`, variant: 'success' });
     } catch (err: unknown) {
       console.error(err);
-      const errMsg = err instanceof Error ? err.message : 'Gagal membaca link Google Sheets';
-      showToast({ message: errMsg, variant: 'error' });
+      setSheetsImportError(err instanceof Error ? err.message : 'Gagal membaca link Google Sheets');
     } finally {
       setImportingSheets(false);
     }
@@ -1723,7 +1698,7 @@ export function MbgProductionPage() {
       showToast({ message: `File Excel berhasil dibaca! Ditemukan ${sheetNames.length} sheet/tab aktif. Silakan pilih sheet hari.`, variant: 'success' });
     } catch (err: unknown) {
       console.error(err);
-      showToast({ message: 'Gagal membaca file Excel', variant: 'error' });
+      setSheetsImportError('Gagal membaca file Excel. Pastikan file berformat .xlsx atau .xls dan tidak rusak.');
     } finally {
       setImportingSheets(false);
     }
@@ -4018,6 +3993,13 @@ export function MbgProductionPage() {
                   className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
                 />
               </div>
+
+              {sheetsImportError && (
+                <div role="alert" className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-[11px] text-red-800">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-red-500 mt-0.5" />
+                  <p className="font-bold">{sheetsImportError}</p>
+                </div>
+              )}
 
               {/* Sumber workbook yang benar-benar terbaca */}
               {loadedWorkbookSource && (
