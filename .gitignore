@@ -73,3 +73,6 @@ wa-gateway/.wwebjs_cache/
 # Absensi worker local secrets & copied face models
 .dev.vars
 frontend/public/models/
+
+# Hasil browser otomatis Playwright MCP (screenshot, snapshot halaman)
+.playwright-mcp/
