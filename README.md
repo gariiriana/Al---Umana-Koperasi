@@ -1,269 +1,260 @@
-# Al-Umanaa Integrated Cooperative & MBG Platform
+<div align="center">
 
-An enterprise-grade, high-performance, and secure hybrid-serverless ecosystem custom-built for **Pesantren Al-Umanaa (Al-Umanaa Islamic Boarding School)**. This platform unifies two mission-critical operations:
+<img src="frontend/public/logo.png" alt="Al-Umanaa logo" width="96" />
 
-1. **Koperasi Order Fulfillment & Delivery Tracking System**: End-to-end commercial order lifecycle—from administrator intake, kitchen production timers, quality control audits, and real-time GPS courier tracking, to digital client handovers and receipt signatures.
-2. **Program MBG (Makan Bergizi Gratis) Ecosystem**: Comprehensive institutional catering and nutrition logistics—featuring smart Excel workbook parsing, live in-app spreadsheet editing and auto-recalculation, dynamic kitchen batch schedules, school distribution tracking, and automated multi-page official government-standard PDF/DOCX reporting.
+# Al-Umanaa Koperasi Platform
 
----
+**One installable web app that runs the daily operations of Koperasi Al-Umanaa: catering orders and delivery, the MBG (Makan Bergizi Gratis) school-meal program, staff KPIs, and employee attendance.**
 
-## System Badges and Metrics
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-6-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vite.dev/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Firebase](https://img.shields.io/badge/Firebase-Auth_·_Firestore_·_Hosting-FFCA28?style=flat-square&logo=firebase&logoColor=black)](https://firebase.google.com/)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers_·_D1-F38020?style=flat-square&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
+[![PWA](https://img.shields.io/badge/PWA-installable-5A0FC8?style=flat-square&logo=pwa&logoColor=white)](https://web.dev/explore/progressive-web-apps)
+[![Vitest](https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/)
 
-[![Go Version](https://img.shields.io/badge/Go-1.24-blue.svg?style=for-the-badge&logo=go&logoColor=white&color=00ADD8)](https://golang.org/)
-[![React Version](https://img.shields.io/badge/React-18.3.1-blue.svg?style=for-the-badge&logo=react&logoColor=white&color=61DAFB)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg?style=for-the-badge&logo=typescript&logoColor=white&color=3178C6)](https://www.typescriptlang.org/)
-[![Firebase](https://img.shields.io/badge/Firebase-11.0-orange.svg?style=for-the-badge&logo=firebase&logoColor=white&color=FFCA28)](https://firebase.google.com/)
-[![Cloudflare Shield](https://img.shields.io/badge/Cloudflare-WAF_Protected-orange.svg?style=for-the-badge&logo=cloudflare&logoColor=white&color=F38020)](https://www.cloudflare.com/)
-[![Testing Framework](https://img.shields.io/badge/Vitest-Checked-brightgreen.svg?style=for-the-badge&logo=vitest&logoColor=white&color=6E9F18)](https://vitest.dev/)
-[![Property-Based Testing](https://img.shields.io/badge/Correctness-18_PBT_Properties-brightgreen.svg?style=for-the-badge&color=2EA043)](#correctness-properties-and-pbt)
-[![Docker](https://img.shields.io/badge/Docker-Enabled-blue.svg?style=for-the-badge&logo=docker&logoColor=white&color=2496ED)](https://www.docker.com/)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-Enabled-blue.svg?style=for-the-badge&logo=kubernetes&logoColor=white&color=326CE5)](https://kubernetes.io/)
+</div>
 
 ---
 
-## Core System Architecture & Modules
+## Contents
 
-### 1. Program Makan Bergizi Gratis (MBG) Ecosystem
-
-The MBG module is an institutional catering automation suite designed for large-scale school nutrition programs:
-
-- **Smart Excel Workbook Parser (`productionSheetParser.ts`)**:
-  - Automatically parses official 5-sheet workbooks: *Menu MBG*, *Kebutuhan Bahan Baku*, *Kebutuhan Bumbu Dapur*, *Distribusi Sekolah / Penerima Manfaat*, and *Catatan Dapur*.
-  - Intelligently identifies dynamic header rows, detects categories (Bahan Basah, Bahan Kering, Bumbu Dapur), normalizes units (kg, gram, butir, ikat, pcs), and maps student counts per school/grade level.
-  - Automatically binds the primary supplier to **Koperasi Al Umanaa Sejahtera Mandiri**.
-- **Live In-App Spreadsheet Editor & Auto-Recalculation**:
-  - Full-featured 5-tab interactive interface mirroring the official Excel structure directly within the browser.
-  - In-place editing of ingredients, grammage, student counts, and kitchen notes with instant recalculation of total weights and procurement requirements.
-- **Synchronized MBG Operational Lifecycle**:
-  $$\text{Admin MBG (Perencanaan \& Impor)} \longrightarrow \text{Produksi MBG (Pengolahan)} \longrightarrow \text{Distribusi MBG (Serah Terima Sekolah)}$$
-  - Real-time batch filtering ensures kitchen and distribution teams focus strictly on the active schedule.
-  - Direct handover to school distribution teams without manual re-entry.
-- **Official Institutional Exporters (PDF & DOCX)**:
-  - Generates web-landscape PDF and Word (.docx) documents matching official agency standards.
-  - Includes multi-page stacked 4-photo activity documentation layout with geolocation, school metadata, and timestamps.
-
-### 2. Koperasi Order Fulfillment & Delivery Tracking
-
-- **Direct Serverless-to-Firestore Architecture**:
-  - React SPA communicates directly with Google Cloud Firestore and Firebase Authentication.
-  - Eliminates API gateway latency and auto-scales for high-volume pesantren events.
-- **Edge WAF & Proxy Layer (Cloudflare)**:
-  - Orange Cloud DNS proxying hides underlying Firebase Hosting IP addresses.
-  - Edge challenge-response screens block automated bots and DDoS threats while enforcing strict HTTPS.
-- **Secure Live-HUD Camera & Anti-Spoofing Engine**:
-  - **Monotonic Clock Synchronization**: Compares client and server timestamps on startup and tracks real-time intervals via `performance.now()` to render local timezone tampering useless.
-  - **GPS Verification & Timezone Validation**: Rejects mock locations and verifies device coordinate bounds against Indonesian timezones (WIB, WITA, WIT).
-  - **Reverse Geocoding**: Queries OpenStreetMap Nominatim to stamp exact village, sub-district, and regency onto the camera watermark.
-- **Triple-Proof Delivery Verification**:
-  - Captures a complete delivery lifecycle audit:
-    1. Departure proof (Start OTW photo with GPS watermark).
-    2. Arrival/Delivery documentation photo.
-    3. Recipient validation with digital signature.
-- **Asynchronous Base64 Chunk-loading Protocol**:
-  - Slices large photos and signatures into $\le 512$ KB binary chunks written sequentially to Firestore subcollections: `/{collection}/{fileId}/chunks/{index}`.
-  - Assembled on-the-fly inside custom React hooks (`useProductImage.ts`), preventing Firestore document size limit overflows ($1$ MB).
-
-### 3. Database Performance & Quota Optimization
-
-- **Firestore Query Bloat Elimination**:
-  - Audited and refactored queries across dashboard, reminders, catalog, and notifications to use indexed limits, preventing quota exhaust.
-- **Bundle Trimming & Asset Optimization**:
-  - Removed bloated static legacy data (`tkpiDatabase.json` and static spreadsheet masters) to reduce frontend bundle size and mobile memory consumption.
-- **Robust Multi-Date Fallback & Indexing**:
-  - Combined `eventDate` and `createdAt` fallbacks across production, dispatch scheduler, and handover queues to ensure zero missing orders across all role views.
+- [What it does](#what-it-does)
+- [Architecture](#architecture)
+- [Repository layout](#repository-layout)
+- [Roles](#roles)
+- [Getting started](#getting-started)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Design notes](#design-notes)
 
 ---
 
-## High-Level System Topology
+## What it does
+
+The app has two entrances on the same domain and PWA: **KASMA JOB** for operations staff and customers, and **Absensi** for employee attendance. Each role sees only its own menus.
+
+### 🛒 Koperasi orders and delivery
+
+- Order intake, a product catalog with photos, invoices, and promos.
+- Production queue and history, a delivery scheduler, and handover to couriers.
+- Live courier GPS tracking, plus a proof-of-delivery camera that stamps the location and server time on each photo.
+- The recipient signs on screen. Customers can also open and sign their invoice through a public link.
+- Checkout prices are recalculated on the server (Cloudflare Worker), never trusted from the browser.
+- Orders past their delivery deadline are flagged with a red dot in the sidebar.
+
+### 🍱 Catering job desk
+
+- The MO plans daily job desks, Teklap teams carry them out, and Co-MO reviews the results.
+
+### 🏫 MBG program (Makan Bergizi Gratis)
+
+| Stage | What happens |
+| --- | --- |
+| **Admin MBG** | Imports the beneficiary (PM) list from an Excel workbook or a Google Sheets link, plans menus, and submits the batch for the day. |
+| **Persiapan & Purchasing** | Ingredient preparation, purchase orders, supplier records, and purchasing recaps. |
+| **Produksi MBG** | Production data per batch, nutrition (TKPI) and recipe adjustments, daily reports, and photo documentation of ingredients. |
+| **Distribusi MBG** | Assigns schools to couriers and corrects delivery evidence. |
+| **Kurir MBG** | Records four proof photos per school: arrival, handover, delivery note, and container pickup. |
+| **Arsip PM** | Archive of every batch, searchable by date, school, or courier. |
+
+Official reports are generated on the device as **PDF and Word (.docx)**, including the multi-page delivery documentation with photos.
+
+### 🕒 Absensi (employee attendance)
+
+A separate attendance app. Employees clock in and out from their own phones. A record is accepted only when **all** of these checks pass:
+
+1. **Passkey**: fingerprint or Face ID built into the phone (WebAuthn).
+2. **Live selfie** that matches the employee's reference face. Matching runs on the device with `face-api`.
+3. **Location** inside the building's drawn polygon, not a loose radius.
+4. **Server time**: the phone's clock is never used.
+
+Every check is automatic, so no admin has to approve each clock-in.
+
+| Employees | Attendance admin |
+| --- | --- |
+| Clock in and out, with status and time shown on the button | **Hari Ini**: live attendance for the day |
+| Attendance history | **Karyawan**: employee accounts and face-check exemptions |
+| Leave, sick-leave, and permission requests | **Area**: draw the allowed building polygon on a map |
+| Shift-swap requests | **Persetujuan**: approve leave and shift requests |
+| In-app notifications and profile | **Rekap**: export to Excel (.xlsx) or Word (.docx) |
+
+Absensi runs entirely on a Cloudflare Worker with **D1** and does not use Firestore at all, so attendance keeps working even if the Firestore daily quota runs out.
+
+### 📊 KPI, tasks, and control centers
+
+- **KPI & Task Unit**: unit heads assign tasks with deadlines and review the evidence.
+- **Performa Saya**: personal performance for each staff member.
+- **Control Center SDM** for the super admin, and a **Developer Control Center** with a recycle bin for restoring deleted records.
+
+### 📱 Platform
+
+- **Installable PWA** with an offline-capable Firestore cache.
+- **Update gate**: after a deploy, a full-screen prompt asks users to press **Perbarui**, so every phone moves to the new version.
+- **Push notifications** to phones through Firebase Cloud Messaging, sent by a Cloudflare Worker.
+
+---
+
+## Architecture
 
 ```mermaid
-graph TB
-    subgraph Client["Frontend Client (React SPA)"]
-        UI[React Components & Hooks]
-        MBGParser[MBG Excel Parser & Editor]
-        GPS[Anti-Spoofing GPS HUD Engine]
-        Chunker[Incremental Chunk Uploader]
-        Auth[Firebase Auth Client]
+flowchart LR
+    subgraph Phone["Browser / installed PWA"]
+        APP["React SPA<br/>(KASMA JOB + Absensi)"]
     end
 
-    subgraph FirebaseCloud["Google Cloud Firebase (Serverless)"]
-        Firestore[(Cloud Firestore Database)]
-        FBAuth[Firebase Auth Service]
-        FBHosting[Firebase Hosting Edge CDN]
+    subgraph CF["Cloudflare (koperasi-alumana.com)"]
+        PROXY["Proxy + WAF"]
+        PUSH["Worker: push<br/>/api/push/*"]
+        INV["Worker: invoice-api<br/>/api/public/invoices/*, /api/orders"]
+        ABS["Worker: absensi<br/>/api/absensi/*"]
+        D1[("D1<br/>attendance + photos")]
     end
 
-    subgraph Edge["Network Edge"]
-        CF[Cloudflare WAF / Orange Cloud Proxy]
+    subgraph FB["Firebase (Spark plan)"]
+        HOST["Hosting"]
+        AUTH["Authentication"]
+        FS[("Cloud Firestore")]
     end
 
-    subgraph LocalServices["Pesantren On-Premise Infrastructure"]
-        WAGateway[Express Node.js WA-Gateway]
-        WABot[whatsapp-web.js WhatsApp Client]
-    end
+    FCM["Firebase Cloud Messaging"]
 
-    CF --> FBHosting
-    FBHosting --> UI
-    UI -->|Direct Reactive Transactions| Firestore
-    GPS -->|GPS Watermark Streams| Firestore
-    MBGParser -->|Sync Batch & Production Data| Firestore
-    Chunker -->|Base64 Chunk Streams| Firestore
-    Auth -->|Token Verification| FBAuth
-    
-    UI -->|Internal Dispatch Alerts| WAGateway
-    WAGateway -->|API Calls| WABot
+    APP --> PROXY --> HOST
+    APP -- "realtime listeners" --> FS
+    APP --> AUTH
+    APP --> PUSH & INV & ABS
+    PUSH -- "read notifications" --> FS
+    PUSH --> FCM
+    INV -- "service account" --> FS
+    ABS --> D1
+    ABS -- "verify ID token" --> AUTH
 ```
 
----
-
-## Transactional State Machine
-
-Order operations follow a strict state transition flow enforced by Firestore security rules:
-
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING: Order created by Admin
-    PENDING --> IN_PRODUCTION: Kitchen production started
-    IN_PRODUCTION --> QC: Cooking completed (Timer finished)
-    QC --> READY_TO_DELIVER: QC passed (Assigned to Courier)
-    QC --> PENDING: QC failed (Returned to Kitchen)
-    READY_TO_DELIVER --> OUT_FOR_DELIVERY: Dispatched by Dispatcher
-    OUT_FOR_DELIVERY --> COMPLETED: Delivered & Signed by Client
-    OUT_FOR_DELIVERY --> DELIVERY_FAILED: Handover failed (Rescheduled)
-    COMPLETED --> [*]
-    DELIVERY_FAILED --> [*]
-```
+- The React app talks to Firestore directly, and **security rules** decide what each role can read and write.
+- The Workers handle only what must not run in the browser: push delivery, public invoice access, server-side checkout pricing, and attendance.
 
 ---
 
-## Security Configuration & Role-Based Access Control (RBAC)
+## Repository layout
 
-Database access is secured via [firestore.rules](./firestore.rules). User access is validated against custom authentication claims:
-
-| Role | Access Scope |
-| :--- | :--- |
-| **Admin** | Full database management, product catalog, user claims, and global configuration. |
-| **Tim Dapur** | Read-write access to kitchen queues, ingredient stock quantities, and production timers. |
-| **Distribusi** | Allocate courier tasks, manage dispatch queues, and monitor delivery progress. |
-| **Kurir** | Restricted write-access for GPS live streams, transit checkpoints, and POD photo chunks. |
-| **Monitoring** | Read-only access to KPI metrics, financial reports, and historical order audits. |
-| **Admin MBG** | Full access to Excel workbook imports, 5-tab live recalculation, menu planning, and official reporting. |
-
----
-
-## Correctness Properties and PBT
-
-The codebase incorporates **18 distinct correctness properties** verified through offline Property-Based Testing (fast-check & vitest):
-
-- **Property 5**: Kitchen queue filters only active `PENDING` or `IN_PRODUCTION` orders, sorted chronologically.
-- **Property 9**: Geolocation coordinates are strictly range-validated ($[-90, 90]$ latitude, $[-180, 180]$ longitude) prior to persistence.
-- **Property 10**: GPS staleness detection triggers warnings if updates halt for $> 5$ minutes during transit.
-- **Property 11**: Base64 chunking round-trip verifies that slicing and reassembly reconstruct the exact original binary payload.
-- **Property 12**: Client chunk structures strictly preserve indices, order, and size limits.
-- **Property 13**: Uploads exceeding client-side limits ($> 15$ MB) are rejected at the UI boundary.
-- **Property 17**: Cumulative filtering on dashboards correctly computes logical `AND` checks.
-- **Property 18**: Proof of Delivery requires valid signature canvas strokes and photo attachments before status promotion to `COMPLETED`.
+| Path | Contents |
+| --- | --- |
+| [`frontend/`](frontend) | React + TypeScript PWA (Vite, Tailwind CSS 4) |
+| `frontend/src/absensi/` | The Absensi app: pages, device checks (passkey, selfie, face, GPS), admin tabs, exports |
+| `frontend/src/pages/mbg/`, `frontend/src/pages/katering/` | MBG and catering screens |
+| `frontend/src/__tests__/` | Unit, component, and Firestore rules tests |
+| [`workers/absensi/`](workers/absensi) | Attendance Worker, D1 migrations, and seed scripts |
+| [`workers/push/`](workers/push) | Push notification Worker (FCM) with a cron safety net |
+| [`workers/invoice-api/`](workers/invoice-api) | Public invoice and checkout Worker |
+| [`firestore.rules`](firestore.rules), [`firestore.indexes.json`](firestore.indexes.json) | Firestore security rules, composite indexes, and index exemptions for photo fields |
+| `backend/`, `k8s/`, `docker-compose*.yml` | A Go API with Docker and Kubernetes manifests. **The live system doesn't use it**: production runs on Firebase and Cloudflare Workers. |
+| `docs/` | Design specs and testing notes |
 
 ---
 
-## Local Development & Deployment
+## Roles
 
-### Prerequisites
+Access is controlled per role in [`firestore.rules`](firestore.rules) and in the app's navigation.
 
-- [Node.js 18+](https://nodejs.org/)
-- [Firebase CLI](https://firebase.google.com/docs/cli)
+| Area | Roles |
+| --- | --- |
+| Koperasi orders | `admin`, `monitoring`, `tim_produksi`, `distribusi`, `kurir`, customers |
+| Catering job desk | `mo_katering`, `co_mo_katering`, `produksi_1/2`, `distribusi_1/2` |
+| MBG | `admin_mbg`, `produksi_mbg`, `distribusi_mbg`, `kurir_mbg`, and the `mbg2` team roles |
+| KPI & tasks | `kepala_unit`, `tim_unit` |
+| Administration | `super_admin`, `developer` |
+| Absensi | `admin_absensi`, `absen_karyawan` (separate accounts, set as a custom claim) |
 
-### 1. Installation
+---
 
-Install all dependencies in the frontend directory:
+## Getting started
+
+**Prerequisites:** Node.js 20+, the [Firebase CLI](https://firebase.google.com/docs/cli), and (for the Workers) [Wrangler](https://developers.cloudflare.com/workers/wrangler/).
 
 ```bash
-cd frontend
+git clone https://github.com/gariiriana/Al---Umana-Koperasi.git
+cd Al---Umana-Koperasi/frontend
 npm install
 ```
 
-### 2. Environment Configuration
+### Run locally against the emulators (recommended)
 
-Create `.env.production` inside `frontend/` containing your production Firebase details:
+Nothing in this mode touches the live project.
 
-```env
-VITE_FIREBASE_API_KEY=your_production_api_key
-VITE_FIREBASE_AUTH_DOMAIN=al-umana-koperasi.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=al-umana-koperasi
-VITE_FIREBASE_STORAGE_BUCKET=al-umana-koperasi.firebasestorage.app
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
-VITE_FIREBASE_APP_ID=your_app_id
-VITE_FIREBASE_MEASUREMENT_ID=your_measurement_id
-VITE_API_BASE_URL=
-```
+1. Create `frontend/.env.emulator` with `VITE_USE_EMULATORS=true`, a `demo-*` project ID, and placeholder Firebase web keys.
+2. Start the emulators from the repo root:
 
-### 3. Build & Test
+   ```bash
+   firebase emulators:start --only auth,firestore --project demo-alumana
+   ```
 
-Run unit and property-based tests:
+3. Start the app:
+
+   ```bash
+   cd frontend && npx vite --mode emulator
+   ```
+
+4. To work on Absensi, also start its Worker. The step-by-step guide, seed accounts, and fake-GPS tips are in [`workers/absensi/README.md`](workers/absensi/README.md).
+
+   ```bash
+   cd workers/absensi
+   cp .dev.vars.example .dev.vars
+   npm run db:migrate:local
+   npm run dev
+   ```
+
+### Environment variables
+
+The frontend reads `VITE_FIREBASE_*` (the Firebase web config), `VITE_TURNSTILE_SITE_KEY`, and the optional Worker base URLs (`VITE_PUSH_API_BASE_URL`, `VITE_INVOICE_API_BASE_URL`). Keep real values in untracked `.env.*` files. Worker secrets (service-account keys, FCM credentials) belong in `wrangler secret`, never in the repo.
+
+---
+
+## Testing
 
 ```bash
-npm run test
-```
+# Frontend: unit, component and property-based tests (Vitest + Testing Library + fast-check)
+cd frontend && npm test
 
-Build the minified production bundle:
+# Firestore security rules on the emulator (from the repo root)
+npm run test:courier-rules
 
-```bash
-npm run build
-```
-
-### 4. Deploying to Firebase Hosting
-
-Deploy the frontend build to Firebase Hosting:
-
-```bash
-npx firebase deploy --only hosting
+# Workers
+cd workers/absensi && npm test
+cd workers/push && npm test
 ```
 
 ---
 
-## On-Premise WhatsApp Gateway (Local Service)
-
-The system includes an on-premise WhatsApp service (`wa-gateway`) interfacing with WhatsApp Web to deliver automatic dispatch alerts:
+## Deployment
 
 ```bash
-cd wa-gateway
-npm install
-node server.js
+cd frontend && npm run build
+
+# From the repo root. Deploy new indexes first and wait until they finish building.
+npx firebase-tools deploy --only firestore:indexes --project al-umana-koperasi
+npx firebase-tools deploy --only firestore:rules,hosting --project al-umana-koperasi
+
+# Each Worker (absensi, push, invoice-api)
+cd workers/push && npm run deploy
 ```
 
-Scan the terminal QR code using WhatsApp to link the session. The service listens on port `8000`.
+After a hosting deploy, open apps show the **Perbarui** prompt and switch to the new version once it is pressed.
 
 ---
 
-## Production Containerization & Orchestration
+## Design notes
 
-### 1. Docker Compose Production Deployment
+- **Built for Firebase's free Spark plan.** Every growing query has a bound and an order: date windows, `orderBy` with `limit`, and `limit(1)` existence checks for indicator dots. Identical listeners are shared, and the Firestore persistent cache absorbs repeat reads.
+- **Photos are stored as compressed base64 in Firestore** (no Cloud Storage), and photo fields are exempt from indexing. Large files are split into chunk subcollections to stay under the 1 MiB document limit.
+- **Mission-critical attendance is isolated** on Cloudflare D1, so a Firestore outage or exhausted quota can't block clock-ins.
+- **Reports are generated on the device** (jsPDF, docx, SheetJS), so no generated file is ever stored.
 
-A pre-configured production Docker Compose architecture is provided in [docker-compose.prod.yml](./docker-compose.prod.yml):
+---
 
-- **Backend Service**: Serves the Go backend production target with `.env.production`.
-- **Frontend Service**: Hosts the compiled static React application served via Nginx with reverse caching.
-- **WA-Gateway**: Runs Node.js Express with headless Chromium dependencies and a persistent volume `wa_session` (`/app/.wwebjs_auth`) to preserve login state across container restarts.
+<div align="center">
 
-```bash
-docker-compose -f docker-compose.prod.yml up --build -d
-```
+Built for **Koperasi Al-Umanaa** · Pondok Pesantren Al-Umanaa, Sukabumi
 
-### 2. Enterprise Kubernetes Deployment
-
-Kubernetes manifests are organized within the [k8s/](./k8s) directory for high-availability cluster deployments:
-
-- **Namespace (`namespace.yaml`)**: Isolates resources in the `al-umana` namespace.
-- **Config & Secrets (`configmap.yaml`, `secrets.yaml`)**: Stores environment configuration and base64 Firebase Service Account credentials.
-- **Backend Deployment (`backend-deployment.yaml`)**: 2 replicas with liveness and readiness probes on port `8080`.
-- **Frontend Deployment (`frontend-deployment.yaml`)**: 2 replicas served via Nginx.
-- **WA Gateway (`wa-gateway-deployment.yaml`)**: Singleton replica backed by a PersistentVolumeClaim for session retention.
-- **Horizontal Pod Autoscaling (`hpa.yaml`)**: Scales frontend pods (2–4 replicas) when CPU $\ge 60\%$, and backend pods (2–6 replicas) when CPU $\ge 50\%$.
-- **Ingress Controller (`ingress.yaml`)**: Routes traffic:
-  - `/api/*` $\rightarrow$ Backend ClusterIP
-  - `/wa/*` $\rightarrow$ WA-Gateway ClusterIP
-  - `/*` $\rightarrow$ Frontend ClusterIP
-
-```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/
-```
+</div>
