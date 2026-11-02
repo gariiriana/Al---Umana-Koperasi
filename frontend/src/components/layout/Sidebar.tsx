@@ -6,7 +6,8 @@ import { navItemsForRole } from "./navItems";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleLabel } from "@/components/kpi/kpiStyles";
-import { subscribeCourierOrders, subscribeOpenOrders } from "@/services/realtimeService";
+import { subscribeCourierOrders, subscribePastDeadlineFlag } from "@/services/realtimeService";
+import { getJakartaDate } from "@/utils/date";
 import { isOrderPastDeadline } from "@/lib/orderHelpers";
 import type { Order } from '@/types/order';
 import {
@@ -153,17 +154,14 @@ export function Sidebar({
     const isRelevantRole = ["admin", "tim_produksi", "distribusi", "monitoring", "kurir", "produksi_1", "distribusi_1", "produksi_2", "distribusi_2", "mo_katering", "co_mo_katering"].includes(userRole);
     if (!isRelevantRole) return;
 
-    const listener = (orders: Order[]) =>
-      setHasPastDeadlineOrders(orders.some(isOrderPastDeadline));
     const onError = (err: Error) => console.error("Sidebar orders subscription error:", err);
     if (userRole === 'kurir') {
       if (!user?.uid) return;
-      return subscribeCourierOrders(user.uid, listener, onError);
+      return subscribeCourierOrders(user.uid, (orders: Order[]) =>
+        setHasPastDeadlineOrders(orders.some(isOrderPastDeadline)), onError);
     }
-    // Finished orders never pass their deadline, so only open ones are read.
-    const unsubscribe = subscribeOpenOrders(listener, onError);
-
-    return () => unsubscribe();
+    // One older open order is enough to know; reading every open order cost 300+ reads per phone.
+    return subscribePastDeadlineFlag(getJakartaDate(), setHasPastDeadlineOrders, onError);
   }, [userRole, user?.uid]);
 
   const allowedItems = navItemsForRole(userRole);

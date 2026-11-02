@@ -11,7 +11,6 @@ import {
   deleteDoc,
   doc,
   getDoc,
-  getDocs,
   limit,
   onSnapshot,
   orderBy,
@@ -244,10 +243,4 @@ export async function permanentlyDeleteArchivedDocuments(ids: readonly string[])
     }
     await batch.commit();
   }
-}
-
-/** Read-only integrity probe used by the Developer Control Center. */
-export async function countRecycleBinRecords(): Promise<number> {
-  const snapshot = await getDocs(query(collection(db, DEVELOPER_RECYCLE_BIN_COLLECTION), limit(250)));
-  return snapshot.size;
 }

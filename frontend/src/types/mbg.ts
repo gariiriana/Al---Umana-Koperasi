@@ -203,6 +203,8 @@ export interface MbgPmBatch {
   totalJumlah: number;
   /** List unique petugas names in this batch */
   petugasList: string[];
+  /** Unique school/posyandu names of the rows, kept with the totals so archive search needs no row reads. Missing on batches saved before 2026-11. */
+  institutionNames?: string[];
   /** Total institusi / sekolah penerima manfaat dalam batch ini */
   totalInstitusi?: number;
   /** Catatan khusus batch (e.g., "GANTI MENU KERINGAN") */

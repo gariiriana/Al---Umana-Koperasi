@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MbgBahanChecklistForm, MbgDeliveryTask } from '@/types/mbg';
 
 const fake = vi.hoisted(() => {
@@ -57,7 +57,9 @@ vi.mock('firebase/firestore', async (importOriginal) => ({
 }));
 
 import { deleteField } from 'firebase/firestore';
-import { completeTaskAndBatch, updateTaskStatus, saveRotatedSchoolDeliveryProof } from '@/services/mbgDeliveryService';
+import {
+  completeTaskAndBatch, updateTaskStatus, saveRotatedSchoolDeliveryProof, updateSchoolDeliveryProof, deleteSchoolDeliveryProof,
+} from '@/services/mbgDeliveryService';
 import { confirmDelivery, dispatchOrder, reassignCourier } from '@/services/orderService';
 import { saveBahanChecklist } from '@/services/mbgBahanService';
 
@@ -149,6 +151,29 @@ describe('saved MBG photo rotations', () => {
   it('saves an entry without trying to update a virtual task', async () => {
     await saveRotatedSchoolDeliveryProof('school', 'surat_jalan', 'letter', 'rotated', 'virt-task-driver');
     expect(fake.transactionUpdate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('new MBG proof photos', () => {
+  // jsdom never loads images, so compression falls back to the original data URL.
+  beforeEach(() => {
+    vi.stubGlobal('Image', class { onerror?: () => void; set src(_url: string) { void Promise.resolve().then(() => this.onerror?.()); } });
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('saves the photo on the school row and leaves the task document alone (task docs sit at the 1 MiB cap)', async () => {
+    const taskBefore = { ...fake.state.documents.get('mbg_delivery_tasks/task') };
+    await updateSchoolDeliveryProof('school', 'menu', 'data:image/jpeg;base64,bmV3', { description: 'Ompreng tiba' });
+    expect(fake.state.documents.get('mbg_pm_entries/school')).toEqual(expect.objectContaining({
+      photoMenuUrl: 'data:image/jpeg;base64,bmV3', photoMenuDesc: 'Ompreng tiba',
+    }));
+    expect(fake.state.documents.get('mbg_delivery_tasks/task')).toEqual(taskBefore);
+  });
+  it('clears the legacy task copy on delete, so readers that fall back to it cannot show the old photo', async () => {
+    fake.state.documents.get('mbg_delivery_tasks/task')!.schoolProofs = { school: { photoMenuUrl: 'legacy' } };
+    await deleteSchoolDeliveryProof('school', 'menu', 'task');
+    expect(fake.state.documents.get('mbg_pm_entries/school')?.photoMenuUrl).toBeNull();
+    expect(fake.state.documents.get('mbg_delivery_tasks/task')).toEqual(expect.objectContaining({ 'schoolProofs.school.photoMenuUrl': null }));
   });
 });
 

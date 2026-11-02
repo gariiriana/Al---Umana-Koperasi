@@ -10,11 +10,9 @@
  *    components subscribing to the same query share ONE Firestore
  *    listener instead of opening N redundant connections.
  *
- * 2. **Pagination**: `subscribeOrders()` is limited to the most recent
- *    100 orders by default (configurable via `limit`). This prevents a
- *    full-collection listener that would fan out every write to every
- *    connected client — the #1 scalability bottleneck identified in the
- *    architecture audit.
+ * 2. **Date windows**: `subscribeOrdersSince()` reads orders from a start
+ *    `eventDate` on. A plain `limit()` without an order returns an arbitrary
+ *    subset, so it is not used to bound order lists.
  *
  * 3. **Backoff reconnect**: Error handling with exponential backoff is
  *    now managed by the `subscriptionManager` rather than each caller.
@@ -42,7 +40,8 @@ import type { Order, OrderStatus } from "@/types/order";
 import type { CourierGPS } from "@/types/courier-gps";
 import type { FileMetadata } from "@/types/file";
 import { subscriptionManager } from "@/services/subscriptionManager";
-import { ORDER_FINISHED_STATUSES } from "@/lib/orderHelpers";
+import { ORDER_FINISHED_STATUSES, isOrderPastDeadline } from "@/lib/orderHelpers";
+import { addDays } from "@/utils/date";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -182,32 +181,14 @@ function snapshotToCourierGPS(
  *
  * @param listener Callback receiving the decoded orders.
  * @param onError  Optional error callback.
- * @param maxOrders Optional maximum number of orders to listen to (default unbounded).
  */
 export function subscribeOrders(
   listener: (orders: Order[]) => void,
-  onError?: (err: Error) => void,
-  maxOrders?: number
+  onError?: (err: Error) => void
 ): Unsubscribe {
-  const q =
-    typeof maxOrders === "number" && maxOrders > 0
-      ? query(collection(db, "orders"), limit(maxOrders))
-      : query(collection(db, "orders"));
-
   return subscriptionManager.subscribe(
-    q,
-    (snap) => {
-      const orders = snap.docs.map(snapshotToOrder);
-      orders.sort((a, b) => {
-        const dateA = a.eventDate || a.createdAt || "";
-        const dateB = b.eventDate || b.createdAt || "";
-        if (dateB !== dateA) {
-          return dateB.localeCompare(dateA);
-        }
-        return (b.createdAt || "").localeCompare(a.createdAt || "");
-      });
-      listener(orders);
-    },
+    query(collection(db, "orders")),
+    (snap) => listener(sortOrdersNewestFirst(snap.docs.map(snapshotToOrder))),
     (err) => {
       console.error("subscribeOrders error:", err);
       onError?.(err);
@@ -216,22 +197,64 @@ export function subscribeOrders(
 }
 
 /**
- * Orders that are not finished yet. Much smaller than `subscribeOrders()` for
- * widgets that only care about open work (e.g. the past-deadline dot).
+ * Orders whose `eventDate` (an ISO string on every order) is `fromDate` or later.
+ * Every day inside the window is complete, unlike a `limit()` without an order.
  */
-export function subscribeOpenOrders(
+export function subscribeOrdersSince(
+  fromDate: string,
   listener: (orders: Order[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
-  const q = query(collection(db, "orders"), where("status", "not-in", ORDER_FINISHED_STATUSES));
   return subscriptionManager.subscribe(
-    q,
-    (snap) => listener(snap.docs.map(snapshotToOrder)),
+    query(collection(db, "orders"), where("eventDate", ">=", fromDate)),
+    (snap) => listener(sortOrdersNewestFirst(snap.docs.map(snapshotToOrder))),
     (err) => {
-      console.error("subscribeOpenOrders error:", err);
+      console.error("subscribeOrdersSince error:", err);
       onError?.(err);
     }
   );
+}
+
+function sortOrdersNewestFirst(orders: Order[]): Order[] {
+  return orders.sort((a, b) => {
+    const dateA = a.eventDate || a.createdAt || "";
+    const dateB = b.eventDate || b.createdAt || "";
+    if (dateB !== dateA) {
+      return dateB.localeCompare(dateA);
+    }
+    return (b.createdAt || "").localeCompare(a.createdAt || "");
+  });
+}
+
+/**
+ * Whether any open order is past its deadline (the Sidebar's red dot). An open order dated
+ * before `today` is always late, so one is enough; today's open orders are checked against
+ * their delivery time. Both queries need the orders (eventDate, status) composite index.
+ */
+export function subscribePastDeadlineFlag(
+  today: string,
+  listener: (hasPastDeadline: boolean) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const open = where("status", "not-in", ORDER_FINISHED_STATUSES);
+  let olderOpen = false;
+  let todayOpen: Order[] = [];
+  const emit = () => listener(olderOpen || todayOpen.some(isOrderPastDeadline));
+  const report = (err: Error) => {
+    console.error("subscribePastDeadlineFlag error:", err);
+    onError?.(err);
+  };
+  const unsubOlder = subscriptionManager.subscribe(
+    query(collection(db, "orders"), open, where("eventDate", "<", today), limit(1)),
+    (snap) => { olderOpen = snap.docs.length > 0; emit(); },
+    report
+  );
+  const unsubToday = subscriptionManager.subscribe(
+    query(collection(db, "orders"), open, where("eventDate", ">=", today), where("eventDate", "<", addDays(today, 1))),
+    (snap) => { todayOpen = snap.docs.map(snapshotToOrder); emit(); },
+    report
+  );
+  return () => { unsubOlder(); unsubToday(); };
 }
 
 /** Courier queries carry the same UID ownership constraint as Firestore rules. */

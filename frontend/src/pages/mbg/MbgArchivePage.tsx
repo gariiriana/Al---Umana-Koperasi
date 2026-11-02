@@ -50,6 +50,7 @@ import {
   restoreMultipleBatchesFromBackup,
   deleteMultipleBatches,
 } from '@/services/mbgAdminService';
+import { hasSearchableSchools, matchArchiveBatch } from '@/lib/mbgArchiveSearch';
 
 // ---- Helper: Auto-calculate portion suggestions based on levels and inputs ----
 function getAutoPortions(entry: Partial<MbgPmEntry>) {
@@ -410,7 +411,6 @@ export function MbgArchivePage() {
       setSelectedBatchId(paramBatchId);
     }
   }, [paramBatchId, selectedBatchId]);
-  const [entries, setEntries] = useState<MbgPmEntry[]>([]);
   const [selectedBatchEntries, setSelectedBatchEntries] = useState<MbgPmEntry[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -537,31 +537,20 @@ export function MbgArchivePage() {
     );
   }, [activeEntries, searchQuery]);
 
-  // Filtered batches for folder list view
-  const filteredBatches = useMemo(() => {
-    return currentTabBatches.filter((b) => {
-      // 1. Filter tanggal: mencocokkan Tanggal Pengiriman (b.tanggal) ATAU Tanggal Input (b.createdAt)
+  // Filtered batches for folder list view. Names are matched on the batch itself, so no PM rows are read.
+  const { filteredBatches, unsearchableCount } = useMemo(() => {
+    // Filter tanggal: mencocokkan Tanggal Pengiriman (b.tanggal) ATAU Tanggal Input (b.createdAt)
+    const inDate = currentTabBatches.filter((b) => {
       const inputDate = b.createdAt ? b.createdAt.slice(0, 10) : '';
-      if (searchDate && b.tanggal !== searchDate && inputDate !== searchDate) {
-        return false;
-      }
-      // 2. School/posyandu/petugas name filter
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        if ((b.petugasList || []).some((p) => p.toLowerCase().includes(q))) {
-          return true;
-        }
-        const batchEntries = entries.filter((e) => e.batchId === b.id);
-        const hasMatch = batchEntries.some(
-          (e) =>
-            e.institutionName.toLowerCase().includes(q) ||
-            (e.assignedPetugasName || '').toLowerCase().includes(q)
-        );
-        return hasMatch;
-      }
-      return true;
+      return !searchDate || b.tanggal === searchDate || inputDate === searchDate;
     });
-  }, [currentTabBatches, entries, searchDate, searchQuery]);
+    const q = searchQuery.trim();
+    if (!q) return { filteredBatches: inDate, unsearchableCount: 0 };
+    return {
+      filteredBatches: inDate.filter((b) => matchArchiveBatch(b, q)),
+      unsearchableCount: inDate.filter((b) => !hasSearchableSchools(b)).length,
+    };
+  }, [currentTabBatches, searchDate, searchQuery]);
 
   const isAllFilteredSelected = useMemo(() => {
     return (
@@ -636,7 +625,6 @@ export function MbgArchivePage() {
     async (entryId: string) => {
       // Optimistic update
       setSelectedBatchEntries((prev) => prev.filter((e) => e.id !== entryId));
-      setEntries((prev) => prev.filter((e) => e.id !== entryId));
       try {
         await deleteEntry(entryId);
         if (selectedBatchId) {
@@ -707,7 +695,6 @@ export function MbgArchivePage() {
       onConfirm: async () => {
         // 1. Optimistic update: immediately remove batch and its entries from UI
         setBatches((prev) => prev.filter((b) => b.id !== batchId));
-        setEntries((prev) => prev.filter((e) => e.batchId !== batchId));
         setSelectedBatchEntries((prev) => prev.filter((e) => e.batchId !== batchId));
         setSelectedBatchIds((prev) => prev.filter((id) => id !== batchId));
         if (selectedBatchId === batchId) {
@@ -899,7 +886,6 @@ export function MbgArchivePage() {
       onConfirm: async () => {
         // Optimistic update: immediately remove from UI
         setBatches((prev) => prev.filter((b) => !idsToDelete.has(b.id)));
-        setEntries((prev) => prev.filter((e) => !idsToDelete.has(e.batchId)));
         setSelectedBatchEntries((prev) => prev.filter((e) => !idsToDelete.has(e.batchId)));
         setSelectedBatchIds([]);
         if (selectedBatchId && idsToDelete.has(selectedBatchId)) {
@@ -1224,6 +1210,12 @@ export function MbgArchivePage() {
             </div>
           )}
 
+          {unsearchableCount > 0 && (
+            <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+              {unsearchableCount} arsip lama belum bisa dicari lewat nama sekolah, hanya lewat tanggal atau nama kurir.
+            </p>
+          )}
+
           {filteredBatches.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm">
               {archiveTab === 'backup' ? (
@@ -1257,15 +1249,8 @@ export function MbgArchivePage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
               {filteredBatches.map((b) => {
-                const batchEntries = entries.filter((e) => e.batchId === b.id);
-                const matchingQuery = searchQuery.toLowerCase();
-                const matchedSchools = searchQuery
-                  ? batchEntries.filter(
-                    (e) =>
-                      e.institutionName.toLowerCase().includes(matchingQuery) ||
-                      (e.assignedPetugasName || '').toLowerCase().includes(matchingQuery)
-                  )
-                  : [];
+                const match = searchQuery.trim() ? matchArchiveBatch(b, searchQuery) : null;
+                const matchedNames = match ? [...match.institutions, ...match.couriers.map((name) => `Kurir: ${name}`)] : [];
                 const isSelected = selectedBatchIds.includes(b.id);
 
                 return (
@@ -1355,13 +1340,13 @@ export function MbgArchivePage() {
                       </div>
 
                       {/* Matched Schools Preview if searching */}
-                      {searchQuery && matchedSchools.length > 0 && (
+                      {matchedNames.length > 0 && (
                         <div className="bg-emerald-50 rounded-xl p-2 border border-emerald-100 space-y-1">
                           <span className="text-[9px] text-emerald-700 font-bold block uppercase tracking-wider">Hasil Cocok:</span>
                           <div className="max-h-[60px] overflow-y-auto space-y-1">
-                            {matchedSchools.map((ms) => (
-                              <span key={ms.id} className="text-[10px] font-semibold text-gray-700 block truncate">
-                                • {ms.institutionName}
+                            {matchedNames.map((name) => (
+                              <span key={name} className="text-[10px] font-semibold text-gray-700 block truncate">
+                                • {name}
                               </span>
                             ))}
                           </div>
@@ -1372,13 +1357,13 @@ export function MbgArchivePage() {
                         <div>
                           <span className="text-gray-400 block font-medium">Total Porsi</span>
                           <span className="font-extrabold text-gray-800 text-xs">
-                            {b.totalJumlah || batchEntries.reduce((sum, e) => sum + (e.isSekolahLibur ? 0 : e.jumlah), 0)}
+                            {b.totalJumlah || 0}
                           </span>
                         </div>
                         <div>
                           <span className="text-gray-400 block font-medium">Sekolah/PM</span>
                           <span className="font-extrabold text-gray-800 text-xs">
-                            {b.totalInstitusi || batchEntries.length}
+                            {b.totalInstitusi || b.institutionNames?.length || 0}
                           </span>
                         </div>
                       </div>

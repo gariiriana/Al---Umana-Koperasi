@@ -26,6 +26,7 @@ import { notifyMbgBatchStatus, notifyMbgCooking } from './flowNotifications';
 import type { MbgPmBatch, MbgPmEntry, MbgBatchStatus, MbgDayMenu, MbgProductionCookingStatus } from '@/types/mbg';
 import { MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
 import { archiveAndDelete, archiveSnapshotsAndDelete, stageArchiveAndDelete } from '@/services/developerRecycleBinService';
+import { institutionNamesOf } from '@/lib/mbgArchiveSearch';
 
 const BATCHES_COLLECTION = 'mbg_pm_batches';
 const ENTRIES_COLLECTION = 'mbg_pm_entries';
@@ -202,6 +203,7 @@ async function createBatchOnce(
     totalPobiaNasi: 0,
     totalJumlah: 0,
     petugasList: [],
+    institutionNames: [],
     batchNotes: '',
     createdBy,
     createdAt: new Date().toISOString(),
@@ -539,6 +541,7 @@ export async function replaceBatchEntries(
     totalJumlah,
     totalInstitusi: entries.length,
     petugasList: Array.from(petugasSet),
+    institutionNames: institutionNamesOf(entries),
     // Admin imports are review-only and reopen the batch as DRAFT. Production
     // imports may enrich an already-submitted batch, so must retain its state.
     ...(options.preserveBatchStatus ? {} : { status: 'DRAFT' as MbgBatchStatus }),
@@ -622,6 +625,7 @@ export async function recalculateBatchTotals(batchId: string): Promise<void> {
     totalJumlah,
     totalInstitusi: entries.length,
     petugasList: Array.from(petugasSet),
+    institutionNames: institutionNamesOf(entries),
   });
 }
 

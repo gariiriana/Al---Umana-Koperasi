@@ -1,0 +1,98 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "recipientId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "eventDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "mbg_pm_entries",
+      "fieldPath": "photoMenuUrl",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mbg_pm_entries",
+      "fieldPath": "photoPenerimaUrl",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mbg_pm_entries",
+      "fieldPath": "photoSerahTerimaUrl",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mbg_pm_entries",
+      "fieldPath": "photoSuratJalanUrl",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mbg_delivery_tasks",
+      "fieldPath": "schoolProofs",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mbg_pm_entry_photos",
+      "fieldPath": "photoMenuUrl",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mbg_pm_entry_photos",
+      "fieldPath": "photoPenerimaUrl",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mbg_pm_entry_photos",
+      "fieldPath": "photoSerahTerimaUrl",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mbg_pm_entry_photos",
+      "fieldPath": "photoSuratJalanUrl",
+      "ttl": false,
+      "indexes": []
+    }
+  ]
+}

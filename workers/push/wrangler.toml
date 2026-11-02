@@ -7,8 +7,9 @@ routes = [
 ]
 
 # Safety net: deliver anything the app's /api/push/kick did not trigger.
+# Every run costs at least 1 Firestore read, so it runs every 5 minutes (288 reads/day).
 [triggers]
-crons = ["* * * * *"]
+crons = ["*/5 * * * *"]
 
 # Simpan log Worker (lihat di dashboard Cloudflare → Workers → al-umana-push → Logs).
 [observability]

@@ -41,8 +41,8 @@ import { TeklapArchive } from "@/components/katering/TeklapArchive";
 import { JobDeskSyncStatus } from "@/components/katering/JobDeskSyncStatus";
 import { useJobDeskSync } from "@/hooks/useJobDeskSync";
 import { useAuth } from "@/contexts/AuthContext";
-import { getJakartaDate } from "@/utils/date";
-import { subscribeOrders } from "@/services/realtimeService";
+import { addDays, getJakartaDate } from "@/utils/date";
+import { subscribeOrdersSince } from "@/services/realtimeService";
 import {
   subscribeBatches,
   subscribeEntriesConfirmed,
@@ -440,7 +440,9 @@ export function MoJobDeskPage() {
       { limitCount: 300 }
     );
 
-    const unsubOrders = subscribeOrders(
+    // The last 30 days and everything scheduled ahead (165 of 477 orders on 2026-11-02).
+    const unsubOrders = subscribeOrdersSince(
+      addDays(getJakartaDate(), -30),
       (allOrders) => {
         if (!mounted) return;
         setOrders(allOrders);
@@ -448,8 +450,7 @@ export function MoJobDeskPage() {
       (err) => {
         console.error("MO: failed to load orders:", err);
         handleSyncError(err);
-      },
-      200
+      }
     );
 
     const unsubBatches = subscribeBatches(

@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
-import { getJakartaDate } from "@/utils/date";
+import { addDays, getJakartaDate } from "@/utils/date";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { deadlineMillis, formatDeadline } from "@/utils/taskKpi";
 
@@ -22,12 +22,6 @@ interface CreateTaskModalProps {
   roleLabel: (role: string) => string;
   onCreate: (input: { assignee: TaskAssignee; title: string; instructions: string; deadline: string }) => Promise<void>;
 }
-
-const addDays = (date: string, days: number) => {
-  const d = new Date(`${date}T12:00:00+07:00`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return getJakartaDate(d);
-};
 
 const inputCls = "w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]";
 

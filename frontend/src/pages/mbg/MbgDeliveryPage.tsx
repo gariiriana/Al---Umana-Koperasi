@@ -364,10 +364,8 @@ export function MbgDeliveryPage() {
             const timestampStr = new Date().toLocaleString('id-ID');
             const compressedUrl = await updateSchoolDeliveryProof(
               selectedEntryForDeliveryPhoto.id,
-              selectedEntryForDeliveryPhoto.institutionName,
               targetProofType,
               dataUrl,
-              activeTaskId,
               { timestamp: timestampStr, location: 'SPPG Sukabumi' }
             );
 
@@ -442,10 +440,8 @@ export function MbgDeliveryPage() {
           const timestampStr = new Date().toLocaleString('id-ID');
           const compressedUrl = await updateSchoolDeliveryProof(
             entry.id,
-            entry.institutionName,
             proofType,
             dataUrl,
-            activeTask.id,
             { timestamp: timestampStr, location: 'Upload Device' }
           );
 

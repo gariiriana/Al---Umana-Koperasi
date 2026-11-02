@@ -11,10 +11,12 @@
 import { disableNetwork, enableNetwork } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
+// Tiap sambung ulang menjalankan ulang query + rules semua listener yang terbuka,
+// jadi ada biaya read-nya. Pindah aplikasi sebentar tidak memutus stream.
 /** Aplikasi dianggap "kembali dibuka" bila sebelumnya tersembunyi selama ini. */
-const RESUME_AFTER_MS = 30_000;
+const RESUME_AFTER_MS = 5 * 60_000;
 /** Sambung ulang berkala selama aplikasi terbuka, untuk stream yang macet di foreground. */
-const PERIODIC_MS = 10 * 60_000;
+const PERIODIC_MS = 30 * 60_000;
 const STEP_TIMEOUT_MS = 10_000;
 
 let inflight: Promise<boolean> | null = null;

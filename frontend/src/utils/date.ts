@@ -7,6 +7,13 @@ export function getJakartaDate(date = new Date()): string {
   return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
+/** Moves a YYYY-MM-DD operational date by whole days. */
+export function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T12:00:00+07:00`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return getJakartaDate(d);
+}
+
 /** Display delivery targets without shifting local datetime-input values. */
 export function formatDeliverySchedule(deliveryTime = '', eventDate = ''): {
   date: string | null;

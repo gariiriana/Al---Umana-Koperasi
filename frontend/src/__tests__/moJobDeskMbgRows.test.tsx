@@ -10,13 +10,14 @@ const fake = vi.hoisted(() => ({
     onError?: (error: Error) => void;
   }>(),
   create: vi.fn(async (inputs: unknown[]) => inputs.length),
+  ordersFrom: '',
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { uid: 'mo-uid' } }) }));
 vi.mock('@/hooks/useJobDeskSync', () => ({ useJobDeskSync: () => ({ state: 'live', checkedAt: null, syncNow: () => {} }) }));
 vi.mock('@/components/katering/TeklapArchive', () => ({ TeklapArchive: () => null }));
 vi.mock('@/services/realtimeService', () => ({
-  subscribeOrders: (cb: (orders: unknown[]) => void) => { cb([]); return () => {}; },
+  subscribeOrdersSince: (from: string, cb: (orders: unknown[]) => void) => { fake.ordersFrom = from; cb([]); return () => {}; },
 }));
 vi.mock('@/services/mbgProductionService', () => ({
   subscribeAllDailyReports: (cb: (reports: unknown[]) => void) => { cb([]); return () => {}; },
@@ -70,6 +71,7 @@ beforeEach(() => {
   localStorage.clear();
   fake.listeners.clear();
   fake.create.mockClear();
+  fake.ordersFrom = '';
   fake.batches = [
     // Today's batch is being delivered: its rows carry the couriers' photos (~5 MB).
     batch('b26', '2026-10-26', '2026-10-23T12:24:02.583Z', { status: 'DELIVERING', totalJumlah: 2835, totalInstitusi: 31 }),
@@ -146,5 +148,13 @@ describe('MO job desk: PM rows entered by Admin MBG', () => {
     expect(screen.getByText('Selasa, 27 Oktober 2026')).toBeTruthy();
     expect(screen.queryByText('Senin, 26 Oktober 2026')).toBeNull();
     expect(screen.queryByText('Jumat, 23 Oktober 2026')).toBeNull();
+  });
+});
+
+describe('MO job desk: catering orders', () => {
+  // A count cap without ordering returned a random 200 of 477 orders, so whole days went missing.
+  it('reads every order from 30 days before today onward', () => {
+    render(<MoJobDeskPage />);
+    expect(fake.ordersFrom).toBe('2026-09-26');
   });
 });

@@ -15,7 +15,7 @@ import type { MbgPmBatch, MbgPmEntry, MbgNutritionEntry, MbgDayMenu, MbgProducti
 import { WeeklyScheduleModal } from '@/components/mbg/WeeklyScheduleModal';
 import { DailyReportExcelSections, type MbgDailyReportSubTab } from '@/components/mbg/DailyReportExcelSections';
 import {
-  subscribeBatches, subscribeEntries, subscribeAllEntries, subscribeWeeklySchedule,
+  subscribeBatches, subscribeEntries, subscribeWeeklySchedule,
   saveWeeklySchedule, getMenuForDate, deleteBatch, createBatch,
   replaceBatchEntries, getBatchEntries,
   type MbgPortionClassification
@@ -36,6 +36,7 @@ import { readSheetsLink } from '@/utils/sheetsLinkReader';
 import { updateBatchStatus, updateBatch, updateBatchCookingStatus } from '@/services/mbgAdminService';
 import { getJakartaDate } from '@/utils/date';
 import { getAutoRekapTotals, getPmRekapRow, isSummaryOrCategoryRow } from '@/utils/mbgPmFilter';
+import { hasSearchableSchools, matchArchiveBatch } from '@/lib/mbgArchiveSearch';
 import {
   MBG_BATCH_STATUS_CONFIG,
   NUTRIENTS_LIST,
@@ -219,10 +220,8 @@ export function MbgProductionPage() {
   const [isSavingAdjustment, setIsSavingAdjustment] = useState(false);
 
   // Archive states
-  const [allEntries, setAllEntries] = useState<MbgPmEntry[]>([]);
   const [archiveSearchQuery, setArchiveSearchQuery] = useState('');
   const [archiveSearchDate, setArchiveSearchDate] = useState('');
-  const [loadingArchive, setLoadingArchive] = useState(true);
 
   // Autocomplete states
   const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
@@ -362,38 +361,6 @@ export function MbgProductionPage() {
       unsub();
     };
   }, [user]);
-
-  // Subscribe to all entries globally in archive ONLY when a search query is active
-  useEffect(() => {
-    if (!user || activeTab !== 'archive' || !archiveSearchQuery.trim()) {
-      setAllEntries([]);
-      setLoadingArchive(false);
-      return;
-    }
-    setLoadingArchive(true);
-    const timer = setTimeout(() => {
-      setLoadingArchive(false);
-    }, 3000);
-
-    const unsub = subscribeAllEntries(
-      (e) => {
-        clearTimeout(timer);
-        setAllEntries(e);
-        setLoadingArchive(false);
-      },
-      (err) => {
-        clearTimeout(timer);
-        console.error('Error loading all entries:', err);
-        setLoadingArchive(false);
-      },
-      false,
-      { limitCount: 300 }
-    );
-    return () => {
-      clearTimeout(timer);
-      unsub();
-    };
-  }, [user, activeTab, archiveSearchQuery]);
 
   // Batch yang datanya (entries, gizi, penyesuaian resep, laporan harian) sedang tampil.
   const [loadedBatchId, setLoadedBatchId] = useState<string | null>(null);
@@ -561,26 +528,16 @@ export function MbgProductionPage() {
     });
   }, [batchSearchQuery, visibleBatchesInBar, batchExcelFilter, savedReportBatchIds]);
 
-  const filteredArchivedBatches = useMemo(() => {
-    return archivedBatches.filter((b) => {
-      // Date filter
-      if (archiveSearchDate && b.tanggal !== archiveSearchDate) return false;
-
-      // School/Posyandu name filter
-      if (archiveSearchQuery) {
-        const q = archiveSearchQuery.toLowerCase();
-        const batchEntries = allEntries.filter((e) => e.batchId === b.id);
-        const hasMatchingEntry = batchEntries.some(
-          (e) =>
-            e.institutionName.toLowerCase().includes(q) ||
-            (e.assignedPetugasName || '').toLowerCase().includes(q)
-        );
-        if (!hasMatchingEntry) return false;
-      }
-
-      return true;
-    });
-  }, [archivedBatches, allEntries, archiveSearchQuery, archiveSearchDate]);
+  // Names are matched on the batch itself, so searching reads no PM rows (each can carry ~230 KB of photos).
+  const { filteredArchivedBatches, unsearchableArchiveCount } = useMemo(() => {
+    const inDate = archivedBatches.filter((b) => !archiveSearchDate || b.tanggal === archiveSearchDate);
+    const q = archiveSearchQuery.trim();
+    if (!q) return { filteredArchivedBatches: inDate, unsearchableArchiveCount: 0 };
+    return {
+      filteredArchivedBatches: inDate.filter((b) => matchArchiveBatch(b, q)),
+      unsearchableArchiveCount: inDate.filter((b) => !hasSearchableSchools(b)).length,
+    };
+  }, [archivedBatches, archiveSearchQuery, archiveSearchDate]);
 
 
 
@@ -2215,12 +2172,13 @@ export function MbgProductionPage() {
             </div>
           </div>
 
-          {loadingArchive ? (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-2">
-              <Loader2 className="h-8 w-8 animate-spin text-[#FBBF24]" />
-              <span className="text-xs font-semibold">Memuat data arsip...</span>
-            </div>
-          ) : filteredArchivedBatches.length === 0 ? (
+          {unsearchableArchiveCount > 0 && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+              {unsearchableArchiveCount} arsip lama belum bisa dicari lewat nama sekolah, hanya lewat tanggal atau nama kurir.
+            </p>
+          )}
+
+          {filteredArchivedBatches.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm">
               <Folder className="h-12 w-12 text-gray-300 mx-auto mb-3" />
               <p className="text-sm font-bold text-gray-600">Arsip tidak ditemukan</p>
@@ -2229,15 +2187,8 @@ export function MbgProductionPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 font-['Hanken_Grotesk']">
               {filteredArchivedBatches.map((b) => {
-                const batchEntries = allEntries.filter((e) => e.batchId === b.id);
-                const matchingQuery = archiveSearchQuery.toLowerCase();
-                const matchedSchools = archiveSearchQuery
-                  ? batchEntries.filter(
-                    (e) =>
-                      e.institutionName.toLowerCase().includes(matchingQuery) ||
-                      (e.assignedPetugasName || '').toLowerCase().includes(matchingQuery)
-                  )
-                  : [];
+                const match = archiveSearchQuery.trim() ? matchArchiveBatch(b, archiveSearchQuery) : null;
+                const matchedNames = match ? [...match.institutions, ...match.couriers.map((name) => `Kurir: ${name}`)] : [];
 
                 const cfg = MBG_BATCH_STATUS_CONFIG[b.status] || MBG_BATCH_STATUS_CONFIG.DRAFT;
 
@@ -2294,13 +2245,13 @@ export function MbgProductionPage() {
                       </div>
 
                       {/* Matched Schools Preview if searching */}
-                      {archiveSearchQuery && matchedSchools.length > 0 && (
+                      {matchedNames.length > 0 && (
                         <div className="bg-emerald-50 rounded-xl p-2 border border-emerald-100 space-y-1">
                           <span className="text-[9px] text-emerald-700 font-bold block uppercase tracking-wider">Hasil Cocok:</span>
                           <div className="max-h-[60px] overflow-y-auto space-y-1">
-                            {matchedSchools.map((ms) => (
-                              <span key={ms.id} className="text-[10px] font-semibold text-gray-700 block truncate">
-                                • {ms.institutionName}
+                            {matchedNames.map((name) => (
+                              <span key={name} className="text-[10px] font-semibold text-gray-700 block truncate">
+                                • {name}
                               </span>
                             ))}
                           </div>
@@ -2311,13 +2262,13 @@ export function MbgProductionPage() {
                         <div>
                           <span className="text-gray-400 block font-medium">Total Porsi</span>
                           <span className="font-extrabold text-gray-800 text-xs">
-                            {b.totalJumlah || batchEntries.reduce((sum, e) => sum + (e.isSekolahLibur ? 0 : e.jumlah), 0)}
+                            {b.totalJumlah || 0}
                           </span>
                         </div>
                         <div>
                           <span className="text-gray-400 block font-medium">Sekolah/PM</span>
                           <span className="font-extrabold text-gray-800 text-xs">
-                            {b.totalInstitusi || (batchEntries.length > 0 ? batchEntries.length : "-")}
+                            {b.totalInstitusi || b.institutionNames?.length || "-"}
                           </span>
                         </div>
                       </div>
@@ -2329,7 +2280,8 @@ export function MbgProductionPage() {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleExportDocxAction(b, batchEntries);
+                            // [] = no rows in hand, so the handler reads this batch's full rows.
+                            handleExportDocxAction(b, []);
                           }}
                           className="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold transition-colors cursor-pointer flex items-center gap-1 text-[10px]"
                           title={`Download Laporan DOCX (Word) Batch ${b.tanggal}`}
@@ -2341,7 +2293,7 @@ export function MbgProductionPage() {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleExportPdf(b, batchEntries);
+                            handleExportPdf(b, []);
                           }}
                           className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold transition-colors cursor-pointer flex items-center gap-1 text-[10px]"
                           title={`Download Laporan PDF Resmi Batch ${b.tanggal}`}

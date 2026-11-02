@@ -10,7 +10,8 @@ Spark plan: this Worker replaces Cloud Functions.
    is written by `frontend/src/services/notificationWriter.ts`, called from
    the order, job desk, MBG and Super Admin task flows.
 2. The app calls `POST /api/push/kick`, which needs a Firebase ID token. A
-   cron every minute is the safety net.
+   cron every 5 minutes is the safety net, so a notification whose kick
+   failed arrives within about 5 minutes.
 3. The Worker finds the recipient's phones in `push_devices`. A recipient can
    be a uid, or a role expanded through `ROLE_ALIASES` in `logic.js`.
 4. It claims the doc using an `updateTime` precondition, so a notification is

@@ -98,6 +98,7 @@ const {
   restoreMultipleBatchesFromBackup,
   replaceBatchEntries,
   copyFromBatch,
+  recalculateBatchTotals,
   subscribeEntriesConfirmed,
 } = await import('@/services/mbgAdminService');
 const { subscriptionManager } = await import('@/services/subscriptionManager');
@@ -200,6 +201,31 @@ describe('replaceBatchEntries', () => {
     expect(fake.store.has('mbg_pm_entries/old1')).toBe(false);
     expect(entryPaths()).toHaveLength(1);
     expect(fake.store.get('mbg_pm_batches/b1')).toMatchObject({ totalJumlah: 5, totalInstitusi: 1 });
+  });
+});
+
+// Archive search matches these names instead of downloading every row (each can carry ~230 KB of photos).
+describe('school names kept on the batch', () => {
+  it('stores the school names of an imported batch on the batch', async () => {
+    putBatch('b1', { tanggal: '2026-10-03' });
+    await replaceBatchEntries('b1', [
+      { batchId: 'b1', institutionName: 'TK Melati', jumlah: 5 } as never,
+      { batchId: 'b1', institutionName: 'SDN 1', jumlah: 7 } as never,
+    ]);
+    expect(fake.store.get('mbg_pm_batches/b1')?.institutionNames).toEqual(['SDN 1', 'TK Melati']);
+  });
+
+  it('refreshes them whenever the totals are recalculated', async () => {
+    putBatch('b1', { tanggal: '2026-10-03', institutionNames: ['Lama'] });
+    putEntry('SDN 2', 'b1');
+    putEntry('PAUD Mawar', 'b1');
+    await recalculateBatchTotals('b1');
+    expect(fake.store.get('mbg_pm_batches/b1')?.institutionNames).toEqual(['PAUD Mawar', 'SDN 2']);
+  });
+
+  it('starts a new batch with an empty list, so it counts as searchable', async () => {
+    const id = await createBatch('2026-10-05', 'u1');
+    expect(fake.store.get(`mbg_pm_batches/${id}`)?.institutionNames).toEqual([]);
   });
 });
 

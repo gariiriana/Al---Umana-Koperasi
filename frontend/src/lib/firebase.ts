@@ -30,7 +30,6 @@ import {
   isSupported as isAnalyticsSupported,
   type Analytics,
 } from 'firebase/analytics';
-import { getStorage, type FirebaseStorage } from 'firebase/storage';
 import { firebaseConfig, useEmulators } from './firebaseConfig';
 
 // Fail fast in development if required keys are missing — easier to debug
@@ -52,7 +51,6 @@ for (const key of requiredKeys) {
 
 export const app: FirebaseApp = initializeApp(firebaseConfig);
 export const auth: Auth = getAuth(app);
-export const storage: FirebaseStorage = getStorage(app);
 
 // Firestore initialization with persistent multi-tab cache (drastically saves server read quota)
 export const db: Firestore = initializeFirestore(app, {

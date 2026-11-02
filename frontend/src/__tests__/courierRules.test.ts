@@ -18,7 +18,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('courier Firestore authori
     await environment.clearFirestore();
     await environment.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
-      await Promise.all(Object.entries({ courier: 'kurir', alias: 'kurir_katering', other: 'kurir', mbg: 'kurir_mbg', assistant: 'kurir_mbg', distribution: 'distribusi' })
+      await Promise.all(Object.entries({ courier: 'kurir', alias: 'kurir_katering', other: 'kurir', mbg: 'kurir_mbg', assistant: 'kurir_mbg', distribution: 'distribusi', mbgDistribution: 'distribusi_mbg' })
         .map(([uid, role]) => setDoc(doc(db, 'users', uid), { role })));
       await Promise.all([
         setDoc(doc(db, 'orders', 'mine'), { assignedCourierId: 'courier', customerId: 'customer', status: 'READY_TO_DELIVER', totalAmount: 100 }),
@@ -72,6 +72,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('courier Firestore authori
     await assertFails(updateDoc(reference, { cookingStatus: 'cooking' }));
     await assertFails(setDoc(doc(dbFor('mbg'), 'mbg_daily_reports', 'new'), { batchId: 'batch' }));
   });
+  it('lets MBG distribution store the school names it recalculates with the batch totals, and nothing more', async () => {
+    const db = dbFor('mbgDistribution');
+    await assertSucceeds(updateDoc(doc(db, 'mbg_pm_batches', 'batch'), {
+      totalJumlah: 120, totalInstitusi: 2, petugasList: ['Dwi'], institutionNames: ['SDN 1', 'TK Melati'], updatedAt: 'now',
+    }));
+    await assertFails(updateDoc(doc(db, 'mbg_pm_batches', 'batch'), { batchNotes: 'diubah' }));
+  });
+
   it('enforces MBG task ownership and handover before departure', async () => {
     const reference = doc(dbFor('mbg'), 'mbg_delivery_tasks', 'task');
     await assertFails(updateDoc(doc(dbFor('other'), 'mbg_delivery_tasks', 'task'), { status: 'handover_done', handoverPhotoId: 'photo' }));

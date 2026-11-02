@@ -2,7 +2,7 @@
  * Al-Umanaa push Worker — delivers Firestore `notifications` to phones via FCM.
  *
  * Triggers:
- *   - cron every minute (safety net), and
+ *   - cron every 5 minutes (safety net), and
  *   - POST /api/push/kick from the app right after it writes a notification
  *     (requires a valid Firebase ID token, so the endpoint can't be abused to
  *     burn the Firestore free read quota).

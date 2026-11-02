@@ -701,7 +701,7 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'totalSiswaBalita', 'totalBumilBusui', 'totalGuruKader',
             'totalPobiaNasi', 'totalJumlah', 'totalInstitusi', 'petugasList',
-            'status', 'updatedAt'
+            'institutionNames', 'status', 'updatedAt'
           ])
           && (
             request.resource.data.status == resource.data.status

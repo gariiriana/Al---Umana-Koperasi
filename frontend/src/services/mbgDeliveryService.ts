@@ -200,14 +200,14 @@ export async function compressImageBase64(
 }
 
 /**
- * Update delivery proof foto (menu, serah terima, atau surat jalan) untuk 1 sekolah/entry
+ * Update delivery proof foto (menu, serah terima, atau surat jalan) untuk 1 sekolah/entry.
+ * The photo is stored on the entry only. Tasks used to mirror every school's photos, which
+ * pushed them to Firestore's 1 MiB limit; readers still fall back to old mirrors.
  */
 export async function updateSchoolDeliveryProof(
   entryId: string,
-  institutionName: string,
   proofType: 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan',
   rawPhotoDataUrl: string,
-  taskId?: string,
   extraMeta?: { timestamp?: string; location?: string; description?: string }
 ): Promise<string> {
   const compressedPhoto = await compressImageBase64(rawPhotoDataUrl, 640, 640, 0.65);
@@ -237,40 +237,6 @@ export async function updateSchoolDeliveryProof(
   // Update Firestore mbg_pm_entries
   await updateDoc(doc(db, 'mbg_pm_entries', entryId), entryUpdates);
 
-  // Sync to task if taskId provided and is a real Firestore document
-  if (taskId && !taskId.startsWith('virt-task-')) {
-    const taskRef = doc(db, DELIVERY_COLLECTION, taskId);
-    const proofKey = `schoolProofs.${entryId}`;
-    const taskUpdates: Record<string, unknown> = {
-      [`${proofKey}.institutionName`]: institutionName,
-      [`${proofKey}.updatedAt`]: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    if (proofType === 'menu') {
-      taskUpdates[`${proofKey}.photoMenuUrl`] = compressedPhoto;
-      if (extraMeta?.description) taskUpdates[`${proofKey}.photoMenuDesc`] = extraMeta.description;
-    } else if (proofType === 'penerima') {
-      taskUpdates[`${proofKey}.photoPenerimaUrl`] = compressedPhoto;
-      if (extraMeta?.description) taskUpdates[`${proofKey}.photoPenerimaDesc`] = extraMeta.description;
-      if (extraMeta?.timestamp) taskUpdates[`${proofKey}.photoPenerimaTimestamp`] = extraMeta.timestamp;
-      if (extraMeta?.location) taskUpdates[`${proofKey}.photoPenerimaLocation`] = extraMeta.location;
-    } else if (proofType === 'serah_terima') {
-      taskUpdates[`${proofKey}.photoSerahTerimaUrl`] = compressedPhoto;
-      if (extraMeta?.description) taskUpdates[`${proofKey}.photoSerahTerimaDesc`] = extraMeta.description;
-      if (extraMeta?.timestamp) taskUpdates[`${proofKey}.photoSerahTerimaTimestamp`] = extraMeta.timestamp;
-      if (extraMeta?.location) taskUpdates[`${proofKey}.photoSerahTerimaLocation`] = extraMeta.location;
-    } else if (proofType === 'surat_jalan') {
-      taskUpdates[`${proofKey}.photoSuratJalanUrl`] = compressedPhoto;
-      if (extraMeta?.description) taskUpdates[`${proofKey}.photoSuratJalanDesc`] = extraMeta.description;
-    }
-
-    try {
-      await updateDoc(taskRef, taskUpdates);
-    } catch (err) {
-      console.warn('Failed syncing to delivery task:', err);
-    }
-  }
 
   return compressedPhoto;
 }
@@ -402,18 +368,18 @@ export function subscribeDeliveryDocuments(
   });
 }
 
+/** A batch has only a few reports, so they are sorted here: batchId + orderBy would need a composite index. */
 export function subscribeBatchDeliveryDocuments(
   batchId: string,
-  callback: (docs: MbgDeliveryDocument[]) => void
+  callback: (docs: MbgDeliveryDocument[]) => void,
+  onError?: (error: Error) => void
 ): Unsubscribe {
-  const q = query(
-    collection(db, DOCUMENTS_COLLECTION),
-    where('batchId', '==', batchId),
-    orderBy('createdAt', 'desc')
-  );
+  const q = query(collection(db, DOCUMENTS_COLLECTION), where('batchId', '==', batchId));
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryDocument)));
-  });
+    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryDocument));
+    docs.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    callback(docs);
+  }, onError);
 }
 
 export function subscribeAllDeliveryDocuments(

@@ -51,10 +51,6 @@ vi.mock("@/contexts/ToastContext", () => ({
   ToastProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("firebase/storage", () => ({
-  getStorage: vi.fn(() => ({})),
-}));
-
 vi.mock("firebase/firestore", () => ({
   getFirestore: vi.fn(() => ({})),
   initializeFirestore: vi.fn(() => ({})),
@@ -97,8 +93,8 @@ vi.mock("../services/realtimeService", () => ({
     listener([]);
     return () => {};
   }),
-  subscribeOpenOrders: vi.fn((listener) => {
-    listener([]);
+  subscribePastDeadlineFlag: vi.fn((_today, listener) => {
+    listener(false);
     return () => {};
   }),
   subscribeProductionOrders: vi.fn((listener) => {

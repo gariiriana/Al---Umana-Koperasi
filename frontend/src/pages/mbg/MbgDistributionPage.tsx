@@ -176,7 +176,6 @@ export function MbgDistributionPage() {
   const handleFileUploadCorrection = async (
     e: React.ChangeEvent<HTMLInputElement>,
     entryId: string,
-    institutionName: string,
     proofType: 'menu' | 'penerima' | 'serah_terima' | 'surat_jalan'
   ) => {
     const file = e.target.files?.[0];
@@ -187,16 +186,10 @@ export function MbgDistributionPage() {
       const reader = new FileReader();
       reader.onload = async () => {
         const dataUrl = reader.result as string;
-        const matchedTask = deliveryTasks.find(
-          (t) => (t.petugasName === editingReportDoc.petugasName || t.petugasId === editingReportDoc.petugasId) && t.batchId === editingReportDoc.batchId
-        );
-
         await updateSchoolDeliveryProof(
           entryId,
-          institutionName,
           proofType,
           dataUrl,
-          matchedTask?.id,
           {
             description: `Dikoreksi oleh Tim Distribusi MBG (${new Date().toLocaleTimeString('id-ID')})`,
             timestamp: new Date().toISOString(),
@@ -222,16 +215,10 @@ export function MbgDistributionPage() {
       const reader = new FileReader();
       reader.onload = async () => {
         const dataUrl = reader.result as string;
-        const matchedTask = deliveryTasks.find(
-          (t) => (t.petugasName === editingReportDoc.petugasName || t.petugasId === editingReportDoc.petugasId) && t.batchId === editingReportDoc.batchId
-        );
-
         await updateSchoolDeliveryProof(
           activeCorrectionSlot.entryId,
-          activeCorrectionSlot.institutionName,
           activeCorrectionSlot.proofType,
           dataUrl,
-          matchedTask?.id,
           {
             description: `Dikoreksi via Kamera Live oleh Tim Distribusi (${new Date().toLocaleTimeString('id-ID')})`,
             timestamp: new Date().toISOString(),
@@ -417,7 +404,7 @@ export function MbgDistributionPage() {
       batchSource<MbgDeliveryTask[]>({ label: 'tugas kurir', empty: [], apply: setDeliveryTasks,
         subscribe: (onData, onError) => subscribeDeliveryTasks(selectedBatchId, onData, onError) }),
       batchSource<MbgDeliveryDocument[]>({ label: 'dokumen pengiriman', empty: [], apply: setDeliveryDocs,
-        subscribe: (onData) => subscribeBatchDeliveryDocuments(selectedBatchId, onData) }),
+        subscribe: (onData, onError) => subscribeBatchDeliveryDocuments(selectedBatchId, onData, onError) }),
     ], () => {});
   }, [selectedBatchId]);
 
@@ -2109,7 +2096,7 @@ export function MbgDistributionPage() {
                                     accept="image/*"
                                     className="hidden"
                                     disabled={isUploadingCorrectionPhoto}
-                                    onChange={(e) => handleFileUploadCorrection(e, entry.id, entry.institutionName, pt.id)}
+                                    onChange={(e) => handleFileUploadCorrection(e, entry.id, pt.id)}
                                   />
                                 </label>
 
