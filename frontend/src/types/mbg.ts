@@ -709,14 +709,26 @@ export interface MbgProductionDailyReport {
 
 // === DOKUMENTASI BAHAN & CEK LIST BAHAN (DISTRIBUSI & PEMERIKSAAN) ===
 
+/** Satu foto dokumentasi bahan */
+export interface MbgBahanPhoto {
+  photoId?: string; // ID dokumen foto di koleksi mbg_bahan_photos (kosong sampai disimpan)
+  url?: string; // base64 compressed dataUrl (hanya di memori, tidak disimpan di dokumen arsip)
+  waktu?: string;
+}
+
 /** Foto dan status per bahan makanan */
 export interface MbgBahanPhotoItem {
   id: string;
   namaBahan: string;
   kuantitas?: number;
   satuan?: string;
-  photoUrl?: string; // base64 compressed dataUrl (hanya di memori; arsip lama masih menyimpannya inline)
-  photoId?: string; // ID dokumen foto di koleksi mbg_bahan_photos
+  /** Satu bahan bisa punya beberapa foto (lihat MAX_BAHAN_PHOTOS). */
+  photos?: MbgBahanPhoto[];
+  /** @deprecated Format lama (1 foto per bahan); dibaca lewat getBahanItemPhotos. */
+  photoUrl?: string;
+  /** @deprecated Format lama (1 foto per bahan); dibaca lewat getBahanItemPhotos. */
+  photoId?: string;
+  /** @deprecated Format lama (1 foto per bahan); dibaca lewat getBahanItemPhotos. */
   waktuFoto?: string;
   kondisi?: 'baik' | 'rusak' | 'segar';
   catatan?: string;

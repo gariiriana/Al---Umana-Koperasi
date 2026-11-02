@@ -17,11 +17,30 @@ import {
   AlignmentType,
   BorderStyle,
   ImageRun,
+  Footer,
+  PageNumber,
+  ShadingType,
+  TableLayoutType,
+  VerticalAlign,
   type ISectionOptions,
 } from 'docx';
 import type { MbgBahanChecklistForm, MbgBahanDocumentation } from '@/types/mbg';
 import { MBG_BAHAN_DOC_OFFICERS } from '@/constants/mbgConstants';
+import { getLoadedBahanPhotos } from '@/services/mbgBahanService';
 import { getBase64ImageWithDimensions } from './mbgDeliveryReportPdfExporter';
+import { bahanPhotoTimeRange, coverCropDataUrl } from './bahanPhotoLayout';
+
+const INDO_MONTHS = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+];
+
+/** "2026-11-02" → "02 November 2026" */
+function formatIndoDate(dateStr?: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr || '');
+  if (!m) return dateStr || '';
+  return `${m[3]} ${INDO_MONTHS[Number(m[2]) - 1] || m[2]} ${m[1]}`;
+}
 
 function dataUriToUint8Array(dataUri: string): Uint8Array | null {
   try {
@@ -391,122 +410,223 @@ export async function exportBahanChecklistDocx(form: MbgBahanChecklistForm): Pro
 // 2. DOKUMENTASI FOTO BAHAN MAKANAN DOCX (DISTRIBUSI MBG)
 // ============================================================================
 
+// Lebar kolom dalam twip; total = lebar A4 (11906) − margin kiri/kanan (2 × 720).
+const DOC_COLUMNS = { no: 620, nama: 2700, jumlah: 1250, kondisi: 1250, foto: 4646 };
+const DOC_TABLE_WIDTH = Object.values(DOC_COLUMNS).reduce((a, b) => a + b, 0);
+// Foto 4:3, dua per baris di kolom foto.
+const DOC_PHOTO_W = 140;
+const DOC_PHOTO_H = 105;
+
+const GRID_BORDER = {
+  top: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+  bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+  left: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+  right: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+};
+
+function docText(text: string, opts: { bold?: boolean; italics?: boolean; size?: number; color?: string } = {}) {
+  return new TextRun({ text, size: opts.size ?? 18, bold: opts.bold, italics: opts.italics, color: opts.color });
+}
+
+function docCell(
+  children: Paragraph[],
+  width: number,
+  opts: { fill?: string; align?: 'top' | 'center' } = {}
+) {
+  return new TableCell({
+    borders: GRID_BORDER,
+    width: { size: width, type: WidthType.DXA },
+    verticalAlign: opts.align === 'top' ? VerticalAlign.TOP : VerticalAlign.CENTER,
+    shading: opts.fill ? { type: ShadingType.CLEAR, color: 'auto', fill: opts.fill } : undefined,
+    margins: { top: 80, bottom: 80, left: 100, right: 100 },
+    children,
+  });
+}
+
+async function loadLogo(path: string, size: number): Promise<Paragraph> {
+  try {
+    const logo = await getBase64ImageWithDimensions(path, 'image/png', 256);
+    const bytes = logo ? dataUriToUint8Array(logo.dataUrl) : null;
+    if (bytes) {
+      return new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new ImageRun({ data: bytes, transformation: { width: size, height: size }, type: 'png' })],
+      });
+    }
+  } catch {
+    // logo opsional
+  }
+  return new Paragraph({});
+}
+
 export async function exportBahanDocumentationDocx(docData: MbgBahanDocumentation): Promise<void> {
   const children: (Paragraph | Table)[] = [];
+  const items = docData.items || [];
+  const itemPhotos = items.map(getLoadedBahanPhotos);
+  const withPhotos = itemPhotos.filter((p) => p.length > 0).length;
+  const totalPhotos = itemPhotos.reduce((sum, p) => sum + p.length, 0);
 
+  // Kop: logo BGN — judul — logo Al Umana
+  const [bgnLogo, alumanaLogo] = await Promise.all([
+    loadLogo('/logo_badan_gizi.png', 58),
+    loadLogo('/logo_alumana.png', 58),
+  ]);
   children.push(
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [
-        new TextRun({ text: 'DOKUMENTASI FOTO BAHAN MAKANAN', bold: true, size: 28, font: 'Arial' }),
+    new Table({
+      width: { size: DOC_TABLE_WIDTH, type: WidthType.DXA },
+      columnWidths: [1300, DOC_TABLE_WIDTH - 2600, 1300],
+      layout: TableLayoutType.FIXED,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({ borders: NO_BORDER, verticalAlign: VerticalAlign.CENTER, children: [bgnLogo] }),
+            new TableCell({
+              borders: NO_BORDER,
+              verticalAlign: VerticalAlign.CENTER,
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: 60 },
+                  children: [docText('DOKUMENTASI FOTO BAHAN MAKANAN', { bold: true, size: 28, color: '0F172A' })],
+                }),
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [docText('PROGRAM MAKAN BERGIZI GRATIS (MBG) — DISTRIBUSI & PENERIMAAN', { size: 18, color: '475569' })],
+                }),
+              ],
+            }),
+            new TableCell({ borders: NO_BORDER, verticalAlign: VerticalAlign.CENTER, children: [alumanaLogo] }),
+          ],
+        }),
       ],
-      spacing: { after: 60 },
     }),
     new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [
-        new TextRun({ text: 'PROGRAM MAKAN BERGIZI GRATIS (MBG) — PENERIMAAN DISTRIBUSI', size: 20, color: '475569', font: 'Arial' }),
-      ],
-      spacing: { after: 180 },
+      border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: 'CBD5E1', space: 1 } },
+      spacing: { after: 160 },
     })
   );
 
-  // Metadata
-  const metaRows = [
-    new TableRow({
-      children: [
-        new TableCell({
-          borders: BLACK_BORDER,
-          children: [new Paragraph({ children: [new TextRun({ text: 'Tanggal Batch', bold: true, size: 19 })] })],
+  // Ringkasan
+  const metaLabel = (text: string) => docCell([new Paragraph({ children: [docText(text, { bold: true, color: '334155' })] })], 1700, { fill: 'F1F5F9' });
+  const metaValue = (text: string) => docCell([new Paragraph({ children: [docText(text)] })], DOC_TABLE_WIDTH / 2 - 1700);
+  children.push(
+    new Table({
+      width: { size: DOC_TABLE_WIDTH, type: WidthType.DXA },
+      columnWidths: [1700, DOC_TABLE_WIDTH / 2 - 1700, 1700, DOC_TABLE_WIDTH / 2 - 1700],
+      layout: TableLayoutType.FIXED,
+      rows: [
+        new TableRow({
+          children: [
+            metaLabel('Tanggal Batch'), metaValue(formatIndoDate(docData.tanggal) || '-'),
+            metaLabel('Petugas'), metaValue(MBG_BAHAN_DOC_OFFICERS),
+          ],
         }),
-        new TableCell({
-          borders: BLACK_BORDER,
-          children: [new Paragraph({ children: [new TextRun({ text: docData.tanggal || '-', size: 19 })] })],
-        }),
-        new TableCell({
-          borders: BLACK_BORDER,
-          children: [new Paragraph({ children: [new TextRun({ text: 'Petugas', bold: true, size: 19 })] })],
-        }),
-        new TableCell({
-          borders: BLACK_BORDER,
-          children: [new Paragraph({ children: [new TextRun({ text: MBG_BAHAN_DOC_OFFICERS, size: 19 })] })],
+        new TableRow({
+          children: [
+            metaLabel('Total Bahan'), metaValue(`${items.length} item`),
+            metaLabel('Bahan Difoto'), metaValue(`${withPhotos} / ${items.length} bahan • ${totalPhotos} foto`),
+          ],
         }),
       ],
     }),
-  ];
-  children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: metaRows }));
-  children.push(new Paragraph({ spacing: { before: 140, after: 100 } }));
+    new Paragraph({ spacing: { after: 160 } })
+  );
 
-  // Items table with embedded images
+  // Tabel bahan: identitas bahan di kiri, foto (2 per baris) di kanan
+  const headCell = (text: string, width: number) =>
+    docCell([new Paragraph({ alignment: AlignmentType.CENTER, children: [docText(text, { bold: true, color: 'FFFFFF' })] })], width, { fill: '047857' });
   const itemRows: TableRow[] = [
     new TableRow({
       tableHeader: true,
+      cantSplit: true,
       children: [
-        new TableCell({ borders: BLACK_BORDER, width: { size: 5, type: WidthType.PERCENTAGE }, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'No', bold: true, size: 19 })] })] }),
-        new TableCell({ borders: BLACK_BORDER, width: { size: 25, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: 'Nama Bahan', bold: true, size: 19 })] })] }),
-        new TableCell({ borders: BLACK_BORDER, width: { size: 15, type: WidthType.PERCENTAGE }, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Jumlah', bold: true, size: 19 })] })] }),
-        new TableCell({ borders: BLACK_BORDER, width: { size: 15, type: WidthType.PERCENTAGE }, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Kondisi', bold: true, size: 19 })] })] }),
-        new TableCell({ borders: BLACK_BORDER, width: { size: 40, type: WidthType.PERCENTAGE }, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Foto Dokumentasi & Keterangan', bold: true, size: 19 })] })] }),
+        headCell('No', DOC_COLUMNS.no),
+        headCell('Nama Bahan', DOC_COLUMNS.nama),
+        headCell('Jumlah', DOC_COLUMNS.jumlah),
+        headCell('Kondisi', DOC_COLUMNS.kondisi),
+        headCell('Foto Dokumentasi', DOC_COLUMNS.foto),
       ],
     }),
   ];
 
-  const items = docData.items || [];
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
-    const photoCellParagraphs: Paragraph[] = [];
+    const photos = itemPhotos[i];
+    const zebra = i % 2 === 1 ? 'F8FAFC' : undefined;
 
-    if (it.photoUrl) {
-      const bytes = dataUriToUint8Array(it.photoUrl);
+    const photoRuns: ImageRun[] = [];
+    for (const photo of photos) {
+      const cropped = await coverCropDataUrl(photo.url!, DOC_PHOTO_W / DOC_PHOTO_H, 480);
+      const bytes = dataUriToUint8Array(cropped);
       if (bytes) {
-        photoCellParagraphs.push(
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [
-              new ImageRun({
-                data: bytes,
-                transformation: { width: 140, height: 105 },
-                type: 'jpg',
-              }),
-            ],
-            spacing: { after: 40 },
-          })
-        );
+        photoRuns.push(new ImageRun({ data: bytes, transformation: { width: DOC_PHOTO_W, height: DOC_PHOTO_H }, type: 'jpg' }));
       }
-    } else {
-      photoCellParagraphs.push(
+    }
+    const photoParagraphs: Paragraph[] = [];
+    for (let p = 0; p < photoRuns.length; p += 2) {
+      photoParagraphs.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
-          children: [new TextRun({ text: '(Belum ada foto)', italics: true, size: 16, color: '94A3B8' })],
+          spacing: { after: p + 2 < photoRuns.length ? 60 : 0 },
+          children: p + 1 < photoRuns.length ? [photoRuns[p], docText('  '), photoRuns[p + 1]] : [photoRuns[p]],
         })
       );
     }
+    if (photoParagraphs.length === 0) {
+      photoParagraphs.push(
+        new Paragraph({ alignment: AlignmentType.CENTER, children: [docText('(Belum ada foto)', { italics: true, size: 16, color: '94A3B8' })] })
+      );
+    }
 
-    if (it.catatan) {
-      photoCellParagraphs.push(
+    const namaParagraphs = [
+      new Paragraph({ children: [docText(it.namaBahan || '-', { bold: true, color: '0F172A' })] }),
+    ];
+    if (photos.length > 0) {
+      namaParagraphs.push(
         new Paragraph({
-          children: [new TextRun({ text: `Catatan: ${it.catatan}`, size: 16, italics: true, color: '475569' })],
+          spacing: { before: 40 },
+          children: [docText(`${photos.length} foto • ${bahanPhotoTimeRange(photos)}`, { size: 15, color: '64748B' })],
         })
       );
     }
+    if (it.catatan) {
+      namaParagraphs.push(
+        new Paragraph({ spacing: { before: 40 }, children: [docText(`Catatan: ${it.catatan}`, { italics: true, size: 15, color: '475569' })] })
+      );
+    }
 
-    const qtyStr = it.kuantitas ? `${it.kuantitas} ${it.satuan || ''}` : '-';
-    const isBaik = it.kondisi !== 'rusak';
+    const qtyStr = it.kuantitas ? `${it.kuantitas} ${it.satuan || ''}`.trim() : '-';
+    const isRusak = it.kondisi === 'rusak';
 
     itemRows.push(
       new TableRow({
+        cantSplit: true,
         children: [
-          new TableCell({ borders: BLACK_BORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${i + 1}`, size: 18 })] })] }),
-          new TableCell({ borders: BLACK_BORDER, children: [new Paragraph({ children: [new TextRun({ text: it.namaBahan, bold: true, size: 18 })] })] }),
-          new TableCell({ borders: BLACK_BORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: qtyStr, size: 18 })] })] }),
-          new TableCell({ borders: BLACK_BORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: isBaik ? 'Baik / Segar' : 'Rusak', color: isBaik ? '16A34A' : 'DC2626', bold: true, size: 18 })] })] }),
-          new TableCell({ borders: BLACK_BORDER, children: photoCellParagraphs }),
+          docCell([new Paragraph({ alignment: AlignmentType.CENTER, children: [docText(`${i + 1}`, { bold: true })] })], DOC_COLUMNS.no, { fill: zebra }),
+          docCell(namaParagraphs, DOC_COLUMNS.nama, { fill: zebra }),
+          docCell([new Paragraph({ alignment: AlignmentType.CENTER, children: [docText(qtyStr)] })], DOC_COLUMNS.jumlah, { fill: zebra }),
+          docCell(
+            [new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [docText(isRusak ? 'Rusak / Cacat' : 'Baik / Segar', { bold: true, size: 16, color: isRusak ? 'B91C1C' : '047857' })],
+            })],
+            DOC_COLUMNS.kondisi,
+            { fill: isRusak ? 'FEE2E2' : 'D1FAE5' }
+          ),
+          docCell(photoParagraphs, DOC_COLUMNS.foto, { fill: zebra }),
         ],
       })
     );
   }
 
-  children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: itemRows }));
+  children.push(
+    new Table({
+      width: { size: DOC_TABLE_WIDTH, type: WidthType.DXA },
+      columnWidths: Object.values(DOC_COLUMNS),
+      layout: TableLayoutType.FIXED,
+      rows: itemRows,
+    })
+  );
 
   const sections: ISectionOptions[] = [{
     properties: {
@@ -514,10 +634,28 @@ export async function exportBahanDocumentationDocx(docData: MbgBahanDocumentatio
         margin: { top: 720, bottom: 720, left: 720, right: 720 },
       },
     },
+    footers: {
+      default: new Footer({
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.RIGHT,
+            children: [
+              new TextRun({ text: 'Dokumentasi Bahan MBG  •  Halaman ', size: 16, color: '94A3B8' }),
+              new TextRun({ children: [PageNumber.CURRENT], size: 16, color: '94A3B8' }),
+              new TextRun({ text: ' dari ', size: 16, color: '94A3B8' }),
+              new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 16, color: '94A3B8' }),
+            ],
+          }),
+        ],
+      }),
+    },
     children,
   }];
 
-  const doc = new Document({ sections });
+  const doc = new Document({
+    styles: { default: { document: { run: { font: 'Arial' } } } },
+    sections,
+  });
   const blob = await Packer.toBlob(doc);
   const cleanDate = (docData.tanggal || 'tanggal').replace(/[^a-zA-Z0-9_-]/g, '_');
   triggerDownload(blob, `Dokumentasi_Foto_Bahan_MBG_${cleanDate}.docx`);

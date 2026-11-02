@@ -71,23 +71,63 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('dokumentasi bahan: simpan
     expect((await getDocs(collection(db, 'mbg_bahan_photos'))).size).toBe(24);
 
     const restored = await withBahanPhotos(main.data() as MbgBahanDocumentation);
-    expect(restored.items.map((i) => i.photoUrl)).toEqual(bahan(24).map((i) => i.photoUrl));
+    expect(restored.items.map((i) => i.photos?.map((p) => p.url))).toEqual(bahan(24).map((i) => [i.photoUrl]));
   });
+
+  // Isi form persis seperti yang dimuat UI dari arsip (foto sudah terpasang).
+  const reload = async (db: Firestore, id: string) =>
+    withBahanPhotos((await getDoc(doc(db, 'mbg_bahan_documentation', id))).data() as MbgBahanDocumentation);
 
   it('rewrites only changed photos and deletes removed ones', async () => {
     const db = signIn('distribusi');
-    const items = bahan(5);
-    const id = await saveBahanDocumentation(docData(items));
-    const before = await getDoc(doc(db, 'mbg_bahan_photos', 'batch1_item-1-Bahan-1-kg'));
+    const id = await saveBahanDocumentation(docData(bahan(5)));
+    const before = await getDoc(doc(db, 'mbg_bahan_photos', 'batch1_item-1-Bahan-1-kg-1'));
 
-    const edited = items.map((it, i) => (i === 0 ? { ...it, photoUrl: undefined } : i === 2 ? { ...it, photoUrl: photo(99) } : it));
+    const loaded = await reload(db, id);
+    const edited = loaded.items.map((it, i) =>
+      i === 0 ? { ...it, photos: [] } : i === 2 ? { ...it, photos: [{ ...it.photos![0], url: photo(99) }] } : it
+    );
     expect(await saveBahanDocumentation(docData(edited), id)).toBe(id);
 
     const photos = await getDocs(collection(db, 'mbg_bahan_photos'));
-    expect(photos.docs.map((d) => d.id).sort()).toEqual(['batch1_item-1-Bahan-1-kg', 'batch1_item-2-Bahan-2-kg', 'batch1_item-3-Bahan-3-kg', 'batch1_item-4-Bahan-4-kg']);
-    expect(photos.docs.find((d) => d.id === 'batch1_item-2-Bahan-2-kg')?.data().photoUrl).toBe(photo(99));
-    const after = await getDoc(doc(db, 'mbg_bahan_photos', 'batch1_item-1-Bahan-1-kg'));
+    expect(photos.docs.map((d) => d.id).sort()).toEqual(['batch1_item-1-Bahan-1-kg-1', 'batch1_item-2-Bahan-2-kg-1', 'batch1_item-3-Bahan-3-kg-1', 'batch1_item-4-Bahan-4-kg-1']);
+    expect(photos.docs.find((d) => d.id === 'batch1_item-2-Bahan-2-kg-1')?.data().photoUrl).toBe(photo(99));
+    const after = await getDoc(doc(db, 'mbg_bahan_photos', 'batch1_item-1-Bahan-1-kg-1'));
     expect(after.data()?.updatedAt).toBe(before.data()?.updatedAt);
+  });
+
+  it('stores several photos for one bahan and keeps their order across edits', async () => {
+    const db = signIn('distribusi');
+    const item = { id: 'item-0-Beras', namaBahan: 'Beras', photos: [1, 2, 3].map((n) => ({ url: photo(n), waktu: `07.0${n}` })) };
+    const id = await saveBahanDocumentation(docData([item]));
+
+    const saved = (await getDoc(doc(db, 'mbg_bahan_documentation', id))).data() as MbgBahanDocumentation;
+    expect(saved.items[0].photos).toEqual([
+      { photoId: 'batch1_item-0-Beras-1', waktu: '07.01' },
+      { photoId: 'batch1_item-0-Beras-2', waktu: '07.02' },
+      { photoId: 'batch1_item-0-Beras-3', waktu: '07.03' },
+    ]);
+
+    // Hapus foto ke-2, tambah foto baru: ID yang dilepas boleh dipakai lagi, urutan tetap.
+    const loaded = await reload(db, id);
+    const [p1, , p3] = loaded.items[0].photos!;
+    await saveBahanDocumentation(docData([{ ...loaded.items[0], photos: [p1, p3, { url: photo(4), waktu: '07.04' }] }]), id);
+
+    const restored = await reload(db, id);
+    expect(restored.items[0].photos?.map((p) => p.url)).toEqual([photo(1), photo(3), photo(4)]);
+    expect(restored.items[0].photos?.map((p) => p.photoId)).toEqual(['batch1_item-0-Beras-1', 'batch1_item-0-Beras-3', 'batch1_item-0-Beras-2']);
+    expect((await getDocs(collection(db, 'mbg_bahan_photos'))).size).toBe(3);
+  });
+
+  it('keeps photos whose image has not loaded yet instead of deleting them', async () => {
+    const db = signIn('distribusi');
+    const id = await saveBahanDocumentation(docData(bahan(2)));
+    const raw = (await getDoc(doc(db, 'mbg_bahan_documentation', id))).data() as MbgBahanDocumentation;
+
+    // Arsip tersimpan lagi sebelum langganan foto sempat mengisi url.
+    await saveBahanDocumentation(docData(raw.items), id);
+    expect((await getDocs(collection(db, 'mbg_bahan_photos'))).size).toBe(2);
+    expect((await reload(db, id)).items.map((i) => i.photos?.[0]?.url)).toEqual([photo(0), photo(1)]);
   });
 
   it('moves inline photos of an old archive into the photo collection on the next save', async () => {
@@ -100,7 +140,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('dokumentasi bahan: simpan
 
     expect(await saveBahanDocumentation(docData([...legacy.items, extra]), 'legacy')).toBe('legacy');
     const saved = (await getDoc(doc(db, 'mbg_bahan_documentation', 'legacy'))).data() as MbgBahanDocumentation;
-    expect(saved.items.every((i) => !i.photoUrl && i.photoId)).toBe(true);
+    expect(saved.items.every((i) => !i.photoUrl && !i.photoId && i.photos?.length === 1 && i.photos[0].photoId)).toBe(true);
     expect((await getDocs(collection(db, 'mbg_bahan_photos'))).size).toBe(4);
   });
 

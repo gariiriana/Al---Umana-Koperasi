@@ -10,6 +10,8 @@ import autoTable from 'jspdf-autotable';
 import type { MbgBahanDocumentation, MbgBahanChecklistForm } from '@/types/mbg';
 import { getBase64ImageWithDimensions } from './mbgDeliveryReportPdfExporter';
 import { MBG_BAHAN_DOC_OFFICERS } from '@/constants/mbgConstants';
+import { getLoadedBahanPhotos } from '@/services/mbgBahanService';
+import { bahanPhotoTimeRange, coverCropDataUrl, photoMosaicCells } from './bahanPhotoLayout';
 
 /**
  * Format date string into Indonesian locale: e.g. "01 September 2026"
@@ -261,125 +263,157 @@ export async function exportBahanDocumentationPdf(docData: MbgBahanDocumentation
   doc.text(`Tanggal Batch: ${formatIndoDate(docData.tanggal)}`, margin + 4, 37);
   doc.text(`Petugas Dokumentasi: ${MBG_BAHAN_DOC_OFFICERS}`, margin + 4, 43);
 
-  const totalItems = docData.items?.length || 0;
-  const withPhotos = (docData.items || []).filter((i) => Boolean(i.photoUrl)).length;
-  doc.text(`Total Bahan: ${totalItems} Item`, pageWidth - margin - 4, 37, { align: 'right' });
-  doc.text(`Terdokumentasi Foto: ${withPhotos} / ${totalItems}`, pageWidth - margin - 4, 43, { align: 'right' });
-
   const items = docData.items || [];
+  const itemPhotos = items.map(getLoadedBahanPhotos);
+  const totalItems = items.length;
+  const withPhotos = itemPhotos.filter((p) => p.length > 0).length;
+  const totalPhotos = itemPhotos.reduce((sum, p) => sum + p.length, 0);
+  doc.text(`Total Bahan: ${totalItems} Item`, pageWidth - margin - 4, 37, { align: 'right' });
+  doc.text(`Bahan Difoto: ${withPhotos} / ${totalItems}  •  ${totalPhotos} Foto`, pageWidth - margin - 4, 43, { align: 'right' });
 
-  // Card Grid settings: 3 columns per row; a row that does not fit moves to a new page
-  // (3 rows on page 1 under the header, 4 rows on the following pages).
+  // Card grid: 3 kolom; baris yang tidak muat pindah ke halaman baru
+  // (3 baris di halaman 1 di bawah kop, 4 baris di halaman berikutnya).
+  // Tiap kartu: judul bahan → kolase foto (maks. 4) → jumlah, waktu, kondisi, catatan.
   const columns = 3;
   const gap = 5;
-  const rowGap = 4;
+  const rowGap = 5;
   const colWidth = (pageWidth - (margin * 2) - (gap * (columns - 1))) / columns;
-  const photoBoxHeight = 42;
-  const cardHeight = photoBoxHeight + 18.5;
+  const headerHeight = 7.5;
+  const photoBoxHeight = 38;
+  const detailHeight = 15.5;
+  const cardHeight = headerHeight + photoBoxHeight + detailHeight;
   const contentBottom = pageHeight - 14; // footer sits at pageHeight - 8
+  const pad = 2.5;
 
-  let pageNum = 1;
   let cardY = 52;
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
+    const photos = itemPhotos[i];
     const colIndex = i % columns;
+    const isRusak = item.kondisi === 'rusak';
 
     if (i > 0 && colIndex === 0) {
       cardY += cardHeight + rowGap;
       if (cardY + cardHeight > contentBottom) {
-        drawPageFooter(doc, pageNum, pageWidth, pageHeight, margin);
         doc.addPage();
-        pageNum++;
-        cardY = 20;
+        cardY = 18;
       }
     }
 
     const cardX = margin + (colIndex * (colWidth + gap));
 
-    // Card frame
+    // Latar kartu + strip judul
     doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(203, 213, 225);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(cardX, cardY, colWidth, cardHeight, 2, 2, 'FD');
+    doc.roundedRect(cardX, cardY, colWidth, cardHeight, 2, 2, 'F');
+    doc.setFillColor(241, 245, 249);
+    doc.roundedRect(cardX, cardY, colWidth, headerHeight, 2, 2, 'F');
+    doc.rect(cardX, cardY + 2, colWidth, headerHeight - 2, 'F');
 
-    // Photo Box (Top of card)
-    if (item.photoUrl) {
-      try {
-        const photoInfo = await getBase64ImageWithDimensions(item.photoUrl, 'image/jpeg');
-        if (photoInfo) {
-          // Fit image maintaining aspect ratio inside photo box
-          const ratio = photoInfo.width / photoInfo.height;
-          let drawW = colWidth - 4;
-          let drawH = drawW / ratio;
-          if (drawH > photoBoxHeight - 4) {
-            drawH = photoBoxHeight - 4;
-            drawW = drawH * ratio;
-          }
-          const imgX = cardX + ((colWidth - drawW) / 2);
-          const imgY = cardY + 2 + ((photoBoxHeight - 4 - drawH) / 2);
-          doc.addImage(photoInfo.dataUrl, 'JPEG', imgX, imgY, drawW, drawH);
-        }
-      } catch {
-        doc.setFillColor(241, 245, 249);
-        doc.rect(cardX + 2, cardY + 2, colWidth - 4, photoBoxHeight - 4, 'F');
-        doc.setFont('helvetica', 'italic');
-        doc.setFontSize(8);
-        doc.setTextColor(148, 163, 184);
-        doc.text('Foto gagal dimuat', cardX + (colWidth / 2), cardY + (photoBoxHeight / 2), { align: 'center' });
-      }
-    } else {
-      // Placeholder when no photo taken
-      doc.setFillColor(248, 250, 252);
-      doc.rect(cardX + 2, cardY + 2, colWidth - 4, photoBoxHeight - 4, 'F');
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184);
-      doc.text('Belum ada foto', cardX + (colWidth / 2), cardY + (photoBoxHeight / 2), { align: 'center' });
-    }
+    // Nomor urut (lingkaran) + nama bahan + jumlah foto
+    const midY = cardY + (headerHeight / 2);
+    doc.setFillColor(5, 150, 105);
+    doc.circle(cardX + pad + 2.2, midY, 2.4, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(i + 1 >= 100 ? 5 : 6.5);
+    doc.setTextColor(255, 255, 255);
+    doc.text(String(i + 1), cardX + pad + 2.2, midY + 0.8, { align: 'center' });
 
-    // Divider inside card
-    doc.setDrawColor(226, 232, 240);
-    doc.line(cardX, cardY + photoBoxHeight, cardX + colWidth, cardY + photoBoxHeight);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    const countLabel = `${photos.length} foto`;
+    const countWidth = doc.getTextWidth(countLabel);
+    doc.text(countLabel, cardX + colWidth - pad, midY + 0.9, { align: 'right' });
 
-    // Card Details (Bottom of card); each line is clipped to the card width
-    const textX = cardX + 2.5;
-    const textWidth = colWidth - 5;
-    const textStartY = cardY + photoBoxHeight + 4;
+    const nameX = cardX + pad + 6;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
     doc.setTextColor(15, 23, 42);
-    doc.text(fitText(doc, `${i + 1}. ${item.namaBahan}`, textWidth), textX, textStartY);
+    doc.text(fitText(doc, item.namaBahan || '-', cardX + colWidth - pad - countWidth - 2 - nameX), nameX, midY + 1);
 
+    // Kolase foto
+    const photoBox = {
+      x: cardX + 2,
+      y: cardY + headerHeight + 1.5,
+      w: colWidth - 4,
+      h: photoBoxHeight - 3,
+    };
+    if (photos.length > 0) {
+      const cells = photoMosaicCells(photos.length, photoBox, 1);
+      for (let p = 0; p < cells.length; p++) {
+        const cell = cells[p];
+        try {
+          const cropped = await coverCropDataUrl(photos[p].url!, cell.w / cell.h);
+          doc.addImage(cropped, 'JPEG', cell.x, cell.y, cell.w, cell.h);
+        } catch {
+          doc.setFillColor(241, 245, 249);
+          doc.rect(cell.x, cell.y, cell.w, cell.h, 'F');
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(6.5);
+          doc.setTextColor(148, 163, 184);
+          doc.text('Foto gagal dimuat', cell.x + (cell.w / 2), cell.y + (cell.h / 2), { align: 'center' });
+        }
+      }
+    } else {
+      doc.setFillColor(248, 250, 252);
+      doc.rect(photoBox.x, photoBox.y, photoBox.w, photoBox.h, 'F');
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text('Belum ada foto', photoBox.x + (photoBox.w / 2), photoBox.y + (photoBox.h / 2) + 1, { align: 'center' });
+    }
+
+    // Garis pemisah
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.2);
+    doc.line(cardX, cardY + headerHeight, cardX + colWidth, cardY + headerHeight);
+    doc.line(cardX, cardY + headerHeight + photoBoxHeight, cardX + colWidth, cardY + headerHeight + photoBoxHeight);
+
+    // Detail: jumlah + badge kondisi, waktu foto, catatan
+    const textX = cardX + pad;
+    const textWidth = colWidth - (pad * 2);
+    const lineY = cardY + headerHeight + photoBoxHeight + 4.4;
+
+    const kondisiLabel = isRusak ? 'Rusak / Cacat' : 'Baik / Segar';
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    const badgeW = doc.getTextWidth(kondisiLabel) + 4;
+    const badgeX = cardX + colWidth - pad - badgeW;
+    if (isRusak) doc.setFillColor(254, 226, 226);
+    else doc.setFillColor(209, 250, 229);
+    doc.roundedRect(badgeX, lineY - 2.8, badgeW, 3.8, 1.9, 1.9, 'F');
+    if (isRusak) doc.setTextColor(185, 28, 28);
+    else doc.setTextColor(4, 120, 87);
+    doc.text(kondisiLabel, badgeX + 2, lineY - 0.2);
+
+    const qtyStr = item.kuantitas ? `${item.kuantitas} ${item.satuan || ''}`.trim() : '-';
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(71, 85, 105);
-
-    const qtyStr = item.kuantitas ? `${item.kuantitas} ${item.satuan || ''}` : '-';
-    const timeStr = item.waktuFoto || '-';
-    doc.text(fitText(doc, `Jumlah: ${qtyStr} | Waktu: ${timeStr}`, textWidth), textX, textStartY + 4);
-
-    // Condition Badge text
-    const isBaik = item.kondisi !== 'rusak';
-    doc.setFont('helvetica', 'bold');
-    if (isBaik) {
-      doc.setTextColor(16, 149, 106); // Emerald
-      doc.text(`Kondisi: Baik / Segar`, textX, textStartY + 8);
-    } else {
-      doc.setTextColor(220, 38, 38); // Red
-      doc.text(`Kondisi: Rusak / Cacat`, textX, textStartY + 8);
-    }
+    doc.text(fitText(doc, `Jumlah: ${qtyStr}`, textWidth - badgeW - 2), textX, lineY);
+    doc.text(fitText(doc, `Waktu foto: ${bahanPhotoTimeRange(photos)}`, textWidth), textX, lineY + 4);
 
     if (item.catatan) {
       doc.setFont('helvetica', 'italic');
       doc.setFontSize(6.5);
       doc.setTextColor(100, 116, 139);
-      doc.text(fitText(doc, `Catatan: ${item.catatan}`, textWidth), textX, textStartY + 12);
+      doc.text(fitText(doc, `Catatan: ${item.catatan}`, textWidth), textX, lineY + 8);
     }
+
+    // Bingkai kartu (merah muda untuk bahan rusak) digambar terakhir agar di atas foto
+    if (isRusak) doc.setDrawColor(252, 165, 165);
+    else doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(cardX, cardY, colWidth, cardHeight, 2, 2, 'S');
   }
 
-  // Draw footer on last page
-  drawPageFooter(doc, pageNum, pageWidth, pageHeight, margin);
+  // Footer + "Halaman x dari y" di setiap halaman
+  const pageCount = doc.getNumberOfPages();
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p);
+    drawPageFooter(doc, p, pageCount, pageWidth, pageHeight, margin);
+  }
 
   // Save PDF
   const cleanDate = (docData.tanggal || 'tanggal').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -394,7 +428,10 @@ function fitText(doc: jsPDF, text: string, maxWidth: number): string {
   return `${cut.trimEnd()}...`;
 }
 
-function drawPageFooter(doc: jsPDF, pageNum: number, pageWidth: number, pageHeight: number, margin: number) {
+function drawPageFooter(doc: jsPDF, pageNum: number, pageCount: number, pageWidth: number, pageHeight: number, margin: number) {
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.2);
+  doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
@@ -403,5 +440,5 @@ function drawPageFooter(doc: jsPDF, pageNum: number, pageWidth: number, pageHeig
     margin,
     pageHeight - 8
   );
-  doc.text(`Halaman ${pageNum}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+  doc.text(`Halaman ${pageNum} dari ${pageCount}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
 }

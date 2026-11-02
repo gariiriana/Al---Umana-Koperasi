@@ -20,6 +20,7 @@ import { subscriptionManager } from './subscriptionManager';
 import { archiveAndDelete, archiveSnapshotsAndDelete, stageArchiveAndDelete } from '@/services/developerRecycleBinService';
 import type {
   MbgBahanDocumentation,
+  MbgBahanPhoto,
   MbgBahanPhotoItem,
   MbgBahanChecklistForm,
   MbgInspectionFormRow,
@@ -121,17 +122,44 @@ export function subscribeBahanPhotos(
   }, onError);
 }
 
-/** Pasang foto dari koleksi mbg_bahan_photos ke item; foto inline arsip lama tetap dipakai. */
+/** Batas foto per bahan; tiap foto ±25 KB dan 1 read Firestore saat dibuka. */
+export const MAX_BAHAN_PHOTOS = 4;
+
+/** Daftar foto sebuah bahan, termasuk arsip format lama (photoUrl/photoId tunggal). */
+export function getBahanItemPhotos(item: MbgBahanPhotoItem): MbgBahanPhoto[] {
+  if (item.photos) return item.photos;
+  if (!item.photoUrl && !item.photoId) return [];
+  return [{ photoId: item.photoId, url: item.photoUrl, waktu: item.waktuFoto }];
+}
+
+/** Foto yang gambarnya sudah ada (siap ditampilkan/diekspor). */
+export function getLoadedBahanPhotos(item: MbgBahanPhotoItem): MbgBahanPhoto[] {
+  return getBahanItemPhotos(item).filter((p) => Boolean(p.url));
+}
+
+/**
+ * Pasang foto dari koleksi mbg_bahan_photos ke item dan ubah ke format `photos`.
+ * Foto inline arsip lama tetap dipakai dan akan dipindah saat disimpan berikutnya.
+ */
 export function attachBahanPhotos(items: MbgBahanPhotoItem[], photos: BahanPhotoMap): MbgBahanPhotoItem[] {
   return items.map((item) => {
-    const photoUrl = item.photoId ? photos[item.photoId] : undefined;
-    return photoUrl ? { ...item, photoUrl } : item;
+    const next: MbgBahanPhotoItem = {
+      ...item,
+      photos: getBahanItemPhotos(item).map((p) => {
+        const url = (p.photoId && photos[p.photoId]) || p.url;
+        return url ? { ...p, url } : p;
+      }),
+    };
+    delete next.photoUrl;
+    delete next.photoId;
+    delete next.waktuFoto;
+    return next;
   });
 }
 
 /** Muat foto sebuah arsip agar bisa diekspor ke PDF/Word. */
 export async function withBahanPhotos<T extends Pick<MbgBahanDocumentation, 'batchId' | 'items'>>(docData: T): Promise<T> {
-  if (!(docData.items || []).some((i) => i.photoId)) return docData;
+  if (!(docData.items || []).some((i) => getBahanItemPhotos(i).some((p) => p.photoId))) return docData;
   const snap = await getDocs(query(collection(db, BAHAN_PHOTOS_COLLECTION), where('batchId', '==', docData.batchId)));
   const photos: BahanPhotoMap = {};
   snap.forEach((d) => {
@@ -179,7 +207,9 @@ export async function saveBahanDocumentation(
   const now = new Date().toISOString();
   const { batchId } = docData;
 
-  const tooLarge = (docData.items || []).find((i) => (i.photoUrl?.length || 0) > MAX_PHOTO_CHARS);
+  const tooLarge = (docData.items || []).find((i) =>
+    getBahanItemPhotos(i).some((p) => (p.url?.length || 0) > MAX_PHOTO_CHARS)
+  );
   if (tooLarge) {
     throw new BahanSaveError(`Foto "${tooLarge.namaBahan || 'bahan'}" terlalu besar. Ambil ulang foto tersebut lalu simpan lagi.`);
   }
@@ -190,27 +220,54 @@ export async function saveBahanDocumentation(
   ]);
   const storedPhotos = new Map(photoSnap.docs.map((d) => [d.id, String(d.data().photoUrl || '')]));
 
+  // ID foto yang masih dipakai tetap; foto baru mendapat ID bebas berikutnya ({itemId}-1, -2, ...).
+  const takenIds = new Set<string>();
+  for (const item of docData.items || []) {
+    for (const p of getBahanItemPhotos(item)) {
+      if (p.photoId && (p.url || storedPhotos.has(p.photoId))) takenIds.add(p.photoId);
+    }
+  }
+  const nextPhotoId = (itemId: string): string => {
+    for (let n = 1; ; n++) {
+      const id = bahanPhotoDocId(batchId, `${itemId}-${n}`);
+      if (!takenIds.has(id)) {
+        takenIds.add(id);
+        return id;
+      }
+    }
+  };
+
   const batch = writeBatch(db);
   const keptPhotoIds = new Set<string>();
-  const items = (docData.items || []).map((original, idx) => {
-    const { photoUrl } = original;
+  const items = (docData.items || []).map((original) => {
     const item = { ...original };
     delete item.photoUrl;
     delete item.photoId;
-    if (!photoUrl) return item;
-    let photoId = bahanPhotoDocId(batchId, item.id);
-    if (keptPhotoIds.has(photoId)) photoId = bahanPhotoDocId(batchId, `${item.id}-${idx}`);
-    keptPhotoIds.add(photoId);
-    if (storedPhotos.get(photoId) !== photoUrl) {
-      batch.set(doc(db, BAHAN_PHOTOS_COLLECTION, photoId), {
-        batchId,
-        itemId: item.id,
-        photoUrl,
-        updatedAt: now,
-        createdBy: docData.createdBy,
-      });
+    delete item.waktuFoto;
+    const photos: MbgBahanPhoto[] = [];
+    for (const p of getBahanItemPhotos(original)) {
+      if (!p.url) {
+        // Gambarnya belum termuat dari server; pertahankan dokumen fotonya apa adanya.
+        if (p.photoId && storedPhotos.has(p.photoId) && !keptPhotoIds.has(p.photoId)) {
+          keptPhotoIds.add(p.photoId);
+          photos.push({ photoId: p.photoId, waktu: p.waktu });
+        }
+        continue;
+      }
+      const photoId = p.photoId && !keptPhotoIds.has(p.photoId) ? p.photoId : nextPhotoId(item.id);
+      keptPhotoIds.add(photoId);
+      if (storedPhotos.get(photoId) !== p.url) {
+        batch.set(doc(db, BAHAN_PHOTOS_COLLECTION, photoId), {
+          batchId,
+          itemId: item.id,
+          photoUrl: p.url,
+          updatedAt: now,
+          createdBy: docData.createdBy,
+        });
+      }
+      photos.push({ photoId, waktu: p.waktu });
     }
-    return { ...item, photoId };
+    return { ...item, photos };
   });
   for (const photoId of storedPhotos.keys()) {
     if (!keptPhotoIds.has(photoId)) batch.delete(doc(db, BAHAN_PHOTOS_COLLECTION, photoId));

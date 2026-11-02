@@ -14,7 +14,6 @@ import {
   Save,
   Trash2,
   Plus,
-  Eye,
   X,
   History,
   Search,
@@ -41,6 +40,8 @@ import {
   deleteBahanDocumentation,
   describeBahanSaveError,
   extractIngredientsFromDailyReport,
+  getBahanItemPhotos,
+  MAX_BAHAN_PHOTOS,
   type BahanPhotoMap,
 } from '@/services/mbgBahanService';
 import { exportBahanDocumentationPdf } from '@/utils/mbgBahanPdfGenerator';
@@ -129,7 +130,7 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
         namaBahan: r.jenisBahan,
         kuantitas: r.banyaknya,
         satuan: r.satuan,
-        photoUrl: undefined,
+        photos: [],
         catatan: r.notes || '',
       })),
     [extractedKey]
@@ -161,7 +162,7 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
       reportItems.map((it) => {
         const prev = existingByName.get(it.namaBahan.trim().toLowerCase());
         return prev
-          ? { ...it, photoUrl: prev.photoUrl, waktuFoto: prev.waktuFoto, kondisi: prev.kondisi, catatan: prev.catatan || it.catatan }
+          ? { ...it, photos: getBahanItemPhotos(prev), kondisi: prev.kondisi, catatan: prev.catatan || it.catatan }
           : it;
       })
     );
@@ -197,65 +198,91 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
     setItems((prev) => prev.filter((_, idx) => idx !== index));
   };
 
-  // Handle Photo Upload from file
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || uploadTargetIndex === null) return;
-
-    try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const rawUrl = event.target?.result as string;
-        const compressed = await compressImageBase64(rawUrl, PHOTO_MAX_PX, PHOTO_MAX_PX, PHOTO_QUALITY);
-        handleUpdateItem(uploadTargetIndex, {
-          photoUrl: compressed,
-          waktuFoto: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-        });
-        showToast({ message: 'Foto bahan berhasil diunggah!', variant: 'success' });
+  // Tambah foto ke sebuah bahan (maksimal MAX_BAHAN_PHOTOS per bahan)
+  const addPhotosToItem = (index: number, urls: string[]) => {
+    const waktu = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    setItems((prev) => {
+      const next = [...prev];
+      const current = getBahanItemPhotos(next[index]);
+      next[index] = {
+        ...next[index],
+        photos: [...current, ...urls.map((url) => ({ url, waktu }))].slice(0, MAX_BAHAN_PHOTOS),
       };
+      return next;
+    });
+  };
+
+  const removePhotoFromItem = (index: number, photoIndex: number) => {
+    setItems((prev) => {
+      const next = [...prev];
+      next[index] = {
+        ...next[index],
+        photos: getBahanItemPhotos(next[index]).filter((_, i) => i !== photoIndex),
+      };
+      return next;
+    });
+  };
+
+  const compressFile = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () =>
+        compressImageBase64(reader.result as string, PHOTO_MAX_PX, PHOTO_MAX_PX, PHOTO_QUALITY).then(resolve, reject);
+      reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(file);
+    });
+
+  // Handle Photo Upload from file (bisa pilih beberapa sekaligus)
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const index = uploadTargetIndex;
+    e.target.value = '';
+    setUploadTargetIndex(null);
+    if (files.length === 0 || index === null || !items[index]) return;
+
+    const room = MAX_BAHAN_PHOTOS - getBahanItemPhotos(items[index]).length;
+    if (room <= 0) {
+      showToast({ message: `Maksimal ${MAX_BAHAN_PHOTOS} foto per bahan.`, variant: 'info' });
+      return;
+    }
+    try {
+      const compressed = await Promise.all(files.slice(0, room).map(compressFile));
+      addPhotosToItem(index, compressed);
+      showToast(files.length > room
+        ? { message: `${room} foto ditambahkan. Maksimal ${MAX_BAHAN_PHOTOS} foto per bahan, sisanya tidak diunggah.`, variant: 'info' }
+        : { message: `${compressed.length} foto bahan berhasil diunggah!`, variant: 'success' });
     } catch (err) {
       console.error('File upload error:', err);
       showToast({ message: 'Gagal memproses file foto', variant: 'error' });
-    } finally {
-      e.target.value = '';
-      setUploadTargetIndex(null);
     }
   };
 
   // Handle Camera Capture
   const handleCameraCapture = async (file: File) => {
-    if (cameraActiveIndex === null) return;
+    const index = cameraActiveIndex;
+    setCameraActiveIndex(null);
+    if (index === null) return;
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const dataUrl = reader.result as string;
-          const compressed = await compressImageBase64(dataUrl, PHOTO_MAX_PX, PHOTO_MAX_PX, PHOTO_QUALITY);
-          handleUpdateItem(cameraActiveIndex, {
-            photoUrl: compressed,
-            waktuFoto: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-          });
-          showToast({ message: 'Foto bahan berhasil diambil!', variant: 'success' });
-        } catch (compErr) {
-          console.error('Compression error:', compErr);
-        } finally {
-          setCameraActiveIndex(null);
-        }
-      };
-      reader.readAsDataURL(file);
+      addPhotosToItem(index, [await compressFile(file)]);
+      showToast({ message: 'Foto bahan berhasil diambil!', variant: 'success' });
     } catch (err) {
       console.error('Camera capture error:', err);
-      setCameraActiveIndex(null);
+      showToast({ message: 'Gagal memproses foto kamera', variant: 'error' });
     }
+  };
+
+  const openUpload = (index: number) => {
+    setUploadTargetIndex(index);
+    fileInputRef.current?.click();
   };
 
   // Statistics
   const stats = useMemo(() => {
     const total = items.length;
-    const withPhoto = items.filter((i) => Boolean(i.photoUrl)).length;
+    const withPhoto = items.filter((i) => getBahanItemPhotos(i).length > 0).length;
+    const totalPhotos = items.reduce((sum, i) => sum + getBahanItemPhotos(i).length, 0);
     const percent = total > 0 ? Math.round((withPhoto / total) * 100) : 0;
-    return { total, withPhoto, percent };
+    return { total, withPhoto, totalPhotos, percent };
   }, [items]);
 
   // Build current documentation object
@@ -380,6 +407,7 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
         type="file"
         ref={fileInputRef}
         accept="image/*"
+        multiple
         className="hidden"
         onChange={handleFileChange}
       />
@@ -451,6 +479,9 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
                     style={{ width: `${stats.percent}%` }}
                   />
                 </div>
+                <p className="mt-1 text-[10px] text-emerald-100/90">
+                  {stats.totalPhotos} foto • maks. {MAX_BAHAN_PHOTOS} foto per bahan
+                </p>
               </div>
             </div>
 
@@ -483,7 +514,9 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
           {/* Cards Grid: Per Bahan */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {items.map((item, idx) => {
-              const hasPhoto = Boolean(item.photoUrl);
+              const itemPhotos = getBahanItemPhotos(item);
+              const hasPhoto = itemPhotos.length > 0;
+              const canAddPhoto = itemPhotos.length < MAX_BAHAN_PHOTOS;
               return (
                 <div
                   key={item.id || idx}
@@ -519,55 +552,73 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
                   {/* Photo Display / Action Box */}
                   <div className="p-3">
                     {hasPhoto ? (
-                      <div className="relative group rounded-xl overflow-hidden bg-slate-950 aspect-4/3 flex items-center justify-center border border-slate-200">
-                        <img
-                          src={item.photoUrl}
-                          alt={item.namaBahan}
-                          className="w-full h-full object-cover"
-                        />
-                        {/* Overlay Controls */}
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-2">
-                          <button
-                            type="button"
-                            onClick={() => setPreviewPhoto({ url: item.photoUrl!, title: item.namaBahan })}
-                            className="p-2 rounded-xl bg-white/20 hover:bg-white/40 text-white backdrop-blur-xs transition-colors cursor-pointer"
-                            title="Perbesar foto"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCameraActiveIndex(idx)}
-                            className="p-2 rounded-xl bg-white/20 hover:bg-white/40 text-white backdrop-blur-xs transition-colors cursor-pointer"
-                            title="Ambil ulang kamera"
-                          >
-                            <Camera className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setUploadTargetIndex(idx);
-                              fileInputRef.current?.click();
-                            }}
-                            className="p-2 rounded-xl bg-white/20 hover:bg-white/40 text-white backdrop-blur-xs transition-colors cursor-pointer"
-                            title="Ganti foto dari file"
-                          >
-                            <Upload className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateItem(idx, { photoUrl: undefined, waktuFoto: undefined })}
-                            className="p-2 rounded-xl bg-red-600/80 hover:bg-red-700 text-white backdrop-blur-xs transition-colors cursor-pointer"
-                            title="Hapus foto"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                      <div>
+                        {/* Galeri foto: 2 kolom, petak terakhir untuk menambah foto */}
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {itemPhotos.map((photo, pIdx) => (
+                            <div
+                              key={photo.photoId || `new-${pIdx}`}
+                              className="relative rounded-xl overflow-hidden bg-slate-950 aspect-4/3 border border-slate-200"
+                            >
+                              {photo.url ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewPhoto({ url: photo.url!, title: `${item.namaBahan} — Foto ${pIdx + 1}` })}
+                                  className="block w-full h-full cursor-zoom-in"
+                                  title="Perbesar foto"
+                                >
+                                  <img src={photo.url} alt={`${item.namaBahan} foto ${pIdx + 1}`} className="w-full h-full object-cover" />
+                                </button>
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-slate-400">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                </div>
+                              )}
+                              <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md text-[9px] font-black bg-black/60 text-white">
+                                {pIdx + 1}
+                              </span>
+                              {photo.waktu && (
+                                <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-black/60 text-white">
+                                  {photo.waktu}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => removePhotoFromItem(idx, pIdx)}
+                                className="absolute top-1 right-1 p-1 rounded-full bg-black/60 hover:bg-red-600 text-white transition-colors cursor-pointer"
+                                title="Hapus foto ini"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+
+                          {canAddPhoto && (
+                            <div className="rounded-xl border-2 border-dashed border-slate-200 hover:border-emerald-400 bg-slate-50/60 aspect-4/3 flex flex-col items-center justify-center gap-1.5 p-1.5 transition-colors">
+                              <button
+                                type="button"
+                                onClick={() => setCameraActiveIndex(idx)}
+                                className="w-full max-w-[110px] px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-xs"
+                              >
+                                <Camera className="h-3 w-3" />
+                                <span>Kamera</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openUpload(idx)}
+                                className="w-full max-w-[110px] px-2 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                              >
+                                <Upload className="h-3 w-3 text-slate-500" />
+                                <span>Upload</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Verified badge top right */}
-                        <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-600 text-white flex items-center gap-1 shadow-sm">
+                        <div className="mt-1.5 flex items-center gap-1 text-[10px] font-black text-emerald-700">
                           <CheckCircle2 className="h-3 w-3" />
-                          <span>Difoto</span>
+                          <span>{itemPhotos.length} / {MAX_BAHAN_PHOTOS} foto</span>
+                          {!canAddPhoto && <span className="font-semibold text-slate-400">• batas foto tercapai</span>}
                         </div>
                       </div>
                     ) : (
@@ -576,7 +627,7 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
                           <Camera className="h-5 w-5" />
                         </div>
                         <span className="text-[11px] font-bold text-slate-700 block">Belum ada foto</span>
-                        <p className="text-[10px] text-slate-400 mb-3">Pilih metode pengambilan:</p>
+                        <p className="text-[10px] text-slate-400 mb-3">Bisa lebih dari 1 foto (maks. {MAX_BAHAN_PHOTOS})</p>
 
                         <div className="flex items-center gap-2">
                           <button
@@ -589,10 +640,7 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              setUploadTargetIndex(idx);
-                              fileInputRef.current?.click();
-                            }}
+                            onClick={() => openUpload(idx)}
                             className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
                           >
                             <Upload className="h-3.5 w-3.5 text-slate-500" />
@@ -777,7 +825,8 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
               ) : (
                 filteredArchive.map((docItem) => {
                   const total = docItem.items?.length || 0;
-                  const photoCount = (docItem.items || []).filter((i) => Boolean(i.photoUrl || i.photoId)).length;
+                  const photoCount = (docItem.items || []).filter((i) => getBahanItemPhotos(i).length > 0).length;
+                  const totalPhotos = (docItem.items || []).reduce((sum, i) => sum + getBahanItemPhotos(i).length, 0);
                   return (
                     <div
                       key={docItem.id}
@@ -787,7 +836,10 @@ export const MbgBahanDocumentationSection: React.FC<MbgBahanDocumentationSection
                         <div className="flex items-center gap-2">
                           <span className="font-black text-sm text-slate-900">{docItem.tanggal}</span>
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800">
-                            {photoCount} / {total} Foto
+                            {photoCount} / {total} Bahan Difoto
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600">
+                            {totalPhotos} Foto
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
