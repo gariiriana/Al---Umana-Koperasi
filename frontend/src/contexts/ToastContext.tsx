@@ -133,8 +133,8 @@ export function ToastProvider({
             <RadixToast.Description>{t.message}</RadixToast.Description>
           </RadixToast.Root>
         ))}
-        {/* Di atas semua modal/overlay app (tertinggi z-[10000]) supaya toast tidak tertutup */}
-        <RadixToast.Viewport className="fixed bottom-4 right-4 z-[10001] flex max-w-sm flex-col gap-2 outline-none" />
+        {/* Di atas semua modal/overlay app, termasuk pop-up Perbarui (z-[10002]), supaya toast tidak tertutup */}
+        <RadixToast.Viewport className="fixed bottom-4 right-4 z-[10003] flex max-w-sm flex-col gap-2 outline-none" />
       </RadixToast.Provider>
     </ToastContext.Provider>
   );
