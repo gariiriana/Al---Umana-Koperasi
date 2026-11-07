@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { FileSpreadsheet, FileText } from "lucide-react";
 
 import { workDateWIB } from "../../../../workers/absensi/shared/time.js";
-import { fetchPhotoUrl, getRekap, listEmployees } from "@/absensi/api";
+import { getRekap, listEmployees } from "@/absensi/api";
+import { ShiftPhoto } from "@/absensi/admin/ShiftPhoto";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
 import { errorMessage } from "@/absensi/errorMessage";
 import {
@@ -44,49 +45,6 @@ interface Filter {
 function defaultFilter(): Filter {
   const today = workDateWIB(Date.now());
   return { from: `${today.slice(0, 8)}01`, to: today, uid: "" };
-}
-
-/** Satu foto shift; dimuat hanya saat modal dibuka. */
-function ShiftPhoto({ label, photoId }: { label: string; photoId: string | null }) {
-  const [state, setState] = useState<{ url: string | null; loading: boolean }>({ url: null, loading: photoId !== null });
-
-  useEffect(() => {
-    if (!photoId) {
-      setState({ url: null, loading: false });
-      return undefined;
-    }
-    let url: string | null = null;
-    let cancelled = false;
-    setState({ url: null, loading: true });
-    fetchPhotoUrl(photoId).then(
-      (result) => {
-        url = result;
-        if (!cancelled) setState({ url: result, loading: false });
-      },
-      () => {
-        if (!cancelled) setState({ url: null, loading: false });
-      },
-    );
-    return () => {
-      cancelled = true;
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [photoId]);
-
-  let content: React.ReactNode;
-  if (!photoId) content = "Tidak ada foto";
-  else if (state.loading) content = "Memuat...";
-  else if (!state.url) content = "Foto sudah dihapus (lebih dari 90 hari)";
-  else content = <img src={state.url} alt={`Selfie ${label.toLowerCase()}`} className="h-full w-full object-cover" />;
-
-  return (
-    <figure className="space-y-1.5">
-      <figcaption className="text-xs font-bold text-neutral-700">{label}</figcaption>
-      <div className="flex aspect-[3/4] items-center justify-center overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-100 p-2 text-center text-xs text-neutral-500">
-        {content}
-      </div>
-    </figure>
-  );
 }
 
 /** Rekap terpadu kehadiran, cuti/sakit/izin, dan pergantian shift beserta export Excel & Word. */
@@ -469,7 +427,7 @@ export function RekapTab() {
           role="dialog"
           aria-modal="true"
           aria-label={`Foto absen ${selected.name}`}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/55 px-4 py-8 backdrop-blur-xs sm:items-center"
           onClick={() => setSelected(null)}
         >
           <div
@@ -490,6 +448,11 @@ export function RekapTab() {
                 <p className="mt-0.5 break-words font-semibold text-orange-800">
                   {selected.lateReason ? `Alasan: ${selected.lateReason}` : "Tidak ada alasan tercatat."}
                 </p>
+                {selected.latePhotoId && (
+                  <div className="mt-3">
+                    <ShiftPhoto label="Foto bukti" photoId={selected.latePhotoId} variant="bukti" />
+                  </div>
+                )}
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">

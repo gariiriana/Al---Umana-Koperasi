@@ -20,6 +20,8 @@ export interface ShiftView {
   durationMin: number | null;
   /** Alasan clock in lewat 08:00 WIB (kosong untuk shift tepat waktu / sebelum fitur ini). */
   lateReason?: string | null;
+  /** Foto bukti alasan terlambat (dihapus otomatis setelah 90 hari). */
+  latePhotoId?: string | null;
 }
 
 export interface ShiftStatus {
@@ -72,6 +74,7 @@ export interface RekapRow {
   masukPhotoId: string | null;
   pulangPhotoId: string | null;
   lateReason?: string | null;
+  latePhotoId?: string | null;
 }
 
 export interface EmployeeView {
@@ -93,6 +96,7 @@ export interface HariIniRow {
   pulangAt: number | null;
   state: "belum" | "masuk" | "pulang" | "tidak_clock_out";
   lateReason?: string | null;
+  latePhotoId?: string | null;
   leaveType?: LeaveType | null;
   shiftSwap?: {
     fromShift: string;

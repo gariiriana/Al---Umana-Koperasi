@@ -17,3 +17,6 @@ export const MIN_PASSWORD_LENGTH: number;
 export const LATE_AFTER_MINUTE_WIB: number;
 export const LATE_REASON_MIN: number;
 export const LATE_REASON_MAX: number;
+export const MAX_LATE_PHOTO_BYTES: number;
+export const LATE_PHOTO_MAX_PX: number;
+export const LATE_PHOTO_JPEG_QUALITY: number;

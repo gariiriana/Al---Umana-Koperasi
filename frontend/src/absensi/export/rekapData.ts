@@ -102,7 +102,9 @@ export function buildUnifiedRekapItems(
     const key = `${row.uid}:${row.workDate}`;
     shiftDates.add(key);
     const swapNote = swapNoteByUidDate.get(key);
-    const lateNote = row.lateReason ? `Alasan terlambat: ${row.lateReason}` : null;
+    const lateNote = row.lateReason
+      ? `Alasan terlambat: ${row.lateReason}${row.latePhotoId ? " (ada foto bukti)" : ""}`
+      : null;
     const notes = [lateNote, swapNote].filter((note): note is string => Boolean(note));
     const infoParts = [row.areaName, ...notes].filter(Boolean);
     return {

@@ -78,6 +78,8 @@ export interface AbsenBody {
   faceDistance: number | null;
   /** Wajib dari pop-up kalau clock in lewat 08:00 WIB. */
   lateReason?: string;
+  /** Foto bukti alasan (JPEG base64, sudah dikecilkan di HP). */
+  latePhotoBase64?: string;
   authentication: AuthenticationResponseJSON;
 }
 export const absen = (body: AbsenBody) => post<AbsenResult>("/absen", body);

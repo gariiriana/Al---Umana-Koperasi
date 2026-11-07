@@ -1,6 +1,6 @@
 // Endpoint untuk akun absensi sendiri: profil, aktivasi, clock in/out, riwayat, pengajuan, notifikasi.
 import { payloadChallenge, sha256Hex } from "../../shared/binding.js";
-import { CHALLENGE_TTL_MS, FACE_MATCH_THRESHOLD, LATE_REASON_MAX } from "../../shared/constants.js";
+import { CHALLENGE_TTL_MS, FACE_MATCH_THRESHOLD, LATE_REASON_MAX, MAX_LATE_PHOTO_BYTES } from "../../shared/constants.js";
 import { checkLocation } from "../../shared/geo.js";
 import { isLateClockIn, workDateWIB } from "../../shared/time.js";
 import {
@@ -21,6 +21,7 @@ const LEAVE_TYPES = new Set(["cuti", "sakit", "izin"]);
 
 const BULAN = /^\d{4}-(0[1-9]|1[0-2])$/;
 const DESCRIPTOR_LENGTH = 128;
+const ABSEN_BODY_MAX_CHARS = 1_000_000;
 const MAX_LEAVE_DAYS = 120;
 
 function randomNonce() {
@@ -148,6 +149,12 @@ function parseLateReason(body) {
   return reason || null;
 }
 
+/** Foto bukti alasan terlambat (opsional di server, sama seperti alasannya). Dicek sebelum challenge terpakai. */
+function parseLatePhoto(body) {
+  if (body.latePhotoBase64 === undefined || body.latePhotoBase64 === null) return null;
+  return decodeJpeg(body.latePhotoBase64, { maxBytes: MAX_LATE_PHOTO_BYTES, code: "FOTO_ALASAN_TIDAK_VALID" });
+}
+
 async function currentDecision(ctx, employee, kind, now) {
   const decision = decideAbsen(kind, shiftStatus(await recentShifts(ctx.env.DB, employee.uid), now), now);
   if (!decision.ok) throw new AbsensiError(decision.code, 409);
@@ -183,9 +190,11 @@ export async function absenOptions(ctx) {
 /** Clock in / clock out. Urutan cek mengikuti spec bagian 6; waktu selalu dari server. */
 export async function absen(ctx) {
   const employee = await requireActivatedEmployee(ctx);
-  const body = await readJson(ctx.request);
+  // Selfie (≤200 KB) + foto alasan (≤300 KB) dalam base64.
+  const body = await readJson(ctx.request, ABSEN_BODY_MAX_CHARS);
   const kind = parseKind(body);
   const lateReason = kind === "masuk" ? parseLateReason(body) : null;
+  const latePhoto = kind === "masuk" ? parseLatePhoto(body) : null;
   const now = ctx.deps.now();
   const { env } = ctx;
 
@@ -221,11 +230,15 @@ export async function absen(ctx) {
   const decision = await currentDecision(ctx, employee, kind, now);
   const photoId = crypto.randomUUID();
   const fields = { ...location, areaId: area.areaId, faceDistance, photoId };
+  // Alasan & foto alasan hanya disimpan kalau menurut jam server clock in-nya memang lewat 08:00.
+  const late = decision.action === "insert" && isLateClockIn(now);
+  const latePhotoId = late && latePhoto ? crypto.randomUUID() : null;
   if (decision.action === "insert") {
     try {
       await insertShift(env.DB, {
         id: crypto.randomUUID(), uid: employee.uid, workDate: decision.workDate, masukAt: now, ...fields,
-        lateReason: isLateClockIn(now) ? lateReason : null,
+        lateReason: late ? lateReason : null,
+        latePhotoId,
       });
     } catch (err) {
       if (/UNIQUE/i.test(String(err?.message))) throw new AbsensiError("SUDAH_CLOCK_IN_HARI_INI", 409);
@@ -235,6 +248,10 @@ export async function absen(ctx) {
     throw new AbsensiError("BELUM_CLOCK_IN", 409);
   }
   await insertPhoto(env.PHOTOS, { id: photoId, uid: employee.uid, kind: "selfie", jpeg, createdAt: now });
+  if (latePhotoId) {
+    // kind "selfie" = foto absen dengan retensi 90 hari (cron purgeSelfies).
+    await insertPhoto(env.PHOTOS, { id: latePhotoId, uid: employee.uid, kind: "selfie", jpeg: latePhoto, createdAt: now });
+  }
   await updatePasskeyCounter(env.DB, passkey.credential_id, verified.newCounter, now);
 
   return { serverTime: now, status: shiftStatus(await recentShifts(env.DB, employee.uid), now) };

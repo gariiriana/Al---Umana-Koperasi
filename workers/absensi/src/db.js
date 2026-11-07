@@ -113,11 +113,16 @@ export const recentShifts = (db, uid, limit = 5) =>
   all(db.prepare("SELECT * FROM shifts WHERE uid = ? ORDER BY masuk_at DESC LIMIT ?").bind(uid, limit));
 
 /** Melempar kalau `(uid, work_date)` sudah ada (indeks unik). */
-export async function insertShift(db, { id, uid, workDate, masukAt, lat, lng, accuracy, areaId, faceDistance, photoId, lateReason }) {
+export async function insertShift(db, {
+  id, uid, workDate, masukAt, lat, lng, accuracy, areaId, faceDistance, photoId, lateReason, latePhotoId,
+}) {
   await db.prepare(
-    `INSERT INTO shifts (id, uid, work_date, masuk_at, masuk_lat, masuk_lng, masuk_accuracy, masuk_area_id, masuk_face_distance, masuk_photo_id, late_reason)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(id, uid, workDate, masukAt, lat, lng, accuracy, areaId, faceDistance ?? null, photoId, lateReason ?? null).run();
+    `INSERT INTO shifts (id, uid, work_date, masuk_at, masuk_lat, masuk_lng, masuk_accuracy, masuk_area_id, masuk_face_distance,
+       masuk_photo_id, late_reason, late_photo_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    id, uid, workDate, masukAt, lat, lng, accuracy, areaId, faceDistance ?? null, photoId, lateReason ?? null, latePhotoId ?? null,
+  ).run();
 }
 
 export const closeShift = (db, id, { pulangAt, lat, lng, accuracy, areaId, faceDistance, photoId }) => changes(db.prepare(
@@ -128,12 +133,13 @@ export const closeShift = (db, id, { pulangAt, lat, lng, accuracy, areaId, faceD
 
 /** Hapus shift hari ini / terbuka (atau shift terakhir) untuk reset simulasi akun testing. */
 export async function deleteShiftsForReset(db, uid, workDate) {
+  const cols = "id, masuk_photo_id, pulang_photo_id, late_photo_id";
   let rows = await all(
-    db.prepare("SELECT id, masuk_photo_id, pulang_photo_id FROM shifts WHERE uid = ? AND (work_date = ? OR status = 'terbuka')").bind(uid, workDate),
+    db.prepare(`SELECT ${cols} FROM shifts WHERE uid = ? AND (work_date = ? OR status = 'terbuka')`).bind(uid, workDate),
   );
   if (rows.length === 0) {
     rows = await all(
-      db.prepare("SELECT id, masuk_photo_id, pulang_photo_id FROM shifts WHERE uid = ? ORDER BY masuk_at DESC LIMIT 1").bind(uid),
+      db.prepare(`SELECT ${cols} FROM shifts WHERE uid = ? ORDER BY masuk_at DESC LIMIT 1`).bind(uid),
     );
   }
   if (rows.length === 0) return { deletedCount: 0, photoIds: [] };
@@ -141,6 +147,7 @@ export async function deleteShiftsForReset(db, uid, workDate) {
   for (const r of rows) {
     if (r.masuk_photo_id) photoIds.push(r.masuk_photo_id);
     if (r.pulang_photo_id) photoIds.push(r.pulang_photo_id);
+    if (r.late_photo_id) photoIds.push(r.late_photo_id);
   }
   await db.batch(rows.map((r) => db.prepare("DELETE FROM shifts WHERE id = ?").bind(r.id)));
   return { deletedCount: rows.length, photoIds };
@@ -183,7 +190,7 @@ export function rekapShifts(db, { from, to, uid }) {
 
 /** Karyawan aktif beserta shift hari ini atau shift yang masih terbuka (bisa 0–2 baris per orang). */
 export const todayOverview = (db, workDate) => all(db.prepare(
-  `SELECT e.uid AS uid, e.name AS name, s.id AS shift_id, s.work_date, s.masuk_at, s.pulang_at, s.status, s.late_reason
+  `SELECT e.uid AS uid, e.name AS name, s.id AS shift_id, s.work_date, s.masuk_at, s.pulang_at, s.status, s.late_reason, s.late_photo_id
    FROM employees e
    LEFT JOIN shifts s ON s.uid = e.uid AND (s.work_date = ? OR s.status = 'terbuka')
    WHERE e.role = 'absen_karyawan' AND e.status = 'aktif'

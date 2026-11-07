@@ -27,3 +27,9 @@ export const MIN_PASSWORD_LENGTH = 8;
 export const LATE_AFTER_MINUTE_WIB = 8 * 60;
 export const LATE_REASON_MIN = 3;
 export const LATE_REASON_MAX = 300;
+
+// Foto bukti alasan terlambat: dikecilkan di HP (sisi terpanjang 1280 px), disimpan sebagai foto
+// absen (kind 'selfie', ikut dihapus setelah 90 hari).
+export const MAX_LATE_PHOTO_BYTES = 300_000;
+export const LATE_PHOTO_MAX_PX = 1280;
+export const LATE_PHOTO_JPEG_QUALITY = 0.72;

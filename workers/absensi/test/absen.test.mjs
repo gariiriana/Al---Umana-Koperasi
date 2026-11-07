@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { addEmployee, call, fakeDeps, fakeWebauthn, JPEG_BASE64, makeEnv, T0 } from "./helpers.mjs";
-import { activateEmployee, insertPasskey, recentShifts, replaceAreas } from "../src/db.js";
+import { activateEmployee, getPhoto, insertPasskey, recentShifts, replaceAreas } from "../src/db.js";
 import { payloadChallenge, sha256Hex } from "../shared/binding.js";
+import { MAX_LATE_PHOTO_BYTES } from "../shared/constants.js";
+
+// Foto alasan yang lebih besar dari batas selfie (200 KB) tapi masih di bawah batas foto alasan.
+const LATE_PHOTO_BASE64 = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(250_000, 7)]).toString("base64");
 
 const PIN = { lat: -6.9735229, lng: 106.8651559 };
 const SQ = [
@@ -44,7 +48,7 @@ describe("clock in / clock out", () => {
   before(async () => {
     ({ env, dispose } = await makeEnv());
     await replaceAreas(env.DB, [{ id: "a1", name: "SPPG", polygon: SQ, toleranceM: 15, active: true }], "admin", T0);
-    for (const uid of ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10", "u11", "u12"]) {
+    for (const uid of ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10", "u11", "u12", "u13", "u14", "u15"]) {
       await addEmployee(env, { uid, email: `${uid}@absen.test`, faceRequired: uid !== "u2" });
       if (uid === "u3") continue;
       await activateEmployee(env.DB, uid, { faceDescriptor: [0.1], referencePhotoId: `r-${uid}`, consentAt: T0, activatedAt: T0 });
@@ -153,5 +157,38 @@ describe("clock in / clock out", () => {
     const retry = await absen("u9", { ...body, lateReason: "Macet di jalan" });
     assert.equal(retry.status, 200, JSON.stringify(retry.data));
     assert.equal(retry.data.status.today.lateReason, "Macet di jalan");
+  });
+
+  it("stores the late reason photo as a 90-day photo linked to the shift", async () => {
+    now = T0 + 12 * HOUR;
+    const res = await absen("u13", await signedBody("u13", "masuk", { lateReason: "Ban bocor", latePhotoBase64: LATE_PHOTO_BASE64 }));
+    assert.equal(res.status, 200, JSON.stringify(res.data));
+    const photoId = res.data.status.today.latePhotoId;
+    assert.ok(photoId);
+    assert.equal((await recentShifts(env.DB, "u13"))[0].late_photo_id, photoId);
+    const photo = await getPhoto(env.PHOTOS, photoId);
+    assert.equal(photo.kind, "selfie"); // ikut dihapus cron selfie > 90 hari
+    assert.deepEqual(photo.jpeg, new Uint8Array(Buffer.from(LATE_PHOTO_BASE64, "base64")));
+  });
+
+  it("ignores a late photo on an on-time clock in", async () => {
+    now = T0 + HOUR; // 08:00 WIB
+    const res = await absen("u14", await signedBody("u14", "masuk", { lateReason: "x y z", latePhotoBase64: LATE_PHOTO_BASE64 }));
+    assert.equal(res.status, 200, JSON.stringify(res.data));
+    assert.equal(res.data.status.today.latePhotoId, null);
+  });
+
+  it("rejects a broken or oversized late photo before using up the challenge", async () => {
+    now = T0 + 12 * HOUR;
+    const body = await signedBody("u15", "masuk", { lateReason: "Ban bocor", latePhotoBase64: "bm90LWEtanBlZw==" });
+    const broken = await absen("u15", body);
+    assert.equal(broken.status, 400);
+    assert.equal(broken.data.error.code, "FOTO_ALASAN_TIDAK_VALID");
+    const huge = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(MAX_LATE_PHOTO_BYTES)]).toString("base64");
+    const tooBig = await absen("u15", { ...body, latePhotoBase64: huge });
+    assert.equal(tooBig.status, 400);
+    assert.equal(tooBig.data.error.code, "FOTO_ALASAN_TIDAK_VALID");
+    const ok = await absen("u15", { ...body, latePhotoBase64: LATE_PHOTO_BASE64 });
+    assert.equal(ok.status, 200, JSON.stringify(ok.data));
   });
 });

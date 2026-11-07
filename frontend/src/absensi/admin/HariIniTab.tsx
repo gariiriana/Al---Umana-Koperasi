@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import { Camera } from "lucide-react";
 
+import { LatePhotoDialog } from "@/absensi/admin/ShiftPhoto";
 import { getHariIni } from "@/absensi/api";
 import { errorMessage } from "@/absensi/errorMessage";
 import { LEAVE_TYPE_LABEL, formatJam, formatTanggalPanjang, formatTerlambat } from "@/absensi/logic/format";
@@ -32,6 +34,7 @@ export function HariIniTab() {
   const [rows, setRows] = useState<HariIniRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [photoRow, setPhotoRow] = useState<HariIniRow | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -124,6 +127,17 @@ export function HariIniTab() {
                     Alasan terlambat: {row.lateReason}
                   </p>
                 )}
+                {row.latePhotoId && (
+                  <button
+                    type="button"
+                    aria-label={`Lihat foto bukti ${row.name}`}
+                    onClick={() => setPhotoRow(row)}
+                    className="mt-1.5 inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-orange-200 bg-white px-3 text-xs font-bold text-orange-800 transition hover:bg-orange-50 active:scale-[0.98]"
+                  >
+                    <Camera className="h-3.5 w-3.5" aria-hidden="true" />
+                    Lihat foto bukti
+                  </button>
+                )}
                 {row.shiftSwap && (
                   <p className="mt-0.5 text-xs font-semibold text-amber-800">
                     Shift: {row.shiftSwap.fromShift} → {row.shiftSwap.toShift}
@@ -151,6 +165,16 @@ export function HariIniTab() {
             );
           })}
         </ul>
+      )}
+
+      {photoRow && photoRow.masukAt !== null && (
+        <LatePhotoDialog
+          name={photoRow.name}
+          masukAt={photoRow.masukAt}
+          lateReason={photoRow.lateReason ?? null}
+          latePhotoId={photoRow.latePhotoId ?? null}
+          onClose={() => setPhotoRow(null)}
+        />
       )}
     </section>
   );

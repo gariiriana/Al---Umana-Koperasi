@@ -117,15 +117,18 @@ describe("admin endpoints", () => {
 
   it("shows the late clock-in reason in Hari Ini and Rekap", async () => {
     const masukAt = T0 + 12 * 3600_000; // 19:00 WIB
-    await insertShift(env.DB, shift({ id: "late-1", uid: "u3", workDate: "2026-10-27", masukAt, lateReason: "Lupa absen pagi" }));
+    await insertShift(env.DB, shift({ id: "late-1", uid: "u3", workDate: "2026-10-27", masukAt, lateReason: "Lupa absen pagi", latePhotoId: "lp-1" }));
     const today = await asAdmin("GET", "/admin/hari-ini");
     const cici = today.data.rows.find((r) => r.name === "Cici");
     assert.equal(cici.masukAt, masukAt);
     assert.equal(cici.lateReason, "Lupa absen pagi");
+    assert.equal(cici.latePhotoId, "lp-1");
     assert.equal(today.data.rows.find((r) => r.name === "Ani").lateReason, null);
+    assert.equal(today.data.rows.find((r) => r.name === "Ani").latePhotoId, null);
 
     const rekap = await asAdmin("GET", "/admin/rekap?from=2026-10-27&to=2026-10-27&uid=u3");
     assert.equal(rekap.data.rows[0].lateReason, "Lupa absen pagi");
+    assert.equal(rekap.data.rows[0].latePhotoId, "lp-1");
   });
 
   it("serves photos as JPEG and 404s purged ones", async () => {

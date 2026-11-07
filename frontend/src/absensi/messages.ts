@@ -25,6 +25,7 @@ const MESSAGES: Record<string, string> = {
   AREA_BELUM_ADA: "Area absen belum diatur. Hubungi admin absensi.",
   NEGARA_TIDAK_VALID: "Lokasi jaringan kamu tidak dikenali. Matikan VPN lalu coba lagi.",
   SELFIE_TIDAK_VALID: "Foto tidak terbaca. Ambil foto lagi.",
+  FOTO_ALASAN_TIDAK_VALID: "Foto bukti tidak terbaca. Pilih atau ambil foto lain.",
   DESKRIPTOR_TIDAK_VALID: "Wajah belum terbaca. Ambil foto wajah lagi.",
   SUDAH_DIPROSES: "Pengajuan ini sudah diproses sebelumnya.",
   CHALLENGE_INVALID: INVALID,

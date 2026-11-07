@@ -50,17 +50,17 @@ export async function readJson(request, maxBytes = 400_000) {
   return body;
 }
 
-/** Base64 JPEG from the phone → bytes; anything else is SELFIE_TIDAK_VALID. */
-export function decodeJpeg(base64) {
+/** Base64 JPEG from the phone → bytes; anything else is `code` (SELFIE_TIDAK_VALID by default). */
+export function decodeJpeg(base64, { maxBytes = MAX_SELFIE_BYTES, code = "SELFIE_TIDAK_VALID" } = {}) {
   let bytes;
   try {
     bytes = Uint8Array.from(atob(String(base64 || "")), (c) => c.charCodeAt(0));
   } catch {
-    throw new AbsensiError("SELFIE_TIDAK_VALID", 400);
+    throw new AbsensiError(code, 400);
   }
   const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-  if (!isJpeg || bytes.length < MIN_SELFIE_BYTES || bytes.length > MAX_SELFIE_BYTES) {
-    throw new AbsensiError("SELFIE_TIDAK_VALID", 400);
+  if (!isJpeg || bytes.length < MIN_SELFIE_BYTES || bytes.length > maxBytes) {
+    throw new AbsensiError(code, 400);
   }
   return bytes;
 }

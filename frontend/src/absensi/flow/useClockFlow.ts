@@ -35,8 +35,8 @@ export interface ClockFlow {
   /** Challenge sudah terikat ke lokasi + selfie; tombol passkey boleh ditekan. */
   passkeyReady: boolean;
   start: (kind: AbsenKind) => void;
-  /** Step "alasan": alasan clock in lewat 08:00; lanjut ke peta lokasi kalau cukup panjang. */
-  submitLateReason: (reason: string) => void;
+  /** Step "alasan": alasan + foto bukti clock in lewat 08:00; lanjut ke peta lokasi kalau keduanya ada. */
+  submitLateReason: (reason: string, photo: Blob | null) => void;
   confirmLocation: (fix: LocationInput) => void;
   selfieDone: (selfie: SelfieResult) => Promise<void>;
   confirmPasskey: () => Promise<void>;
@@ -71,6 +71,7 @@ export function useClockFlow({
   const locationRef = useRef<LocationInput | null>(null);
   const preparedRef = useRef<Prepared | null>(null);
   const lateReasonRef = useRef<string | null>(null);
+  const latePhotoRef = useRef<Blob | null>(null);
   const meRef = useRef(me);
   const onStatusRef = useRef(onStatus);
   const nowRef = useRef(now);
@@ -92,21 +93,27 @@ export function useClockFlow({
     kindRef.current = nextKind;
     locationRef.current = null;
     preparedRef.current = null;
-    if (!keepReason || nextKind !== "masuk") lateReasonRef.current = null;
+    if (!keepReason || nextKind !== "masuk") {
+      lateReasonRef.current = null;
+      latePhotoRef.current = null;
+    }
     setKind(nextKind);
     setError(null);
     setResult(null);
     setPrepared(null);
-    const needReason = nextKind === "masuk" && lateReasonRef.current === null && isLateClockIn(nowRef.current());
+    const needReason = nextKind === "masuk"
+      && (lateReasonRef.current === null || latePhotoRef.current === null)
+      && isLateClockIn(nowRef.current());
     setStep(needReason ? "alasan" : "lokasi");
   }, []);
 
   const start = useCallback((nextKind: AbsenKind) => begin(nextKind, false), [begin]);
 
-  const submitLateReason = useCallback((text: string) => {
+  const submitLateReason = useCallback((text: string, photo: Blob | null) => {
     const reason = normalizeLateReason(text);
-    if (!reason || kindRef.current !== "masuk") return;
+    if (!reason || !photo || kindRef.current !== "masuk") return;
     lateReasonRef.current = reason;
+    latePhotoRef.current = photo;
     setStep("lokasi");
   }, []);
 
@@ -163,6 +170,9 @@ export function useClockFlow({
       if (token !== run.current) return;
       setStep("kirim");
       const lateReason = currentKind === "masuk" ? lateReasonRef.current : null;
+      const latePhoto = currentKind === "masuk" ? latePhotoRef.current : null;
+      const latePhotoBase64 = latePhoto ? await blobToBase64(latePhoto) : null;
+      if (token !== run.current) return;
       const res = await absen({
         challengeId: ready.options.challengeId,
         kind: currentKind,
@@ -170,6 +180,7 @@ export function useClockFlow({
         selfieBase64: ready.selfieBase64,
         faceDistance: ready.faceDistance,
         ...(lateReason ? { lateReason } : {}),
+        ...(latePhotoBase64 ? { latePhotoBase64 } : {}),
         authentication,
       });
       if (token !== run.current) return;
@@ -189,6 +200,7 @@ export function useClockFlow({
     run.current++;
     preparedRef.current = null;
     lateReasonRef.current = null;
+    latePhotoRef.current = null;
     setPrepared(null);
     setError(null);
     setStep("idle");

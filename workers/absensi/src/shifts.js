@@ -18,6 +18,7 @@ export function toShiftView(row, nowMs) {
     status,
     durationMin: status === "selesai" && pulangAt !== null ? Math.floor((pulangAt - row.masuk_at) / 60_000) : null,
     lateReason: row.late_reason ?? null,
+    latePhotoId: row.late_photo_id ?? null,
   };
 }
 

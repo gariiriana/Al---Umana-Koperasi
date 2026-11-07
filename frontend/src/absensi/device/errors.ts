@@ -6,7 +6,8 @@ export type DeviceErrorCode =
   | "IZIN_KAMERA"
   | "KAMERA_TIDAK_ADA"
   | "PASSKEY_DIBATALKAN"
-  | "PASSKEY_TIDAK_DIDUKUNG";
+  | "PASSKEY_TIDAK_DIDUKUNG"
+  | "FOTO_ALASAN_TIDAK_VALID";
 
 export class DeviceError extends Error {
   readonly code: DeviceErrorCode;
