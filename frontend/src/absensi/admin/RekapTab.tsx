@@ -36,6 +36,13 @@ const BADGE_TONE: Record<UnifiedRekapItem["badgeTone"], string> = {
   izin: "bg-sky-100 text-sky-800 border border-sky-200",
 };
 
+/** Absen luar zona yang belum diverifikasi / ditolak diberi warna mencolok. */
+function badgeClass(item: UnifiedRekapItem): string {
+  if (item.zoneStatus === "pending") return "bg-violet-100 text-violet-900 border border-violet-300";
+  if (item.zoneStatus === "rejected") return "bg-rose-100 text-rose-800 border border-rose-300";
+  return BADGE_TONE[item.badgeTone];
+}
+
 interface Filter {
   from: string;
   to: string;
@@ -312,7 +319,7 @@ export function RekapTab() {
                       <>
                         <div className="flex items-start justify-between gap-3">
                           <p className="min-w-0 break-words text-sm font-extrabold text-neutral-900">{item.name}</p>
-                          <span className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold ${BADGE_TONE[item.badgeTone]}`}>
+                          <span className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold ${badgeClass(item)}`}>
                             {item.statusLabel}
                           </span>
                         </div>
@@ -396,7 +403,7 @@ export function RekapTab() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
-                        <span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold ${BADGE_TONE[item.badgeTone]}`}>
+                        <span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold ${badgeClass(item)}`}>
                           {item.statusLabel}
                         </span>
                         {item.late && (

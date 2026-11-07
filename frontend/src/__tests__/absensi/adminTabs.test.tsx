@@ -7,6 +7,7 @@ const api = vi.hoisted(() => ({
   createEmployee: vi.fn(),
   patchEmployee: vi.fn(),
   fetchPhotoUrl: vi.fn(async () => null),
+  getUnits: vi.fn(),
 }));
 vi.mock("@/absensi/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/absensi/api")>()),
@@ -23,6 +24,7 @@ beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
   api.fetchPhotoUrl.mockResolvedValue(null);
   api.listEmployees.mockResolvedValue({ employees: [] });
+  api.getUnits.mockResolvedValue({ units: [] });
 });
 
 describe("HariIniTab", () => {

@@ -138,3 +138,32 @@ export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
   approved: "Disetujui",
   rejected: "Ditolak",
 };
+
+/** Label absen di luar zona; selama belum disetujui ditulis "Perlu verifikasi". */
+export const ZONE_STATUS_LABEL: Record<RequestStatus, string> = {
+  pending: "Perlu verifikasi · absen di luar zona",
+  approved: "Luar zona · disetujui",
+  rejected: "Luar zona · ditolak",
+};
+
+/** Catatan luar zona untuk satu shift: ["Clock in: Perlu verifikasi · absen di luar zona", ...]. */
+export function zoneNotes(shift: {
+  zoneMasuk?: { status: RequestStatus; reason: string } | null;
+  zonePulang?: { status: RequestStatus; reason: string } | null;
+}): string[] {
+  const notes: string[] = [];
+  if (shift.zoneMasuk) notes.push(`Clock in: ${ZONE_STATUS_LABEL[shift.zoneMasuk.status]} (${shift.zoneMasuk.reason})`);
+  if (shift.zonePulang) notes.push(`Clock out: ${ZONE_STATUS_LABEL[shift.zonePulang.status]} (${shift.zonePulang.reason})`);
+  return notes;
+}
+
+/** Status luar zona yang paling perlu perhatian: menunggu > ditolak > disetujui. */
+export function worstZoneStatus(shift: {
+  zoneMasuk?: { status: RequestStatus } | null;
+  zonePulang?: { status: RequestStatus } | null;
+}): RequestStatus | null {
+  const all = [shift.zoneMasuk?.status, shift.zonePulang?.status].filter((s): s is RequestStatus => Boolean(s));
+  if (all.includes("pending")) return "pending";
+  if (all.includes("rejected")) return "rejected";
+  return all.length ? "approved" : null;
+}

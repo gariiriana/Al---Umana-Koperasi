@@ -2,9 +2,11 @@ import { useEffect, useId, useState } from "react";
 import { AlarmClock, Camera, ImagePlus, Loader2, X } from "lucide-react";
 
 import { LATE_REASON_MAX } from "../../../../workers/absensi/shared/constants.js";
+import { LiveProofCamera } from "@/absensi/components/LiveProofCamera";
 import { compressPhoto } from "@/absensi/device/photo";
 import { normalizeLateReason } from "@/absensi/flow/useClockFlow";
 import { formatJam } from "@/absensi/logic/format";
+import { lateProofWatermark } from "@/absensi/logic/watermark";
 import { messageFor } from "@/absensi/messages";
 import { Button } from "@/components/ui/Button";
 
@@ -22,18 +24,21 @@ const pickerClass =
 
 export interface LateReasonFormProps {
   now: number;
+  /** Nama karyawan untuk watermark foto. */
+  name?: string;
   onSubmit: (reason: string, photo: Blob) => void;
   onCancel: () => void;
 }
 
 /** Pop-up alasan + foto bukti sebelum Clock In yang lewat jam 08:00 WIB; keduanya tampil di admin absensi. */
-export function LateReasonForm({ now, onSubmit, onCancel }: LateReasonFormProps) {
+export function LateReasonForm({ now, name = "", onSubmit, onCancel }: LateReasonFormProps) {
   const fieldId = useId();
   const [text, setText] = useState("");
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const reason = normalizeLateReason(text);
 
   useEffect(() => {
@@ -54,7 +59,7 @@ export function LateReasonForm({ now, onSubmit, onCancel }: LateReasonFormProps)
     setProcessing(true);
     setPhotoError(null);
     try {
-      setPhoto(await compressPhoto(file));
+      setPhoto(await compressPhoto(file, { watermark: lateProofWatermark({ now: Date.now(), name, source: "galeri" }) }));
     } catch {
       setPhoto(null);
       setPhotoError(messageFor("FOTO_ALASAN_TIDAK_VALID"));
@@ -132,6 +137,16 @@ export function LateReasonForm({ now, onSubmit, onCancel }: LateReasonFormProps)
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
+        ) : cameraOpen ? (
+          <LiveProofCamera
+            name={name}
+            onCapture={(blob) => {
+              setPhoto(blob);
+              setPhotoError(null);
+              setCameraOpen(false);
+            }}
+            onCancel={() => setCameraOpen(false)}
+          />
         ) : processing ? (
           <div className="flex min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-neutral-50 text-sm font-semibold text-neutral-600">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -139,19 +154,11 @@ export function LateReasonForm({ now, onSubmit, onCancel }: LateReasonFormProps)
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            {/* capture="environment": langsung membuka kamera belakang di HP. */}
-            <label className={pickerClass}>
+            {/* Kamera live di dalam aplikasi, foto diberi watermark waktu, nama & lokasi. */}
+            <button type="button" aria-label="Kamera" className={pickerClass} onClick={() => setCameraOpen(true)}>
               <Camera className="h-5 w-5 text-amber-600" aria-hidden="true" />
               <span>Kamera</span>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                aria-label="Kamera"
-                className="sr-only"
-                onChange={(e) => void handleFile(e.currentTarget)}
-              />
-            </label>
+            </button>
             <label className={pickerClass}>
               <ImagePlus className="h-5 w-5 text-amber-600" aria-hidden="true" />
               <span>Galeri</span>
@@ -173,7 +180,7 @@ export function LateReasonForm({ now, onSubmit, onCancel }: LateReasonFormProps)
       </div>
 
       <div className="flex flex-col gap-2">
-        <Button type="submit" variant="primary" className="w-full" disabled={!reason || !photo || processing}>
+        <Button type="submit" variant="primary" className="w-full" disabled={!reason || !photo || processing || cameraOpen}>
           Lanjut
         </Button>
         <Button type="button" variant="outlined" className="w-full" onClick={onCancel}>

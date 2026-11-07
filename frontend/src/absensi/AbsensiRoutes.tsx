@@ -9,6 +9,7 @@ import { BerandaPage } from "@/absensi/pages/BerandaPage";
 import { PengajuanPage } from "@/absensi/pages/PengajuanPage";
 import { ProfilPage } from "@/absensi/pages/ProfilPage";
 import { RiwayatPage } from "@/absensi/pages/RiwayatPage";
+import { TimPage } from "@/absensi/pages/TimPage";
 import { messageFor } from "@/absensi/messages";
 import type { AbsensiRole } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
@@ -77,6 +78,10 @@ export function AbsensiRoutes() {
         <Route
           path="persetujuan"
           element={<RequireAbsensi role="absen_karyawan" requireActivated><PengajuanPage /></RequireAbsensi>}
+        />
+        <Route
+          path="tim"
+          element={<RequireAbsensi role="absen_karyawan" requireActivated><TimPage /></RequireAbsensi>}
         />
         <Route
           path="profil"

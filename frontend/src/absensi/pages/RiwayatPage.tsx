@@ -10,6 +10,7 @@ import { errorMessage } from "@/absensi/errorMessage";
 import {
   LEAVE_TYPE_LABEL,
   SHIFT_STATUS_LABEL,
+  zoneNotes,
   bulanWIB,
   daysInMonth,
   expandDatesInRange,
@@ -336,6 +337,9 @@ export function RiwayatPage() {
                       Durasi Kerja: <span className="font-bold">{formatDurasi(selectedShift.durationMin)}</span>
                     </p>
                   )}
+                  {zoneNotes(selectedShift).map((note) => (
+                    <p key={note} className="font-semibold text-violet-800">{note}</p>
+                  ))}
                 </div>
               ) : selectedLeave ? (
                 <p className="mt-1.5 text-neutral-700">

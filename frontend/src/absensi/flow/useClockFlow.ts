@@ -37,7 +37,8 @@ export interface ClockFlow {
   start: (kind: AbsenKind) => void;
   /** Step "alasan": alasan + foto bukti clock in lewat 08:00; lanjut ke peta lokasi kalau keduanya ada. */
   submitLateReason: (reason: string, photo: Blob | null) => void;
-  confirmLocation: (fix: LocationInput) => void;
+  /** `outsideReason`: absen di luar zona dengan alasan (menunggu persetujuan). */
+  confirmLocation: (fix: LocationInput, outsideReason?: string) => void;
   selfieDone: (selfie: SelfieResult) => Promise<void>;
   confirmPasskey: () => Promise<void>;
   retry: () => void;
@@ -72,6 +73,7 @@ export function useClockFlow({
   const preparedRef = useRef<Prepared | null>(null);
   const lateReasonRef = useRef<string | null>(null);
   const latePhotoRef = useRef<Blob | null>(null);
+  const outsideReasonRef = useRef<string | null>(null);
   const meRef = useRef(me);
   const onStatusRef = useRef(onStatus);
   const nowRef = useRef(now);
@@ -93,6 +95,7 @@ export function useClockFlow({
     kindRef.current = nextKind;
     locationRef.current = null;
     preparedRef.current = null;
+    outsideReasonRef.current = null;
     if (!keepReason || nextKind !== "masuk") {
       lateReasonRef.current = null;
       latePhotoRef.current = null;
@@ -117,13 +120,15 @@ export function useClockFlow({
     setStep("lokasi");
   }, []);
 
-  const confirmLocation = useCallback((fix: LocationInput) => {
+  const confirmLocation = useCallback((fix: LocationInput, outsideText?: string) => {
     const token = run.current;
     const check = checkLocation(fix, meRef.current.areas);
-    if (!check.ok) {
+    const outsideReason = outsideText ? normalizeLateReason(outsideText) : null;
+    if (!check.ok && !(check.code === "DI_LUAR_AREA" && outsideReason)) {
       fail(token, messageFor(check.code, { distanceM: check.distanceM }));
       return;
     }
+    outsideReasonRef.current = check.ok ? null : outsideReason;
     locationRef.current = fix;
     setError(null);
     setStep("selfie");
@@ -181,6 +186,7 @@ export function useClockFlow({
         faceDistance: ready.faceDistance,
         ...(lateReason ? { lateReason } : {}),
         ...(latePhotoBase64 ? { latePhotoBase64 } : {}),
+        ...(outsideReasonRef.current ? { outsideReason: outsideReasonRef.current } : {}),
         authentication,
       });
       if (token !== run.current) return;
@@ -201,6 +207,7 @@ export function useClockFlow({
     preparedRef.current = null;
     lateReasonRef.current = null;
     latePhotoRef.current = null;
+    outsideReasonRef.current = null;
     setPrepared(null);
     setError(null);
     setStep("idle");

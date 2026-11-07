@@ -39,6 +39,8 @@ import {
   recalculateBatchTotals,
   copyFromBatch,
   getCopyableEntries,
+  countBatchEntries,
+  bulkAddEntriesFromMaster,
   moveBatchToBackup,
   subscribeWeeklySchedule,
   getMenuForDate,
@@ -46,6 +48,7 @@ import {
   replaceBatchEntries,
 } from '@/services/mbgAdminService';
 import { getJakartaDate } from '@/utils/date';
+import { copySourceOptions } from '@/lib/mbgCopySource';
 import { subscribeCustomRecipes } from '@/services/mbgProductionService';
 import resepStandardData from '@/constants/standarResep.json';
 import { MBG_BATCH_STATUS_CONFIG, MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
@@ -137,6 +140,16 @@ function getAutoRekapTotals(entries: MbgPmEntry[]) {
 
 // ---- New Batch Modal ----
 // ---- New Batch Modal ----
+function CopySourceOption({ batch }: { batch: MbgPmBatch }) {
+  const porsi = batch.totalJumlah ?? 0;
+  const statusBadge = batch.status === 'DRAFT' ? 'Draft' : 'Final';
+  return (
+    <option value={batch.id}>
+      {batch.tanggal} — {statusBadge} ({porsi.toLocaleString('id-ID')} porsi)
+    </option>
+  );
+}
+
 function NewBatchModal({
   isOpen,
   onClose,
@@ -151,25 +164,27 @@ function NewBatchModal({
   const [tanggal, setTanggal] = useState(getJakartaDate());
   const [creationMode, setCreationMode] = useState<'copy' | 'master' | 'blank'>('copy');
   const [copyFrom, setCopyFrom] = useState('');
+  // true setelah admin memilih sumber sendiri; pilihan itu tidak ditimpa saat tanggal diganti
+  const [copyFromPicked, setCopyFromPicked] = useState(false);
 
-  // Sumber salinan hanya batch aktif; batch yang sudah dihapus/dipindah ke Arsip Backup tidak ditawarkan
-  const sortedBatches = useMemo(() => {
-    return batches
-      .filter((b) => !b.isBackup)
-      .sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
-  }, [batches]);
-
-  // Find first batch with > 0 portions as default copy candidate if available
+  // Komponen tetap ter-mount saat ditutup, jadi isian lama di-reset tiap kali dibuka
   useEffect(() => {
-    if (!copyFrom && sortedBatches.length > 0) {
-      const best = sortedBatches.find((b) => (b.totalJumlah || 0) > 0);
-      if (best) {
-        setCopyFrom(best.id);
-      } else {
-        setCopyFrom(sortedBatches[0].id);
-      }
-    }
-  }, [sortedBatches, copyFrom]);
+    if (!isOpen) return;
+    setTanggal(getJakartaDate());
+    setCreationMode('copy');
+    setCopyFrom('');
+    setCopyFromPicked(false);
+  }, [isOpen]);
+
+  // Sumber salinan hanya batch aktif selain tanggal tujuan; yang sebelum tanggal tujuan didahulukan
+  const sources = useMemo(() => copySourceOptions(batches, tanggal), [batches, tanggal]);
+  const sortedBatches = useMemo(() => [...sources.before, ...sources.after], [sources]);
+
+  // Sumber bawaan = batch terakhir sebelum tanggal pengiriman yang punya porsi
+  useEffect(() => {
+    if (copyFromPicked && sortedBatches.some((b) => b.id === copyFrom)) return;
+    if (copyFrom !== sources.defaultId) setCopyFrom(sources.defaultId);
+  }, [sources, sortedBatches, copyFrom, copyFromPicked]);
 
   if (!isOpen) return null;
 
@@ -243,23 +258,34 @@ function NewBatchModal({
                         id="copy-from-select"
                         title="Salin dari Batch Sebelumnya"
                         value={copyFrom}
-                        onChange={(e) => setCopyFrom(e.target.value)}
+                        onChange={(e) => {
+                          setCopyFrom(e.target.value);
+                          setCopyFromPicked(true);
+                        }}
                         className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-bold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FBBF24]"
                       >
                         {sortedBatches.length === 0 ? (
                           <option value="">(Belum ada batch sebelumnya)</option>
                         ) : (
-                          sortedBatches.map((b) => {
-                            const porsi = b.totalJumlah ?? 0;
-                            const statusBadge = b.status === 'DRAFT' ? 'Draft' : 'Final';
-                            return (
-                              <option key={b.id} value={b.id}>
-                                {b.tanggal} — {statusBadge} ({porsi.toLocaleString('id-ID')} porsi)
-                              </option>
-                            );
-                          })
+                          <>
+                            {sources.before.length > 0 && (
+                              <optgroup label={`Sebelum ${tanggal}`}>
+                                {sources.before.map((b) => <CopySourceOption key={b.id} batch={b} />)}
+                              </optgroup>
+                            )}
+                            {sources.after.length > 0 && (
+                              <optgroup label={`Setelah ${tanggal} (cek tanggalnya)`}>
+                                {sources.after.map((b) => <CopySourceOption key={b.id} batch={b} />)}
+                              </optgroup>
+                            )}
+                          </>
                         )}
                       </select>
+                      {selectedCopyBatch && selectedCopyBatch.tanggal > tanggal && (
+                        <p className="text-[10px] text-amber-700 font-semibold mt-1.5">
+                          ⚠️ Batch sumber bertanggal setelah tanggal pengiriman. Pastikan memang ini yang mau disalin.
+                        </p>
+                      )}
 
                       {selectedCopyBatch && selectedCopyPortions === 0 && (
                         <p className="text-[10px] text-amber-700 font-semibold mt-1.5 flex items-center gap-1">
@@ -1774,26 +1800,42 @@ export function MbgAdminPage() {
     if (!user) return;
     try {
       setSaving(true);
-      const existing = batches.find((b) => b.tanggal === tanggal && !b.isBackup);
+      const fillsData = Boolean(copyFromId || autoPopulateMaster);
+      const existing = findActiveBatchByDate(tanggal);
+      // Halaman ini otomatis membuat batch kosong untuk hari ini. Batch kosong seperti itu
+      // diisi, bukan dialihkan — dulu salinan jadi tidak pernah terjadi untuk tanggal hari ini.
+      let existingEmpty = false;
       if (existing) {
-        setSelectedBatchId(existing.id);
-        showToast({
-          message: `Batch untuk tanggal ${tanggal} sudah ada! Mengalihkan ke batch tersebut.`,
-          variant: 'info',
-        });
-        return;
+        existingEmpty = !((existing.totalInstitusi ?? 0) > 0) && (await countBatchEntries(existing.id)) === 0;
+        if (!fillsData || !existingEmpty) {
+          setSelectedBatchId(existing.id);
+          showToast({
+            message: existingEmpty
+              ? `Batch ${tanggal} sudah ada (masih kosong). Mengalihkan ke batch tersebut.`
+              : `Batch ${tanggal} sudah berisi data institusi. Mengalihkan ke batch tersebut tanpa menyalin agar data tidak dobel.`,
+            variant: 'info',
+          });
+          return;
+        }
       }
-      // Validasi sumber salinan dulu agar batch kosong tidak tertinggal bila sumber tidak valid
-      if (copyFromId) {
-        await getCopyableEntries(copyFromId);
+      // Validasi + unduh sumber salinan sekali saja, sebelum batch dibuat,
+      // agar batch kosong tidak tertinggal bila sumber tidak valid
+      const sourceEntries = copyFromId ? await getCopyableEntries(copyFromId) : undefined;
+      const sourceBatch = copyFromId ? allBatches.find((b) => b.id === copyFromId) : undefined;
+      const newId = existing && existingEmpty
+        ? existing.id
+        : await createBatch(tanggal, user.uid, autoPopulateMaster || false, weeklySchedule);
+      if (existing && existingEmpty && autoPopulateMaster) {
+        await bulkAddEntriesFromMaster(newId, user.uid, tanggal, weeklySchedule);
+        await recalculateBatchTotals(newId);
       }
-      const newId = await createBatch(tanggal, user.uid, autoPopulateMaster || false, weeklySchedule);
+      let copiedCount = 0;
       if (copyFromId) {
-        await copyFromBatch(copyFromId, newId, user.uid, tanggal, weeklySchedule);
+        copiedCount = await copyFromBatch(copyFromId, newId, user.uid, tanggal, weeklySchedule, sourceEntries);
       }
       setSelectedBatchId(newId);
       const successMsg = copyFromId
-        ? `Batch ${tanggal} berhasil dibuat dengan menyalin data dari batch sebelumnya!`
+        ? `Batch ${tanggal} berisi ${copiedCount} institusi, disalin dari batch ${sourceBatch?.tanggal ?? 'sebelumnya'}.`
         : autoPopulateMaster
         ? `Batch ${tanggal} berhasil dibuat dengan 30 Institusi Master resmi!`
         : `Batch ${tanggal} baru berhasil dibuat! Silakan klik "Import Excel / CSV PM" untuk mengisi data PM.`;

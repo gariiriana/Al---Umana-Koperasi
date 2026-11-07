@@ -27,6 +27,8 @@ import type { MbgPmBatch, MbgPmEntry, MbgBatchStatus, MbgDayMenu, MbgProductionC
 import { MBG_MASTER_INSTITUTIONS, DEFAULT_WEEKLY_SCHEDULE } from '@/constants/mbgConstants';
 import { archiveAndDelete, archiveSnapshotsAndDelete, stageArchiveAndDelete } from '@/services/developerRecycleBinService';
 import { institutionNamesOf } from '@/lib/mbgArchiveSearch';
+import { firebaseConfig, useEmulators } from '@/lib/firebaseConfig';
+import { runEqualityQuerySelect } from '@/utils/firestoreRest';
 
 const BATCHES_COLLECTION = 'mbg_pm_batches';
 const ENTRIES_COLLECTION = 'mbg_pm_entries';
@@ -735,6 +737,46 @@ export async function deleteMultipleBatches(
 }
 
 /**
+ * Field PM yang ikut disalin. Foto bukti pengiriman (base64, ~230 KB per baris) sengaja
+ * tidak termasuk: batch sumber yang sudah dikirim beratnya 5–7 MB dan menyalin tidak butuh fotonya.
+ */
+const COPY_ENTRY_FIELDS = [
+  'batchId', 'institutionName', 'institutionType', 'schoolLevel', 'address',
+  'qtSiswaBalita', 'qtBumilBusui', 'qtBumil', 'qtBusui', 'qtGuruKader', 'qtPobiaNasi',
+  'qtPorsiBalita', 'qtPorsiKecil', 'qtPorsiBesar', 'qtPorsiBumilBusui',
+  'qtPorsiKecilL', 'qtPorsiKecilP', 'qtPorsiBesarL', 'qtPorsiBesarP',
+  'qtGuruL', 'qtGuruP', 'qtTendikL', 'qtTendikP',
+  'qtAlergi', 'qtTidakAlergi', 'keteranganAlergi', 'classesBreakdown',
+  'jumlah', 'jadwalPengantaran', 'assignedPetugasId', 'assignedPetugasName',
+  'assignedKenekName', 'assignedKenekId', 'menuItems', 'menuKeringanItems',
+  'isSekolahLibur', 'isBackup', 'notes', 'sortOrder',
+] as const;
+
+/** Baris PM sebuah batch tanpa foto. Lewat REST (bisa pilih field); jatuh ke SDK bila gagal/emulator. */
+async function getBatchEntriesForCopy(batchId: string): Promise<MbgPmEntry[]> {
+  const user = auth.currentUser;
+  const projectId = firebaseConfig.projectId;
+  if (!useEmulators && projectId && typeof user?.getIdToken === 'function' && typeof fetch === 'function') {
+    try {
+      const rows = await runEqualityQuerySelect({
+        projectId,
+        idToken: await user.getIdToken(),
+        collectionId: ENTRIES_COLLECTION,
+        field: 'batchId',
+        value: batchId,
+        selectFields: COPY_ENTRY_FIELDS,
+      });
+      const entries = rows as unknown as MbgPmEntry[];
+      entries.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      return entries;
+    } catch (err) {
+      console.warn('Baca ringan batch sumber gagal, pakai SDK:', err);
+    }
+  }
+  return getBatchEntries(batchId);
+}
+
+/**
  * Data PM yang boleh disalin dari sebuah batch: batch sumber harus aktif (bukan
  * Arsip Backup) dan entri yang ditandai backup dilewati. Melempar error bila kosong.
  */
@@ -743,27 +785,38 @@ export async function getCopyableEntries(sourceBatchId: string): Promise<MbgPmEn
   if (!sourceBatch.exists() || (sourceBatch.data() as MbgPmBatch).isBackup) {
     throw new Error('Batch sumber sudah dihapus atau dipindah ke Arsip Backup. Pilih batch aktif lain.');
   }
-  const entries = (await getBatchEntries(sourceBatchId)).filter((entry) => !entry.isBackup);
+  const entries = (await getBatchEntriesForCopy(sourceBatchId)).filter((entry) => !entry.isBackup);
   if (entries.length === 0) {
     throw new Error('Batch sumber tidak memiliki data penerima manfaat (0 porsi). Silakan gunakan opsi "Isi Otomatis 27 Institusi Master" atau pilih batch lain.');
   }
   return entries;
 }
 
+/** Jumlah baris PM (aktif maupun backup) di sebuah batch. */
+export async function countBatchEntries(batchId: string): Promise<number> {
+  const snap = await getDocs(query(collection(db, ENTRIES_COLLECTION), where('batchId', '==', batchId)));
+  return snap.size;
+}
+
 /**
  * Copy entries from a previous batch (for "salin data kemarin" feature).
+ * `sourceEntries` boleh diisi hasil `getCopyableEntries` supaya batch sumber tidak diunduh dua kali.
  */
 export async function copyFromBatch(
   sourceBatchId: string,
   targetBatchId: string,
   createdBy: string,
   targetDate?: string,
-  scheduleDays?: MbgDayMenu[]
-): Promise<void> {
-  const sourceEntries = await getCopyableEntries(sourceBatchId);
+  scheduleDays?: MbgDayMenu[],
+  preloadedEntries?: MbgPmEntry[]
+): Promise<number> {
+  if (sourceBatchId === targetBatchId) {
+    throw new Error('Batch sumber dan tujuan sama. Pilih batch sumber dari tanggal lain.');
+  }
+  const sourceEntries = preloadedEntries ?? (await getCopyableEntries(sourceBatchId));
   // createBatch mengembalikan batch yang sudah ada bila tanggalnya sudah terisi;
   // menyalin ke batch berisi akan membuat data institusi dobel.
-  if ((await getBatchEntries(targetBatchId)).length > 0) {
+  if ((await countBatchEntries(targetBatchId)) > 0) {
     throw new Error('Batch tujuan sudah berisi data PM. Penyalinan dibatalkan agar data tidak dobel.');
   }
 
@@ -781,31 +834,17 @@ export async function copyFromBatch(
 
   sourceEntries.forEach((data) => {
     const ref = doc(collection(db, ENTRIES_COLLECTION));
-    // `id` milik dokumen sumber tidak ikut disimpan
-    const { id: _sourceId, ...rest } = data;
-    void _sourceId;
+    // Hanya field data PM yang disalin; foto/bukti pengiriman & status arsip tanggal sumber tidak ikut.
+    const copied: Record<string, unknown> = {};
+    for (const field of COPY_ENTRY_FIELDS) copied[field] = (data as unknown as Record<string, unknown>)[field];
     batch.set(ref, cleanUndefined({
-      ...rest,
+      ...copied,
       batchId: targetBatchId,
       menuItems: (newMenuItems && newMenuItems.length > 0) ? [...newMenuItems] : (data.menuItems || []),
       menuKeringanItems: (newMenuKeringanItems && newMenuKeringanItems.length > 0) ? [...newMenuKeringanItems] : (data.menuKeringanItems || []),
       isSekolahLibur: false,
-      // Status arsip dan bukti pengiriman tanggal sumber tidak ikut ke batch baru
       isBackup: undefined,
-      backedUpAt: undefined,
-      photoMenuUrl: undefined,
-      photoMenuDesc: undefined,
-      photoSerahTerimaUrl: undefined,
-      photoSerahTerimaDesc: undefined,
-      photoPenerimaUrl: undefined,
-      photoPenerimaDesc: undefined,
-      photoSuratJalanUrl: undefined,
-      photoSuratJalanDesc: undefined,
-      photoMenuTimestamp: undefined,
-      photoSerahTerimaTimestamp: undefined,
-      photoPenerimaTimestamp: undefined,
-      photoSerahTerimaLocation: undefined,
-      photoPenerimaLocation: undefined,
+      notes: data.notes || '',
       createdBy,
       createdAt: now,
       updatedAt: now,
@@ -814,6 +853,7 @@ export async function copyFromBatch(
 
   await batch.commit();
   await recalculateBatchTotals(targetBatchId);
+  return sourceEntries.length;
 }
 
 /**

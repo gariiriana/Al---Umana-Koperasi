@@ -19,6 +19,20 @@ export function toShiftView(row, nowMs) {
     durationMin: status === "selesai" && pulangAt !== null ? Math.floor((pulangAt - row.masuk_at) / 60_000) : null,
     lateReason: row.late_reason ?? null,
     latePhotoId: row.late_photo_id ?? null,
+    zoneMasuk: zoneView(row, "masuk"),
+    zonePulang: zoneView(row, "pulang"),
+  };
+}
+
+/** Absen di luar zona untuk `kind` (kolom dari ZONE_COLUMNS di db.js), atau null kalau di dalam zona. */
+function zoneView(row, kind) {
+  const id = row[`zone_${kind}_id`];
+  if (!id) return null;
+  return {
+    id,
+    status: row[`zone_${kind}_status`],
+    reason: row[`zone_${kind}_reason`] ?? "",
+    distanceM: row[`zone_${kind}_distance`] ?? null,
   };
 }
 

@@ -1,13 +1,15 @@
 // Endpoint admin_absensi: hari ini, rekap, pengajuan, foto, karyawan, area.
 import { MAX_TOLERANCE_M, MIN_PASSWORD_LENGTH, REKAP_MAX_DAYS } from "../../shared/constants.js";
 import { workDateWIB } from "../../shared/time.js";
+import { reviewRequestAs, reviewZoneAs } from "../approval.js";
 import {
-  approvedRequestsInRange, countPendingRequests, deletePhoto, getEmployee, getPhoto, getRequestById,
-  insertEmployee, insertNotifications, listAdminRequests, listAreas, listEmployees, rekapShifts,
-  replaceAreas, resetEmployeeDevice, reviewRequest, setEmployeeStatus, setFaceRequired, todayOverview,
+  approvedRequestsInRange, countPendingApprovals, deletePhoto, getEmployee, getPhoto, getUnit,
+  insertEmployee, insertUnit, listAdminRequests, listAreas, listEmployees, listUnits, listZoneExceptions,
+  rekapShifts, replaceAreas, resetEmployeeDevice, setEmployeeStatus, setEmployeeUnit, setFaceRequired,
+  todayOverview, updateUnit,
 } from "../db.js";
 import { AbsensiError, readJson } from "../http.js";
-import { DAY_MS, parseIsoDate, requestDetailSummary, requestKindTitle, toRequestView } from "../requests.js";
+import { DAY_MS, parseIsoDate, toRequestView, toZoneExceptionView } from "../requests.js";
 import { requireEmployee } from "../session.js";
 import { toShiftView } from "../shifts.js";
 
@@ -27,7 +29,16 @@ const employeeView = (row) => ({
   faceRequired: row.face_required === 1,
   activated: row.activated_at !== null,
   referencePhotoId: row.reference_photo_id,
+  unitId: row.unit_id ?? null,
   createdAt: row.created_at,
+});
+
+const unitView = (row) => ({
+  id: row.id,
+  name: row.name,
+  headUid: row.head_uid ?? null,
+  headName: row.head_name ?? null,
+  memberCount: Number(row.member_count ?? 0),
 });
 
 const STATE = { terbuka: "masuk", selesai: "pulang", lupa_pulang: "tidak_clock_out" };
@@ -59,10 +70,7 @@ export async function getHariIni(ctx) {
   for (const row of overviewRows) {
     if (!people.has(row.uid)) people.set(row.uid, { uid: row.uid, name: row.name, views: [] });
     if (row.shift_id) {
-      people.get(row.uid).views.push(toShiftView({
-        id: row.shift_id, work_date: row.work_date, masuk_at: row.masuk_at, pulang_at: row.pulang_at, status: row.status,
-        late_reason: row.late_reason, late_photo_id: row.late_photo_id,
-      }, now));
+      people.get(row.uid).views.push(toShiftView({ ...row, id: row.shift_id }, now));
     }
   }
 
@@ -77,6 +85,8 @@ export async function getHariIni(ctx) {
       state: shown ? STATE[shown.status] : "belum",
       lateReason: shown?.lateReason ?? null,
       latePhotoId: shown?.latePhotoId ?? null,
+      zoneMasuk: shown?.zoneMasuk ?? null,
+      zonePulang: shown?.zonePulang ?? null,
       leaveType: leaveByUid.get(uid) ?? null,
       shiftSwap: swapByUid.get(uid) ?? null,
     };
@@ -105,6 +115,7 @@ export async function getRekap(ctx) {
         pulangAt: view.pulangAt, durationMin: view.durationMin, status: view.status, areaName: row.area_name ?? null,
         masukPhotoId: row.masuk_photo_id, pulangPhotoId: row.pulang_photo_id ?? null,
         lateReason: view.lateReason, latePhotoId: view.latePhotoId,
+        zoneMasuk: view.zoneMasuk, zonePulang: view.zonePulang,
       };
     }),
     requests: requests.map(toRequestView),
@@ -115,53 +126,26 @@ export async function listPengajuanAdmin(ctx) {
   await requireAdmin(ctx);
   const status = ctx.url.searchParams.get("status") || "all";
   if (!REQUEST_FILTERS.has(status)) throw invalid();
-  const [rows, pendingCount] = await Promise.all([
+  const [rows, zoneExceptions, pendingCount] = await Promise.all([
     listAdminRequests(ctx.env.DB, { status }),
-    countPendingRequests(ctx.env.DB),
+    listZoneExceptions(ctx.env.DB, { status }),
+    countPendingApprovals(ctx.env.DB),
   ]);
   return {
     requests: rows.map(toRequestView),
+    zoneExceptions: zoneExceptions.map(toZoneExceptionView),
     pendingCount,
   };
 }
 
 export async function reviewPengajuanAdmin(ctx) {
   const admin = await requireAdmin(ctx);
-  const id = ctx.params[0];
-  const body = await readJson(ctx.request);
-  if (body.action !== "approve" && body.action !== "reject") throw invalid();
-  const note = typeof body.note === "string" ? body.note.trim() : "";
-  if (note.length > 300) throw invalid();
+  return reviewRequestAs(ctx, admin, ctx.params[0]);
+}
 
-  const existing = await getRequestById(ctx.env.DB, id);
-  if (!existing) throw new AbsensiError("NOT_FOUND", 404);
-
-  const now = ctx.deps.now();
-  const nextStatus = body.action === "approve" ? "approved" : "rejected";
-  const changed = await reviewRequest(ctx.env.DB, id, {
-    status: nextStatus,
-    reviewedBy: admin.uid,
-    reviewedAt: now,
-    reviewNote: note || null,
-  });
-  if (changed === 0) throw new AbsensiError("SUDAH_DIPROSES", 409);
-
-  const updated = await getRequestById(ctx.env.DB, id);
-  const approved = nextStatus === "approved";
-  const kindTitle = requestKindTitle(updated);
-  const detail = requestDetailSummary(updated);
-  const noteSuffix = note ? ` Catatan admin: "${note}"` : "";
-
-  await insertNotifications(ctx.env.DB, [{
-    recipientUid: updated.uid,
-    kind: approved ? "pengajuan_disetujui" : "pengajuan_ditolak",
-    title: `${kindTitle} ${approved ? "Disetujui" : "Ditolak"}`,
-    body: `${detail} telah ${approved ? "disetujui" : "ditolak"} oleh ${admin.name}.${noteSuffix}`,
-    requestId: updated.id,
-    createdAt: now,
-  }]);
-
-  return toRequestView(updated);
+export async function reviewLuarZonaAdmin(ctx) {
+  const admin = await requireAdmin(ctx);
+  return reviewZoneAs(ctx, admin, ctx.params[0]);
 }
 
 export async function getFoto(ctx) {
@@ -222,6 +206,13 @@ export async function patchKaryawan(ctx) {
       if (referencePhotoId) await deletePhoto(ctx.env.PHOTOS, referencePhotoId);
       break;
     }
+    case "set_unit": {
+      // Pindah unit = kepala unit yang menyetujui ikut berganti.
+      const unitId = body.unitId === null || body.unitId === "" ? null : String(body.unitId ?? "");
+      if (unitId !== null && !(await getUnit(ctx.env.DB, unitId))) throw invalid();
+      await setEmployeeUnit(ctx.env.DB, uid, unitId);
+      break;
+    }
     case "set_face_required":
       if (typeof body.faceRequired !== "boolean") throw invalid();
       await setFaceRequired(ctx.env.DB, uid, body.faceRequired);
@@ -265,4 +256,47 @@ export async function putArea(ctx) {
   if (!Array.isArray(body.areas) || body.areas.length > 20) throw invalid();
   await replaceAreas(ctx.env.DB, body.areas.map(parseArea), admin.uid, ctx.deps.now());
   return { areas: await listAreas(ctx.env.DB) };
+}
+
+// ---------------------------------------------------------------------------
+// Unit kerja & kepala unit
+// ---------------------------------------------------------------------------
+
+export async function getUnits(ctx) {
+  await requireAdmin(ctx);
+  return { units: (await listUnits(ctx.env.DB)).map(unitView) };
+}
+
+async function parseUnitBody(ctx, body) {
+  const name = typeof body.name === "string" ? body.name.replace(/\s+/g, " ").trim() : "";
+  if (!name || name.length > 60) throw invalid();
+  let headUid = null;
+  if (body.headUid !== undefined && body.headUid !== null && body.headUid !== "") {
+    const head = await getEmployee(ctx.env.DB, String(body.headUid));
+    if (!head || head.role !== "absen_karyawan" || head.status !== "aktif") throw invalid();
+    headUid = head.uid;
+  }
+  return { name, headUid };
+}
+
+function duplicateName(err) {
+  if (/UNIQUE/i.test(String(err?.message))) throw new AbsensiError("UNIT_SUDAH_ADA", 409);
+  throw err;
+}
+
+export async function createUnit(ctx) {
+  const admin = await requireAdmin(ctx);
+  const { name, headUid } = await parseUnitBody(ctx, await readJson(ctx.request));
+  const id = crypto.randomUUID();
+  await insertUnit(ctx.env.DB, { id, name, headUid, nowMs: ctx.deps.now(), byUid: admin.uid }).catch(duplicateName);
+  return getUnits(ctx);
+}
+
+export async function patchUnit(ctx) {
+  const admin = await requireAdmin(ctx);
+  const id = ctx.params[0];
+  if (!(await getUnit(ctx.env.DB, id))) throw new AbsensiError("NOT_FOUND", 404);
+  const { name, headUid } = await parseUnitBody(ctx, await readJson(ctx.request));
+  await updateUnit(ctx.env.DB, id, { name, headUid, nowMs: ctx.deps.now(), byUid: admin.uid }).catch(duplicateName);
+  return getUnits(ctx);
 }

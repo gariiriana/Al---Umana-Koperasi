@@ -244,7 +244,7 @@ describe("PersetujuanTab (Admin Absensi)", () => {
     expect(await screen.findByText("Gari Iriana")).toBeTruthy();
     expect(screen.getByText("Cuti Tahunan")).toBeTruthy();
     expect(screen.getByText(/Karyawan pengganti: Budi/)).toBeTruthy();
-    expect(screen.getByText("1 pengajuan menunggu persetujuan")).toBeTruthy();
+    expect(screen.getByText("1 menunggu persetujuan")).toBeTruthy();
 
     fireEvent.change(screen.getByPlaceholderText(/Catatan persetujuan/), {
       target: { value: "Selamat berlibur, jadwal aman" },

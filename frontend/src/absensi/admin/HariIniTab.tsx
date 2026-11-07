@@ -4,7 +4,9 @@ import { Camera } from "lucide-react";
 import { LatePhotoDialog } from "@/absensi/admin/ShiftPhoto";
 import { getHariIni } from "@/absensi/api";
 import { errorMessage } from "@/absensi/errorMessage";
-import { LEAVE_TYPE_LABEL, formatJam, formatTanggalPanjang, formatTerlambat } from "@/absensi/logic/format";
+import {
+  LEAVE_TYPE_LABEL, formatJam, formatTanggalPanjang, formatTerlambat, worstZoneStatus, zoneNotes,
+} from "@/absensi/logic/format";
 import type { HariIniRow } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
 
@@ -138,6 +140,11 @@ export function HariIniTab() {
                     Lihat foto bukti
                   </button>
                 )}
+                {zoneNotes(row).map((note) => (
+                  <p key={note} className="mt-0.5 break-words text-xs font-semibold text-violet-800">
+                    {note}
+                  </p>
+                ))}
                 {row.shiftSwap && (
                   <p className="mt-0.5 text-xs font-semibold text-amber-800">
                     Shift: {row.shiftSwap.fromShift} → {row.shiftSwap.toShift}
@@ -147,6 +154,16 @@ export function HariIniTab() {
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5">
+                {worstZoneStatus(row) === "pending" && (
+                  <span className="rounded-full border border-violet-300 bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-900">
+                    Perlu verifikasi
+                  </span>
+                )}
+                {worstZoneStatus(row) === "rejected" && (
+                  <span className="rounded-full border border-rose-300 bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">
+                    Luar zona ditolak
+                  </span>
+                )}
                 {terlambat && (
                   <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-xs font-bold text-orange-800">
                     {terlambat}

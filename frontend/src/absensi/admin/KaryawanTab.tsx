@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { MIN_PASSWORD_LENGTH } from "../../../../workers/absensi/shared/constants.js";
-import { createEmployee, fetchPhotoUrl, listEmployees, patchEmployee, type PatchEmployeeBody } from "@/absensi/api";
+import { createEmployee, fetchPhotoUrl, getUnits, listEmployees, patchEmployee, type PatchEmployeeBody } from "@/absensi/api";
+import { UnitsPanel } from "@/absensi/admin/UnitsPanel";
 import { errorMessage } from "@/absensi/errorMessage";
-import type { AbsensiRole, EmployeeView } from "@/absensi/types";
+import type { AbsensiRole, EmployeeView, UnitView } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
@@ -50,6 +51,7 @@ function ReferencePhoto({ employee }: { employee: EmployeeView }) {
 /** Kelola akun absensi: tambah, nonaktifkan/aktifkan, reset HP & wajah, atur cek wajah. */
 export function KaryawanTab() {
   const [employees, setEmployees] = useState<EmployeeView[] | null>(null);
+  const [units, setUnits] = useState<UnitView[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyUid, setBusyUid] = useState<string | null>(null);
   const [resetTarget, setResetTarget] = useState<EmployeeView | null>(null);
@@ -64,8 +66,10 @@ export function KaryawanTab() {
 
   const load = useCallback(async () => {
     try {
-      const res = await listEmployees();
+      // Daftar unit gagal (mis. Worker belum diperbarui) tidak boleh menghalangi daftar karyawan.
+      const [res, unitRes] = await Promise.all([listEmployees(), getUnits().catch(() => ({ units: [] }))]);
       setEmployees(res.employees);
+      setUnits(unitRes.units);
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -107,8 +111,12 @@ export function KaryawanTab() {
     }
   };
 
+  const unitById = new Map(units.map((u) => [u.id, u]));
+
   return (
     <section className="space-y-6">
+      {employees && <UnitsPanel units={units} employees={employees} onChanged={load} />}
+
       <form onSubmit={submit} className="space-y-4 rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-xs">
         <div>
           <h2 className="font-['Manrope',system-ui,sans-serif] text-lg font-extrabold text-neutral-900">
@@ -205,6 +213,31 @@ export function KaryawanTab() {
                     </p>
                   </div>
                 </div>
+                {employee.role === "absen_karyawan" && (
+                  <div className="flex flex-col gap-1.5 rounded-2xl bg-neutral-50 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <label className="flex items-center gap-2 text-xs font-bold text-neutral-700">
+                      <span className="shrink-0">Unit</span>
+                      <select
+                        aria-label={`Unit ${employee.name}`}
+                        disabled={busy}
+                        value={employee.unitId ?? ""}
+                        onChange={(e) => void patch(employee, { action: "set_unit", unitId: e.target.value || null })}
+                        className="rounded-xl border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-900 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-200"
+                      >
+                        <option value="">— Tanpa unit —</option>
+                        {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    </label>
+                    <span className="text-[11px] font-semibold text-neutral-500">
+                      {(() => {
+                        const unit = employee.unitId ? unitById.get(employee.unitId) : undefined;
+                        if (!unit) return "Disetujui admin absensi saja";
+                        if (!unit.headName || unit.headUid === employee.uid) return "Disetujui admin absensi";
+                        return `Disetujui ${unit.headName} (kepala unit) atau admin`;
+                      })()}
+                    </span>
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-2 border-t border-neutral-100 pt-3">
                   <Button
                     variant="outlined"

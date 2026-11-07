@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   getHariIni: vi.fn(),
   fetchPhotoUrl: vi.fn(async () => "blob:foto-alasan"),
   compressPhoto: vi.fn(),
+  captureWatermarkedPhoto: vi.fn(),
 }));
 
 vi.mock("@/absensi/api", async (importOriginal) => ({
@@ -26,7 +27,10 @@ vi.mock("@/absensi/api", async (importOriginal) => ({
   fetchPhotoUrl: mocks.fetchPhotoUrl,
 }));
 vi.mock("@/absensi/device/passkey", () => ({ signWithPasskey: mocks.signWithPasskey }));
-vi.mock("@/absensi/device/photo", () => ({ compressPhoto: mocks.compressPhoto }));
+vi.mock("@/absensi/device/photo", () => ({
+  compressPhoto: mocks.compressPhoto,
+  captureWatermarkedPhoto: mocks.captureWatermarkedPhoto,
+}));
 
 import { HariIniTab } from "@/absensi/admin/HariIniTab";
 import { LateReasonForm } from "@/absensi/components/LateReasonForm";
@@ -70,6 +74,13 @@ beforeEach(() => {
   mocks.fetchPhotoUrl.mockClear();
   mocks.compressPhoto.mockReset();
   mocks.compressPhoto.mockImplementation(async () => photo());
+  mocks.captureWatermarkedPhoto.mockReset();
+  mocks.captureWatermarkedPhoto.mockImplementation(async () => photo());
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop: vi.fn() }] })) },
+  });
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
   URL.createObjectURL = vi.fn(() => "blob:preview");
   URL.revokeObjectURL = vi.fn();
 });
@@ -149,7 +160,7 @@ describe("clock in lewat jam 08:00", () => {
 describe("LateReasonForm", () => {
   it("menampilkan jam, pilihan cepat mengisi kolom, Lanjut aktif setelah alasan + foto ada", async () => {
     const onSubmit = vi.fn();
-    render(<LateReasonForm now={wib("19:02")} onSubmit={onSubmit} onCancel={vi.fn()} />);
+    render(<LateReasonForm now={wib("19:02")} name="Sari" onSubmit={onSubmit} onCancel={vi.fn()} />);
     expect(screen.getByText(/19:02/)).toBeTruthy();
 
     const lanjut = screen.getByRole("button", { name: "Lanjut" }) as HTMLButtonElement;
@@ -160,13 +171,19 @@ describe("LateReasonForm", () => {
     expect(field.value).toBe("Lupa absen pagi");
     expect(lanjut.disabled).toBe(true); // foto belum ada
 
-    const camera = screen.getByLabelText("Kamera") as HTMLInputElement;
-    expect(camera.getAttribute("capture")).toBe("environment");
+    // Galeri = pemilih file biasa (bukan kamera HP); Kamera = kamera live di aplikasi.
     expect((screen.getByLabelText("Galeri") as HTMLInputElement).hasAttribute("capture")).toBe(false);
-    const raw = new File([new Uint8Array([1, 2, 3])], "bukti.jpg", { type: "image/jpeg" });
-    fireEvent.change(camera, { target: { files: [raw] } });
+    fireEvent.click(screen.getByRole("button", { name: "Kamera" }));
+    const jepret = await screen.findByRole("button", { name: "Jepret" });
+    expect(screen.getByText(/Sari/)).toBeTruthy(); // pratinjau watermark: nama
+    expect(screen.getByText(/WIB$/)).toBeTruthy(); // pratinjau watermark: jam
+    await waitFor(() => expect((jepret as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(jepret);
     expect(await screen.findByAltText("Foto bukti alasan")).toBeTruthy();
-    expect(mocks.compressPhoto).toHaveBeenCalledWith(raw);
+    const [, lines] = mocks.captureWatermarkedPhoto.mock.calls[0] as unknown as [HTMLVideoElement, string[]];
+    expect(lines).toEqual(expect.arrayContaining(["Sari", "Kamera langsung · Absensi Al-Umana"]));
+    expect(lines[0]).toMatch(/\d{2}:\d{2}:\d{2} WIB$/);
+    expect(mocks.compressPhoto).not.toHaveBeenCalled();
     expect(lanjut.disabled).toBe(false);
 
     fireEvent.change(field, { target: { value: "Lupa absen pagi, HP lowbat" } });
@@ -180,6 +197,8 @@ describe("LateReasonForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Lupa absen pagi" }));
     fireEvent.change(screen.getByLabelText("Galeri"), { target: { files: [new File([new Uint8Array([1])], "x.heic")] } });
     expect(await screen.findByText("Foto bukti tidak terbaca. Pilih atau ambil foto lain.")).toBeTruthy();
+    // Foto galeri tetap diberi watermark "Diunggah ..." supaya admin tahu asalnya.
+    expect(mocks.compressPhoto.mock.calls[0][1]).toEqual({ watermark: expect.arrayContaining(["Dari galeri · Absensi Al-Umana"]) });
     expect((screen.getByRole("button", { name: "Lanjut" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

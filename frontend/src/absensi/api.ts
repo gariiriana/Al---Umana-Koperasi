@@ -3,8 +3,8 @@ import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simp
 import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
 import type {
   AbsenKind, AbsenOptions, AbsenResult, AbsensiNotificationView, AbsensiRequestView, AbsensiRole,
-  ActivateOptions, AreaView, CoworkerView, EmployeeView, HariIniRow, LeaveType, LocationInput,
-  Me, RekapRow, RequestStatus, ShiftStatus, ShiftView,
+  ActivateOptions, ApprovalList, AreaView, CoworkerView, EmployeeView, HariIniRow, LeaveType, LocationInput,
+  Me, RekapRow, RequestStatus, ShiftStatus, ShiftView, UnitRef, UnitView, ZoneExceptionView,
 } from "@/absensi/types";
 
 const BASE = `${import.meta.env.VITE_ABSENSI_API_BASE_URL ?? ""}/api/absensi`;
@@ -80,6 +80,8 @@ export interface AbsenBody {
   lateReason?: string;
   /** Foto bukti alasan (JPEG base64, sudah dikecilkan di HP). */
   latePhotoBase64?: string;
+  /** Alasan absen di luar zona; tanpa ini server menolak lokasi di luar zona. */
+  outsideReason?: string;
   authentication: AuthenticationResponseJSON;
 }
 export const absen = (body: AbsenBody) => post<AbsenResult>("/absen", body);
@@ -122,6 +124,19 @@ export const getNotifications = () =>
 export const markNotificationsRead = (id?: string) =>
   post<{ unreadCount: number }>("/notifikasi/baca", id ? { id } : {});
 
+// --- Kepala unit -------------------------------------------------------------
+
+export type ReviewBody = { action: "approve" | "reject"; note?: string };
+
+export const getTeamApprovals = (status: RequestStatus | "all" = "all") =>
+  absensiFetch<ApprovalList & { units: UnitRef[] }>(`/tim/persetujuan?status=${encodeURIComponent(status)}`);
+
+export const reviewTeamRequest = (id: string, body: ReviewBody) =>
+  post<AbsensiRequestView>(`/tim/pengajuan/${encodeURIComponent(id)}`, body, "PATCH");
+
+export const reviewTeamZone = (id: string, body: ReviewBody) =>
+  post<ZoneExceptionView>(`/tim/luar-zona/${encodeURIComponent(id)}`, body, "PATCH");
+
 // --- Admin ------------------------------------------------------------------
 
 export const getHariIni = () => absensiFetch<{ date: string; rows: HariIniRow[] }>("/admin/hari-ini");
@@ -133,16 +148,17 @@ export function getRekap(q: { from: string; to: string; uid?: string }) {
 }
 
 export const listAdminRequests = (status: RequestStatus | "all" = "all") =>
-  absensiFetch<{ requests: AbsensiRequestView[]; pendingCount: number }>(
-    `/admin/pengajuan?status=${encodeURIComponent(status)}`,
-  );
+  absensiFetch<ApprovalList>(`/admin/pengajuan?status=${encodeURIComponent(status)}`);
 
 export const reviewAdminRequest = (id: string, body: { action: "approve" | "reject"; note?: string }) =>
   post<AbsensiRequestView>(`/admin/pengajuan/${encodeURIComponent(id)}`, body, "PATCH");
 
-/** Object URL untuk satu foto, atau null kalau sudah dihapus (lewat 90 hari). */
-export async function fetchPhotoUrl(id: string): Promise<string | null> {
-  const response = await authorizedFetch(`/admin/foto/${encodeURIComponent(id)}`);
+export const reviewAdminZone = (id: string, body: ReviewBody) =>
+  post<ZoneExceptionView>(`/admin/luar-zona/${encodeURIComponent(id)}`, body, "PATCH");
+
+/** Object URL untuk satu foto, atau null kalau sudah dihapus (lewat 90 hari). `scope` "tim" = kepala unit. */
+export async function fetchPhotoUrl(id: string, scope: "admin" | "tim" = "admin"): Promise<string | null> {
+  const response = await authorizedFetch(`/${scope}/foto/${encodeURIComponent(id)}`);
   if (response.status === 404) return null;
   if (!response.ok) throw new AbsensiApiError("INTERNAL", response.status);
   return URL.createObjectURL(await response.blob());
@@ -161,7 +177,8 @@ export const createEmployee = (input: CreateEmployeeInput) => post<EmployeeView>
 
 export type PatchEmployeeBody =
   | { action: "nonaktifkan" | "aktifkan" | "reset_perangkat" }
-  | { action: "set_face_required"; faceRequired: boolean };
+  | { action: "set_face_required"; faceRequired: boolean }
+  | { action: "set_unit"; unitId: string | null };
 export const patchEmployee = (uid: string, body: PatchEmployeeBody) =>
   post<EmployeeView>(`/admin/karyawan/${encodeURIComponent(uid)}`, body, "PATCH");
 
@@ -169,3 +186,11 @@ export const getAreas = () => absensiFetch<{ areas: AreaView[] }>("/admin/area")
 
 export const putAreas = (areas: Array<Omit<AreaView, "id"> & { id?: string }>) =>
   post<{ areas: AreaView[] }>("/admin/area", { areas }, "PUT");
+
+export const getUnits = () => absensiFetch<{ units: UnitView[] }>("/admin/unit");
+
+export const createUnit = (body: { name: string; headUid: string | null }) =>
+  post<{ units: UnitView[] }>("/admin/unit", body);
+
+export const updateUnit = (id: string, body: { name: string; headUid: string | null }) =>
+  post<{ units: UnitView[] }>(`/admin/unit/${encodeURIComponent(id)}`, body, "PATCH");

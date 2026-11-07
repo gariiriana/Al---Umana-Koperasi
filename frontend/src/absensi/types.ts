@@ -22,6 +22,22 @@ export interface ShiftView {
   lateReason?: string | null;
   /** Foto bukti alasan terlambat (dihapus otomatis setelah 90 hari). */
   latePhotoId?: string | null;
+  /** Clock in di luar zona (menunggu / disetujui / ditolak kepala unit atau admin). */
+  zoneMasuk?: ZoneStatusView | null;
+  /** Clock out di luar zona. */
+  zonePulang?: ZoneStatusView | null;
+}
+
+export interface ZoneStatusView {
+  id: string;
+  status: RequestStatus;
+  reason: string;
+  distanceM: number | null;
+}
+
+export interface UnitRef {
+  id: string;
+  name: string;
 }
 
 export interface ShiftStatus {
@@ -42,6 +58,12 @@ export interface Me {
   faceDescriptor: number[] | null;
   unreadNotifications?: number;
   pendingRequests?: number;
+  /** Unit tempat karyawan bernaung (kepala unitnya ikut menyetujui pengajuan). */
+  unit?: UnitRef | null;
+  /** Unit yang dikepalai akun ini; kosong = bukan kepala unit. */
+  headOf?: UnitRef[];
+  /** Pengajuan + absen luar zona anggota tim yang menunggu persetujuan kepala unit ini. */
+  teamPending?: number;
 }
 
 export interface ActivateOptions {
@@ -75,6 +97,8 @@ export interface RekapRow {
   pulangPhotoId: string | null;
   lateReason?: string | null;
   latePhotoId?: string | null;
+  zoneMasuk?: ZoneStatusView | null;
+  zonePulang?: ZoneStatusView | null;
 }
 
 export interface EmployeeView {
@@ -86,7 +110,16 @@ export interface EmployeeView {
   faceRequired: boolean;
   activated: boolean;
   referencePhotoId: string | null;
+  unitId?: string | null;
   createdAt: number;
+}
+
+export interface UnitView {
+  id: string;
+  name: string;
+  headUid: string | null;
+  headName: string | null;
+  memberCount: number;
 }
 
 export interface HariIniRow {
@@ -97,6 +130,8 @@ export interface HariIniRow {
   state: "belum" | "masuk" | "pulang" | "tidak_clock_out";
   lateReason?: string | null;
   latePhotoId?: string | null;
+  zoneMasuk?: ZoneStatusView | null;
+  zonePulang?: ZoneStatusView | null;
   leaveType?: LeaveType | null;
   shiftSwap?: {
     fromShift: string;
@@ -109,6 +144,7 @@ export interface AbsensiRequestView {
   id: string;
   uid: string;
   employeeName: string;
+  unitName?: string | null;
   kind: RequestKind;
   leaveType: LeaveType | null;
   leaveSubtype?: string | null;
@@ -126,6 +162,36 @@ export interface AbsensiRequestView {
   reviewedAt: number | null;
   reviewNote: string | null;
   createdAt: number;
+}
+
+/** Clock in / clock out di luar zona yang perlu disetujui. */
+export interface ZoneExceptionView {
+  id: string;
+  shiftId: string;
+  uid: string;
+  employeeName: string;
+  unitName: string | null;
+  kind: AbsenKind;
+  workDate: string | null;
+  at: number;
+  lat: number;
+  lng: number;
+  accuracy: number;
+  distanceM: number | null;
+  reason: string;
+  photoId: string | null;
+  status: RequestStatus;
+  reviewedBy: string | null;
+  reviewerName: string | null;
+  reviewedAt: number | null;
+  reviewNote: string | null;
+  createdAt: number;
+}
+
+export interface ApprovalList {
+  requests: AbsensiRequestView[];
+  zoneExceptions: ZoneExceptionView[];
+  pendingCount: number;
 }
 
 export interface AbsensiNotificationView {

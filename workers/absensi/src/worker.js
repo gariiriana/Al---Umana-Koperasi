@@ -8,9 +8,10 @@ import { AbsensiError, corsHeaders, errorResponse, json } from "./http.js";
 import { createAuthUser, setAuthDisabled, setClaims } from "./identity.js";
 import { runCron } from "./cron.js";
 import {
-  createKaryawan, getArea, getFoto, getHariIni, getRekap, listKaryawan,
-  listPengajuanAdmin, patchKaryawan, putArea, reviewPengajuanAdmin,
+  createKaryawan, createUnit, getArea, getFoto, getHariIni, getRekap, getUnits, listKaryawan,
+  listPengajuanAdmin, patchKaryawan, patchUnit, putArea, reviewLuarZonaAdmin, reviewPengajuanAdmin,
 } from "./handlers/admin.js";
+import { getTimFoto, getTimPersetujuan, reviewTimLuarZona, reviewTimPengajuan } from "./handlers/tim.js";
 import {
   absen, absenOptions, activate, activateOptions, bacaNotifikasi,
   createPengajuan, getMe, getNotifikasi, getRekan, getRiwayat, listPengajuan, resetSimulasi,
@@ -32,10 +33,18 @@ const ROUTES = [
   ["POST", /^\/absen\/options$/, absenOptions],
   ["POST", /^\/absen$/, absen],
   ["POST", /^\/reset-simulasi$/, resetSimulasi],
+  ["GET", /^\/tim\/persetujuan$/, getTimPersetujuan],
+  ["PATCH", /^\/tim\/pengajuan\/([\w-]{1,64})$/, reviewTimPengajuan],
+  ["PATCH", /^\/tim\/luar-zona\/([\w-]{1,64})$/, reviewTimLuarZona],
+  ["GET", /^\/tim\/foto\/([\w-]{1,64})$/, getTimFoto],
   ["GET", /^\/admin\/hari-ini$/, getHariIni],
   ["GET", /^\/admin\/rekap$/, getRekap],
   ["GET", /^\/admin\/pengajuan$/, listPengajuanAdmin],
   ["PATCH", /^\/admin\/pengajuan\/([\w-]{1,64})$/, reviewPengajuanAdmin],
+  ["PATCH", /^\/admin\/luar-zona\/([\w-]{1,64})$/, reviewLuarZonaAdmin],
+  ["GET", /^\/admin\/unit$/, getUnits],
+  ["POST", /^\/admin\/unit$/, createUnit],
+  ["PATCH", /^\/admin\/unit\/([\w-]{1,64})$/, patchUnit],
   ["GET", /^\/admin\/foto\/([\w-]{1,64})$/, getFoto],
   ["GET", /^\/admin\/karyawan$/, listKaryawan],
   ["POST", /^\/admin\/karyawan$/, createKaryawan],

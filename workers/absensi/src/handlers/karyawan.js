@@ -1,15 +1,16 @@
 // Endpoint untuk akun absensi sendiri: profil, aktivasi, clock in/out, riwayat, pengajuan, notifikasi.
 import { payloadChallenge, sha256Hex } from "../../shared/binding.js";
-import { CHALLENGE_TTL_MS, FACE_MATCH_THRESHOLD, LATE_REASON_MAX, MAX_LATE_PHOTO_BYTES } from "../../shared/constants.js";
+import { CHALLENGE_TTL_MS, FACE_MATCH_THRESHOLD, LATE_REASON_MAX, LATE_REASON_MIN, MAX_LATE_PHOTO_BYTES } from "../../shared/constants.js";
 import { checkLocation } from "../../shared/geo.js";
 import { isLateClockIn, workDateWIB } from "../../shared/time.js";
 import {
-  activateEmployee, closeShift, consumeChallenge, countPendingRequests, countUnreadNotifications, createChallenge,
-  deletePhoto, deleteShiftsForReset, getEmployee, getRequestById, insertNotifications, insertPasskey, insertPhoto,
-  insertRequest, insertShift, listActiveEmployeesByRole, listAreas, listEmployeeRequests, listNotifications,
-  listPasskeys, markAllNotificationsRead, markNotificationRead, recentShifts, requestsForMonth,
-  resetShiftPulangForSimulasi, shiftsForMonth, updatePasskeyCounter,
+  activateEmployee, closeShift, consumeChallenge, countPendingApprovals, countUnreadNotifications, createChallenge,
+  deletePhoto, deleteShiftsForReset, getEmployee, getRequestById, getUnit, insertNotifications, insertPasskey, insertPhoto,
+  insertRequest, insertShift, insertZoneException, listActiveEmployeesByRole, listAreas, listEmployeeRequests,
+  listNotifications, listPasskeys, markAllNotificationsRead, markNotificationRead, recentShifts, requestsForMonth,
+  resetShiftPulangForSimulasi, shiftsForMonth, unitsHeadedBy, updatePasskeyCounter,
 } from "../db.js";
+import { approverRecipients, jamWIB, zoneKindLabel } from "../approval.js";
 import { AbsensiError, decodeJpeg, readJson } from "../http.js";
 import { DAY_MS, LEAVE_LABEL, parseIsoDate, requestDetailSummary, requestKindTitle, toNotificationView, toRequestView } from "../requests.js";
 import { requireEmployee } from "../session.js";
@@ -43,14 +44,33 @@ async function requireInsideArea(ctx, location) {
   return result;
 }
 
+/**
+ * Lokasi clock in/out. Di luar zona hanya boleh kalau ada alasan; absen itu lalu menunggu
+ * persetujuan kepala unit / admin absensi. GPS lemah atau belum ada area tetap ditolak.
+ */
+async function absenLocation(ctx, location, outsideReason) {
+  const result = checkLocation(location, await listAreas(ctx.env.DB, { activeOnly: true }));
+  if (result.ok) return { areaId: result.areaId, outside: null };
+  if (result.code === "DI_LUAR_AREA" && outsideReason) {
+    return { areaId: null, outside: { distanceM: result.distanceM ?? null } };
+  }
+  throw new AbsensiError(result.code, 422, { distanceM: result.distanceM });
+}
+
 export async function meView(ctx, employee) {
   const now = ctx.deps.now();
   const faceRequired = employee.face_required === 1;
-  const [shifts, areas, unreadNotifications, pendingRequests] = await Promise.all([
+  const isAdmin = employee.role === "admin_absensi";
+  const [shifts, areas, unreadNotifications, headOf, unit] = await Promise.all([
     recentShifts(ctx.env.DB, employee.uid),
     listAreas(ctx.env.DB, { activeOnly: true }),
     countUnreadNotifications(ctx.env.DB, employee.uid),
-    employee.role === "admin_absensi" ? countPendingRequests(ctx.env.DB) : Promise.resolve(0),
+    unitsHeadedBy(ctx.env.DB, employee.uid),
+    employee.unit_id ? getUnit(ctx.env.DB, employee.unit_id) : Promise.resolve(null),
+  ]);
+  const [pendingRequests, teamPending] = await Promise.all([
+    isAdmin ? countPendingApprovals(ctx.env.DB) : Promise.resolve(0),
+    headOf.length > 0 ? countPendingApprovals(ctx.env.DB, { teamOf: employee.uid }) : Promise.resolve(0),
   ]);
   return {
     uid: employee.uid,
@@ -64,6 +84,9 @@ export async function meView(ctx, employee) {
     faceDescriptor: faceRequired && employee.face_descriptor ? JSON.parse(employee.face_descriptor) : null,
     unreadNotifications,
     pendingRequests,
+    unit: unit ? { id: unit.id, name: unit.name } : null,
+    headOf: headOf.map((u) => ({ id: u.id, name: u.name })),
+    teamPending,
   };
 }
 
@@ -149,6 +172,15 @@ function parseLateReason(body) {
   return reason || null;
 }
 
+/** Alasan absen di luar zona (3–300 karakter). Tanpa alasan, absen di luar zona tetap ditolak seperti dulu. */
+function parseOutsideReason(body) {
+  if (body.outsideReason === undefined || body.outsideReason === null) return null;
+  if (typeof body.outsideReason !== "string") throw new AbsensiError("VALIDATION_ERROR", 400);
+  const reason = body.outsideReason.replace(/\s+/g, " ").trim();
+  if (reason.length < LATE_REASON_MIN || reason.length > LATE_REASON_MAX) throw new AbsensiError("VALIDATION_ERROR", 400);
+  return reason;
+}
+
 /** Foto bukti alasan terlambat (opsional di server, sama seperti alasannya). Dicek sebelum challenge terpakai. */
 function parseLatePhoto(body) {
   if (body.latePhotoBase64 === undefined || body.latePhotoBase64 === null) return null;
@@ -195,6 +227,7 @@ export async function absen(ctx) {
   const kind = parseKind(body);
   const lateReason = kind === "masuk" ? parseLateReason(body) : null;
   const latePhoto = kind === "masuk" ? parseLatePhoto(body) : null;
+  const outsideReason = parseOutsideReason(body);
   const now = ctx.deps.now();
   const { env } = ctx;
 
@@ -217,7 +250,7 @@ export async function absen(ctx) {
   });
   if (!verified) throw new AbsensiError("PASSKEY_TIDAK_VALID", 400);
 
-  const area = await requireInsideArea(ctx, location);
+  const area = await absenLocation(ctx, location, outsideReason);
   const country = ctx.deps.country(ctx.request);
   if (env.ENFORCE_COUNTRY && country && country !== env.ENFORCE_COUNTRY) throw new AbsensiError("NEGARA_TIDAK_VALID", 422);
 
@@ -233,10 +266,11 @@ export async function absen(ctx) {
   // Alasan & foto alasan hanya disimpan kalau menurut jam server clock in-nya memang lewat 08:00.
   const late = decision.action === "insert" && isLateClockIn(now);
   const latePhotoId = late && latePhoto ? crypto.randomUUID() : null;
+  const shiftId = decision.action === "insert" ? crypto.randomUUID() : decision.shiftId;
   if (decision.action === "insert") {
     try {
       await insertShift(env.DB, {
-        id: crypto.randomUUID(), uid: employee.uid, workDate: decision.workDate, masukAt: now, ...fields,
+        id: shiftId, uid: employee.uid, workDate: decision.workDate, masukAt: now, ...fields,
         lateReason: late ? lateReason : null,
         latePhotoId,
       });
@@ -253,8 +287,31 @@ export async function absen(ctx) {
     await insertPhoto(env.PHOTOS, { id: latePhotoId, uid: employee.uid, kind: "selfie", jpeg: latePhoto, createdAt: now });
   }
   await updatePasskeyCounter(env.DB, passkey.credential_id, verified.newCounter, now);
+  if (area.outside) {
+    await recordOutsideZone(ctx, employee, {
+      shiftId, kind, now, location, photoId, reason: outsideReason, distanceM: area.outside.distanceM,
+    });
+  }
 
   return { serverTime: now, status: shiftStatus(await recentShifts(env.DB, employee.uid), now) };
+}
+
+/** Simpan absen luar zona (status menunggu) dan kabari kepala unit + admin absensi. */
+async function recordOutsideZone(ctx, employee, { shiftId, kind, now, location, photoId, reason, distanceM }) {
+  const { DB } = ctx.env;
+  await insertZoneException(DB, {
+    id: crypto.randomUUID(), shiftId, uid: employee.uid, kind, at: now, ...location, distanceM, reason, photoId, createdAt: now,
+  });
+  const jarak = distanceM === null ? "" : ` sekitar ${Math.round(distanceM)} m dari zona`;
+  const recipients = await approverRecipients(DB, employee.uid);
+  await insertNotifications(DB, recipients.map((person) => ({
+    recipientUid: person.uid,
+    kind: "pengajuan_baru",
+    title: "Absen Luar Zona Perlu Persetujuan",
+    body: `${employee.name} ${zoneKindLabel(kind).toLowerCase()} pukul ${jamWIB(now)} WIB di luar zona${jarak}: "${reason}"`,
+    requestId: null,
+    createdAt: now,
+  })));
 }
 
 export async function getRiwayat(ctx) {
@@ -344,11 +401,12 @@ export async function createPengajuan(ctx) {
   });
 
   const saved = await getRequestById(ctx.env.DB, id);
-  const admins = await listActiveEmployeesByRole(ctx.env.DB, "admin_absensi");
+  // Admin absensi + kepala unit karyawan ini yang bisa menyetujui.
+  const approvers = await approverRecipients(ctx.env.DB, employee.uid);
   const title = `${requestKindTitle(saved)} Baru`;
   const detail = requestDetailSummary(saved);
-  await insertNotifications(ctx.env.DB, admins.map((admin) => ({
-    recipientUid: admin.uid,
+  await insertNotifications(ctx.env.DB, approvers.map((approver) => ({
+    recipientUid: approver.uid,
     kind: "pengajuan_baru",
     title,
     body: `${employee.name} mengajukan ${LEAVE_LABEL[leaveType] ? detail : `pergantian shift (${detail})`} — "${reason}"`,

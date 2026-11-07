@@ -7,8 +7,10 @@ import {
   formatDurasi,
   formatJam,
   formatTanggalPanjang,
+  worstZoneStatus,
+  zoneNotes,
 } from "@/absensi/logic/format";
-import type { AbsensiRequestView, LeaveType, RekapRow } from "@/absensi/types";
+import type { AbsensiRequestView, LeaveType, RekapRow, RequestStatus } from "@/absensi/types";
 
 export interface RekapMeta {
   /** `YYYY-MM-DD` */
@@ -44,6 +46,8 @@ export interface UnifiedRekapItem {
   badgeTone: "selesai" | "terbuka" | "lupa_pulang" | "cuti" | "sakit" | "izin";
   /** Clock in lewat 08:00 WIB. */
   late: boolean;
+  /** Absen di luar zona: menunggu (perlu verifikasi) / disetujui / ditolak; null = di dalam zona. */
+  zoneStatus: RequestStatus | null;
   /** Kolom "Area / Keterangan" lengkap (tabel layar lebar & export). */
   info: string;
   areaName: string | null;
@@ -105,7 +109,8 @@ export function buildUnifiedRekapItems(
     const lateNote = row.lateReason
       ? `Alasan terlambat: ${row.lateReason}${row.latePhotoId ? " (ada foto bukti)" : ""}`
       : null;
-    const notes = [lateNote, swapNote].filter((note): note is string => Boolean(note));
+    const zoneStatus = worstZoneStatus(row);
+    const notes = [...zoneNotes(row), lateNote, swapNote].filter((note): note is string => Boolean(note));
     const infoParts = [row.areaName, ...notes].filter(Boolean);
     return {
       key: `shift-${row.shiftId}`,
@@ -116,9 +121,14 @@ export function buildUnifiedRekapItems(
       masukAt: row.masukAt,
       pulangAt: row.pulangAt,
       durationMin: row.durationMin,
-      statusLabel: SHIFT_STATUS_LABEL[row.status],
+      statusLabel: zoneStatus === "pending"
+        ? `${SHIFT_STATUS_LABEL[row.status]} · Perlu verifikasi`
+        : zoneStatus === "rejected"
+          ? `${SHIFT_STATUS_LABEL[row.status]} · Luar zona ditolak`
+          : SHIFT_STATUS_LABEL[row.status],
       badgeTone: row.status,
       late: isLateClockIn(row.masukAt),
+      zoneStatus,
       info: infoParts.length > 0 ? infoParts.join(" · ") : "-",
       areaName: row.areaName,
       notes,
@@ -150,6 +160,7 @@ export function buildUnifiedRekapItems(
         statusLabel: LEAVE_TYPE_LABEL[leaveType],
         badgeTone: leaveType,
         late: false,
+        zoneStatus: null,
         info,
         areaName: null,
         notes: [info],
@@ -173,7 +184,8 @@ export function summarizeRekap(
   for (const row of rows) {
     shiftDates.add(`${row.uid}:${row.workDate}`);
     const summary = byUid.get(row.uid) ?? emptySummary(row.uid, row.name);
-    summary.hariHadir += 1;
+    // Clock in luar zona yang ditolak kepala unit / admin tidak dihitung hadir.
+    if (row.zoneMasuk?.status !== "rejected") summary.hariHadir += 1;
     if (row.status === "lupa_pulang") summary.tidakClockOut += 1;
     if (row.status === "selesai" && row.durationMin !== null) summary.totalMenit += row.durationMin;
     byUid.set(row.uid, summary);

@@ -239,6 +239,42 @@ describe('copyFromBatch', () => {
     await expect(copyFromBatch('src', 'dst', 'u1')).rejects.toThrow(/sudah berisi data PM/);
     expect(entryPaths()).toHaveLength(2);
   });
+
+  it('copies PM data without delivery photos and skips backup rows', async () => {
+    putBatch('src', { tanggal: '2026-11-06' });
+    fake.store.set('mbg_pm_entries/s1', {
+      batchId: 'src', institutionName: 'SDN 1', jumlah: 120, qtSiswaBalita: 110, qtGuruKader: 10,
+      assignedPetugasName: 'Kurir A', sortOrder: 1, notes: 'catatan',
+      photoMenuUrl: 'data:image/jpeg;base64,AAAA', photoSuratJalanUrl: 'data:image/jpeg;base64,BBBB',
+      photoPenerimaTimestamp: '2026-11-06T08:00:00Z', deliveryRandomField: 'x',
+    });
+    fake.store.set('mbg_pm_entries/s2', { batchId: 'src', institutionName: 'Lama', jumlah: 5, isBackup: true });
+    putBatch('dst', { tanggal: '2026-11-07' });
+
+    await expect(copyFromBatch('src', 'dst', 'u2', '2026-11-07')).resolves.toBe(1);
+
+    const copied = entryPaths()
+      .map((p) => fake.store.get(p) as Data)
+      .filter((d) => d.batchId === 'dst');
+    expect(copied).toHaveLength(1);
+    expect(copied[0]).toMatchObject({ institutionName: 'SDN 1', jumlah: 120, assignedPetugasName: 'Kurir A', createdBy: 'u2', isSekolahLibur: false });
+    expect(Object.keys(copied[0]).filter((k) => k.startsWith('photo'))).toEqual([]);
+    expect(copied[0].deliveryRandomField).toBeUndefined();
+    expect(copied[0].isBackup).toBeUndefined();
+    expect(fake.store.get('mbg_pm_batches/dst')).toMatchObject({ totalJumlah: 120, totalInstitusi: 1 });
+  });
+
+  it('uses preloaded source rows instead of downloading the source batch again', async () => {
+    putBatch('dst', { tanggal: '2026-11-07' });
+    const preloaded = [{ id: 'x', batchId: 'gone', institutionName: 'TK A', jumlah: 30, sortOrder: 1 }] as never[];
+
+    await expect(copyFromBatch('gone', 'dst', 'u1', undefined, undefined, preloaded)).resolves.toBe(1);
+    expect(entryPaths()).toHaveLength(1);
+  });
+
+  it('refuses to copy a batch onto itself', async () => {
+    await expect(copyFromBatch('same', 'same', 'u1')).rejects.toThrow(/sama/);
+  });
 });
 
 describe('subscribeEntriesConfirmed', () => {

@@ -48,6 +48,8 @@ describe("shift rules", () => {
       id: "s1", workDate: "2026-10-26", masukAt: wib(2026, 10, 26, 22, 0), pulangAt: null, status: "terbuka", durationMin: null,
       lateReason: null,
       latePhotoId: null,
+      zoneMasuk: null,
+      zonePulang: null,
     });
   });
 });

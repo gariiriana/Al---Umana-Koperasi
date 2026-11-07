@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, Crosshair, LocateFixed, RefreshCw } from "lucide-react";
+import { ChevronLeft, Crosshair, LocateFixed, MapPinOff, RefreshCw } from "lucide-react";
 import { Circle, MapContainer, Marker, Polygon, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
+import { LATE_REASON_MAX } from "../../../../workers/absensi/shared/constants.js";
 import { checkLocation } from "../../../../workers/absensi/shared/geo.js";
 import { FirebaseMapAttribution, GOOGLE_MAP_ATTRIBUTION } from "@/absensi/components/MapAttribution";
 import { SignalStatusPill, isGpsUsable, useOnlineStatus } from "@/absensi/components/SignalStatusPill";
 import { subscribeGpsPosition, type GpsFix } from "@/absensi/device/gps";
+import { normalizeLateReason } from "@/absensi/flow/useClockFlow";
 import { messageFor } from "@/absensi/messages";
 import type { AbsenKind, AreaView, LocationInput } from "@/absensi/types";
 
@@ -36,9 +38,12 @@ export interface LocationConfirmModalProps {
   kind: AbsenKind;
   areas: AreaView[];
   headerRight?: React.ReactNode;
-  onConfirm: (fix: LocationInput) => void;
+  /** `outsideReason` terisi kalau absen di luar zona (menunggu persetujuan kepala unit / admin). */
+  onConfirm: (fix: LocationInput, outsideReason?: string) => void;
   onCancel: () => void;
 }
+
+const OUTSIDE_PRESETS = ["Tugas di luar kantor", "Antar barang / bahan", "Rapat di luar", "GPS tidak akurat"];
 
 /**
  * Layar penuh Konfirmasi Clock In / Clock Out dengan Google Maps, poligon zona kantor,
@@ -56,6 +61,7 @@ export function LocationConfirmModal({
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
   const [recenterSeq, setRecenterSeq] = useState(0);
+  const [outsideText, setOutsideText] = useState("");
 
   useEffect(() => {
     setFix(null);
@@ -83,6 +89,8 @@ export function LocationConfirmModal({
   const title = kind === "pulang" ? "Konfirmasi Clock Out" : "Konfirmasi Clock In";
   const ctaLabel = kind === "pulang" ? "Lanjutkan Clock Out" : "Lanjutkan Clock In";
   const canProceed = Boolean(fix && zoneCheck?.ok && online);
+  const outside = Boolean(fix && online && zoneCheck && !zoneCheck.ok && zoneCheck.code === "DI_LUAR_AREA");
+  const outsideReason = normalizeLateReason(outsideText);
 
   return (
     <div
@@ -220,6 +228,56 @@ export function LocationConfirmModal({
 
       {/* Footer Tombol Lanjutkan */}
       <div className="shrink-0 border-t border-neutral-200 bg-white p-4">
+        {outside ? (
+          <div className="space-y-2.5">
+            <div className="flex items-start gap-2 text-left">
+              <MapPinOff className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
+              <p className="text-xs font-semibold text-neutral-700">
+                Kamu di luar zona. Tetap bisa {kind === "pulang" ? "clock out" : "clock in"} dengan alasan, lalu menunggu
+                persetujuan kepala unit / admin absensi.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {OUTSIDE_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setOutsideText(preset)}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-bold transition ${
+                    outsideText === preset
+                      ? "border-amber-500 bg-amber-400 text-neutral-900"
+                      : "border-amber-200 bg-white text-amber-900 hover:bg-amber-50"
+                  }`}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+            <textarea
+              rows={2}
+              maxLength={LATE_REASON_MAX}
+              aria-label="Alasan absen di luar zona"
+              placeholder="Tulis alasan absen di luar zona"
+              value={outsideText}
+              onChange={(e) => setOutsideText(e.target.value)}
+              className="w-full resize-none rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-200"
+            />
+            <button
+              type="button"
+              disabled={!outsideReason}
+              onClick={() => {
+                if (fix && outsideReason) onConfirm(fix, outsideReason);
+              }}
+              className={`w-full rounded-2xl py-3.5 font-['Manrope',system-ui,sans-serif] text-sm font-extrabold transition-all ${
+                outsideReason
+                  ? "bg-neutral-900 text-white shadow-md hover:bg-neutral-800 active:scale-[0.99]"
+                  : "cursor-not-allowed bg-neutral-200 text-neutral-500"
+              }`}
+            >
+              {kind === "pulang" ? "Ajukan Clock Out Luar Zona" : "Ajukan Clock In Luar Zona"}
+            </button>
+          </div>
+        ) : (
         <button
           type="button"
           disabled={!canProceed}
@@ -234,6 +292,7 @@ export function LocationConfirmModal({
         >
           {ctaLabel}
         </button>
+        )}
       </div>
     </div>
   );

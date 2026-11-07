@@ -4,6 +4,13 @@ const first = async (statement) => (await statement.first()) ?? null;
 const all = async (statement) => (await statement.all()).results;
 const changes = async (statement) => (await statement.run()).meta.changes;
 
+/** Status absen luar zona (masuk & pulang) per shift `s`; dibaca toShiftView. */
+const ZONE_COLUMNS = `zm.id AS zone_masuk_id, zm.status AS zone_masuk_status, zm.reason AS zone_masuk_reason,
+  zm.distance_m AS zone_masuk_distance, zp.id AS zone_pulang_id, zp.status AS zone_pulang_status,
+  zp.reason AS zone_pulang_reason, zp.distance_m AS zone_pulang_distance`;
+const ZONE_JOINS = `LEFT JOIN zone_exceptions zm ON zm.shift_id = s.id AND zm.kind = 'masuk'
+  LEFT JOIN zone_exceptions zp ON zp.shift_id = s.id AND zp.kind = 'pulang'`;
+
 // ---------------------------------------------------------------------------
 // Karyawan
 // ---------------------------------------------------------------------------
@@ -109,8 +116,9 @@ export const consumeChallenge = (db, id, uid, purpose, nowMs) => first(db.prepar
 // Shift
 // ---------------------------------------------------------------------------
 
-export const recentShifts = (db, uid, limit = 5) =>
-  all(db.prepare("SELECT * FROM shifts WHERE uid = ? ORDER BY masuk_at DESC LIMIT ?").bind(uid, limit));
+export const recentShifts = (db, uid, limit = 5) => all(db.prepare(
+  `SELECT s.*, ${ZONE_COLUMNS} FROM shifts s ${ZONE_JOINS} WHERE s.uid = ? ORDER BY s.masuk_at DESC LIMIT ?`,
+).bind(uid, limit));
 
 /** Melempar kalau `(uid, work_date)` sudah ada (indeks unik). */
 export async function insertShift(db, {
@@ -149,7 +157,10 @@ export async function deleteShiftsForReset(db, uid, workDate) {
     if (r.pulang_photo_id) photoIds.push(r.pulang_photo_id);
     if (r.late_photo_id) photoIds.push(r.late_photo_id);
   }
-  await db.batch(rows.map((r) => db.prepare("DELETE FROM shifts WHERE id = ?").bind(r.id)));
+  await db.batch(rows.flatMap((r) => [
+    db.prepare("DELETE FROM zone_exceptions WHERE shift_id = ?").bind(r.id),
+    db.prepare("DELETE FROM shifts WHERE id = ?").bind(r.id),
+  ]));
   return { deletedCount: rows.length, photoIds };
 }
 
@@ -164,6 +175,7 @@ export async function resetShiftPulangForSimulasi(db, uid, workDate) {
     );
   }
   if (!row) return { deletedCount: 0, photoIds: [] };
+  await db.prepare("DELETE FROM zone_exceptions WHERE shift_id = ? AND kind = 'pulang'").bind(row.id).run();
   await db.prepare(
     `UPDATE shifts SET pulang_at = NULL, pulang_lat = NULL, pulang_lng = NULL, pulang_accuracy = NULL,
        pulang_area_id = NULL, pulang_face_distance = NULL, pulang_photo_id = NULL, status = 'terbuka'
@@ -173,16 +185,18 @@ export async function resetShiftPulangForSimulasi(db, uid, workDate) {
 }
 
 export const shiftsForMonth = (db, uid, bulan) => all(db.prepare(
-  "SELECT * FROM shifts WHERE uid = ? AND work_date BETWEEN ? AND ? ORDER BY work_date DESC",
+  `SELECT s.*, ${ZONE_COLUMNS} FROM shifts s ${ZONE_JOINS}
+   WHERE s.uid = ? AND s.work_date BETWEEN ? AND ? ORDER BY s.work_date DESC`,
 ).bind(uid, `${bulan}-01`, `${bulan}-31`));
 
 export function rekapShifts(db, { from, to, uid }) {
   const filter = uid ? " AND s.uid = ?" : "";
   const values = uid ? [from, to, uid] : [from, to];
   return all(db.prepare(
-    `SELECT s.*, e.name AS name, a.name AS area_name FROM shifts s
+    `SELECT s.*, e.name AS name, a.name AS area_name, ${ZONE_COLUMNS} FROM shifts s
      JOIN employees e ON e.uid = s.uid
      LEFT JOIN areas a ON a.id = s.masuk_area_id
+     ${ZONE_JOINS}
      WHERE s.work_date BETWEEN ? AND ?${filter}
      ORDER BY s.work_date, e.name COLLATE NOCASE`,
   ).bind(...values));
@@ -190,9 +204,11 @@ export function rekapShifts(db, { from, to, uid }) {
 
 /** Karyawan aktif beserta shift hari ini atau shift yang masih terbuka (bisa 0–2 baris per orang). */
 export const todayOverview = (db, workDate) => all(db.prepare(
-  `SELECT e.uid AS uid, e.name AS name, s.id AS shift_id, s.work_date, s.masuk_at, s.pulang_at, s.status, s.late_reason, s.late_photo_id
+  `SELECT e.uid AS uid, e.name AS name, e.unit_id AS unit_id, s.id AS shift_id, s.work_date, s.masuk_at, s.pulang_at,
+     s.status, s.late_reason, s.late_photo_id, ${ZONE_COLUMNS}
    FROM employees e
    LEFT JOIN shifts s ON s.uid = e.uid AND (s.work_date = ? OR s.status = 'terbuka')
+   ${ZONE_JOINS}
    WHERE e.role = 'absen_karyawan' AND e.status = 'aktif'
    ORDER BY e.name COLLATE NOCASE, s.masuk_at DESC`,
 ).bind(workDate));
@@ -202,10 +218,11 @@ export const todayOverview = (db, workDate) => all(db.prepare(
 // ---------------------------------------------------------------------------
 
 const REQUEST_SELECT = `
-  SELECT r.*, e.name AS employee_name, rev.name AS reviewer_name
+  SELECT r.*, e.name AS employee_name, rev.name AS reviewer_name, un.name AS unit_name
   FROM requests r
   JOIN employees e ON e.uid = r.uid
   LEFT JOIN employees rev ON rev.uid = r.reviewed_by
+  LEFT JOIN units un ON un.id = e.unit_id
 `;
 
 export async function insertRequest(db, {
@@ -331,3 +348,114 @@ export const purgeSelfies = (photos, cutoffMs) =>
   changes(photos.prepare("DELETE FROM photos WHERE kind = 'selfie' AND created_at < ?").bind(cutoffMs));
 
 export const purgeChallenges = (db, nowMs) => changes(db.prepare("DELETE FROM challenges WHERE expires_at < ?").bind(nowMs));
+
+// ---------------------------------------------------------------------------
+// Unit kerja & kepala unit
+// ---------------------------------------------------------------------------
+
+export const listUnits = (db) => all(db.prepare(
+  `SELECT u.*, h.name AS head_name,
+     (SELECT COUNT(*) FROM employees m WHERE m.unit_id = u.id AND m.status = 'aktif') AS member_count
+   FROM units u LEFT JOIN employees h ON h.uid = u.head_uid
+   ORDER BY u.name COLLATE NOCASE`,
+));
+
+export const getUnit = (db, id) => first(db.prepare("SELECT * FROM units WHERE id = ?").bind(id));
+
+export async function insertUnit(db, { id, name, headUid, nowMs, byUid }) {
+  await db.prepare(
+    "INSERT INTO units (id, name, head_uid, created_at, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?)",
+  ).bind(id, name, headUid ?? null, nowMs, nowMs, byUid ?? null).run();
+}
+
+export const updateUnit = (db, id, { name, headUid, nowMs, byUid }) => changes(db.prepare(
+  "UPDATE units SET name = ?, head_uid = ?, updated_at = ?, updated_by = ? WHERE id = ?",
+).bind(name, headUid ?? null, nowMs, byUid ?? null, id));
+
+export const setEmployeeUnit = (db, uid, unitId) =>
+  changes(db.prepare("UPDATE employees SET unit_id = ? WHERE uid = ?").bind(unitId ?? null, uid));
+
+/** Unit yang dikepalai `uid`. */
+export const unitsHeadedBy = (db, uid) =>
+  all(db.prepare("SELECT id, name FROM units WHERE head_uid = ? ORDER BY name COLLATE NOCASE").bind(uid));
+
+/** Kepala unit aktif dari karyawan `uid`; null bila tidak ada atau kepala unitnya dirinya sendiri. */
+export const unitHeadOf = (db, uid) => first(db.prepare(
+  `SELECT h.uid AS uid, h.name AS name FROM employees e
+   JOIN units u ON u.id = e.unit_id
+   JOIN employees h ON h.uid = u.head_uid
+   WHERE e.uid = ? AND h.uid <> e.uid AND h.status = 'aktif'`,
+).bind(uid));
+
+/** Anggota semua unit yang dikepalai `?` (dua kali uid kepala unit), tanpa kepala unit itu sendiri. */
+const TEAM_UIDS = `(SELECT m.uid FROM employees m JOIN units u ON u.id = m.unit_id WHERE u.head_uid = ? AND m.uid <> ?)`;
+
+export function listTeamRequests(db, headUid, { status, limit = 200 } = {}) {
+  if (status && status !== "all") {
+    return all(db.prepare(
+      `${REQUEST_SELECT} WHERE r.uid IN ${TEAM_UIDS} AND r.status = ? ORDER BY r.created_at DESC LIMIT ?`,
+    ).bind(headUid, headUid, status, limit));
+  }
+  return all(db.prepare(
+    `${REQUEST_SELECT} WHERE r.uid IN ${TEAM_UIDS}
+     ORDER BY CASE WHEN r.status = 'pending' THEN 0 ELSE 1 END, r.created_at DESC LIMIT ?`,
+  ).bind(headUid, headUid, limit));
+}
+
+// ---------------------------------------------------------------------------
+// Absen di luar zona (menunggu persetujuan)
+// ---------------------------------------------------------------------------
+
+const ZONE_SELECT = `
+  SELECT z.*, e.name AS employee_name, rev.name AS reviewer_name, un.name AS unit_name, s.work_date AS work_date
+  FROM zone_exceptions z
+  JOIN employees e ON e.uid = z.uid
+  LEFT JOIN employees rev ON rev.uid = z.reviewed_by
+  LEFT JOIN units un ON un.id = e.unit_id
+  LEFT JOIN shifts s ON s.id = z.shift_id
+`;
+
+export async function insertZoneException(db, {
+  id, shiftId, uid, kind, at, lat, lng, accuracy, distanceM, reason, photoId, createdAt,
+}) {
+  await db.prepare(
+    `INSERT INTO zone_exceptions (id, shift_id, uid, kind, at, lat, lng, accuracy, distance_m, reason, photo_id, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+  ).bind(id, shiftId, uid, kind, at, lat, lng, accuracy, distanceM ?? null, reason, photoId ?? null, createdAt).run();
+}
+
+export const getZoneException = (db, id) => first(db.prepare(`${ZONE_SELECT} WHERE z.id = ?`).bind(id));
+
+/** `teamOf` = uid kepala unit: hanya anggota timnya. Tanpa `teamOf` = semua (admin). */
+export function listZoneExceptions(db, { status, teamOf, limit = 200 } = {}) {
+  const where = [];
+  const values = [];
+  if (teamOf) {
+    where.push(`z.uid IN ${TEAM_UIDS}`);
+    values.push(teamOf, teamOf);
+  }
+  if (status && status !== "all") {
+    where.push("z.status = ?");
+    values.push(status);
+  }
+  const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  return all(db.prepare(
+    `${ZONE_SELECT} ${clause} ORDER BY CASE WHEN z.status = 'pending' THEN 0 ELSE 1 END, z.created_at DESC LIMIT ?`,
+  ).bind(...values, limit));
+}
+
+export const reviewZoneException = (db, id, { status, reviewedBy, reviewedAt, reviewNote }) => changes(db.prepare(
+  `UPDATE zone_exceptions SET status = ?, reviewed_by = ?, reviewed_at = ?, review_note = ?
+   WHERE id = ? AND status = 'pending'`,
+).bind(status, reviewedBy, reviewedAt, reviewNote ?? null, id));
+
+/** Jumlah yang menunggu persetujuan (pengajuan + absen luar zona); `teamOf` membatasi ke tim kepala unit. */
+export async function countPendingApprovals(db, { teamOf } = {}) {
+  const team = teamOf ? ` AND uid IN ${TEAM_UIDS}` : "";
+  const values = teamOf ? [teamOf, teamOf] : [];
+  const [requests, zones] = await Promise.all([
+    first(db.prepare(`SELECT COUNT(*) AS n FROM requests WHERE status = 'pending'${team}`).bind(...values)),
+    first(db.prepare(`SELECT COUNT(*) AS n FROM zone_exceptions WHERE status = 'pending'${team}`).bind(...values)),
+  ]);
+  return Number(requests?.n ?? 0) + Number(zones?.n ?? 0);
+}

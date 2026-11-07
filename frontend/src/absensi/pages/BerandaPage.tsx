@@ -10,6 +10,7 @@ import {
   ChevronUp,
   ClipboardList,
   RefreshCcw,
+  UsersRound,
 } from "lucide-react";
 
 import { checkLocation } from "../../../../workers/absensi/shared/geo.js";
@@ -338,6 +339,30 @@ function Beranda({
           )}
         </section>
 
+        {/* Kepala unit: pintu ke persetujuan anggota tim */}
+        {(me.headOf?.length ?? 0) > 0 && (
+          <Link
+            to="/absensi/tim"
+            className="flex items-center gap-3 rounded-3xl border border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 p-4 shadow-xs transition hover:border-amber-400"
+          >
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-400 text-neutral-900">
+              <UsersRound className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-neutral-900">Persetujuan Tim</p>
+              <p className="truncate text-xs font-semibold text-amber-900/80">
+                Kepala unit {me.headOf?.map((u) => u.name).join(", ")}
+              </p>
+            </div>
+            {(me.teamPending ?? 0) > 0 && (
+              <span className="rounded-full bg-rose-500 px-2.5 py-1 text-xs font-extrabold text-white">
+                {me.teamPending} menunggu
+              </span>
+            )}
+            <ChevronRight className="h-5 w-5 shrink-0 text-amber-700" aria-hidden="true" />
+          </Link>
+        )}
+
         {/* Grid Menu Layanan */}
         <section className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-xs">
           <h2 className="mb-3.5 font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-neutral-900">
@@ -395,7 +420,7 @@ function Beranda({
           kind={flow.kind}
           areas={me.areas}
           headerRight={<NotificationBellButton variant="plain" />}
-          onConfirm={(fix) => flow.confirmLocation(fix)}
+          onConfirm={(fix, outsideReason) => flow.confirmLocation(fix, outsideReason)}
           onCancel={cancel}
         />
       )}
@@ -419,7 +444,7 @@ function Beranda({
             </div>
 
             {flow.step === "alasan" && (
-              <LateReasonForm now={now} onSubmit={flow.submitLateReason} onCancel={cancel} />
+              <LateReasonForm now={now} name={me.name} onSubmit={flow.submitLateReason} onCancel={cancel} />
             )}
 
             {flow.step === "selfie" && (
