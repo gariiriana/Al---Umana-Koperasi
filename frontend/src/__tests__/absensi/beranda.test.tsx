@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -42,6 +42,21 @@ describe("BerandaPage", () => {
     expect(screen.getByRole("link", { name: /Permohonan Cuti/ }).getAttribute("href")).toBe("/absensi/persetujuan?buat=cuti");
     expect(screen.getByRole("link", { name: /Pergantian Shift/ }).getAttribute("href")).toBe("/absensi/persetujuan?buat=shift");
     await screen.findByText("Belum ada catatan absensi terbaru.");
+  });
+
+  it("Clock In jam 11:23 WIB: pop-up alasan + foto bukti muncul sebelum peta & scan wajah", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-07T11:23:00+07:00"));
+    try {
+      render(<MemoryRouter><BerandaPage /></MemoryRouter>);
+      fireEvent.click(screen.getByRole("button", { name: /^Clock In$/ }));
+      expect(await screen.findByText("Clock in lewat jam 08:00")).toBeTruthy();
+      expect(screen.getByText(/Sekarang pukul 11:23/)).toBeTruthy();
+      expect(screen.getByLabelText("Kamera")).toBeTruthy();
+      expect(screen.getByLabelText("Galeri")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("dengan penanda perangkat: tanpa banner, menampilkan nama dan area kerja", async () => {
