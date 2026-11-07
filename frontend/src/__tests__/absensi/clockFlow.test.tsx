@@ -48,6 +48,7 @@ const me = {
 } as unknown as Me;
 
 const STATUS: ShiftStatus = { today: null, open: null, last: null };
+const EARLY = Date.parse("2026-11-07T07:30:00+07:00");
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3, 4, 5]);
 
 beforeEach(() => {
@@ -59,7 +60,7 @@ beforeEach(() => {
 });
 
 async function runToPasskey(onStatus = vi.fn()) {
-  const hook = renderHook(() => useClockFlow({ me, onStatus }));
+  const hook = renderHook(() => useClockFlow({ me, onStatus, now: () => EARLY }));
   await act(async () => hook.result.current.start("masuk"));
   expect(hook.result.current.step).toBe("lokasi");
   await act(async () => hook.result.current.confirmLocation(mocks.position));
@@ -89,7 +90,7 @@ describe("useClockFlow", () => {
 
   it("pra-cek di luar area saat konfirmasi lokasi: gagal dengan DI_LUAR_AREA dan absen tidak dipanggil", async () => {
     mocks.position = { lat: PIN.lat + 0.001, lng: PIN.lng, accuracy: 8 };
-    const hook = renderHook(() => useClockFlow({ me, onStatus: vi.fn() }));
+    const hook = renderHook(() => useClockFlow({ me, onStatus: vi.fn(), now: () => EARLY }));
     await act(async () => hook.result.current.start("masuk"));
     expect(hook.result.current.step).toBe("lokasi");
     await act(async () => hook.result.current.confirmLocation(mocks.position));

@@ -113,11 +113,11 @@ export const recentShifts = (db, uid, limit = 5) =>
   all(db.prepare("SELECT * FROM shifts WHERE uid = ? ORDER BY masuk_at DESC LIMIT ?").bind(uid, limit));
 
 /** Melempar kalau `(uid, work_date)` sudah ada (indeks unik). */
-export async function insertShift(db, { id, uid, workDate, masukAt, lat, lng, accuracy, areaId, faceDistance, photoId }) {
+export async function insertShift(db, { id, uid, workDate, masukAt, lat, lng, accuracy, areaId, faceDistance, photoId, lateReason }) {
   await db.prepare(
-    `INSERT INTO shifts (id, uid, work_date, masuk_at, masuk_lat, masuk_lng, masuk_accuracy, masuk_area_id, masuk_face_distance, masuk_photo_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(id, uid, workDate, masukAt, lat, lng, accuracy, areaId, faceDistance ?? null, photoId).run();
+    `INSERT INTO shifts (id, uid, work_date, masuk_at, masuk_lat, masuk_lng, masuk_accuracy, masuk_area_id, masuk_face_distance, masuk_photo_id, late_reason)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(id, uid, workDate, masukAt, lat, lng, accuracy, areaId, faceDistance ?? null, photoId, lateReason ?? null).run();
 }
 
 export const closeShift = (db, id, { pulangAt, lat, lng, accuracy, areaId, faceDistance, photoId }) => changes(db.prepare(
@@ -183,7 +183,7 @@ export function rekapShifts(db, { from, to, uid }) {
 
 /** Karyawan aktif beserta shift hari ini atau shift yang masih terbuka (bisa 0–2 baris per orang). */
 export const todayOverview = (db, workDate) => all(db.prepare(
-  `SELECT e.uid AS uid, e.name AS name, s.id AS shift_id, s.work_date, s.masuk_at, s.pulang_at, s.status
+  `SELECT e.uid AS uid, e.name AS name, s.id AS shift_id, s.work_date, s.masuk_at, s.pulang_at, s.status, s.late_reason
    FROM employees e
    LEFT JOIN shifts s ON s.uid = e.uid AND (s.work_date = ? OR s.status = 'terbuka')
    WHERE e.role = 'absen_karyawan' AND e.status = 'aktif'

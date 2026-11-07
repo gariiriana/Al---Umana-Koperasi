@@ -14,3 +14,6 @@ export const SELFIE_JPEG_QUALITY: number;
 export const FACE_MATCH_THRESHOLD: number;
 export const REKAP_MAX_DAYS: number;
 export const MIN_PASSWORD_LENGTH: number;
+export const LATE_AFTER_MINUTE_WIB: number;
+export const LATE_REASON_MIN: number;
+export const LATE_REASON_MAX: number;

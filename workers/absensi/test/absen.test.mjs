@@ -44,7 +44,7 @@ describe("clock in / clock out", () => {
   before(async () => {
     ({ env, dispose } = await makeEnv());
     await replaceAreas(env.DB, [{ id: "a1", name: "SPPG", polygon: SQ, toleranceM: 15, active: true }], "admin", T0);
-    for (const uid of ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9"]) {
+    for (const uid of ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10", "u11", "u12"]) {
       await addEmployee(env, { uid, email: `${uid}@absen.test`, faceRequired: uid !== "u2" });
       if (uid === "u3") continue;
       await activateEmployee(env.DB, uid, { faceDescriptor: [0.1], referencePhotoId: `r-${uid}`, consentAt: T0, activatedAt: T0 });
@@ -121,5 +121,37 @@ describe("clock in / clock out", () => {
     const out = await options("u9", "pulang");
     assert.equal(out.status, 409);
     assert.equal(out.data.error.code, "BELUM_CLOCK_IN");
+  });
+
+  it("clock in at 19:00 WIB without a morning clock in is accepted and keeps the late reason", async () => {
+    now = T0 + 12 * HOUR; // 19:00 WIB
+    const res = await absen("u10", await signedBody("u10", "masuk", { lateReason: "  Lupa absen pagi,   HP ketinggalan  " }));
+    assert.equal(res.status, 200, JSON.stringify(res.data));
+    assert.equal(res.data.status.today.lateReason, "Lupa absen pagi, HP ketinggalan");
+    assert.equal((await recentShifts(env.DB, "u10"))[0].late_reason, "Lupa absen pagi, HP ketinggalan");
+  });
+
+  it("drops the late reason for an on-time clock in, and still accepts a late one sent without a reason", async () => {
+    now = T0 + HOUR; // 08:00 WIB
+    const onTime = await absen("u11", await signedBody("u11", "masuk", { lateReason: "tidak perlu" }));
+    assert.equal(onTime.status, 200, JSON.stringify(onTime.data));
+    assert.equal((await recentShifts(env.DB, "u11"))[0].late_reason, null);
+
+    // Versi aplikasi lama belum mengirim lateReason; absen tetap jalan.
+    now = T0 + 3 * HOUR;
+    const old = await absen("u12", await signedBody("u12", "masuk"));
+    assert.equal(old.status, 200, JSON.stringify(old.data));
+    assert.equal((await recentShifts(env.DB, "u12"))[0].late_reason, null);
+  });
+
+  it("rejects a late reason over 300 characters before using up the challenge", async () => {
+    now = T0 + 12 * HOUR;
+    const body = await signedBody("u9", "masuk", { lateReason: "x".repeat(301) });
+    const tooLong = await absen("u9", body);
+    assert.equal(tooLong.status, 400);
+    assert.equal(tooLong.data.error.code, "VALIDATION_ERROR");
+    const retry = await absen("u9", { ...body, lateReason: "Macet di jalan" });
+    assert.equal(retry.status, 200, JSON.stringify(retry.data));
+    assert.equal(retry.data.status.today.lateReason, "Macet di jalan");
   });
 });

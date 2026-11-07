@@ -1,8 +1,8 @@
 // Endpoint untuk akun absensi sendiri: profil, aktivasi, clock in/out, riwayat, pengajuan, notifikasi.
 import { payloadChallenge, sha256Hex } from "../../shared/binding.js";
-import { CHALLENGE_TTL_MS, FACE_MATCH_THRESHOLD } from "../../shared/constants.js";
+import { CHALLENGE_TTL_MS, FACE_MATCH_THRESHOLD, LATE_REASON_MAX } from "../../shared/constants.js";
 import { checkLocation } from "../../shared/geo.js";
-import { workDateWIB } from "../../shared/time.js";
+import { isLateClockIn, workDateWIB } from "../../shared/time.js";
 import {
   activateEmployee, closeShift, consumeChallenge, countPendingRequests, countUnreadNotifications, createChallenge,
   deletePhoto, deleteShiftsForReset, getEmployee, getRequestById, insertNotifications, insertPasskey, insertPhoto,
@@ -136,6 +136,18 @@ function parseKind(body) {
   return body.kind;
 }
 
+/**
+ * Alasan clock in lewat 08:00. Opsional di server supaya aplikasi versi lama (belum klik "Perbarui")
+ * tetap bisa absen; aplikasi baru mewajibkannya lewat pop-up.
+ */
+function parseLateReason(body) {
+  if (body.lateReason === undefined || body.lateReason === null) return null;
+  if (typeof body.lateReason !== "string") throw new AbsensiError("VALIDATION_ERROR", 400);
+  const reason = body.lateReason.replace(/\s+/g, " ").trim();
+  if (reason.length > LATE_REASON_MAX) throw new AbsensiError("VALIDATION_ERROR", 400);
+  return reason || null;
+}
+
 async function currentDecision(ctx, employee, kind, now) {
   const decision = decideAbsen(kind, shiftStatus(await recentShifts(ctx.env.DB, employee.uid), now), now);
   if (!decision.ok) throw new AbsensiError(decision.code, 409);
@@ -173,6 +185,7 @@ export async function absen(ctx) {
   const employee = await requireActivatedEmployee(ctx);
   const body = await readJson(ctx.request);
   const kind = parseKind(body);
+  const lateReason = kind === "masuk" ? parseLateReason(body) : null;
   const now = ctx.deps.now();
   const { env } = ctx;
 
@@ -210,7 +223,10 @@ export async function absen(ctx) {
   const fields = { ...location, areaId: area.areaId, faceDistance, photoId };
   if (decision.action === "insert") {
     try {
-      await insertShift(env.DB, { id: crypto.randomUUID(), uid: employee.uid, workDate: decision.workDate, masukAt: now, ...fields });
+      await insertShift(env.DB, {
+        id: crypto.randomUUID(), uid: employee.uid, workDate: decision.workDate, masukAt: now, ...fields,
+        lateReason: isLateClockIn(now) ? lateReason : null,
+      });
     } catch (err) {
       if (/UNIQUE/i.test(String(err?.message))) throw new AbsensiError("SUDAH_CLOCK_IN_HARI_INI", 409);
       throw err;

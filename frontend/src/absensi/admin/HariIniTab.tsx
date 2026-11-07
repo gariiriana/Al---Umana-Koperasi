@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { getHariIni } from "@/absensi/api";
 import { errorMessage } from "@/absensi/errorMessage";
-import { LEAVE_TYPE_LABEL, formatJam, formatTanggalPanjang } from "@/absensi/logic/format";
+import { LEAVE_TYPE_LABEL, formatJam, formatTanggalPanjang, formatTerlambat } from "@/absensi/logic/format";
 import type { HariIniRow } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
 
@@ -111,12 +111,19 @@ export function HariIniTab() {
 
       {rows && rows.length > 0 && (
         <ul className="divide-y divide-neutral-100 overflow-hidden rounded-3xl border border-neutral-200/80 bg-white shadow-xs">
-          {rows.map((row) => (
+          {rows.map((row) => {
+            const terlambat = row.state !== "belum" && row.masukAt !== null ? formatTerlambat(row.masukAt) : null;
+            return (
             <li key={row.uid} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 hover:bg-amber-50/30">
               <div className="min-w-0">
                 <p className="truncate font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-neutral-900">
                   {row.name}
                 </p>
+                {row.lateReason && (
+                  <p className="mt-0.5 break-words text-xs font-semibold text-orange-800">
+                    Alasan terlambat: {row.lateReason}
+                  </p>
+                )}
                 {row.shiftSwap && (
                   <p className="mt-0.5 text-xs font-semibold text-amber-800">
                     Shift: {row.shiftSwap.fromShift} → {row.shiftSwap.toShift}
@@ -126,6 +133,11 @@ export function HariIniTab() {
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5">
+                {terlambat && (
+                  <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-xs font-bold text-orange-800">
+                    {terlambat}
+                  </span>
+                )}
                 {row.leaveType && (
                   <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700">
                     {LEAVE_TYPE_LABEL[row.leaveType]}
@@ -136,7 +148,8 @@ export function HariIniTab() {
                 </span>
               </div>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </section>

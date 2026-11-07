@@ -5,6 +5,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 import { checkLocation } from "../../../../workers/absensi/shared/geo.js";
+import { FirebaseMapAttribution, GOOGLE_MAP_ATTRIBUTION } from "@/absensi/components/MapAttribution";
 import { SignalStatusPill, isGpsUsable, useOnlineStatus } from "@/absensi/components/SignalStatusPill";
 import { subscribeGpsPosition, type GpsFix } from "@/absensi/device/gps";
 import { messageFor } from "@/absensi/messages";
@@ -166,12 +167,14 @@ export function LocationConfirmModal({
               zoom={17}
               maxZoom={21}
               zoomControl={false}
+              attributionControl={false}
               className="h-full w-full"
             >
+              <FirebaseMapAttribution />
               <TileLayer
                 url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
                 subdomains={["mt0", "mt1", "mt2", "mt3"]}
-                attribution="Map data &copy; Google"
+                attribution={GOOGLE_MAP_ATTRIBUTION}
                 maxZoom={21}
               />
               <RecenterControl center={[fix.lat, fix.lng]} trigger={recenterSeq} />

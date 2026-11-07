@@ -3,6 +3,7 @@ import { CircleMarker, MapContainer, Marker, Polygon, TileLayer, useMapEvents } 
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
+import { FirebaseMapAttribution, GOOGLE_MAP_ATTRIBUTION } from "@/absensi/components/MapAttribution";
 import type { LatLng } from "@/absensi/types";
 
 /** Pin SPPG Sukabumi Gunungguruh Kebonmanggu. */
@@ -55,13 +56,21 @@ export function AreaMap({ points, onAdd }: { points: LatLng[]; onAdd: (point: La
         </button>
       </div>
 
-      <MapContainer center={[center.lat, center.lng]} zoom={18} maxZoom={21} className="h-80 w-full" scrollWheelZoom>
+      <MapContainer
+        center={[center.lat, center.lng]}
+        zoom={18}
+        maxZoom={21}
+        className="h-80 w-full"
+        scrollWheelZoom
+        attributionControl={false}
+      >
+        <FirebaseMapAttribution />
         {layer === "roadmap" ? (
           <TileLayer
             key="google-road"
             url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
             subdomains={["mt0", "mt1", "mt2", "mt3"]}
-            attribution="Map data &copy; Google"
+            attribution={GOOGLE_MAP_ATTRIBUTION}
             maxZoom={21}
           />
         ) : (
@@ -69,7 +78,7 @@ export function AreaMap({ points, onAdd }: { points: LatLng[]; onAdd: (point: La
             key="google-sat"
             url="https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
             subdomains={["mt0", "mt1", "mt2", "mt3"]}
-            attribution="Map data &copy; Google"
+            attribution={GOOGLE_MAP_ATTRIBUTION}
             maxZoom={21}
           />
         )}

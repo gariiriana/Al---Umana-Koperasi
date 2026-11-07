@@ -1,4 +1,5 @@
 // Data rekap terpadu (shift hadir + cuti/sakit/izin + pergantian shift) untuk layar Rekap, Excel, dan Word.
+import { isLateClockIn } from "../../../../workers/absensi/shared/time.js";
 import {
   LEAVE_TYPE_LABEL,
   SHIFT_STATUS_LABEL,
@@ -41,7 +42,13 @@ export interface UnifiedRekapItem {
   durationMin: number | null;
   statusLabel: string;
   badgeTone: "selesai" | "terbuka" | "lupa_pulang" | "cuti" | "sakit" | "izin";
+  /** Clock in lewat 08:00 WIB. */
+  late: boolean;
+  /** Kolom "Area / Keterangan" lengkap (tabel layar lebar & export). */
   info: string;
+  areaName: string | null;
+  /** Keterangan tanpa nama area (alasan terlambat, pergantian shift, alasan cuti) untuk kartu di HP. */
+  notes: string[];
   shiftRow: RekapRow | null;
 }
 
@@ -95,7 +102,9 @@ export function buildUnifiedRekapItems(
     const key = `${row.uid}:${row.workDate}`;
     shiftDates.add(key);
     const swapNote = swapNoteByUidDate.get(key);
-    const infoParts = [row.areaName, swapNote].filter(Boolean);
+    const lateNote = row.lateReason ? `Alasan terlambat: ${row.lateReason}` : null;
+    const notes = [lateNote, swapNote].filter((note): note is string => Boolean(note));
+    const infoParts = [row.areaName, ...notes].filter(Boolean);
     return {
       key: `shift-${row.shiftId}`,
       kind: "shift",
@@ -107,7 +116,10 @@ export function buildUnifiedRekapItems(
       durationMin: row.durationMin,
       statusLabel: SHIFT_STATUS_LABEL[row.status],
       badgeTone: row.status,
+      late: isLateClockIn(row.masukAt),
       info: infoParts.length > 0 ? infoParts.join(" · ") : "-",
+      areaName: row.areaName,
+      notes,
       shiftRow: row,
     };
   });
@@ -123,6 +135,7 @@ export function buildUnifiedRekapItems(
       const leaveType: LeaveType = r.leaveType;
       const typeTitle = r.leaveSubtype || LEAVE_TYPE_LABEL[leaveType];
       const partnerSuffix = r.partnerName ? ` (Pengganti: ${r.partnerName})` : "";
+      const info = `${r.reason ? `${typeTitle}: ${r.reason}` : typeTitle}${partnerSuffix}`;
       items.push({
         key: `leave-${r.id}-${date}`,
         kind: "leave",
@@ -134,7 +147,10 @@ export function buildUnifiedRekapItems(
         durationMin: null,
         statusLabel: LEAVE_TYPE_LABEL[leaveType],
         badgeTone: leaveType,
-        info: `${r.reason ? `${typeTitle}: ${r.reason}` : typeTitle}${partnerSuffix}`,
+        late: false,
+        info,
+        areaName: null,
+        notes: [info],
         shiftRow: null,
       });
     }
@@ -191,7 +207,7 @@ function detailCells(item: UnifiedRekapItem, withName: boolean): string[] {
     item.masukAt !== null ? formatJam(item.masukAt) : "-",
     item.pulangAt !== null ? formatJam(item.pulangAt) : "-",
     item.durationMin !== null ? formatDurasi(item.durationMin) : "-",
-    item.statusLabel,
+    item.late ? `${item.statusLabel} · Terlambat` : item.statusLabel,
     item.info,
   ];
   if (withName) cells.splice(1, 0, item.name);

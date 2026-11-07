@@ -1,5 +1,6 @@
 // Format jam/tanggal/durasi untuk karyawan; semua dalam WIB, sama dengan tanggal kerja Worker.
-import { workDateWIB } from "../../../../workers/absensi/shared/time.js";
+import { LATE_AFTER_MINUTE_WIB } from "../../../../workers/absensi/shared/constants.js";
+import { isLateClockIn, minuteOfDayWIB, workDateWIB } from "../../../../workers/absensi/shared/time.js";
 import type { LeaveType, RequestStatus, ShiftStatusName } from "@/absensi/types";
 
 const WIB_OFFSET_MS = 7 * 3600_000;
@@ -64,6 +65,12 @@ export function formatDurasi(min: number): string {
   const minutes = min % 60;
   if (hours === 0) return `${minutes} menit`;
   return minutes === 0 ? `${hours} jam` : `${hours} jam ${minutes} menit`;
+}
+
+/** "Terlambat 11 jam" untuk clock in lewat 08:00 WIB; null kalau tepat waktu. */
+export function formatTerlambat(masukAt: number): string | null {
+  if (!isLateClockIn(masukAt)) return null;
+  return `Terlambat ${formatDurasi(minuteOfDayWIB(masukAt) - LATE_AFTER_MINUTE_WIB)}`;
 }
 
 /** "Oktober 2026" dari `YYYY-MM`. */

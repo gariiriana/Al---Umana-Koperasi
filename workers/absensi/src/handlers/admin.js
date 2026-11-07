@@ -61,6 +61,7 @@ export async function getHariIni(ctx) {
     if (row.shift_id) {
       people.get(row.uid).views.push(toShiftView({
         id: row.shift_id, work_date: row.work_date, masuk_at: row.masuk_at, pulang_at: row.pulang_at, status: row.status,
+        late_reason: row.late_reason,
       }, now));
     }
   }
@@ -74,6 +75,7 @@ export async function getHariIni(ctx) {
       masukAt: shown?.masukAt ?? null,
       pulangAt: shown?.pulangAt ?? null,
       state: shown ? STATE[shown.status] : "belum",
+      lateReason: shown?.lateReason ?? null,
       leaveType: leaveByUid.get(uid) ?? null,
       shiftSwap: swapByUid.get(uid) ?? null,
     };
@@ -100,7 +102,7 @@ export async function getRekap(ctx) {
       return {
         shiftId: row.id, uid: row.uid, name: row.name, workDate: row.work_date, masukAt: row.masuk_at,
         pulangAt: view.pulangAt, durationMin: view.durationMin, status: view.status, areaName: row.area_name ?? null,
-        masukPhotoId: row.masuk_photo_id, pulangPhotoId: row.pulang_photo_id ?? null,
+        masukPhotoId: row.masuk_photo_id, pulangPhotoId: row.pulang_photo_id ?? null, lateReason: view.lateReason,
       };
     }),
     requests: requests.map(toRequestView),

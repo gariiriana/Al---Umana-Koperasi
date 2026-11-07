@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { payloadChallenge } from "../../../../workers/absensi/shared/binding.js";
+import { LATE_REASON_MAX, LATE_REASON_MIN } from "../../../../workers/absensi/shared/constants.js";
 import { checkLocation } from "../../../../workers/absensi/shared/geo.js";
+import { isLateClockIn } from "../../../../workers/absensi/shared/time.js";
 import { absen, absenOptions } from "@/absensi/api";
 import type { SelfieResult } from "@/absensi/components/SelfieCapture";
 import { signWithPasskey } from "@/absensi/device/passkey";
@@ -10,7 +12,13 @@ import { errorMessage } from "@/absensi/errorMessage";
 import { messageFor } from "@/absensi/messages";
 import type { AbsenKind, AbsenOptions, LocationInput, Me, ShiftStatus } from "@/absensi/types";
 
-export type ClockStep = "idle" | "lokasi" | "selfie" | "passkey" | "kirim" | "sukses" | "gagal";
+export type ClockStep = "idle" | "alasan" | "lokasi" | "selfie" | "passkey" | "kirim" | "sukses" | "gagal";
+
+/** Rapikan spasi; null kalau alasan terlalu pendek. */
+export function normalizeLateReason(text: string): string | null {
+  const reason = text.replace(/\s+/g, " ").trim().slice(0, LATE_REASON_MAX);
+  return reason.length >= LATE_REASON_MIN ? reason : null;
+}
 
 interface Prepared {
   options: AbsenOptions;
@@ -27,6 +35,8 @@ export interface ClockFlow {
   /** Challenge sudah terikat ke lokasi + selfie; tombol passkey boleh ditekan. */
   passkeyReady: boolean;
   start: (kind: AbsenKind) => void;
+  /** Step "alasan": alasan clock in lewat 08:00; lanjut ke peta lokasi kalau cukup panjang. */
+  submitLateReason: (reason: string) => void;
   confirmLocation: (fix: LocationInput) => void;
   selfieDone: (selfie: SelfieResult) => Promise<void>;
   confirmPasskey: () => Promise<void>;
@@ -35,10 +45,20 @@ export interface ClockFlow {
 }
 
 /**
- * Konfirmasi Peta Lokasi → Selfie → Challenge dari Worker yang diikat ke lokasi + hash selfie → Passkey → Absen.
+ * (Alasan kalau clock in lewat 08:00) → Konfirmasi Peta Lokasi → Selfie → Challenge dari Worker yang diikat
+ * ke lokasi + hash selfie → Passkey → Absen.
  * Passkey dipanggil dari tombol (`confirmPasskey`) karena Safari iPhone butuh ketukan pengguna.
  */
-export function useClockFlow({ me, onStatus }: { me: Me; onStatus: (status: ShiftStatus) => void }): ClockFlow {
+export function useClockFlow({
+  me,
+  onStatus,
+  now = Date.now,
+}: {
+  me: Me;
+  onStatus: (status: ShiftStatus) => void;
+  /** Jam perangkat untuk cek "lewat 08:00"; bisa diganti di tes. */
+  now?: () => number;
+}): ClockFlow {
   const [step, setStep] = useState<ClockStep>("idle");
   const [kind, setKind] = useState<AbsenKind | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,11 +70,14 @@ export function useClockFlow({ me, onStatus }: { me: Me; onStatus: (status: Shif
   const kindRef = useRef<AbsenKind | null>(null);
   const locationRef = useRef<LocationInput | null>(null);
   const preparedRef = useRef<Prepared | null>(null);
+  const lateReasonRef = useRef<string | null>(null);
   const meRef = useRef(me);
   const onStatusRef = useRef(onStatus);
+  const nowRef = useRef(now);
   useEffect(() => {
     meRef.current = me;
     onStatusRef.current = onStatus;
+    nowRef.current = now;
   });
 
   const fail = useCallback((token: number, message: string) => {
@@ -63,15 +86,27 @@ export function useClockFlow({ me, onStatus }: { me: Me; onStatus: (status: Shif
     setStep("gagal");
   }, []);
 
-  const start = useCallback((nextKind: AbsenKind) => {
+  // `keepReason`: "Coba lagi" sesudah gagal tidak menanyakan alasan untuk kedua kalinya.
+  const begin = useCallback((nextKind: AbsenKind, keepReason: boolean) => {
     run.current++;
     kindRef.current = nextKind;
     locationRef.current = null;
     preparedRef.current = null;
+    if (!keepReason || nextKind !== "masuk") lateReasonRef.current = null;
     setKind(nextKind);
     setError(null);
     setResult(null);
     setPrepared(null);
+    const needReason = nextKind === "masuk" && lateReasonRef.current === null && isLateClockIn(nowRef.current());
+    setStep(needReason ? "alasan" : "lokasi");
+  }, []);
+
+  const start = useCallback((nextKind: AbsenKind) => begin(nextKind, false), [begin]);
+
+  const submitLateReason = useCallback((text: string) => {
+    const reason = normalizeLateReason(text);
+    if (!reason || kindRef.current !== "masuk") return;
+    lateReasonRef.current = reason;
     setStep("lokasi");
   }, []);
 
@@ -127,12 +162,14 @@ export function useClockFlow({ me, onStatus }: { me: Me; onStatus: (status: Shif
       });
       if (token !== run.current) return;
       setStep("kirim");
+      const lateReason = currentKind === "masuk" ? lateReasonRef.current : null;
       const res = await absen({
         challengeId: ready.options.challengeId,
         kind: currentKind,
         location,
         selfieBase64: ready.selfieBase64,
         faceDistance: ready.faceDistance,
+        ...(lateReason ? { lateReason } : {}),
         authentication,
       });
       if (token !== run.current) return;
@@ -145,12 +182,13 @@ export function useClockFlow({ me, onStatus }: { me: Me; onStatus: (status: Shif
   }, [fail]);
 
   const retry = useCallback(() => {
-    if (kindRef.current) start(kindRef.current);
-  }, [start]);
+    if (kindRef.current) begin(kindRef.current, true);
+  }, [begin]);
 
   const cancel = useCallback(() => {
     run.current++;
     preparedRef.current = null;
+    lateReasonRef.current = null;
     setPrepared(null);
     setError(null);
     setStep("idle");
@@ -163,6 +201,7 @@ export function useClockFlow({ me, onStatus }: { me: Me; onStatus: (status: Shif
     result,
     passkeyReady: prepared !== null,
     start,
+    submitLateReason,
     confirmLocation,
     selfieDone,
     confirmPasskey,

@@ -1,6 +1,7 @@
 // Pengenal wajah di perangkat (@vladmandic/face-api); model disajikan dari /models.
 import type * as FaceApi from "@vladmandic/face-api";
 import type { Point } from "@/absensi/device/eyes";
+import { pickSingleFace } from "@/absensi/device/faceMatch";
 
 const MODEL_URI = "/models";
 
@@ -35,15 +36,23 @@ export type FaceDetection =
   | { kind: "none" }
   | { kind: "many" };
 
-export async function detectSingleFace(video: HTMLVideoElement): Promise<FaceDetection> {
+// Saat absen ambang deteksi dilonggarkan supaya wajah di ruangan redup / malam hari tetap terbaca;
+// cocok-tidaknya wajah tetap ditentukan jarak deskriptor (FACE_MATCH_THRESHOLD).
+// Foto acuan aktivasi tetap memakai ambang default face-api (0.5) supaya acuannya jelas.
+export const DETECT_SCORE_ABSEN = 0.3;
+export const DETECT_SCORE_ACUAN = 0.5;
+
+export async function detectSingleFace(
+  video: HTMLVideoElement,
+  { minScore = DETECT_SCORE_ABSEN }: { minScore?: number } = {},
+): Promise<FaceDetection> {
   const faceapi = await faceApi();
   const results = await faceapi
-    .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+    .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: minScore }))
     .withFaceLandmarks(true)
     .withFaceDescriptors();
-  if (results.length === 0) return { kind: "none" };
-  if (results.length > 1) return { kind: "many" };
-  const [face] = results;
+  const face = pickSingleFace(results);
+  if (face === "none" || face === "many") return { kind: face };
   return {
     kind: "one",
     descriptor: Array.from(face.descriptor),

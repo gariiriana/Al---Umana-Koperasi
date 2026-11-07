@@ -115,6 +115,19 @@ describe("admin endpoints", () => {
     assert.deepEqual(state, { Ani: "masuk", Budi: "tidak_clock_out", Cici: "belum", Eka: "belum" });
   });
 
+  it("shows the late clock-in reason in Hari Ini and Rekap", async () => {
+    const masukAt = T0 + 12 * 3600_000; // 19:00 WIB
+    await insertShift(env.DB, shift({ id: "late-1", uid: "u3", workDate: "2026-10-27", masukAt, lateReason: "Lupa absen pagi" }));
+    const today = await asAdmin("GET", "/admin/hari-ini");
+    const cici = today.data.rows.find((r) => r.name === "Cici");
+    assert.equal(cici.masukAt, masukAt);
+    assert.equal(cici.lateReason, "Lupa absen pagi");
+    assert.equal(today.data.rows.find((r) => r.name === "Ani").lateReason, null);
+
+    const rekap = await asAdmin("GET", "/admin/rekap?from=2026-10-27&to=2026-10-27&uid=u3");
+    assert.equal(rekap.data.rows[0].lateReason, "Lupa absen pagi");
+  });
+
   it("serves photos as JPEG and 404s purged ones", async () => {
     await insertPhoto(env.PHOTOS, { id: "selfie-1", uid: "u1", kind: "selfie", jpeg: new Uint8Array([0xff, 0xd8, 0xff, 7]), createdAt: T0 });
     const ok = await asAdmin("GET", "/admin/foto/selfie-1");

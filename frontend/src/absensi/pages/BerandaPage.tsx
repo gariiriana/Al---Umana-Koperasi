@@ -18,6 +18,7 @@ import { getRiwayat, resetSimulasi } from "@/absensi/api";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
 import { ClockButtons } from "@/absensi/components/ClockButtons";
 import { EmployeeBottomNav } from "@/absensi/components/EmployeeBottomNav";
+import { LateReasonForm } from "@/absensi/components/LateReasonForm";
 import { LocationConfirmModal } from "@/absensi/components/LocationConfirmModal";
 import { NotificationBellButton } from "@/absensi/components/NotificationSheet";
 import { SelfieCapture } from "@/absensi/components/SelfieCapture";
@@ -399,7 +400,7 @@ function Beranda({
         />
       )}
 
-      {/* Langkah 2–4: Selfie Liveness, Passkey, dan Hasil */}
+      {/* Langkah 0 (Clock In lewat 08:00): Alasan, lalu Langkah 2–4: Selfie Liveness, Passkey, dan Hasil */}
       {flow.step !== "idle" && flow.step !== "lokasi" && (
         <div
           role="dialog"
@@ -416,6 +417,10 @@ function Beranda({
                 {title}
               </h2>
             </div>
+
+            {flow.step === "alasan" && (
+              <LateReasonForm now={now} onSubmit={flow.submitLateReason} onCancel={cancel} />
+            )}
 
             {flow.step === "selfie" && (
               <SelfieCapture

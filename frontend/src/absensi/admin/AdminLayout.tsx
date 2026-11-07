@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Navigate, NavLink, useParams } from "react-router-dom";
+import { CalendarCheck, ChartColumn, ClipboardCheck, MapPin, Users } from "lucide-react";
 
 import { AreaTab } from "@/absensi/admin/AreaTab";
 import { HariIniTab } from "@/absensi/admin/HariIniTab";
@@ -12,11 +13,11 @@ import { NotificationBellButton } from "@/absensi/components/NotificationSheet";
 import { Button } from "@/components/ui/Button";
 
 const TABS = [
-  { id: "hari-ini", label: "Hari ini" },
-  { id: "persetujuan", label: "Persetujuan" },
-  { id: "rekap", label: "Rekap" },
-  { id: "karyawan", label: "Karyawan" },
-  { id: "area", label: "Area" },
+  { id: "hari-ini", label: "Hari ini", Icon: CalendarCheck },
+  { id: "persetujuan", label: "Persetujuan", Icon: ClipboardCheck },
+  { id: "rekap", label: "Rekap", Icon: ChartColumn },
+  { id: "karyawan", label: "Karyawan", Icon: Users },
+  { id: "area", label: "Area", Icon: MapPin },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -48,9 +49,9 @@ export function AdminLayout() {
   const pendingCount = me?.pendingRequests ?? 0;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-12 font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900">
+    <div className="min-h-screen bg-[#F8FAFC] pb-[calc(6rem+env(safe-area-inset-bottom))] font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900 sm:pb-12">
       {/* Header Kuning Khas Seragam */}
-      <div className="relative overflow-hidden rounded-b-[2.25rem] bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 px-4 pb-16 pt-7 shadow-xs">
+      <div className="relative overflow-hidden rounded-b-[2.25rem] bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 px-4 pb-12 pt-7 shadow-xs sm:pb-16">
         <div className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-white/20" />
         <header className="relative mx-auto flex w-full max-w-4xl items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -83,7 +84,8 @@ export function AdminLayout() {
 
       {/* Konten Utama */}
       <div className="relative z-10 mx-auto -mt-8 w-full max-w-4xl space-y-5 px-4">
-        <nav className="flex gap-1.5 overflow-x-auto rounded-2xl border border-amber-100 bg-white p-1.5 shadow-md">
+        {/* Layar lebar: tab di atas. HP: navigasi bawah (di akhir halaman). */}
+        <nav aria-label="Menu admin absensi" className="hidden gap-1.5 rounded-2xl border border-amber-100 bg-white p-1.5 shadow-md sm:flex">
           {TABS.map((item) => (
             <NavLink
               key={item.id}
@@ -108,6 +110,45 @@ export function AdminLayout() {
 
         <TabContent tab={tab} />
       </div>
+
+      <nav
+        aria-label="Menu admin absensi"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-amber-200/70 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-6px_24px_-8px_rgba(17,24,39,0.10)] backdrop-blur-md sm:hidden"
+      >
+        <div className="grid grid-cols-5 gap-1 px-1.5 py-1.5">
+          {TABS.map(({ id, label, Icon }) => (
+            <NavLink
+              key={id}
+              to={`/absensi/admin/${id}`}
+              className={({ isActive }) =>
+                `flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-2xl px-0.5 text-[11px] font-bold leading-tight transition-colors ${
+                  isActive ? "bg-amber-100/80 text-amber-900" : "text-neutral-500 active:bg-neutral-100"
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <span className="relative">
+                    <Icon className={`h-5 w-5 ${isActive ? "text-amber-600" : "text-neutral-400"}`} aria-hidden="true" />
+                    {id === "persetujuan" && pendingCount > 0 && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute -right-2.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-extrabold text-white ring-2 ring-white"
+                      >
+                        {pendingCount}
+                      </span>
+                    )}
+                  </span>
+                  <span className="max-w-full truncate">{label}</span>
+                  {id === "persetujuan" && pendingCount > 0 && (
+                    <span className="sr-only">, {pendingCount} menunggu</span>
+                  )}
+                </>
+              )}
+            </NavLink>
+          ))}
+        </div>
+      </nav>
 
       <LogoutConfirmModal
         open={confirmLogout}

@@ -22,3 +22,8 @@ export const FACE_MATCH_THRESHOLD = 0.55;
 
 export const REKAP_MAX_DAYS = 366;
 export const MIN_PASSWORD_LENGTH = 8;
+
+// Clock in sesudah 08:00 WIB (mulai 08:01) wajib isi alasan di aplikasi; alasan tampil di admin absensi.
+export const LATE_AFTER_MINUTE_WIB = 8 * 60;
+export const LATE_REASON_MIN = 3;
+export const LATE_REASON_MAX = 300;

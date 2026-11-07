@@ -46,6 +46,7 @@ describe("shift rules", () => {
   it("toShiftView maps columns and leaves duration empty while open", () => {
     assert.deepEqual(toShiftView(row(), wib(2026, 10, 27, 1, 0)), {
       id: "s1", workDate: "2026-10-26", masukAt: wib(2026, 10, 26, 22, 0), pulangAt: null, status: "terbuka", durationMin: null,
+      lateReason: null,
     });
   });
 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { addDays, workDateWIB } from "../shared/time.js";
+import { addDays, isLateClockIn, minuteOfDayWIB, workDateWIB } from "../shared/time.js";
 import { checkLocation, distanceToPolygonM, pointInPolygon } from "../shared/geo.js";
 import { payloadChallenge, sha256Hex } from "../shared/binding.js";
 
@@ -24,6 +24,17 @@ describe("time", () => {
   it("addDays crosses month ends", () => {
     assert.equal(addDays("2026-10-31", 1), "2026-11-01");
     assert.equal(addDays("2026-03-01", -1), "2026-02-28");
+  });
+  it("minuteOfDayWIB counts minutes since 00:00 WIB", () => {
+    assert.equal(minuteOfDayWIB(Date.UTC(2026, 9, 26, 17, 0)), 0);
+    assert.equal(minuteOfDayWIB(Date.UTC(2026, 9, 27, 1, 5)), 8 * 60 + 5);
+  });
+  it("isLateClockIn: 08:00 still on time, 08:01 onward late, early morning not late", () => {
+    assert.equal(isLateClockIn(Date.UTC(2026, 9, 27, 0, 59)), false); // 07:59 WIB
+    assert.equal(isLateClockIn(Date.UTC(2026, 9, 27, 1, 0, 59)), false); // 08:00:59 WIB
+    assert.equal(isLateClockIn(Date.UTC(2026, 9, 27, 1, 1)), true); // 08:01 WIB
+    assert.equal(isLateClockIn(Date.UTC(2026, 9, 27, 12, 0)), true); // 19:00 WIB
+    assert.equal(isLateClockIn(Date.UTC(2026, 9, 26, 20, 0)), false); // 03:00 WIB
   });
 });
 

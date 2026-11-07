@@ -76,6 +76,8 @@ export interface AbsenBody {
   location: LocationInput;
   selfieBase64: string;
   faceDistance: number | null;
+  /** Wajib dari pop-up kalau clock in lewat 08:00 WIB. */
+  lateReason?: string;
   authentication: AuthenticationResponseJSON;
 }
 export const absen = (body: AbsenBody) => post<AbsenResult>("/absen", body);
