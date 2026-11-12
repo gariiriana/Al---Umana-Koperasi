@@ -20,7 +20,7 @@ import {
   formatTanggalPendek,
   formatTerlambat,
 } from "@/absensi/logic/format";
-import type { AbsensiRequestView, EmployeeView, RekapRow } from "@/absensi/types";
+import type { AbsensiRequestView, EmployeeView, RekapRow, SilahEntry } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
 
 const field =
@@ -34,6 +34,7 @@ const BADGE_TONE: Record<UnifiedRekapItem["badgeTone"], string> = {
   cuti: "bg-slate-100 text-slate-800 border border-slate-300",
   sakit: "bg-rose-100 text-rose-800 border border-rose-200",
   izin: "bg-sky-100 text-sky-800 border border-sky-200",
+  silah: "bg-teal-50 text-teal-800 border border-teal-200",
 };
 
 /** Absen luar zona yang belum diverifikasi / ditolak diberi warna mencolok. */
@@ -62,6 +63,7 @@ export function RekapTab() {
   const [employees, setEmployees] = useState<EmployeeView[]>([]);
   const [rows, setRows] = useState<RekapRow[] | null>(null);
   const [requests, setRequests] = useState<AbsensiRequestView[]>([]);
+  const [silah, setSilah] = useState<{ entries: SilahEntry[]; today?: string }>({ entries: [] });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState<"xlsx" | "docx" | null>(null);
@@ -74,6 +76,7 @@ export function RekapTab() {
       const res = await getRekap({ from: next.from, to: next.to, uid: next.uid || undefined });
       setRows(res.rows);
       setRequests(res.requests ?? []);
+      setSilah({ entries: res.silah ?? [], today: res.today });
       setApplied(next);
     } catch (err) {
       setError(errorMessage(err));
@@ -89,13 +92,13 @@ export function RekapTab() {
 
   const unifiedItems = useMemo(() => {
     if (!rows || !applied) return [];
-    return buildUnifiedRekapItems(rows, requests, { from: applied.from, to: applied.to });
-  }, [rows, requests, applied]);
+    return buildUnifiedRekapItems(rows, requests, { from: applied.from, to: applied.to, silah: silah.entries, today: silah.today });
+  }, [rows, requests, applied, silah]);
 
   const summaries = useMemo(() => {
     if (!rows || !applied) return [];
-    return summarizeRekap(rows, requests, { from: applied.from, to: applied.to });
-  }, [rows, requests, applied]);
+    return summarizeRekap(rows, requests, { from: applied.from, to: applied.to, silah: silah.entries, today: silah.today });
+  }, [rows, requests, applied, silah]);
 
   /** Kartu HP dikelompokkan per tanggal (item sudah urut tanggal lalu nama). */
   const dayGroups = useMemo(() => {
@@ -114,7 +117,15 @@ export function RekapTab() {
   const meta = (): RekapMeta | null => {
     if (!applied || !rows) return null;
     const areaNames = [...new Set(rows.map((row) => row.areaName).filter((name): name is string => !!name))];
-    return { from: applied.from, to: applied.to, areaNames, printedBy: me?.name ?? "Admin absensi", printedAt: Date.now() };
+    return {
+      from: applied.from,
+      to: applied.to,
+      areaNames,
+      printedBy: me?.name ?? "Admin absensi",
+      printedAt: Date.now(),
+      silah: silah.entries,
+      today: silah.today,
+    };
   };
 
   const exportAs = async (ext: "xlsx" | "docx") => {
@@ -250,6 +261,7 @@ export function RekapTab() {
                     ["Cuti", s.cuti, "border-slate-200 bg-slate-50 text-slate-800"],
                     ["Sakit", s.sakit, "border-rose-200 bg-rose-50 text-rose-800"],
                     ["Izin", s.izin, "border-sky-200 bg-sky-50 text-sky-800"],
+                    ["Silah", s.silah, "border-teal-200 bg-teal-50 text-teal-800"],
                     ["Tidak clock out", s.tidakClockOut, "border-orange-200 bg-orange-50 text-orange-800"],
                     ["Ganti shift", s.pergantianShift, "border-neutral-200 bg-neutral-50 text-neutral-700"],
                   ] as const)
@@ -266,10 +278,10 @@ export function RekapTab() {
           </ul>
 
           <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[680px] text-left text-xs sm:text-sm">
+            <table className="w-full min-w-[740px] text-left text-xs sm:text-sm">
               <thead className="border-b border-neutral-100 bg-neutral-50/80 text-xs font-bold text-neutral-500">
                 <tr>
-                  {["Nama", "Hadir", "Cuti", "Sakit", "Izin", "Tidak Clock Out", "Ganti Shift", "Total Jam Kerja"].map((head) => (
+                  {["Nama", "Hadir", "Cuti", "Sakit", "Izin", "Silah", "Tidak Clock Out", "Ganti Shift", "Total Jam Kerja"].map((head) => (
                     <th key={head} className="px-4 py-2.5">{head}</th>
                   ))}
                 </tr>
@@ -282,6 +294,7 @@ export function RekapTab() {
                     <td className="px-4 py-3">{s.cuti}</td>
                     <td className="px-4 py-3">{s.sakit}</td>
                     <td className="px-4 py-3">{s.izin}</td>
+                    <td className="px-4 py-3 text-teal-700">{s.silah}</td>
                     <td className="px-4 py-3 text-orange-700">{s.tidakClockOut}</td>
                     <td className="px-4 py-3">{s.pergantianShift}</td>
                     <td className="px-4 py-3 font-semibold text-neutral-700">{formatDurasi(s.totalMenit)}</td>

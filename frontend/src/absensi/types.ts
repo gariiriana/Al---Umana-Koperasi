@@ -64,6 +64,8 @@ export interface Me {
   headOf?: UnitRef[];
   /** Pengajuan + absen luar zona anggota tim yang menunggu persetujuan kepala unit ini. */
   teamPending?: number;
+  /** Hari ini jadwal Silah (libur mingguan) akun ini; clock in ditolak server. */
+  silahToday?: boolean;
 }
 
 export interface ActivateOptions {
@@ -111,6 +113,8 @@ export interface EmployeeView {
   activated: boolean;
   referencePhotoId: string | null;
   unitId?: string | null;
+  /** Hari Silah (libur mingguan) yang berlaku sekarang; 0 = Minggu … 6 = Sabtu. */
+  silahDays?: number[];
   createdAt: number;
 }
 
@@ -138,6 +142,16 @@ export interface HariIniRow {
     toShift: string;
     partnerName: string | null;
   } | null;
+  /** Hari ini jadwal Silah (libur mingguan) orang ini. */
+  silah?: boolean;
+}
+
+/** Satu versi jadwal Silah karyawan (berlaku mulai effectiveFrom). */
+export interface SilahEntry {
+  uid: string;
+  name: string;
+  effectiveFrom: string;
+  days: number[];
 }
 
 export interface AbsensiRequestView {

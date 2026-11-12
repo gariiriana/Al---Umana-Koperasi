@@ -2,11 +2,12 @@
 import { payloadChallenge, sha256Hex } from "../../shared/binding.js";
 import { CHALLENGE_TTL_MS, FACE_MATCH_THRESHOLD, LATE_REASON_MAX, LATE_REASON_MIN, MAX_LATE_PHOTO_BYTES } from "../../shared/constants.js";
 import { checkLocation } from "../../shared/geo.js";
+import { groupSilahHistory, isSilahOn } from "../../shared/silah.js";
 import { isLateClockIn, workDateWIB } from "../../shared/time.js";
 import {
   activateEmployee, closeShift, consumeChallenge, countPendingApprovals, countUnreadNotifications, createChallenge,
   deletePhoto, deleteShiftsForReset, getEmployee, getRequestById, getUnit, insertNotifications, insertPasskey, insertPhoto,
-  insertRequest, insertShift, insertZoneException, listActiveEmployeesByRole, listAreas, listEmployeeRequests,
+  insertRequest, insertShift, insertZoneException, listActiveEmployeesByRole, listAreas, listEmployeeRequests, listSilahHistory,
   listNotifications, listPasskeys, markAllNotificationsRead, markNotificationRead, recentShifts, requestsForMonth,
   resetShiftPulangForSimulasi, shiftsForMonth, unitsHeadedBy, updatePasskeyCounter,
 } from "../db.js";
@@ -57,16 +58,30 @@ async function absenLocation(ctx, location, outsideReason) {
   throw new AbsensiError(result.code, 422, { distanceM: result.distanceM });
 }
 
+/** Hari ini (WIB) jadwal Silah karyawan ini. */
+async function isSilahToday(ctx, employee, now) {
+  if (employee.role !== "absen_karyawan") return false;
+  const today = workDateWIB(now);
+  const history = groupSilahHistory(await listSilahHistory(ctx.env.DB, { to: today, uid: employee.uid }));
+  return isSilahOn(history.get(employee.uid) ?? [], today);
+}
+
+/** Clock in di hari Silah ditolak; karyawan diminta menghubungi admin untuk mengubah jadwal Silah. Clock out tetap boleh. */
+async function rejectClockInOnSilah(ctx, employee, kind, now) {
+  if (kind === "masuk" && (await isSilahToday(ctx, employee, now))) throw new AbsensiError("HARI_SILAH", 409);
+}
+
 export async function meView(ctx, employee) {
   const now = ctx.deps.now();
   const faceRequired = employee.face_required === 1;
   const isAdmin = employee.role === "admin_absensi";
-  const [shifts, areas, unreadNotifications, headOf, unit] = await Promise.all([
+  const [shifts, areas, unreadNotifications, headOf, unit, silahToday] = await Promise.all([
     recentShifts(ctx.env.DB, employee.uid),
     listAreas(ctx.env.DB, { activeOnly: true }),
     countUnreadNotifications(ctx.env.DB, employee.uid),
     unitsHeadedBy(ctx.env.DB, employee.uid),
     employee.unit_id ? getUnit(ctx.env.DB, employee.unit_id) : Promise.resolve(null),
+    isSilahToday(ctx, employee, now),
   ]);
   const [pendingRequests, teamPending] = await Promise.all([
     isAdmin ? countPendingApprovals(ctx.env.DB) : Promise.resolve(0),
@@ -87,6 +102,7 @@ export async function meView(ctx, employee) {
     unit: unit ? { id: unit.id, name: unit.name } : null,
     headOf: headOf.map((u) => ({ id: u.id, name: u.name })),
     teamPending,
+    silahToday,
   };
 }
 
@@ -205,6 +221,7 @@ export async function absenOptions(ctx) {
   const employee = await requireActivatedEmployee(ctx);
   const kind = parseKind(await readJson(ctx.request));
   const now = ctx.deps.now();
+  await rejectClockInOnSilah(ctx, employee, kind, now);
   await currentDecision(ctx, employee, kind, now);
   const { nonce } = randomNonce();
   const challengeId = await createChallenge(ctx.env.DB, {
@@ -230,6 +247,7 @@ export async function absen(ctx) {
   const outsideReason = parseOutsideReason(body);
   const now = ctx.deps.now();
   const { env } = ctx;
+  await rejectClockInOnSilah(ctx, employee, kind, now);
 
   const challenge = await consumeChallenge(env.DB, String(body.challengeId || ""), employee.uid, "absen", now);
   if (!challenge || challenge.kind !== kind) throw new AbsensiError("CHALLENGE_INVALID", 400);

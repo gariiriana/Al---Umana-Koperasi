@@ -13,7 +13,7 @@ export function buildRekapWorkbook(
   meta: RekapMeta,
   requests: AbsensiRequestView[] = [],
 ): XLSX.WorkBook {
-  const range = { from: meta.from, to: meta.to };
+  const range = { from: meta.from, to: meta.to, silah: meta.silah, today: meta.today };
   const { detail } = rekapTables(rows, requests, range);
   const summaryRows: (string | number)[][] = [
     SUMMARY_HEADER,
@@ -23,6 +23,7 @@ export function buildRekapWorkbook(
       s.cuti,
       s.sakit,
       s.izin,
+      s.silah,
       s.tidakClockOut,
       s.pergantianShift,
       formatDurasi(s.totalMenit),

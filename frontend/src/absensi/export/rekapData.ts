@@ -1,4 +1,5 @@
 // Data rekap terpadu (shift hadir + cuti/sakit/izin + pergantian shift) untuk layar Rekap, Excel, dan Word.
+import { isSilahOn, type SilahHistoryEntry } from "../../../../workers/absensi/shared/silah.js";
 import { isLateClockIn } from "../../../../workers/absensi/shared/time.js";
 import {
   LEAVE_TYPE_LABEL,
@@ -10,7 +11,16 @@ import {
   worstZoneStatus,
   zoneNotes,
 } from "@/absensi/logic/format";
-import type { AbsensiRequestView, LeaveType, RekapRow, RequestStatus } from "@/absensi/types";
+import type { AbsensiRequestView, LeaveType, RekapRow, RequestStatus, SilahEntry } from "@/absensi/types";
+
+/** Rentang rekap + riwayat jadwal Silah (hari Silah hanya dihitung sampai `today`). */
+export interface RekapRange {
+  from?: string;
+  to?: string;
+  silah?: SilahEntry[];
+  /** `YYYY-MM-DD` hari ini (WIB); hari Silah sesudahnya belum terjadi. */
+  today?: string;
+}
 
 export interface RekapMeta {
   /** `YYYY-MM-DD` */
@@ -19,6 +29,8 @@ export interface RekapMeta {
   areaNames: string[];
   printedBy: string;
   printedAt: number;
+  silah?: SilahEntry[];
+  today?: string;
 }
 
 export interface RekapSummary {
@@ -28,6 +40,7 @@ export interface RekapSummary {
   cuti: number;
   sakit: number;
   izin: number;
+  silah: number;
   tidakClockOut: number;
   pergantianShift: number;
   totalMenit: number;
@@ -35,7 +48,7 @@ export interface RekapSummary {
 
 export interface UnifiedRekapItem {
   key: string;
-  kind: "shift" | "leave";
+  kind: "shift" | "leave" | "silah";
   uid: string;
   name: string;
   workDate: string;
@@ -43,7 +56,7 @@ export interface UnifiedRekapItem {
   pulangAt: number | null;
   durationMin: number | null;
   statusLabel: string;
-  badgeTone: "selesai" | "terbuka" | "lupa_pulang" | "cuti" | "sakit" | "izin";
+  badgeTone: "selesai" | "terbuka" | "lupa_pulang" | "cuti" | "sakit" | "izin" | "silah";
   /** Clock in lewat 08:00 WIB. */
   late: boolean;
   /** Absen di luar zona: menunggu (perlu verifikasi) / disetujui / ditolak; null = di dalam zona. */
@@ -62,6 +75,7 @@ export const SUMMARY_HEADER = [
   "Cuti",
   "Sakit",
   "Izin",
+  "Silah",
   "Tidak clock out",
   "Pergantian shift",
   "Total jam kerja",
@@ -81,17 +95,40 @@ function emptySummary(uid: string, name: string): RekapSummary {
     cuti: 0,
     sakit: 0,
     izin: 0,
+    silah: 0,
     tidakClockOut: 0,
     pergantianShift: 0,
     totalMenit: 0,
   };
 }
 
-/** Menggabungkan baris shift dan pengajuan disetujui menjadi daftar harian terurut. */
+export const SILAH_SHIFT_NOTE = "Masuk di hari Silah";
+
+/** Setiap hari Silah per karyawan di rentang (sampai hari ini), dengan kunci `uid:tanggal`. */
+function silahDayMap(range?: RekapRange): Map<string, { uid: string; name: string; date: string }> {
+  const out = new Map<string, { uid: string; name: string; date: string }>();
+  if (!range?.from || !range.to || !range.silah?.length) return out;
+  const last = range.today && range.today < range.to ? range.today : range.to;
+  const dates = expandDatesInRange(range.from, last);
+  const byUid = new Map<string, { name: string; history: SilahHistoryEntry[] }>();
+  for (const entry of range.silah) {
+    const person = byUid.get(entry.uid) ?? { name: entry.name, history: [] };
+    person.history.push({ effectiveFrom: entry.effectiveFrom, days: entry.days });
+    byUid.set(entry.uid, person);
+  }
+  for (const [uid, { name, history }] of byUid) {
+    for (const date of dates) {
+      if (isSilahOn(history, date)) out.set(`${uid}:${date}`, { uid, name, date });
+    }
+  }
+  return out;
+}
+
+/** Menggabungkan baris shift, pengajuan disetujui, dan hari Silah menjadi daftar harian terurut. */
 export function buildUnifiedRekapItems(
   rows: RekapRow[],
   requests: AbsensiRequestView[] = [],
-  range?: { from?: string; to?: string },
+  range?: RekapRange,
 ): UnifiedRekapItem[] {
   const swapNoteByUidDate = new Map<string, string>();
   for (const r of requests) {
@@ -101,6 +138,7 @@ export function buildUnifiedRekapItems(
     }
   }
 
+  const silahDays = silahDayMap(range);
   const shiftDates = new Set<string>();
   const items: UnifiedRekapItem[] = rows.map((row) => {
     const key = `${row.uid}:${row.workDate}`;
@@ -110,7 +148,8 @@ export function buildUnifiedRekapItems(
       ? `Alasan terlambat: ${row.lateReason}${row.latePhotoId ? " (ada foto bukti)" : ""}`
       : null;
     const zoneStatus = worstZoneStatus(row);
-    const notes = [...zoneNotes(row), lateNote, swapNote].filter((note): note is string => Boolean(note));
+    const silahNote = silahDays.has(key) ? SILAH_SHIFT_NOTE : null;
+    const notes = [...zoneNotes(row), lateNote, swapNote, silahNote].filter((note): note is string => Boolean(note));
     const infoParts = [row.areaName, ...notes].filter(Boolean);
     return {
       key: `shift-${row.shiftId}`,
@@ -142,7 +181,8 @@ export function buildUnifiedRekapItems(
     const dates = expandDatesInRange(r.startDate, r.endDate, range?.from, range?.to);
     for (const date of dates) {
       const uidDate = `${r.uid}:${date}`;
-      if (shiftDates.has(uidDate) || leaveAdded.has(uidDate)) continue;
+      // Hari Silah bukan hari kerja, jadi tidak memotong cuti/sakit/izin.
+      if (shiftDates.has(uidDate) || silahDays.has(uidDate) || leaveAdded.has(uidDate)) continue;
       leaveAdded.add(uidDate);
       const leaveType: LeaveType = r.leaveType;
       const typeTitle = r.leaveSubtype || LEAVE_TYPE_LABEL[leaveType];
@@ -169,6 +209,28 @@ export function buildUnifiedRekapItems(
     }
   }
 
+  for (const [uidDate, { uid, name, date }] of silahDays) {
+    if (shiftDates.has(uidDate)) continue;
+    items.push({
+      key: `silah-${uidDate}`,
+      kind: "silah",
+      uid,
+      name,
+      workDate: date,
+      masukAt: null,
+      pulangAt: null,
+      durationMin: null,
+      statusLabel: "Silah",
+      badgeTone: "silah",
+      late: false,
+      zoneStatus: null,
+      info: "Libur mingguan",
+      areaName: null,
+      notes: [],
+      shiftRow: null,
+    });
+  }
+
   return items.sort(byDateThenName);
 }
 
@@ -176,10 +238,11 @@ export function buildUnifiedRekapItems(
 export function summarizeRekap(
   rows: RekapRow[],
   requests: AbsensiRequestView[] = [],
-  range?: { from?: string; to?: string },
+  range?: RekapRange,
 ): RekapSummary[] {
   const byUid = new Map<string, RekapSummary>();
   const shiftDates = new Set<string>();
+  const silahDays = silahDayMap(range);
 
   for (const row of rows) {
     shiftDates.add(`${row.uid}:${row.workDate}`);
@@ -202,7 +265,7 @@ export function summarizeRekap(
     } else if (r.kind === "cuti" && r.leaveType) {
       for (const date of expandDatesInRange(r.startDate, r.endDate, range?.from, range?.to)) {
         const uidDate = `${r.uid}:${date}`;
-        if (shiftDates.has(uidDate) || leaveAdded.has(uidDate)) continue;
+        if (shiftDates.has(uidDate) || silahDays.has(uidDate) || leaveAdded.has(uidDate)) continue;
         leaveAdded.add(uidDate);
         if (r.leaveType === "sakit") summary.sakit += 1;
         else if (r.leaveType === "izin") summary.izin += 1;
@@ -210,6 +273,13 @@ export function summarizeRekap(
       }
     }
     byUid.set(r.uid, summary);
+  }
+
+  for (const [uidDate, { uid, name }] of silahDays) {
+    if (shiftDates.has(uidDate)) continue;
+    const summary = byUid.get(uid) ?? emptySummary(uid, name);
+    summary.silah += 1;
+    byUid.set(uid, summary);
   }
 
   return [...byUid.values()].sort(byName);
@@ -232,7 +302,7 @@ function detailCells(item: UnifiedRekapItem, withName: boolean): string[] {
 export function rekapTables(
   rows: RekapRow[],
   requests: AbsensiRequestView[] = [],
-  range?: { from?: string; to?: string },
+  range?: RekapRange,
 ): {
   summary: string[][];
   detail: string[][];
@@ -249,6 +319,7 @@ export function rekapTables(
         String(s.cuti),
         String(s.sakit),
         String(s.izin),
+        String(s.silah),
         String(s.tidakClockOut),
         String(s.pergantianShift),
         formatDurasi(s.totalMenit),

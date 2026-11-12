@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -94,5 +94,45 @@ describe("KaryawanTab", () => {
     expect(await screen.findByText("Foto sudah dihapus")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Nonaktifkan" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reset HP & wajah" })).toBeTruthy();
+  });
+});
+
+describe("Silah", () => {
+  const employee = (uid: string, name: string, silahDays: number[]) => ({
+    uid, name, email: `${uid}@absen.alumana.id`, role: "absen_karyawan" as const, status: "aktif" as const,
+    faceRequired: true, activated: true, referencePhotoId: null, createdAt: 0, silahDays,
+  });
+
+  it("Hari Ini: yang Silah tidak dihitung belum absen", async () => {
+    api.getHariIni.mockResolvedValue({
+      date: "2026-11-13",
+      rows: [
+        { uid: "a", name: "Ani", masukAt: null, pulangAt: null, state: "belum", silah: true },
+        { uid: "b", name: "Budi", masukAt: null, pulangAt: null, state: "belum", silah: false },
+        { uid: "c", name: "Citra", masukAt: wib("07:00"), pulangAt: null, state: "masuk", silah: true },
+      ],
+    });
+    render(<HariIniTab />);
+    expect(await screen.findByText("Silah (libur)", { selector: "span" })).toBeTruthy();
+    expect(screen.getByText("Masuk di hari Silah")).toBeTruthy();
+    expect(screen.getAllByText("Belum absen")).toHaveLength(1);
+  });
+
+  it("Karyawan: ringkasan per hari dan ubah jadwal", async () => {
+    api.listEmployees.mockResolvedValue({
+      employees: [employee("u1", "Dwi", [5]), employee("u2", "Wandi", [6]), employee("u3", "Joko", [0])],
+    });
+    api.patchEmployee.mockResolvedValue({});
+    render(<KaryawanTab />);
+    expect(await screen.findByText("Jumat")).toBeTruthy();
+    expect(screen.getByText("Sabtu")).toBeTruthy();
+    expect(screen.getByText("Minggu")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ubah jadwal" }));
+    const wandi = screen.getByRole("group", { name: "Hari Silah Wandi" });
+    fireEvent.click(within(wandi).getByRole("button", { name: "Minggu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
+    await waitFor(() => expect(api.patchEmployee).toHaveBeenCalledWith("u2", { action: "set_silah", silahDays: [6, 0] }));
+    await waitFor(() => expect(api.listEmployees).toHaveBeenCalledTimes(2));
   });
 });

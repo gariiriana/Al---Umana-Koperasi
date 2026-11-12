@@ -18,6 +18,8 @@ const MESSAGES: Record<string, string> = {
   SUDAH_CLOCK_IN: "Kamu sudah clock in.",
   BELUM_CLOCK_IN: "Kamu belum clock in.",
   SUDAH_CLOCK_IN_HARI_INI: "Kamu sudah clock in dan clock out hari ini. Clock in berikutnya besok.",
+  HARI_SILAH:
+    "Hari ini jadwal Silah (libur) Anda, jadi belum bisa clock in. Jika tetap perlu masuk, hubungi Ustadzah Santi untuk mengubah jadwal Silah.",
   BELUM_AKTIVASI: "HP ini belum diaktivasi. Lakukan aktivasi dulu.",
   SUDAH_AKTIVASI: "Akun ini sudah diaktivasi.",
   AKUN_NONAKTIF: "Akun kamu dinonaktifkan. Hubungi admin absensi.",

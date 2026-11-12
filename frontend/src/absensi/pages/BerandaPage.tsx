@@ -21,6 +21,7 @@ import { ClockButtons } from "@/absensi/components/ClockButtons";
 import { EmployeeBottomNav } from "@/absensi/components/EmployeeBottomNav";
 import { LateReasonForm } from "@/absensi/components/LateReasonForm";
 import { LocationConfirmModal } from "@/absensi/components/LocationConfirmModal";
+import { SilahNoticeModal } from "@/absensi/components/SilahNoticeModal";
 import { NotificationBellButton } from "@/absensi/components/NotificationSheet";
 import { SelfieCapture } from "@/absensi/components/SelfieCapture";
 import { SignalStatusPill, useAmbientGps, useOnlineStatus } from "@/absensi/components/SignalStatusPill";
@@ -161,6 +162,7 @@ function Beranda({
   }, [currentMonth, reloadKey]);
 
   const flow = useClockFlow({ me, onStatus: setStatus });
+  const [silahNotice, setSilahNotice] = useState(false);
   const view = buttonState(me.status, now);
   const activeShift = me.status.open ?? (me.status.today?.workDate === workDateWIB(now) ? me.status.today : null);
   const showDeviceBanner = hasDeviceMarker(me.uid) === false;
@@ -267,11 +269,21 @@ function Beranda({
             <ClockButtons
               view={view}
               activeShift={activeShift}
-              onPress={(kind) => flow.start(kind)}
+              onPress={(kind) => {
+                // Hari Silah: langsung pop-up, tanpa lewat peta/selfie (server juga menolak).
+                if (kind === "masuk" && me.silahToday) setSilahNotice(true);
+                else flow.start(kind);
+              }}
               onSecretReset={isSimulationAccount ? (target) => void triggerSecretReset(target) : undefined}
             />
           </div>
         </section>
+
+        {me.silahToday && (
+          <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-xs font-semibold text-teal-900">
+            Hari ini jadwal Silah (libur) Anda. Perlu masuk? Hubungi Ustadzah Santi untuk mengubah jadwal Silah.
+          </div>
+        )}
 
         {showDeviceBanner && (
           <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900">
@@ -413,6 +425,16 @@ function Beranda({
       </main>
 
       <EmployeeBottomNav />
+
+      <SilahNoticeModal
+        open={silahNotice}
+        date={workDateWIB(now)}
+        onClose={() => {
+          setSilahNotice(false);
+          // Kalau admin baru mengubah jadwal Silah, ketukan berikutnya sudah memakai data terbaru.
+          void reloadMe();
+        }}
+      />
 
       {/* Langkah 1 Clock In / Out: Layar Peta Konfirmasi Google Maps (Referensi SS 3–5) */}
       {flow.step === "lokasi" && flow.kind && (

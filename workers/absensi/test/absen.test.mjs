@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { addEmployee, call, fakeDeps, fakeWebauthn, JPEG_BASE64, makeEnv, T0 } from "./helpers.mjs";
-import { activateEmployee, getPhoto, insertPasskey, recentShifts, replaceAreas } from "../src/db.js";
+import { activateEmployee, getPhoto, insertPasskey, recentShifts, replaceAreas, setSilah } from "../src/db.js";
 import { payloadChallenge, sha256Hex } from "../shared/binding.js";
 import { MAX_LATE_PHOTO_BYTES } from "../shared/constants.js";
 
@@ -48,7 +48,7 @@ describe("clock in / clock out", () => {
   before(async () => {
     ({ env, dispose } = await makeEnv());
     await replaceAreas(env.DB, [{ id: "a1", name: "SPPG", polygon: SQ, toleranceM: 15, active: true }], "admin", T0);
-    for (const uid of ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10", "u11", "u12", "u13", "u14", "u15"]) {
+    for (const uid of ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10", "u11", "u12", "u13", "u14", "u15", "u16"]) {
       await addEmployee(env, { uid, email: `${uid}@absen.test`, faceRequired: uid !== "u2" });
       if (uid === "u3") continue;
       await activateEmployee(env.DB, uid, { faceDescriptor: [0.1], referencePhotoId: `r-${uid}`, consentAt: T0, activatedAt: T0 });
@@ -56,6 +56,30 @@ describe("clock in / clock out", () => {
     }
   });
   after(() => dispose());
+
+  it("rejects clock in on the employee's Silah day until the schedule changes, but still allows clock out", async () => {
+    now = T0; // Selasa 27 Okt, 07:00 WIB
+    await setSilah(env.DB, { uid: "u16", days: [2], effectiveFrom: "2026-10-01", nowMs: T0, byUid: "adm" });
+    const me = await call(env, deps, "GET", "/me", { token: "u16" });
+    assert.equal(me.data.silahToday, true);
+    const opts = await options("u16", "masuk");
+    assert.equal(opts.status, 409);
+    assert.equal(opts.data.error.code, "HARI_SILAH");
+
+    // Challenge yang sempat dibuat sebelum hari Silah juga tidak bisa dipakai untuk clock in.
+    await setSilah(env.DB, { uid: "u16", days: [], effectiveFrom: "2026-10-27", nowMs: T0, byUid: "adm" });
+    const body = await signedBody("u16", "masuk");
+    await setSilah(env.DB, { uid: "u16", days: [2], effectiveFrom: "2026-10-27", nowMs: T0, byUid: "adm" });
+    assert.equal((await absen("u16", body)).data.error.code, "HARI_SILAH");
+
+    // Admin mengubah jadwal (Silah pindah ke Sabtu) → bisa clock in, dan clock out tetap boleh.
+    await setSilah(env.DB, { uid: "u16", days: [6], effectiveFrom: "2026-10-27", nowMs: T0, byUid: "adm" });
+    assert.equal((await call(env, deps, "GET", "/me", { token: "u16" })).data.silahToday, false);
+    assert.equal((await absen("u16", await signedBody("u16", "masuk"))).status, 200);
+    await setSilah(env.DB, { uid: "u16", days: [2], effectiveFrom: "2026-10-27", nowMs: T0, byUid: "adm" });
+    now = T0 + 9 * HOUR;
+    assert.equal((await absen("u16", await signedBody("u16", "pulang"))).status, 200);
+  });
 
   it("clocks in on server time, ignores client time, and never records the same body twice", async () => {
     now = T0;

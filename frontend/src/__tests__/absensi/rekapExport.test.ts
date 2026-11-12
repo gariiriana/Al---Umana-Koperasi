@@ -90,6 +90,7 @@ describe("summarizeRekap", () => {
         cuti: 0,
         sakit: 0,
         izin: 0,
+        silah: 0,
         tidakClockOut: 0,
         pergantianShift: 1,
         totalMenit: 510,
@@ -101,6 +102,7 @@ describe("summarizeRekap", () => {
         cuti: 2,
         sakit: 0,
         izin: 0,
+        silah: 0,
         tidakClockOut: 1,
         pergantianShift: 0,
         totalMenit: 540,
@@ -118,6 +120,7 @@ describe("rekapTables", () => {
       "Cuti",
       "Sakit",
       "Izin",
+      "Silah",
       "Tidak clock out",
       "Pergantian shift",
       "Total jam kerja",
@@ -145,6 +148,46 @@ describe("rekapTables", () => {
     const sari = tables.detailByEmployee.find((e) => e.name === "Sari");
     expect(sari?.rows[0]).toEqual(["Tanggal", "Clock in", "Clock out", "Durasi", "Status", "Area / Keterangan"]);
     expect(sari?.rows).toHaveLength(5); // header + 2 shift + 2 hari cuti
+  });
+});
+
+describe("silah", () => {
+  // Ahmad Silah Jumat sampai 7 Okt, mulai 8 Okt ganti Sabtu. Sari Silah Senin (5 Okt) bertabrakan dengan cutinya.
+  const SILAH = [
+    { uid: "a", name: "Ahmad", effectiveFrom: "2026-09-01", days: [5] },
+    { uid: "a", name: "Ahmad", effectiveFrom: "2026-10-08", days: [6] },
+    { uid: "s", name: "Sari", effectiveFrom: "2026-09-01", days: [1] },
+    { uid: "w", name: "Wandi", effectiveFrom: "2026-09-01", days: [4] },
+  ];
+  const range = { from: "2026-10-01", to: "2026-10-31", silah: SILAH, today: "2026-10-10" };
+
+  it("menghitung hari Silah sampai hari ini, memakai jadwal yang berlaku di tiap tanggal", () => {
+    const summary = summarizeRekap(ROWS, REQUESTS, range);
+    const ahmad = summary.find((s) => s.uid === "a");
+    const sari = summary.find((s) => s.uid === "s");
+    const wandi = summary.find((s) => s.uid === "w");
+    // Jumat 2 Okt (jadwal lama) + Sabtu 10 Okt (jadwal baru); Jumat 9 Okt bukan Silah lagi, 17 Okt dst. belum terjadi.
+    expect(ahmad?.silah).toBe(2);
+    expect(sari?.silah).toBe(1); // Senin 5 Okt
+    expect(sari?.cuti).toBe(1); // cuti 5–6 Okt, 5 Okt sudah Silah → hanya 6 Okt
+    // Wandi tidak punya shift maupun pengajuan, tetap muncul karena ada Silah (Kamis 1 & 8 Okt).
+    expect(wandi?.silah).toBe(2);
+    expect(wandi?.hariHadir).toBe(0);
+  });
+
+  it("baris Silah di rincian, dan clock in di hari Silah diberi catatan", () => {
+    const rows = [...ROWS, row({ uid: "w", name: "Wandi", workDate: "2026-10-08", status: "selesai", durationMin: 480 })];
+    const tables = rekapTables(rows, REQUESTS, range);
+    const silahRows = tables.detail.filter((cells) => cells[5] === "Silah");
+    expect(silahRows.map((cells) => cells[1]).sort()).toEqual(["Ahmad", "Ahmad", "Sari", "Wandi"]);
+    expect(silahRows.every((cells) => cells[6] === "Libur mingguan")).toBe(true);
+    const wandiMasuk = tables.detail.find((cells) => cells[1] === "Wandi" && cells[5] !== "Silah");
+    expect(wandiMasuk?.[6]).toContain("Masuk di hari Silah");
+    expect(summarizeRekap(rows, REQUESTS, range).find((s) => s.uid === "w")?.silah).toBe(1);
+  });
+
+  it("tanpa jadwal Silah rekap tidak berubah", () => {
+    expect(rekapTables(ROWS, REQUESTS, { from: META.from, to: META.to }).detail).toHaveLength(6);
   });
 });
 

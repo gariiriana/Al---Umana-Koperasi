@@ -17,7 +17,12 @@ const STATE_STYLE: Record<HariIniRow["state"], string> = {
   tidak_clock_out: "bg-orange-100 text-orange-800 border border-orange-200",
 };
 
+/** Belum absen karena memang jadwal Silah (libur mingguan) hari ini. */
+const isOnSilah = (row: HariIniRow) => row.state === "belum" && Boolean(row.silah) && !row.leaveType;
+const SILAH_STYLE = "bg-teal-50 text-teal-800 border border-teal-200";
+
 function stateLabel(row: HariIniRow): string {
+  if (isOnSilah(row)) return "Silah (libur)";
   switch (row.state) {
     case "belum":
       return "Belum absen";
@@ -57,6 +62,9 @@ export function HariIniTab() {
   }, [load]);
 
   const count = (state: HariIniRow["state"]) => rows?.filter((row) => row.state === state).length ?? 0;
+  const silahToday = rows?.filter(isOnSilah).length ?? 0;
+  // "Belum absen" tidak menghitung yang sedang Silah atau cuti/sakit/izin.
+  const belumAbsen = rows?.filter((row) => row.state === "belum" && !isOnSilah(row) && !row.leaveType).length ?? 0;
   const cutiToday = rows?.filter((row) => Boolean(row.leaveType)).length ?? 0;
 
   return (
@@ -74,7 +82,7 @@ export function HariIniTab() {
       </div>
 
       {rows && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <div className="rounded-2xl border border-amber-200/80 bg-amber-50/70 p-4">
             <p className="text-xs font-bold text-amber-800">Sudah Clock In</p>
             <p className="mt-1 font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-neutral-900">
@@ -96,7 +104,13 @@ export function HariIniTab() {
           <div className="rounded-2xl border border-neutral-200 bg-white p-4">
             <p className="text-xs font-bold text-neutral-500">Belum Absen</p>
             <p className="mt-1 font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-neutral-900">
-              {count("belum")}
+              {belumAbsen}
+            </p>
+          </div>
+          <div className="col-span-2 rounded-2xl border border-teal-200/80 bg-teal-50/60 p-4 sm:col-span-1">
+            <p className="text-xs font-bold text-teal-800">Silah (libur)</p>
+            <p className="mt-1 font-['Manrope',system-ui,sans-serif] text-2xl font-extrabold text-neutral-900">
+              {silahToday}
             </p>
           </div>
         </div>
@@ -174,7 +188,12 @@ export function HariIniTab() {
                     {LEAVE_TYPE_LABEL[row.leaveType]}
                   </span>
                 )}
-                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${STATE_STYLE[row.state]}`}>
+                {row.silah && row.state !== "belum" && (
+                  <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-bold text-teal-800">
+                    Masuk di hari Silah
+                  </span>
+                )}
+                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${isOnSilah(row) ? SILAH_STYLE : STATE_STYLE[row.state]}`}>
                   {stateLabel(row)}
                 </span>
               </div>

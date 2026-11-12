@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { MIN_PASSWORD_LENGTH } from "../../../../workers/absensi/shared/constants.js";
 import { createEmployee, fetchPhotoUrl, getUnits, listEmployees, patchEmployee, type PatchEmployeeBody } from "@/absensi/api";
+import { SilahPanel } from "@/absensi/admin/SilahPanel";
 import { UnitsPanel } from "@/absensi/admin/UnitsPanel";
 import { errorMessage } from "@/absensi/errorMessage";
 import type { AbsensiRole, EmployeeView, UnitView } from "@/absensi/types";
@@ -115,6 +116,7 @@ export function KaryawanTab() {
 
   return (
     <section className="space-y-6">
+      {employees && <SilahPanel employees={employees} onChanged={load} />}
       {employees && <UnitsPanel units={units} employees={employees} onChanged={load} />}
 
       <form onSubmit={submit} className="space-y-4 rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-xs">

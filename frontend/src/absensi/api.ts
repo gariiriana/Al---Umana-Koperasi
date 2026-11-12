@@ -4,7 +4,7 @@ import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
 import type {
   AbsenKind, AbsenOptions, AbsenResult, AbsensiNotificationView, AbsensiRequestView, AbsensiRole,
   ActivateOptions, ApprovalList, AreaView, CoworkerView, EmployeeView, HariIniRow, LeaveType, LocationInput,
-  Me, RekapRow, RequestStatus, ShiftStatus, ShiftView, UnitRef, UnitView, ZoneExceptionView,
+  Me, RekapRow, RequestStatus, ShiftStatus, ShiftView, SilahEntry, UnitRef, UnitView, ZoneExceptionView,
 } from "@/absensi/types";
 
 const BASE = `${import.meta.env.VITE_ABSENSI_API_BASE_URL ?? ""}/api/absensi`;
@@ -144,7 +144,9 @@ export const getHariIni = () => absensiFetch<{ date: string; rows: HariIniRow[] 
 export function getRekap(q: { from: string; to: string; uid?: string }) {
   const params = new URLSearchParams({ from: q.from, to: q.to });
   if (q.uid) params.set("uid", q.uid);
-  return absensiFetch<{ rows: RekapRow[]; requests?: AbsensiRequestView[] }>(`/admin/rekap?${params}`);
+  return absensiFetch<{ rows: RekapRow[]; requests?: AbsensiRequestView[]; silah?: SilahEntry[]; today?: string }>(
+    `/admin/rekap?${params}`,
+  );
 }
 
 export const listAdminRequests = (status: RequestStatus | "all" = "all") =>
@@ -178,7 +180,8 @@ export const createEmployee = (input: CreateEmployeeInput) => post<EmployeeView>
 export type PatchEmployeeBody =
   | { action: "nonaktifkan" | "aktifkan" | "reset_perangkat" }
   | { action: "set_face_required"; faceRequired: boolean }
-  | { action: "set_unit"; unitId: string | null };
+  | { action: "set_unit"; unitId: string | null }
+  | { action: "set_silah"; silahDays: number[] };
 export const patchEmployee = (uid: string, body: PatchEmployeeBody) =>
   post<EmployeeView>(`/admin/karyawan/${encodeURIComponent(uid)}`, body, "PATCH");
 

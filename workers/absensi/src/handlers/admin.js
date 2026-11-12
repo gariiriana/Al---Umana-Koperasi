@@ -1,11 +1,12 @@
 // Endpoint admin_absensi: hari ini, rekap, pengajuan, foto, karyawan, area.
 import { MAX_TOLERANCE_M, MIN_PASSWORD_LENGTH, REKAP_MAX_DAYS } from "../../shared/constants.js";
+import { groupSilahHistory, isSilahOn, normalizeSilahDays, parseSilahDays, silahDaysOn } from "../../shared/silah.js";
 import { workDateWIB } from "../../shared/time.js";
 import { reviewRequestAs, reviewZoneAs } from "../approval.js";
 import {
   approvedRequestsInRange, countPendingApprovals, deletePhoto, getEmployee, getPhoto, getUnit,
   insertEmployee, insertUnit, listAdminRequests, listAreas, listEmployees, listUnits, listZoneExceptions,
-  rekapShifts, replaceAreas, resetEmployeeDevice, setEmployeeStatus, setEmployeeUnit, setFaceRequired,
+  listSilahHistory, rekapShifts, replaceAreas, resetEmployeeDevice, setEmployeeStatus, setEmployeeUnit, setFaceRequired, setSilah,
   todayOverview, updateUnit,
 } from "../db.js";
 import { AbsensiError, readJson } from "../http.js";
@@ -20,7 +21,7 @@ const invalid = () => new AbsensiError("VALIDATION_ERROR", 400);
 
 const requireAdmin = (ctx) => requireEmployee(ctx, { role: "admin_absensi" });
 
-const employeeView = (row) => ({
+const employeeView = (row, silahDays = []) => ({
   uid: row.uid,
   name: row.name,
   email: row.email,
@@ -30,8 +31,21 @@ const employeeView = (row) => ({
   activated: row.activated_at !== null,
   referencePhotoId: row.reference_photo_id,
   unitId: row.unit_id ?? null,
+  silahDays,
   createdAt: row.created_at,
 });
+
+/** Map uid → hari Silah yang berlaku hari ini (WIB). */
+async function currentSilahByUid(ctx, uid) {
+  const today = workDateWIB(ctx.deps.now());
+  const history = groupSilahHistory(await listSilahHistory(ctx.env.DB, { to: today, uid }));
+  return new Map([...history].map(([key, entries]) => [key, silahDaysOn(entries, today)]));
+}
+
+async function employeeViewByUid(ctx, uid) {
+  const silah = await currentSilahByUid(ctx, uid);
+  return employeeView(await getEmployee(ctx.env.DB, uid), silah.get(uid) ?? []);
+}
 
 const unitView = (row) => ({
   id: row.id,
@@ -47,10 +61,12 @@ export async function getHariIni(ctx) {
   await requireAdmin(ctx);
   const now = ctx.deps.now();
   const date = workDateWIB(now);
-  const [overviewRows, approvedToday] = await Promise.all([
+  const [overviewRows, approvedToday, silahRows] = await Promise.all([
     todayOverview(ctx.env.DB, date),
     approvedRequestsInRange(ctx.env.DB, { from: date, to: date }),
+    listSilahHistory(ctx.env.DB, { to: date }),
   ]);
+  const silahHistory = groupSilahHistory(silahRows);
 
   const leaveByUid = new Map();
   const swapByUid = new Map();
@@ -89,6 +105,7 @@ export async function getHariIni(ctx) {
       zonePulang: shown?.zonePulang ?? null,
       leaveType: leaveByUid.get(uid) ?? null,
       shiftSwap: swapByUid.get(uid) ?? null,
+      silah: isSilahOn(silahHistory.get(uid) ?? [], date),
     };
   });
   return { date, rows };
@@ -103,9 +120,10 @@ export async function getRekap(ctx) {
   if (days < 1 || days > REKAP_MAX_DAYS) throw invalid();
   const uid = params.get("uid") || undefined;
   const now = ctx.deps.now();
-  const [rows, requests] = await Promise.all([
+  const [rows, requests, silahRows] = await Promise.all([
     rekapShifts(ctx.env.DB, { from, to, uid }),
     approvedRequestsInRange(ctx.env.DB, { from, to, uid }),
+    listSilahHistory(ctx.env.DB, { to, uid }),
   ]);
   return {
     rows: rows.map((row) => {
@@ -119,6 +137,9 @@ export async function getRekap(ctx) {
       };
     }),
     requests: requests.map(toRequestView),
+    // Riwayat jadwal Silah; layar & export menurunkan hari Silah per tanggal darinya.
+    silah: silahRows.map((row) => ({ uid: row.uid, name: row.name, effectiveFrom: row.effective_from, days: parseSilahDays(row.days) })),
+    today: workDateWIB(now),
   };
 }
 
@@ -157,7 +178,8 @@ export async function getFoto(ctx) {
 
 export async function listKaryawan(ctx) {
   await requireAdmin(ctx);
-  return { employees: (await listEmployees(ctx.env.DB)).map(employeeView) };
+  const [rows, silah] = await Promise.all([listEmployees(ctx.env.DB), currentSilahByUid(ctx)]);
+  return { employees: rows.map((row) => employeeView(row, silah.get(row.uid) ?? [])) };
 }
 
 export async function createKaryawan(ctx) {
@@ -180,7 +202,7 @@ export async function createKaryawan(ctx) {
     await identity.setAuthDisabled(uid, true).catch(() => {});
     throw err;
   }
-  return employeeView(await getEmployee(ctx.env.DB, uid));
+  return employeeViewByUid(ctx, uid);
 }
 
 export async function patchKaryawan(ctx) {
@@ -213,6 +235,13 @@ export async function patchKaryawan(ctx) {
       await setEmployeeUnit(ctx.env.DB, uid, unitId);
       break;
     }
+    case "set_silah": {
+      // Berlaku mulai hari ini (WIB); hari-hari sebelumnya tetap memakai jadwal lama di rekap.
+      const days = normalizeSilahDays(body.silahDays);
+      if (!days || target.role !== "absen_karyawan") throw invalid();
+      await setSilah(ctx.env.DB, { uid, days, effectiveFrom: workDateWIB(ctx.deps.now()), nowMs: ctx.deps.now(), byUid: admin.uid });
+      break;
+    }
     case "set_face_required":
       if (typeof body.faceRequired !== "boolean") throw invalid();
       await setFaceRequired(ctx.env.DB, uid, body.faceRequired);
@@ -226,7 +255,7 @@ export async function patchKaryawan(ctx) {
     default:
       throw invalid();
   }
-  return employeeView(await getEmployee(ctx.env.DB, uid));
+  return employeeViewByUid(ctx, uid);
 }
 
 export async function getArea(ctx) {

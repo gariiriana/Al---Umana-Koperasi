@@ -54,7 +54,7 @@ export function buildRekapDocument(
   meta: RekapMeta,
   requests: AbsensiRequestView[] = [],
 ): Document {
-  const { summary, detailByEmployee } = rekapTables(rows, requests, { from: meta.from, to: meta.to });
+  const { summary, detailByEmployee } = rekapTables(rows, requests, { from: meta.from, to: meta.to, silah: meta.silah, today: meta.today });
   const printedAt = `${formatTanggalPanjang(workDateWIB(meta.printedAt))} ${formatJam(meta.printedAt)} WIB`;
 
   return new Document({
@@ -73,7 +73,7 @@ export function buildRekapDocument(
         line(`Periode: ${formatTanggalPanjang(meta.from)} – ${formatTanggalPanjang(meta.to)}`),
         line(`Dicetak oleh: ${meta.printedBy} · ${printedAt}`),
         new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240 }, children: [new TextRun("Ringkasan")] }),
-        table(summary, [4, 2, 1.5, 1.5, 1.5, 2, 2, 3]),
+        table(summary, [4, 2, 1.5, 1.5, 1.5, 1.5, 2, 2, 3]),
         new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240 }, children: [new TextRun("Detail per karyawan")] }),
         ...detailByEmployee.flatMap((employee) => [
           new Paragraph({ heading: HeadingLevel.HEADING_3, keepNext: true, spacing: { before: 200 }, children: [new TextRun(employee.name)] }),

@@ -2,6 +2,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const session = vi.hoisted(() => ({ silahToday: false, reloadMe: vi.fn(async () => {}) }));
+
 vi.mock("@/absensi/AbsensiSession", () => ({
   useAbsensiSession: () => ({
     me: {
@@ -15,9 +17,10 @@ vi.mock("@/absensi/AbsensiSession", () => ({
       status: { today: null, open: null, last: null },
       unreadNotifications: 2,
       pendingRequests: 1,
+      silahToday: session.silahToday,
     },
     setStatus: vi.fn(),
-    reloadMe: vi.fn(async () => {}),
+    reloadMe: session.reloadMe,
     signOut: vi.fn(async () => {}),
   }),
 }));
@@ -30,7 +33,11 @@ import { BerandaPage } from "@/absensi/pages/BerandaPage";
 
 const BANNER = "HP ini belum terdaftar. Minta admin absensi reset HP kamu.";
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  session.silahToday = false;
+  session.reloadMe.mockClear();
+});
 
 describe("BerandaPage", () => {
   it("tanpa penanda perangkat: banner tampil, Clock In tetap bisa ditekan, menu layanan & Lihat Selengkapnya tampil", async () => {
@@ -66,5 +73,25 @@ describe("BerandaPage", () => {
     expect(screen.getByText("Sari")).toBeTruthy();
     expect(screen.getByText("SITE TDE")).toBeTruthy();
     await screen.findByText("Belum ada catatan absensi terbaru.");
+  });
+
+  it("hari Silah: Clock In memunculkan pop-up hubungi Ustadzah Santi, tanpa masuk alur peta/selfie", async () => {
+    session.silahToday = true;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-13T07:30:00+07:00")); // Jumat
+    try {
+      render(<MemoryRouter><BerandaPage /></MemoryRouter>);
+      expect(screen.getByText((text) => text.startsWith("Hari ini jadwal Silah (libur) Anda."))).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: /^Clock In$/ }));
+      const dialog = await screen.findByRole("dialog", { name: "Hari Ini Jadwal Silah Anda" });
+      expect(dialog.textContent).toContain("Jumat");
+      expect(dialog.textContent).toContain("Ustadzah Santi");
+      expect(screen.queryByText("Clock in lewat jam 08:00")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Baik, Mengerti" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(session.reloadMe).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

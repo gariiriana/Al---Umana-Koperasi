@@ -350,6 +350,34 @@ export const purgeSelfies = (photos, cutoffMs) =>
 export const purgeChallenges = (db, nowMs) => changes(db.prepare("DELETE FROM challenges WHERE expires_at < ?").bind(nowMs));
 
 // ---------------------------------------------------------------------------
+// Silah (hari libur mingguan tetap)
+// ---------------------------------------------------------------------------
+
+/**
+ * Riwayat jadwal Silah karyawan aktif yang sudah berlaku sampai `to` (termasuk), urut per karyawan.
+ * Berisi `uid, name, effective_from, days`.
+ */
+export function listSilahHistory(db, { to, uid } = {}) {
+  const filter = uid ? " AND s.uid = ?" : "";
+  const values = uid ? [to, uid] : [to];
+  return all(db.prepare(
+    `SELECT s.uid, e.name, s.effective_from, s.days FROM silah s
+     JOIN employees e ON e.uid = s.uid
+     WHERE e.status = 'aktif' AND e.role = 'absen_karyawan' AND s.effective_from <= ?${filter}
+     ORDER BY e.name COLLATE NOCASE, s.effective_from`,
+  ).bind(...values));
+}
+
+/** Simpan jadwal Silah yang berlaku mulai `effectiveFrom`; diubah lagi di hari yang sama = ditimpa. */
+export async function setSilah(db, { uid, days, effectiveFrom, nowMs, byUid }) {
+  await db.prepare(
+    `INSERT INTO silah (uid, effective_from, days, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (uid, effective_from) DO UPDATE SET days = excluded.days, updated_at = excluded.updated_at,
+       updated_by = excluded.updated_by`,
+  ).bind(uid, effectiveFrom, days.join(","), nowMs, byUid ?? null).run();
+}
+
+// ---------------------------------------------------------------------------
 // Unit kerja & kepala unit
 // ---------------------------------------------------------------------------
 
