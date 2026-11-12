@@ -15,12 +15,17 @@
  *
  * Secrets: FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY (service account with
  * Firestore + Firebase Cloud Messaging access). Var: FIREBASE_PROJECT_ID.
+ *
+ * Also serves /api/security/* (security.js): the App Check token endpoint
+ * (secret TURNSTILE_APPCHECK_SECRET, var FIREBASE_APP_ID) and the CSP report
+ * sink.
  */
 
 import {
   buildMessage, classifyFcmError, encodeValue, finalStatus, planBatch,
   resolveRecipient, selectCandidates, toNotification, decodeValue,
 } from "./logic.js";
+import { handleAppCheckToken, handleCspReport } from "./security.js";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SCOPES = "https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.messaging";
@@ -35,8 +40,11 @@ const ALLOWED_ORIGINS = new Set([
   "https://al-umana-koperasi.firebaseapp.com",
 ]);
 
+// App Check token exchange (security.js) needs the cloud-platform scope.
+const APP_CHECK_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
+
 // Plain data only is shared across requests of an isolate (never promises/streams).
-let cachedAccessToken = null;
+const cachedAccessTokens = new Map();
 let cachedJwks = null;
 
 // ---------------------------------------------------------------------------
@@ -60,24 +68,32 @@ function pemToBytes(pem) {
   return Uint8Array.from(atob(normalized), (c) => c.charCodeAt(0));
 }
 
-async function getAccessToken(env, counter) {
-  if (cachedAccessToken && cachedAccessToken.expiresAt > Date.now() + 60_000) return cachedAccessToken.token;
-  const now = Math.floor(Date.now() / 1000);
+/** Sign `claims` as an RS256 JWT with the service account key. */
+async function signJwt(env, claims) {
   const header = base64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const claims = base64Url(JSON.stringify({ iss: env.FIREBASE_CLIENT_EMAIL, scope: SCOPES, aud: GOOGLE_TOKEN_URL, iat: now, exp: now + 3_600 }));
+  const body = base64Url(JSON.stringify(claims));
   const key = await crypto.subtle.importKey("pkcs8", pemToBytes(env.FIREBASE_PRIVATE_KEY),
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
-  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(`${header}.${claims}`));
+  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(`${header}.${body}`));
+  return `${header}.${body}.${base64Url(new Uint8Array(signature))}`;
+}
+
+async function getAccessToken(env, counter, scope = SCOPES) {
+  const cached = cachedAccessTokens.get(scope);
+  if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
+  const now = Math.floor(Date.now() / 1000);
+  const assertion = await signJwt(env, { iss: env.FIREBASE_CLIENT_EMAIL, scope, aud: GOOGLE_TOKEN_URL, iat: now, exp: now + 3_600 });
   counter.n++;
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: `${header}.${claims}.${base64Url(new Uint8Array(signature))}` }),
+    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }),
   });
   if (!response.ok) throw new Error(`Google OAuth failed (${response.status})`);
   const payload = await response.json();
-  cachedAccessToken = { token: payload.access_token, expiresAt: Date.now() + Number(payload.expires_in || 3_000) * 1_000 };
-  return cachedAccessToken.token;
+  const entry = { token: payload.access_token, expiresAt: Date.now() + Number(payload.expires_in || 3_000) * 1_000 };
+  cachedAccessTokens.set(scope, entry);
+  return entry.token;
 }
 
 /** Verify a Firebase Auth ID token (RS256, securetoken JWKs). Returns uid or null. */
@@ -281,8 +297,21 @@ export default {
 
     const { pathname } = new URL(request.url);
     if (pathname === "/api/push/health" && request.method === "GET") {
-      return json({ ok: true, configured: Boolean(env.FIREBASE_CLIENT_EMAIL && env.FIREBASE_PRIVATE_KEY) }, 200, cors);
+      return json({
+        ok: true,
+        configured: Boolean(env.FIREBASE_CLIENT_EMAIL && env.FIREBASE_PRIVATE_KEY),
+        appCheckConfigured: Boolean(env.TURNSTILE_APPCHECK_SECRET && env.FIREBASE_APP_ID),
+      }, 200, cors);
     }
+    if (pathname === "/api/security/app-check-token") {
+      return handleAppCheckToken(request, env, {
+        fetch: (url, init) => fetch(url, init),
+        signJwt: (claims) => signJwt(env, claims),
+        getAccessToken: () => getAccessToken(env, { n: 0 }, APP_CHECK_SCOPE),
+        now: () => Date.now(),
+      }, cors);
+    }
+    if (pathname === "/api/security/csp-report") return handleCspReport(request, console.warn, cors);
     if (pathname === "/api/push/kick" && request.method === "POST") {
       const auth = request.headers.get("authorization") || "";
       const idToken = auth.startsWith("Bearer ") ? auth.slice(7) : "";

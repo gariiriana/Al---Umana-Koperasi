@@ -31,6 +31,7 @@ import {
   type Analytics,
 } from 'firebase/analytics';
 import { firebaseConfig, useEmulators } from './firebaseConfig';
+import { startAppCheck } from './appCheck';
 
 // Fail fast in development if required keys are missing — easier to debug
 // than the cryptic errors thrown later by individual Firebase SDKs.
@@ -50,6 +51,8 @@ for (const key of requiredKeys) {
 }
 
 export const app: FirebaseApp = initializeApp(firebaseConfig);
+// App Check must start before Firestore sends its first request (see appCheck.ts).
+startAppCheck(app);
 export const auth: Auth = getAuth(app);
 
 // Firestore initialization with persistent multi-tab cache (drastically saves server read quota)

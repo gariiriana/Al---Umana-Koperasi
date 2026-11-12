@@ -368,6 +368,27 @@ export function HelpCenterPage() {
             </div>
           )}
         </section>
+
+        {/* Privasi: wajib untuk Cloudflare Turnstile mode Invisible (dipakai Firebase App Check). */}
+        <section id="privasi" className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-xs space-y-2">
+          <h2 className="font-['Manrope',system-ui,sans-serif] text-base font-bold text-[#111827]">
+            {lang === "id" ? "Privasi & Keamanan" : "Privacy & Security"}
+          </h2>
+          <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-xs text-neutral-600 leading-relaxed">
+            {lang === "id"
+              ? "Untuk melindungi aplikasi dari bot dan penyalahgunaan, kami memakai Cloudflare Turnstile. Pemeriksaan ini berjalan otomatis di latar belakang tanpa perlu tindakan dari Anda, dan dapat memproses informasi teknis perangkat serta browser Anda sesuai "
+              : "To protect this app from bots and abuse, we use Cloudflare Turnstile. The check runs automatically in the background without any action from you, and may process technical information about your device and browser under the "}
+            <a
+              href="https://www.cloudflare.com/turnstile-privacy-policy/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-[#B45309] underline hover:text-[#92400E]"
+            >
+              {lang === "id" ? "Turnstile Privacy Addendum dari Cloudflare" : "Cloudflare Turnstile Privacy Addendum"}
+            </a>
+            .
+          </p>
+        </section>
       </div>
     </div>
   );

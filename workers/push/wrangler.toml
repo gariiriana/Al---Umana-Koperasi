@@ -3,7 +3,9 @@ account_id = "42957b053de047bdb5d17c57be5bda9b"
 main = "worker.js"
 compatibility_date = "2026-09-22"
 routes = [
-  { pattern = "koperasi-alumana.com/api/push/*", zone_name = "koperasi-alumana.com" }
+  { pattern = "koperasi-alumana.com/api/push/*", zone_name = "koperasi-alumana.com" },
+  # App Check token (Turnstile) + CSP report sink, see security.js.
+  { pattern = "koperasi-alumana.com/api/security/*", zone_name = "koperasi-alumana.com" }
 ]
 
 # Safety net: deliver anything the app's /api/push/kick did not trigger.
@@ -17,7 +19,10 @@ enabled = true
 
 [vars]
 FIREBASE_PROJECT_ID = "al-umana-koperasi"
+# Web app ID (public, same as VITE_FIREBASE_APP_ID) for App Check tokens.
+FIREBASE_APP_ID = "1:238836777828:web:29f9786375e2c7ad61f071"
 
 # Encrypted secrets (never in this file or the repository):
 #   npx wrangler secret put FIREBASE_CLIENT_EMAIL
 #   npx wrangler secret put FIREBASE_PRIVATE_KEY
+#   npx wrangler secret put TURNSTILE_APPCHECK_SECRET   (secret of the Invisible Turnstile widget)

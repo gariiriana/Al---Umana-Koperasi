@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test logic.test.mjs",
+    "test": "node --test logic.test.mjs security.test.mjs",
     "deploy": "npx wrangler@3 deploy"
   }
 }

@@ -25,8 +25,46 @@ handler that shows the notification is `frontend/public/push-sw.js`.
 
 Routes:
 
-- `GET /api/push/health`: shows whether the secrets are set.
+- `GET /api/push/health`: shows whether the secrets are set (`configured`,
+  `appCheckConfigured`).
 - `POST /api/push/kick`
+- `POST /api/security/app-check-token`: Firebase App Check (see below).
+- `POST /api/security/csp-report`: receives Content-Security-Policy violation
+  reports and writes a short summary (`csp-violation ...`) to Worker Logs.
+
+## App Check (Turnstile)
+
+`frontend/src/lib/appCheck.ts` solves an invisible Cloudflare Turnstile
+widget and sends the token to `/api/security/app-check-token`. The Worker
+(`security.js`) then:
+
+1. verifies the token with Turnstile `siteverify`, accepting only our
+   hostnames and the `app-check` action;
+2. signs a custom token with the service account;
+3. exchanges it for an App Check token valid for 12 hours.
+
+Firestore only rejects requests without that token once **enforcement** is
+switched on (Firebase console → App Check → APIs → Cloud Firestore → Enforce).
+Requests from Workers use the service account and are not affected.
+
+Setup:
+
+1. Cloudflare dashboard → Turnstile → **Add widget**. Use mode **Invisible**
+   and add the hostnames `koperasi-alumana.com`, `al-umana-koperasi.web.app`
+   and `al-umana-koperasi.firebaseapp.com`.
+2. Set its secret on the Worker:
+   `cd workers/push && npx wrangler@4 secret put TURNSTILE_APPCHECK_SECRET`.
+3. Put its sitekey in `frontend/.env.production` as
+   `VITE_TURNSTILE_APPCHECK_SITE_KEY=...`. Leaving it empty keeps App Check
+   off.
+4. Deploy the Worker, then hosting. `/api/push/health` should show
+   `"appCheckConfigured": true`.
+5. Watch Firebase console → App Check → Cloud Firestore for a few days. Turn
+   on enforcement only when almost all requests are **verified**. Users still
+   on an old version show up as unverified until they tap "Perbarui".
+6. Local `vite dev` against production after enforcement: register a debug
+   token in the Firebase console (App Check → Apps → Manage debug tokens).
+   Then set `VITE_APPCHECK_DEBUG_TOKEN=...` in `frontend/.env.local`.
 
 ## Setup
 
@@ -40,7 +78,7 @@ Routes:
 5. Check: `https://koperasi-alumana.com/api/push/health` should show
    `"configured": true`.
 
-Tests: `node --test workers/push/logic.test.mjs`
+Tests: `node --test workers/push/logic.test.mjs workers/push/security.test.mjs`
 
 ## Limits (Cloudflare free plan)
 

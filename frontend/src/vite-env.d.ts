@@ -10,6 +10,10 @@ interface ImportMetaEnv {
   readonly VITE_ABSENSI_API_BASE_URL?: string;
   /** Asal Worker push (default produksi: https://koperasi-alumana.com). */
   readonly VITE_PUSH_API_BASE_URL?: string;
+  /** Sitekey widget Turnstile "Invisible" untuk App Check; kosong = App Check mati. */
+  readonly VITE_TURNSTILE_APPCHECK_SITE_KEY?: string;
+  /** Hanya `vite dev`: debug token App Check yang sudah didaftarkan di Firebase console. */
+  readonly VITE_APPCHECK_DEBUG_TOKEN?: string;
   /** Opsional: kunci publik Web Push sendiri; kosong = kunci bawaan FCM. */
   readonly VITE_FIREBASE_VAPID_KEY?: string;
   readonly VITE_FIREBASE_AUTH_DOMAIN: string;
