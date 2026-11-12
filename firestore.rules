@@ -772,9 +772,6 @@ service cloud.firestore {
     match /mbg_daily_reports/{reportId} {
       allow read: if isMbgStaff();
       allow write: if isMbgManager() || isDistribusiMbg();
-      // Couriers may sync the inspection checklist, never production or financial fields.
-      allow update: if isKurirMbg()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['inspectionForm', 'updatedAt']);
     }
 
     // -------------------------------------------------------------------
@@ -896,13 +893,13 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /mbg_bahan_documentation/{docId} {
       allow read: if isMbgStaff();
-      allow create, update, delete: if isMbgManager() || isDistribusiMbg() || isKurirMbg();
+      allow create, update, delete: if isMbgManager() || isDistribusiMbg();
     }
 
     // Satu foto per dokumen agar arsip di atas tidak melewati batas 1 MiB Firestore.
     match /mbg_bahan_photos/{photoId} {
       allow read: if isMbgStaff();
-      allow create, update, delete: if isMbgManager() || isDistribusiMbg() || isKurirMbg();
+      allow create, update, delete: if isMbgManager() || isDistribusiMbg();
     }
 
     // -------------------------------------------------------------------
@@ -910,7 +907,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /mbg_inspection_forms/{formId} {
       allow read: if isMbgStaff();
-      allow create, update, delete: if isMbgManager() || isDistribusiMbg() || isKurirMbg();
+      allow create, update, delete: if isMbgManager() || isDistribusiMbg();
     }
   }
 }

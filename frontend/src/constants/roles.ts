@@ -166,7 +166,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
    */
   kurir_mbg: [
     "/mbg/delivery",
-    "/mbg/persiapan",
   ],
 
   /**

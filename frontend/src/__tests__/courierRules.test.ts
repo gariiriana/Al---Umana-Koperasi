@@ -66,9 +66,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('courier Firestore authori
     await assertSucceeds(setDoc(doc(dbFor('assistant'), 'courier_locations', 'batch_assistant'), { courierId: 'assistant', orderId: 'batch', latitude: -6, longitude: 106 }));
     await assertFails(setDoc(doc(dbFor('assistant'), 'courier_locations', 'batch_mbg'), { courierId: 'mbg', orderId: 'batch', latitude: -6, longitude: 106 }));
   });
-  it('allows courier checklist sync without permitting production edits', async () => {
+  // Cek list bahan khusus distribusimbg@ (Ustadz Dwi) sejak 2026-11-12, kurir tidak lagi ikut menyinkronkan.
+  it('blocks couriers from the checklist and from production edits', async () => {
     const reference = doc(dbFor('mbg'), 'mbg_daily_reports', 'report');
-    await assertSucceeds(updateDoc(reference, { inspectionForm: { officerName: 'Kurir', rows: [] }, updatedAt: 'now' }));
+    await assertFails(updateDoc(reference, { inspectionForm: { officerName: 'Kurir', rows: [] }, updatedAt: 'now' }));
     await assertFails(updateDoc(reference, { cookingStatus: 'cooking' }));
     await assertFails(setDoc(doc(dbFor('mbg'), 'mbg_daily_reports', 'new'), { batchId: 'batch' }));
   });

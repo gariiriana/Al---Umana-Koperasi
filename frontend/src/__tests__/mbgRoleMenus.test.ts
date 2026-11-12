@@ -21,8 +21,9 @@ describe("menu akun MBG", () => {
     expect(ROLE_DEFAULT_REDIRECT.distribusi_mbg).toBe("/mbg/persiapan");
   });
 
-  it("Cek List & Dokumentasi Bahan tidak ada di menu adminmbg@ maupun produksimbg@", () => {
+  it("Cek List & Dokumentasi Bahan tidak ada di menu adminmbg@, produksimbg@, maupun akun kurir", () => {
     expect(menu("admin_mbg")).not.toContain("Persiapan");
     expect(menu("produksi_mbg")).not.toContain("Persiapan");
+    expect(menu("kurir_mbg")).toEqual(["Kurir MBG"]);
   });
 });

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { initializeTestEnvironment, assertFails, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
+import { initializeTestEnvironment, assertFails, assertSucceeds, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { collection, doc, getDoc, getDocs, setDoc, type Firestore } from 'firebase/firestore';
 import type { MbgBahanDocumentation, MbgBahanPhotoItem } from '@/types/mbg';
 
@@ -50,7 +50,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('dokumentasi bahan: simpan
     await env.clearFirestore();
     await env.withSecurityRulesDisabled(async (ctx) => {
       const store = ctx.firestore();
-      await Promise.all(Object.entries({ distribusi: 'distribusi_mbg', admin: 'admin_mbg', buyer: 'pelanggan' })
+      await Promise.all(Object.entries({ distribusi: 'distribusi_mbg', admin: 'admin_mbg', buyer: 'pelanggan', kurir: 'kurir_mbg' })
         .map(([uid, role]) => setDoc(doc(store, 'users', uid), { role })));
     });
   });
@@ -161,5 +161,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('dokumentasi bahan: simpan
     const buyer = signIn('buyer');
     await assertFails(getDocs(collection(buyer, 'mbg_bahan_photos')));
     await assertFails(setDoc(doc(buyer, 'mbg_bahan_photos', 'batch1_x'), { batchId: 'batch1', photoUrl: 'x' }));
+  });
+
+  // Cek List & Dokumentasi Bahan khusus distribusimbg@ (Ustadz Dwi), kurir tidak ikut menulis.
+  it('blocks MBG couriers from writing bahan documentation and checklists', async () => {
+    const kurir = signIn('kurir');
+    await assertFails(setDoc(doc(kurir, 'mbg_bahan_photos', 'batch1_k'), { batchId: 'batch1', photoUrl: 'x' }));
+    await assertFails(setDoc(doc(kurir, 'mbg_bahan_documentation', 'batch1'), { batchId: 'batch1' }));
+    await assertFails(setDoc(doc(kurir, 'mbg_inspection_forms', 'f1'), { batchId: 'batch1' }));
+    const dwi = signIn('distribusi');
+    await assertSucceeds(setDoc(doc(dwi, 'mbg_inspection_forms', 'f1'), { batchId: 'batch1' }));
+    await assertSucceeds(setDoc(doc(dwi, 'mbg_bahan_photos', 'batch1_d'), { batchId: 'batch1', photoUrl: 'x' }));
   });
 });
