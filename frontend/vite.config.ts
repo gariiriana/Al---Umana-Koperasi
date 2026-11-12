@@ -81,17 +81,10 @@ export default defineConfig(({ mode }) => {
                 cacheableResponse: { statuses: [0, 200] },
               },
             },
-            {
-              // Firestore listeners must never fall back to a cached response:
-              // an installed PWA otherwise can show an older order snapshot
-              // than the browser version of the same account.
-              urlPattern: /^https:\/\/firestore\.googleapis\.com\/.*/i,
-              handler: "NetworkOnly",
-              options: {
-                cacheName: "firestore-cache",
-                expiration: { maxEntries: 50, maxAgeSeconds: 60 * 5 },
-              },
-            },
+            // Sengaja TIDAK ada rute untuk firestore.googleapis.com: browser mengambilnya langsung,
+            // tanpa cache. Koneksi Firestore terbuka terus; bila lewat service worker, worker lama
+            // tidak bisa menyerahkan halaman ke versi baru, dan tombol "Perbarui" memunculkan
+            // pop-up yang sama berulang kali (terbukti di Chrome dan Safari, 2026-11-07).
             {
               // Model pengenal wajah absensi (±7 MB, disalin scripts/copy-face-models.mjs):
               // tidak ikut precache, diunduh sekali saat dipakai lalu disimpan.

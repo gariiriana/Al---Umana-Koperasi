@@ -8,31 +8,44 @@ import type { RegisterSWOptions } from "vite-plugin-pwa/types";
 type UpdateServiceWorker = (reloadPage?: boolean) => Promise<void>;
 type RegisterSW = (options: RegisterSWOptions) => UpdateServiceWorker;
 
+/**
+ * idle: tidak ada versi baru. ready: versi baru menunggu tombol Perbarui. applying: tombol sudah
+ * ditekan, menunggu versi baru mengambil alih. stuck: versi baru belum bisa mengambil alih.
+ * dismissed: pengguna memilih lanjut dulu setelah tertunda.
+ */
+export type AppUpdateStatus = "idle" | "ready" | "applying" | "stuck" | "dismissed";
+
 /** Seberapa sering aplikasi yang sedang terbuka menanyakan versi baru ke server. */
 const CHECK_EVERY_MS = 10 * 60_000;
-/** Bila service worker baru tidak mengambil alih (mis. sudah tidak ada), muat ulang saja. */
-const RELOAD_FALLBACK_MS = 5_000;
+/** Batas tunggu versi baru mengambil alih setelah Perbarui ditekan (biasanya beberapa milidetik). */
+const TAKEOVER_TIMEOUT_MS = 8_000;
 
 let updateServiceWorker: UpdateServiceWorker | null = null;
-let updateReady = false;
+let registration: ServiceWorkerRegistration | null = null;
+let status: AppUpdateStatus = "idle";
+let takeoverTimer: number | undefined;
 const listeners = new Set<() => void>();
-const emit = () => listeners.forEach((fn) => fn());
+
+function setStatus(next: AppUpdateStatus) {
+  status = next;
+  listeners.forEach((fn) => fn());
+}
 
 export function watchAppUpdates(registerSW: RegisterSW): void {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
   updateServiceWorker = registerSW({
     immediate: true,
     onNeedRefresh() {
-      updateReady = true;
-      emit();
+      if (status === "idle") setStatus("ready");
     },
-    onRegisteredSW(_swUrl, registration) {
-      if (!registration) return;
+    onRegisteredSW(_swUrl, reg) {
+      if (!reg) return;
+      registration = reg;
       // Aplikasi terpasang biasanya dilanjutkan dari latar belakang, bukan dimuat ulang, jadi
       // tidak pernah memeriksa versi baru sendiri. Periksa saat kembali ke layar dan berkala.
       const check = () => {
-        if (document.visibilityState !== "visible" || !navigator.onLine || registration.installing) return;
-        registration.update().catch(() => {
+        if (document.visibilityState !== "visible" || !navigator.onLine || reg.installing) return;
+        reg.update().catch(() => {
           // Gagal sementara (sinyal); dicoba lagi pada pemeriksaan berikutnya.
         });
       };
@@ -42,8 +55,8 @@ export function watchAppUpdates(registerSW: RegisterSW): void {
   });
 }
 
-export function isAppUpdateReady(): boolean {
-  return updateReady;
+export function getAppUpdateStatus(): AppUpdateStatus {
+  return status;
 }
 
 export function onAppUpdateChange(fn: () => void): () => void {
@@ -51,8 +64,27 @@ export function onAppUpdateChange(fn: () => void): () => void {
   return () => listeners.delete(fn);
 }
 
-/** Aktifkan versi baru; halaman dimuat ulang begitu service worker baru mengambil alih. */
+/**
+ * Aktifkan versi baru. Begitu ia mengambil alih, vite-plugin-pwa memuat ulang halaman.
+ *
+ * Service worker lama tidak bisa menyerahkan halaman selama ia masih melayani request yang
+ * belum dijawab server (berlaku di Chrome dan Safari). Memuat ulang tidak membantu: versi baru
+ * tetap menunggu dan pop-up yang sama muncul lagi. Jadi bila versi baru masih menunggu setelah
+ * batas waktu, tampilkan petunjuk alih-alih memuat ulang.
+ */
 export async function applyAppUpdate(): Promise<void> {
-  window.setTimeout(() => window.location.reload(), RELOAD_FALLBACK_MS);
+  window.clearTimeout(takeoverTimer);
+  setStatus("applying");
+  takeoverTimer = window.setTimeout(() => {
+    if (registration?.waiting) setStatus("stuck");
+    // Versi baru sudah aktif atau tidak ada lagi, tapi halaman belum dimuat ulang.
+    else window.location.reload();
+  }, TAKEOVER_TIMEOUT_MS);
   await updateServiceWorker?.(true);
+}
+
+/** Setelah tertunda, pengguna boleh lanjut memakai versi ini; pop-up muncul lagi saat dibuka ulang. */
+export function dismissAppUpdate(): void {
+  window.clearTimeout(takeoverTimer);
+  setStatus("dismissed");
 }

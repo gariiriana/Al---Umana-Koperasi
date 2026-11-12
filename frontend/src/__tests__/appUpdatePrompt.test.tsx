@@ -61,8 +61,51 @@ describe('app update prompt', () => {
     fireEvent.click(screen.getByTestId('app-update-backdrop'));
     expect(screen.getByRole('alertdialog')).toBeTruthy();
     expect(updateServiceWorker).not.toHaveBeenCalled();
-    // The only button inside the dialog is Perbarui; there is no close or "nanti" button.
+    // Until Perbarui is pressed the only button is Perbarui; there is no close or "nanti" button.
     expect(Array.from(dialog.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Perbarui']);
+  });
+
+  it('does not reload into the same pop-up when the new version is held up', async () => {
+    // The old service worker cannot hand over while it still serves an open request, so a
+    // reload would only show the same pop-up again (the loop staff saw on some phones).
+    const { AppUpdatePrompt, updateServiceWorker, options } = await setup();
+    vi.useFakeTimers();
+    const reload = vi.fn();
+    Object.defineProperty(window, 'location', { value: { ...window.location, reload }, configurable: true });
+    const registration = { installing: null, waiting: {}, update: vi.fn(async () => undefined) };
+    options().onRegisteredSW?.('/sw.js', registration as unknown as ServiceWorkerRegistration);
+    render(<AppUpdatePrompt />);
+    act(() => options().onNeedRefresh?.());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Perbarui' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+
+    expect(reload).not.toHaveBeenCalled();
+    expect(screen.getByText('Pembaruan tertunda')).toBeTruthy();
+    expect(screen.getByText(/Tutup aplikasi sepenuhnya/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Coba lagi' }));
+    expect(updateServiceWorker).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(reload).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lanjutkan dulu' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('reloads when the waiting version is gone but did not take over by itself', async () => {
+    const { AppUpdatePrompt, options } = await setup();
+    vi.useFakeTimers();
+    const reload = vi.fn();
+    Object.defineProperty(window, 'location', { value: { ...window.location, reload }, configurable: true });
+    const registration = { installing: null, waiting: null, update: vi.fn(async () => undefined) };
+    options().onRegisteredSW?.('/sw.js', registration as unknown as ServiceWorkerRegistration);
+    render(<AppUpdatePrompt />);
+    act(() => options().onNeedRefresh?.());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Perbarui' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 
   it('looks for a new version when the app returns to the screen and every 10 minutes', async () => {
