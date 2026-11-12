@@ -18,7 +18,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('catering job desk submit 
     await environment.clearFirestore();
     await environment.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
-      await Promise.all(Object.entries({ joko: 'produksi_1', mbg2: 'MBG2', legacy: 'tim_produksi', shifa: 'produksi_mbg', wandi: 'distribusi_mbg_2', dwi: 'distribusi_1' })
+      await Promise.all(Object.entries({ joko: 'produksi_1', mbg2: 'MBG2', legacy: 'tim_produksi', shifa: 'produksi_mbg', wandi: 'distribusi_mbg_2', dwi: 'distribusi_1', adminmbg: 'admin_mbg' })
         .map(([uid, role]) => setDoc(doc(db, 'users', uid), { role })));
       await Promise.all([
         setDoc(doc(db, 'catering_jobdesks', 'p1'), { assignedRole: 'produksi_1', status: 'pending', reviewStatus: 'not_submitted' }),
@@ -39,10 +39,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('catering job desk submit 
     await assertSucceeds(submit('legacy', 'p1'));
     await assertSucceeds(submit('shifa', 'p2'));
     await assertSucceeds(submit('wandi', 'd2'));
+    // adminmbg@ dipegang Kang Wandi, jadi job desk-nya = distribusi_2.
+    await assertSucceeds(submit('adminmbg', 'd2'));
   });
   it('still blocks submitting job desks assigned to another role', async () => {
     await assertFails(submit('mbg2', 'p2'));
     await assertFails(submit('dwi', 'p1'));
     await assertFails(submit('shifa', 'd2'));
+    await assertFails(submit('adminmbg', 'p1'));
+    await assertFails(submit('adminmbg', 'p2'));
   });
 });

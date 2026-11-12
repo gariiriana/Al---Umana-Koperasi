@@ -122,30 +122,25 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   // ==========================================================================
 
   /**
-   * Administrasi MBG: Akses penuh ke seluruh fitur MBG.
+   * Administrasi MBG — Kang Wandi (adminmbg@alumana.id): buat data PM, penugasan kurir
+   * (Distribusi MBG), Arsip PM, dan Job Desk Teklap (dipetakan ke distribusi_2).
    */
   admin_mbg: [
-    "/mbg/admin",
-    "/mbg/admin/batch/new",
-    "/mbg/archive",
-    "/mbg/production",
-    "/mbg/distribution",
-    "/mbg/delivery",
-    "/mbg/persiapan",
-  ],
-
-  /**
-   * Tim Produksi MBG: Akses penuh ke seluruh fitur MBG.
-   */
-  produksi_mbg: [
     "/katering/jobdesk",
     "/mbg/admin",
     "/mbg/admin/batch/new",
     "/mbg/archive",
-    "/mbg/production",
     "/mbg/distribution",
-    "/mbg/delivery",
-    "/mbg/persiapan",
+  ],
+
+  /**
+   * Produksi MBG — Ustadzah Hashifah (produksimbg@alumana.id): Produksi MBG, Arsip PM
+   * (hanya lihat), dan Job Desk Teklap.
+   */
+  produksi_mbg: [
+    "/katering/jobdesk",
+    "/mbg/archive",
+    "/mbg/production",
   ],
 
   /**
@@ -156,12 +151,11 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
 
   /**
-   * Distribusi MBG: QC barang masuk, assign tugas kurir, serta akses & edit fitur kurir.
+   * Distribusi MBG — Ustadz Dwi (distribusimbg@alumana.id): hanya Persiapan
+   * (Cek List Bahan & Dokumentasi Bahan) dan Job Desk Teklap.
    */
   distribusi_mbg: [
     "/katering/jobdesk",
-    "/mbg/distribution",
-    "/mbg/delivery",
     "/mbg/persiapan",
   ],
 
@@ -313,7 +307,7 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   admin_mbg: "/mbg/admin",
   produksi_mbg: "/mbg/production",
   dokumentasi_produksiMBG: "/mbg/production",
-  distribusi_mbg: "/mbg/distribution",
+  distribusi_mbg: "/mbg/persiapan",
   kurir_mbg: "/mbg/delivery",
   MBG2: "/katering/jobdesk",
   mbg2: "/katering/jobdesk",

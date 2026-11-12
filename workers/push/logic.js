@@ -20,7 +20,7 @@ export const ROLE_ALIASES = {
   produksi_1: ["produksi_1", "tim_produksi", "MBG2", "mbg2", "produksi_mbg_2"],
   distribusi_1: ["distribusi_1", "distribusi", "distribusi_mbg"],
   produksi_2: ["produksi_2", "produksi_mbg"],
-  distribusi_2: ["distribusi_2", "distribusi_mbg_2"],
+  distribusi_2: ["distribusi_2", "distribusi_mbg_2", "admin_mbg"],
   mo_katering: ["mo_katering"],
   co_mo_katering: ["co_mo_katering"],
   // MBG

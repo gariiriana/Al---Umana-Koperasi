@@ -60,6 +60,7 @@ function mapToAssignableRole(profileRole?: string): JobDeskAssignableRole | null
     produksi_mbg_2: "produksi_1", // Joko
     distribusi_mbg: "distribusi_1", // Dwi
     distribusi_mbg_2: "distribusi_2", // Wandi
+    admin_mbg: "distribusi_2", // Wandi (adminmbg@alumana.id)
   };
   return profileRole ? mapping[profileRole] || null : null;
 }

@@ -48,6 +48,7 @@ export function canonicalJobDeskRole(role: string): string {
     distribusi_mbg: "distribusi_1",
     produksi_mbg: "produksi_2",
     distribusi_mbg_2: "distribusi_2",
+    admin_mbg: "distribusi_2",
   };
   return map[role] ?? role;
 }

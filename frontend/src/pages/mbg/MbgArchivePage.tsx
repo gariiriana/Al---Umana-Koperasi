@@ -397,7 +397,9 @@ function PmEntryRow({
 // Main Archive Page Component
 // ============================================================================
 export function MbgArchivePage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  // Produksi MBG hanya melihat arsip: tanpa edit, hapus, backup, atau pulihkan.
+  const canEdit = profile?.role !== 'produksi_mbg';
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -994,8 +996,8 @@ export function MbgArchivePage() {
           </h1>
           <p className="text-sm text-[#6B7280] mt-1">
             {selectedBatchId
-              ? `Melihat dan mengedit data PM historis untuk batch tanggal ${selectedBatch?.tanggal}`
-              : 'Kelola, edit, atau hapus data PM historis yang sudah disubmit'
+              ? `${canEdit ? 'Melihat dan mengedit' : 'Melihat'} data PM historis untuk batch tanggal ${selectedBatch?.tanggal}`
+              : canEdit ? 'Kelola, edit, atau hapus data PM historis yang sudah disubmit' : 'Lihat data PM historis yang sudah disubmit'
             }
           </p>
         </div>
@@ -1083,7 +1085,8 @@ export function MbgArchivePage() {
                 </span>
               </button>
 
-              <button
+              {canEdit && (<>
+<button
                 type="button"
                 onClick={() => setArchiveTab('backup')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${archiveTab === 'backup'
@@ -1098,6 +1101,7 @@ export function MbgArchivePage() {
                   {backupBatches.length}
                 </span>
               </button>
+</>)}
             </div>
 
             <div className="text-[11px] text-gray-500 px-2 font-medium">
@@ -1132,7 +1136,7 @@ export function MbgArchivePage() {
           )}
 
           {/* ─── SELECTION TOOLBAR & BULK ACTIONS ─── */}
-          {filteredBatches.length > 0 && (
+          {canEdit && filteredBatches.length > 0 && (
             <div className="mb-5 sticky top-3 z-20 bg-white/95 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-3 transition-all">
               <div className="flex items-center gap-3">
                 <button
@@ -1276,7 +1280,8 @@ export function MbgArchivePage() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <button
+                          {canEdit && (<>
+<button
                             type="button"
                             onClick={(e) => handleToggleSelectBatch(b.id, e)}
                             className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${isSelected
@@ -1287,6 +1292,7 @@ export function MbgArchivePage() {
                           >
                             <Check className={`h-4 w-4 stroke-[3] ${isSelected ? 'opacity-100 text-slate-950' : 'opacity-0'}`} />
                           </button>
+</>)}
                           <div className={`p-2.5 rounded-xl transition-colors ${b.isBackup ? 'bg-slate-100 text-slate-700 group-hover:bg-slate-200' : 'bg-amber-50 text-amber-500 group-hover:bg-amber-100'
                             }`}>
                             {b.isBackup ? <Archive className="h-5 w-5" /> : <Folder className="h-5 w-5 fill-amber-100" />}
@@ -1313,7 +1319,8 @@ export function MbgArchivePage() {
                               <Info className="h-2.5 w-2.5 opacity-60 text-emerald-600" />
                             </button>
                           )}
-                          <button
+                          {canEdit && (<>
+<button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1324,6 +1331,7 @@ export function MbgArchivePage() {
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
+</>)}
                         </div>
                       </div>
 
@@ -1377,7 +1385,8 @@ export function MbgArchivePage() {
                         }
                       </span>
                       <div className="flex items-center gap-1.5">
-                        {b.isBackup ? (
+                        {canEdit && (<>
+{b.isBackup ? (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1428,6 +1437,7 @@ export function MbgArchivePage() {
                           <Trash2 className="h-3 w-3" />
                           Hapus
                         </button>
+</>)}
                         <span className="font-bold text-amber-600 group-hover:text-amber-700 flex items-center gap-0.5 ml-0.5">
                           Buka →
                         </span>
@@ -1481,7 +1491,8 @@ export function MbgArchivePage() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              {selectedBatch?.isBackup ? (
+              {canEdit && (<>
+{selectedBatch?.isBackup ? (
                 <button
                   type="button"
                   onClick={() => selectedBatch && handleRestoreFromBackup(selectedBatch.id, selectedBatch.tanggal)}
@@ -1504,10 +1515,12 @@ export function MbgArchivePage() {
                   <span>Pindahkan ke Arsip Backup</span>
                 </button>
               )}
+</>)}
 
               {selectedBatch && (
                 <>
-                  <button
+                  {canEdit && (<>
+<button
                     type="button"
                     onClick={() => navigate(`/mbg/admin?batchId=${selectedBatch.id}`)}
                     className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl cursor-pointer shadow-md transition-all hover:scale-[1.02]"
@@ -1516,6 +1529,7 @@ export function MbgArchivePage() {
                     <Edit className="h-4 w-4" />
                     <span>Edit di Admin MBG</span>
                   </button>
+</>)}
 
                   {!selectedBatch.isBackup && (
                     <button
@@ -1531,7 +1545,8 @@ export function MbgArchivePage() {
                 </>
               )}
 
-              <button
+              {canEdit && (<>
+<button
                 onClick={handleDeleteBatch}
                 disabled={saving}
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer shadow-md transition-colors disabled:opacity-50"
@@ -1539,6 +1554,7 @@ export function MbgArchivePage() {
                 <Trash2 className="h-4 w-4" />
                 Hapus Batch Ini
               </button>
+</>)}
             </div>
           </div>
 
@@ -1551,7 +1567,8 @@ export function MbgArchivePage() {
                   Terdeteksi <strong>{duplicateCount} data duplikat</strong> pada batch ini di database. Tampilan dan total porsi saat ini telah otomatis dirapikan (1 baris per institusi).
                 </span>
               </div>
-              <button
+              {canEdit && (<>
+<button
                 type="button"
                 onClick={handleCleanDuplicates}
                 disabled={cleaningDuplicates}
@@ -1559,6 +1576,7 @@ export function MbgArchivePage() {
               >
                 {cleaningDuplicates ? 'Membersihkan...' : 'Bersihkan Duplikat dari Database'}
               </button>
+</>)}
             </div>
           )}
 
@@ -1571,13 +1589,15 @@ export function MbgArchivePage() {
                   <strong>Data Arsip Backup:</strong> Data PM ini tersimpan di arsip backup dan <strong>tidak terlihat</strong> oleh divisi manapun (Produksi, Distribusi, Kurir, Purchasing).
                 </span>
               </div>
-              <button
+              {canEdit && (<>
+<button
                 type="button"
                 onClick={() => selectedBatch && handleRestoreFromBackup(selectedBatch.id, selectedBatch.tanggal)}
                 className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-lg text-xs font-black transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
               >
                 Pulihkan Sekarang
               </button>
+</>)}
             </div>
           )}
 
@@ -1597,6 +1617,7 @@ export function MbgArchivePage() {
 
           {/* Archive Table */}
           <div className="overflow-x-auto border border-[#E5E7EB] rounded-xl bg-white shadow-sm">
+            <fieldset disabled={!canEdit} className="m-0 min-w-0 border-0 p-0">
             <table className="w-full text-left font-['Hanken_Grotesk',system-ui,sans-serif] min-w-[760px]">
               <thead>
                 <tr className="bg-[#F3F4F6] text-[10px] font-extrabold text-gray-600 uppercase tracking-wider border-b border-[#E5E7EB]">
@@ -1661,17 +1682,21 @@ export function MbgArchivePage() {
                 )}
               </tbody>
             </table>
-            <button
+            </fieldset>
+            {canEdit && (<>
+<button
               onClick={handleAddRow}
               className="w-full py-3.5 text-xs font-bold text-[#6B7280] hover:text-[#111827] hover:bg-[#F9FAFB] border-t border-[#E5E7EB] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
             >
               <Plus className="h-3.5 w-3.5" />
               Tambah Institusi Baru Ke Arsip
             </button>
+</>)}
           </div>
 
           {/* Action Buttons */}
-          <div className="mt-8 flex flex-col sm:flex-row justify-end items-center gap-3">
+          {canEdit && (<>
+<div className="mt-8 flex flex-col sm:flex-row justify-end items-center gap-3">
             <div className="flex items-center gap-2 text-xs font-bold text-amber-600 bg-amber-50 px-4 py-2.5 rounded-xl border border-amber-200 max-w-md">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>
@@ -1691,6 +1716,7 @@ export function MbgArchivePage() {
               Simpan Perubahan Arsip
             </button>
           </div>
+</>)}
         </>
       )}
 
