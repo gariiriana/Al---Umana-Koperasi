@@ -6,8 +6,8 @@ const menu = (role: string) => navItemsForRole(role).map((item) => item.label);
 
 // Pembagian akun MBG per 2026-11-12 (grup WA): Wandi = adminmbg@, Hashifah = produksimbg@, Dwi = distribusimbg@.
 describe("menu akun MBG", () => {
-  it("adminmbg@ (Kang Wandi): data PM, Arsip PM, Distribusi MBG (penugasan kurir), Job Desk Teklap, Performa Saya", () => {
-    expect(menu("admin_mbg")).toEqual(["Job Desk Teklap", "Admin MBG", "Arsip PM", "Distribusi MBG", "Performa Saya"]);
+  it("adminmbg@ (Kang Wandi): data PM, Arsip PM, Distribusi MBG (penugasan kurir), Kurir MBG (monitoring dokumentasi), Job Desk Teklap, Performa Saya", () => {
+    expect(menu("admin_mbg")).toEqual(["Job Desk Teklap", "Admin MBG", "Arsip PM", "Distribusi MBG", "Kurir MBG", "Performa Saya"]);
     expect(ROLE_DEFAULT_REDIRECT.admin_mbg).toBe("/mbg/admin");
   });
 

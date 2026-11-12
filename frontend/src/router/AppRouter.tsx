@@ -792,7 +792,7 @@ function RoutesTree() {
         path="/mbg/delivery"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Kurir MBG" allowedRoles={["kurir_mbg", "distribusi_mbg_2"]}>
+            <ShelledRoute pageTitle="Kurir MBG" allowedRoles={["kurir_mbg", "distribusi_mbg_2", "admin_mbg"]}>
               <MbgDeliveryPage />
             </ShelledRoute>
           </Protected>

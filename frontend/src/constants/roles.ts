@@ -123,7 +123,8 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
 
   /**
    * Administrasi MBG — Kang Wandi (adminmbg@alumana.id): buat data PM, penugasan kurir
-   * (Distribusi MBG), Arsip PM, dan Job Desk Teklap (dipetakan ke distribusi_2).
+   * (Distribusi MBG), monitoring dokumentasi kurir (Kurir MBG), Arsip PM, dan Job Desk Teklap
+   * (dipetakan ke distribusi_2).
    */
   admin_mbg: [
     "/katering/jobdesk",
@@ -131,6 +132,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/mbg/admin/batch/new",
     "/mbg/archive",
     "/mbg/distribution",
+    "/mbg/delivery",
   ],
 
   /**
