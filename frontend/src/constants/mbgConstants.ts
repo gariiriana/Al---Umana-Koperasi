@@ -366,18 +366,25 @@ export function findMasterPmInstitution(name: string): MbgMasterInstitution | un
   );
 }
 
+/**
+ * Baris sudah punya rincian L/P kalau salah satu kolom laki-laki ATAU perempuan terisi.
+ * Sekolah putri (mis. SD QURROTAYAUN) hanya punya angka di kolom P, jangan dianggap kosong.
+ */
+function hasLpBreakdown(entry: import('../types/mbg').MbgPmEntry): boolean {
+  return (
+    (entry.qtPorsiKecilL || 0) > 0 || (entry.qtPorsiKecilP || 0) > 0 ||
+    (entry.qtPorsiBesarL || 0) > 0 || (entry.qtPorsiBesarP || 0) > 0 ||
+    (entry.qtGuruL || 0) > 0 || (entry.qtGuruP || 0) > 0 ||
+    (entry.qtTendikL || 0) > 0 || (entry.qtTendikP || 0) > 0
+  );
+}
+
 /** Enrich an existing entry with official master details if granular L/P numbers are missing */
 export function enrichPmEntryWithMaster(entry: import('../types/mbg').MbgPmEntry): import('../types/mbg').MbgPmEntry {
   const master = findMasterPmInstitution(entry.institutionName);
   if (!master) return entry;
 
-  const hasGranularData =
-    (entry.qtPorsiKecilL || 0) > 0 ||
-    (entry.qtPorsiBesarL || 0) > 0 ||
-    (entry.qtGuruL || 0) > 0 ||
-    (entry.qtTendikL || 0) > 0;
-
-  if (hasGranularData) return entry;
+  if (hasLpBreakdown(entry)) return entry;
 
   // Fill in granular numbers from master
   const isPos = master.institutionType === 'posyandu';
@@ -471,7 +478,7 @@ export function resolveEffectivePmEntries(
       const name = e.institutionName.toLowerCase();
       return name.includes('balita 1-5 tahun') || name.includes('bumil ds.');
     }) ||
-    validEntries.every((e) => (e.qtPorsiKecilL || 0) === 0 && (e.qtPorsiBesarL || 0) === 0 && (e.qtGuruL || 0) === 0);
+    validEntries.every((e) => !hasLpBreakdown(e));
 
   if (hasNoUsableRows) {
     return createDefaultOfficialPmEntries(batchId, createdBy) as unknown as import('../types/mbg').MbgPmEntry[];
