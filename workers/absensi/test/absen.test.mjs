@@ -103,13 +103,19 @@ describe("clock in / clock out", () => {
     assert.equal(opts.data.error.code, "SUDAH_CLOCK_IN_HARI_INI");
   });
 
-  it("rejects a payload changed after signing, and a challenge used for the other kind", async () => {
+  it("accepts clock in/out without a passkey (no fingerprint), but each challenge is single-use and kind-bound", async () => {
     now = T0;
-    const body = await signedBody("u4", "masuk");
-    const tampered = await absen("u4", { ...body, location: { ...body.location, lat: body.location.lat + 0.00001 } });
-    assert.equal(tampered.data.error.code, "PAYLOAD_TIDAK_COCOK");
-    const other = await signedBody("u4", "masuk");
-    assert.equal((await absen("u4", { ...other, kind: "pulang" })).data.error.code, "CHALLENGE_INVALID");
+    const { authentication: _ignored, ...masuk } = await signedBody("u4", "masuk");
+    assert.equal((await absen("u4", { ...masuk, kind: "pulang" })).data.error.code, "CHALLENGE_INVALID");
+    const fresh = { ...(await signedBody("u4", "masuk")), authentication: undefined };
+    const res = await absen("u4", fresh);
+    assert.equal(res.status, 200, JSON.stringify(res.data));
+    assert.equal((await absen("u4", fresh)).data.error.code, "CHALLENGE_INVALID");
+    now = T0 + 9 * HOUR;
+    const { authentication: _old, ...pulang } = await signedBody("u4", "pulang");
+    const out = await absen("u4", pulang);
+    assert.equal(out.status, 200, JSON.stringify(out.data));
+    assert.equal(out.data.status.last.status, "selesai");
   });
 
   it("checks the face distance only when face check is on", async () => {
@@ -140,11 +146,11 @@ describe("clock in / clock out", () => {
     assert.equal(out.data.status.open, null);
   });
 
-  it("rejects unknown passkeys, inactive devices and clock out without clock in", async () => {
+  it("ignores a stale passkey from an old app build, rejects inactive devices and clock out without clock in", async () => {
     now = T0;
     const body = await signedBody("u8", "masuk");
-    const unknown = await absen("u8", { ...body, authentication: { ...body.authentication, id: "cred-other" } });
-    assert.equal(unknown.data.error.code, "PASSKEY_TIDAK_DIKENAL");
+    const old = await absen("u8", { ...body, authentication: { ...body.authentication, id: "cred-other" } });
+    assert.equal(old.status, 200, JSON.stringify(old.data));
     assert.equal((await options("u3", "masuk")).data.error.code, "BELUM_AKTIVASI");
     const out = await options("u9", "pulang");
     assert.equal(out.status, 409);

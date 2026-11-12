@@ -40,9 +40,9 @@ beforeEach(() => {
 });
 
 describe("BerandaPage", () => {
-  it("tanpa penanda perangkat: banner tampil, Clock In tetap bisa ditekan, menu layanan & Lihat Selengkapnya tampil", async () => {
+  it("tanpa penanda perangkat: tidak ada banner HP belum terdaftar (absen tanpa sidik jari), Clock In bisa ditekan", async () => {
     render(<MemoryRouter><BerandaPage /></MemoryRouter>);
-    expect(screen.getByText(BANNER)).toBeTruthy();
+    expect(screen.queryByText(BANNER)).toBeNull();
     expect((screen.getByRole("button", { name: /^Clock In$/ }) as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getByRole("button", { name: /Clock in dulu/ }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole("link", { name: /Lihat Selengkapnya/ }).getAttribute("href")).toBe("/absensi/riwayat");
@@ -66,7 +66,7 @@ describe("BerandaPage", () => {
     }
   });
 
-  it("dengan penanda perangkat: tanpa banner, menampilkan nama dan area kerja", async () => {
+  it("dengan penanda perangkat: menampilkan nama dan area kerja", async () => {
     localStorage.setItem("absensi:device:u1", "1");
     render(<MemoryRouter><BerandaPage /></MemoryRouter>);
     expect(screen.queryByText(BANNER)).toBeNull();

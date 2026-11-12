@@ -1,5 +1,4 @@
 // Endpoint untuk akun absensi sendiri: profil, aktivasi, clock in/out, riwayat, pengajuan, notifikasi.
-import { payloadChallenge, sha256Hex } from "../../shared/binding.js";
 import { CHALLENGE_TTL_MS, FACE_MATCH_THRESHOLD, LATE_REASON_MAX, LATE_REASON_MIN, MAX_LATE_PHOTO_BYTES } from "../../shared/constants.js";
 import { checkLocation } from "../../shared/geo.js";
 import { groupSilahHistory, isSilahOn } from "../../shared/silah.js";
@@ -9,7 +8,7 @@ import {
   deletePhoto, deleteShiftsForReset, getEmployee, getRequestById, getUnit, insertNotifications, insertPasskey, insertPhoto,
   insertRequest, insertShift, insertZoneException, listActiveEmployeesByRole, listAreas, listEmployeeRequests, listSilahHistory,
   listNotifications, listPasskeys, markAllNotificationsRead, markNotificationRead, recentShifts, requestsForMonth,
-  resetShiftPulangForSimulasi, shiftsForMonth, unitsHeadedBy, updatePasskeyCounter,
+  resetShiftPulangForSimulasi, shiftsForMonth, unitsHeadedBy,
 } from "../db.js";
 import { approverRecipients, jamWIB, zoneKindLabel } from "../approval.js";
 import { AbsensiError, decodeJpeg, readJson } from "../http.js";
@@ -209,14 +208,6 @@ async function currentDecision(ctx, employee, kind, now) {
   return decision;
 }
 
-function signedChallenge(authentication) {
-  try {
-    return JSON.parse(Buffer.from(authentication.response.clientDataJSON, "base64url").toString()).challenge;
-  } catch {
-    return null;
-  }
-}
-
 export async function absenOptions(ctx) {
   const employee = await requireActivatedEmployee(ctx);
   const kind = parseKind(await readJson(ctx.request));
@@ -227,6 +218,7 @@ export async function absenOptions(ctx) {
   const challengeId = await createChallenge(ctx.env.DB, {
     uid: employee.uid, purpose: "absen", kind, nonce, expiresAt: now + CHALLENGE_TTL_MS,
   });
+  // rpId + allowCredentials hanya untuk aplikasi versi lama (belum "Perbarui") yang masih minta sidik jari.
   const passkeys = await listPasskeys(ctx.env.DB, employee.uid);
   return {
     challengeId,
@@ -236,7 +228,11 @@ export async function absenOptions(ctx) {
   };
 }
 
-/** Clock in / clock out. Urutan cek mengikuti spec bagian 6; waktu selalu dari server. */
+/**
+ * Clock in / clock out. Urutan cek mengikuti spec bagian 6; waktu selalu dari server.
+ * Tanpa sidik jari/Face ID (passkey) sejak 2026-11-12: identitas = login + challenge sekali pakai + selfie/cek wajah
+ * + lokasi. `authentication` dari aplikasi versi lama diabaikan.
+ */
 export async function absen(ctx) {
   const employee = await requireActivatedEmployee(ctx);
   // Selfie (≤200 KB) + foto alasan (≤300 KB) dalam base64.
@@ -254,19 +250,6 @@ export async function absen(ctx) {
 
   const location = parseLocation(body.location);
   const jpeg = decodeJpeg(body.selfieBase64);
-  const expectedChallenge = await payloadChallenge({ nonce: challenge.nonce, kind, ...location, selfieSha256Hex: await sha256Hex(jpeg) });
-  if (signedChallenge(body.authentication) !== expectedChallenge) throw new AbsensiError("PAYLOAD_TIDAK_COCOK", 400);
-
-  const passkey = (await listPasskeys(env.DB, employee.uid)).find((p) => p.credential_id === body.authentication?.id);
-  if (!passkey) throw new AbsensiError("PASSKEY_TIDAK_DIKENAL", 400);
-  const verified = await ctx.deps.webauthn.verifyAuthentication({
-    response: body.authentication,
-    expectedChallenge,
-    origin: env.EXPECTED_ORIGIN,
-    rpId: env.RP_ID,
-    credential: { id: passkey.credential_id, publicKey: passkey.public_key, counter: passkey.counter, transports: JSON.parse(passkey.transports || "[]") },
-  });
-  if (!verified) throw new AbsensiError("PASSKEY_TIDAK_VALID", 400);
 
   const area = await absenLocation(ctx, location, outsideReason);
   const country = ctx.deps.country(ctx.request);
@@ -304,7 +287,6 @@ export async function absen(ctx) {
     // kind "selfie" = foto absen dengan retensi 90 hari (cron purgeSelfies).
     await insertPhoto(env.PHOTOS, { id: latePhotoId, uid: employee.uid, kind: "selfie", jpeg: latePhoto, createdAt: now });
   }
-  await updatePasskeyCounter(env.DB, passkey.credential_id, verified.newCounter, now);
   if (area.outside) {
     await recordOutsideZone(ctx, employee, {
       shiftId, kind, now, location, photoId, reason: outsideReason, distanceM: area.outside.distanceM,

@@ -1,5 +1,5 @@
 // Klien Worker absensi (/api/absensi/*). Tidak memakai Firestore sama sekali.
-import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/browser";
+import type { RegistrationResponseJSON } from "@simplewebauthn/browser";
 import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
 import type {
   AbsenKind, AbsenOptions, AbsenResult, AbsensiNotificationView, AbsensiRequestView, AbsensiRole,
@@ -82,7 +82,6 @@ export interface AbsenBody {
   latePhotoBase64?: string;
   /** Alasan absen di luar zona; tanpa ini server menolak lokasi di luar zona. */
   outsideReason?: string;
-  authentication: AuthenticationResponseJSON;
 }
 export const absen = (body: AbsenBody) => post<AbsenResult>("/absen", body);
 

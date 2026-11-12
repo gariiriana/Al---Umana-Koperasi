@@ -25,7 +25,6 @@ import { SilahNoticeModal } from "@/absensi/components/SilahNoticeModal";
 import { NotificationBellButton } from "@/absensi/components/NotificationSheet";
 import { SelfieCapture } from "@/absensi/components/SelfieCapture";
 import { SignalStatusPill, useAmbientGps, useOnlineStatus } from "@/absensi/components/SignalStatusPill";
-import { hasDeviceMarker } from "@/absensi/deviceMarker";
 import { useClockFlow } from "@/absensi/flow/useClockFlow";
 import { buttonState } from "@/absensi/logic/buttonState";
 import {
@@ -36,7 +35,6 @@ import {
   formatLogWaktu,
   geserBulan,
 } from "@/absensi/logic/format";
-import { messageFor } from "@/absensi/messages";
 import type { Me, ShiftStatus, ShiftView } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
 
@@ -165,7 +163,6 @@ function Beranda({
   const [silahNotice, setSilahNotice] = useState(false);
   const view = buttonState(me.status, now);
   const activeShift = me.status.open ?? (me.status.today?.workDate === workDateWIB(now) ? me.status.today : null);
-  const showDeviceBanner = hasDeviceMarker(me.uid) === false;
   const recentLogs = useMemo(() => (recentShifts ? buildRecentLogs(recentShifts) : null), [recentShifts]);
 
   const { step, cancel } = flow;
@@ -282,12 +279,6 @@ function Beranda({
         {me.silahToday && (
           <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-xs font-semibold text-teal-900">
             Hari ini jadwal Silah (libur) Anda. Perlu masuk? Hubungi Ustadzah Santi untuk mengubah jadwal Silah.
-          </div>
-        )}
-
-        {showDeviceBanner && (
-          <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900">
-            {messageFor("PASSKEY_TIDAK_DIKENAL")}
           </div>
         )}
 
@@ -447,7 +438,7 @@ function Beranda({
         />
       )}
 
-      {/* Langkah 0 (Clock In lewat 08:00): Alasan, lalu Langkah 2–4: Selfie Liveness, Passkey, dan Hasil */}
+      {/* Langkah 0 (Clock In lewat 08:00): Alasan, lalu Langkah 2–4: Selfie Liveness, Kirim, dan Hasil */}
       {flow.step !== "idle" && flow.step !== "lokasi" && (
         <div
           role="dialog"
@@ -476,26 +467,6 @@ function Beranda({
                 onDone={(selfie) => void flow.selfieDone(selfie)}
                 onCancel={cancel}
               />
-            )}
-
-            {flow.step === "passkey" && (
-              <div className="space-y-4 text-center">
-                <p className="text-sm text-neutral-600">
-                  Konfirmasi kehadiran dengan sidik jari atau Face ID perangkat Anda.
-                </p>
-                <Button
-                  variant="primary"
-                  className="w-full"
-                  loading={!flow.passkeyReady}
-                  disabled={!flow.passkeyReady}
-                  onClick={() => void flow.confirmPasskey()}
-                >
-                  Konfirmasi sidik jari / Face ID
-                </Button>
-                <Button variant="outlined" className="w-full" onClick={cancel}>
-                  Batal
-                </Button>
-              </div>
             )}
 
             {flow.step === "kirim" && (

@@ -160,7 +160,7 @@ export function AktivasiPage() {
           {step === "passkey" && (
             <div className="space-y-4 py-2 text-center">
               <p className="text-sm text-neutral-700">
-                Terakhir, daftarkan sidik jari atau Face ID HP ini. Nanti dipakai setiap clock in dan clock out.
+                Terakhir, daftarkan sidik jari atau Face ID HP ini (cukup sekali). Clock in dan clock out nanti tidak perlu sidik jari.
               </p>
               <Button
                 variant="primary"

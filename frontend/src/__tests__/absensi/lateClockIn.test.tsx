@@ -12,7 +12,6 @@ const mocks = vi.hoisted(() => ({
     allowCredentials: [{ id: "cred-1", transports: ["internal"] }],
   })),
   absen: vi.fn(),
-  signWithPasskey: vi.fn(async () => ({ id: "cred-1", response: {} })),
   getHariIni: vi.fn(),
   fetchPhotoUrl: vi.fn(async () => "blob:foto-alasan"),
   compressPhoto: vi.fn(),
@@ -26,7 +25,6 @@ vi.mock("@/absensi/api", async (importOriginal) => ({
   getHariIni: mocks.getHariIni,
   fetchPhotoUrl: mocks.fetchPhotoUrl,
 }));
-vi.mock("@/absensi/device/passkey", () => ({ signWithPasskey: mocks.signWithPasskey }));
 vi.mock("@/absensi/device/photo", () => ({
   compressPhoto: mocks.compressPhoto,
   captureWatermarkedPhoto: mocks.captureWatermarkedPhoto,
@@ -69,7 +67,6 @@ beforeEach(() => {
   mocks.absen.mockReset();
   mocks.absen.mockResolvedValue({ serverTime: wib("19:00"), status: STATUS });
   mocks.absenOptions.mockClear();
-  mocks.signWithPasskey.mockClear();
   mocks.getHariIni.mockReset();
   mocks.fetchPhotoUrl.mockClear();
   mocks.compressPhoto.mockReset();
@@ -89,8 +86,6 @@ async function finishClock(hook: { result: { current: ReturnType<typeof useClock
   await act(async () => hook.result.current.confirmLocation(inside));
   await waitFor(() => expect(hook.result.current.step).toBe("selfie"));
   await act(async () => hook.result.current.selfieDone({ jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: [0.1, 0.2], distance: 0.3 }));
-  await waitFor(() => expect(hook.result.current.passkeyReady).toBe(true));
-  await act(async () => hook.result.current.confirmPasskey());
 }
 
 describe("clock in lewat jam 08:00", () => {

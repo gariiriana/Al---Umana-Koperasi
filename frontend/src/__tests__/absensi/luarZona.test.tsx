@@ -13,7 +13,6 @@ const mocks = vi.hoisted(() => ({
     allowCredentials: [{ id: "cred-1", transports: ["internal"] }],
   })),
   absen: vi.fn(),
-  signWithPasskey: vi.fn(async () => ({ id: "cred-1", response: {} })),
   getHariIni: vi.fn(),
   getTeamApprovals: vi.fn(),
   reviewTeamRequest: vi.fn(),
@@ -31,7 +30,6 @@ vi.mock("@/absensi/api", async (importOriginal) => ({
   reviewTeamZone: mocks.reviewTeamZone,
   fetchPhotoUrl: mocks.fetchPhotoUrl,
 }));
-vi.mock("@/absensi/device/passkey", () => ({ signWithPasskey: mocks.signWithPasskey }));
 vi.mock("@/absensi/AbsensiSession", () => ({
   useAbsensiSession: () => ({
     me: { uid: "inas", name: "Inas", role: "absen_karyawan", headOf: [{ id: "kasma", name: "Kasma Katering" }], teamPending: 1 },
@@ -82,8 +80,6 @@ describe("clock in di luar zona", () => {
     await act(async () => hook.result.current.confirmLocation(outside, "  Antar bahan  ke sekolah "));
     expect(hook.result.current.step).toBe("selfie");
     await act(async () => hook.result.current.selfieDone({ jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: [0.1], distance: 0.3 }));
-    await waitFor(() => expect(hook.result.current.passkeyReady).toBe(true));
-    await act(async () => hook.result.current.confirmPasskey());
     await waitFor(() => expect(hook.result.current.step).toBe("sukses"));
     expect(mocks.absen.mock.calls[0][0]).toMatchObject({ outsideReason: "Antar bahan ke sekolah" });
   });
@@ -93,8 +89,6 @@ describe("clock in di luar zona", () => {
     await act(async () => hook.result.current.start("masuk"));
     await act(async () => hook.result.current.confirmLocation({ ...PIN, accuracy: 8 }, "iseng"));
     await act(async () => hook.result.current.selfieDone({ jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: [0.1], distance: 0.3 }));
-    await waitFor(() => expect(hook.result.current.passkeyReady).toBe(true));
-    await act(async () => hook.result.current.confirmPasskey());
     await waitFor(() => expect(hook.result.current.step).toBe("sukses"));
     expect(mocks.absen.mock.calls[0][0]).not.toHaveProperty("outsideReason");
   });
