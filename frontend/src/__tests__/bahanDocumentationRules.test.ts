@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initializeTestEnvironment, assertFails, assertSucceeds, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, type Firestore } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, type Firestore } from 'firebase/firestore';
 import type { MbgBahanDocumentation, MbgBahanPhotoItem } from '@/types/mbg';
 
 // The service talks to whichever Firestore the test points it at, signed in as `uid`.
@@ -50,7 +50,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('dokumentasi bahan: simpan
     await env.clearFirestore();
     await env.withSecurityRulesDisabled(async (ctx) => {
       const store = ctx.firestore();
-      await Promise.all(Object.entries({ distribusi: 'distribusi_mbg', admin: 'admin_mbg', buyer: 'pelanggan', kurir: 'kurir_mbg' })
+      await Promise.all(Object.entries({ distribusi: 'distribusi_mbg', admin: 'admin_mbg', buyer: 'pelanggan', kurir: 'kurir_mbg', distributor: 'distribusi', distribusi2: 'distribusi_2' })
         .map(([uid, role]) => setDoc(doc(store, 'users', uid), { role })));
     });
   });
@@ -164,6 +164,21 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('dokumentasi bahan: simpan
   });
 
   // Cek List & Dokumentasi Bahan khusus distribusimbg@ (Ustadz Dwi), kurir tidak ikut menulis.
+  it('lets distributor@ (role distribusi) fill the checklist and documentation, but not distribusi_2', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'mbg_daily_reports', 'r1'), { batchId: 'batch1', totalPorsi: 100 });
+    });
+    const distributor = signIn('distributor');
+    await assertSucceeds(setDoc(doc(distributor, 'mbg_inspection_forms', 'f2'), { batchId: 'batch1' }));
+    await assertSucceeds(setDoc(doc(distributor, 'mbg_bahan_documentation', 'batch1'), { batchId: 'batch1' }));
+    await assertSucceeds(setDoc(doc(distributor, 'mbg_bahan_photos', 'batch1_p'), { batchId: 'batch1', photoUrl: 'x' }));
+    await assertSucceeds(updateDoc(doc(distributor, 'mbg_daily_reports', 'r1'), { inspectionForm: { rows: [] }, updatedAt: 'now' }));
+    await assertFails(updateDoc(doc(distributor, 'mbg_daily_reports', 'r1'), { totalPorsi: 1 }));
+    await assertFails(setDoc(doc(distributor, 'mbg_daily_reports', 'r2'), { batchId: 'batch1' }));
+    const distribusi2 = signIn('distribusi2');
+    await assertFails(setDoc(doc(distribusi2, 'mbg_inspection_forms', 'f3'), { batchId: 'batch1' }));
+  });
+
   it('blocks MBG couriers from writing bahan documentation and checklists', async () => {
     const kurir = signIn('kurir');
     await assertFails(setDoc(doc(kurir, 'mbg_bahan_photos', 'batch1_k'), { batchId: 'batch1', photoUrl: 'x' }));

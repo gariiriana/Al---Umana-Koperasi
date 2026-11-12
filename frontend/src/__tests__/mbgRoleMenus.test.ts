@@ -26,4 +26,9 @@ describe("menu akun MBG", () => {
     expect(menu("produksi_mbg")).not.toContain("Persiapan");
     expect(menu("kurir_mbg")).toEqual(["Kurir MBG"]);
   });
+
+  it("distributor@ (distribusi katering, Ustadz Dwi) juga bisa membuka Persiapan", () => {
+    expect(menu("distribusi")).toContain("Persiapan");
+    expect(menu("distribusi_2")).not.toContain("Persiapan");
+  });
 });

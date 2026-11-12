@@ -189,6 +189,14 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
+    // Akun distribusi katering (distributor@alumana.id, Ustadz Dwi) juga mengisi
+    // Cek List & Dokumentasi Bahan MBG. Sengaja hanya role 'distribusi', bukan distribusi_2.
+    function isDistributorKatering() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && getUserRole() == 'distribusi';
+    }
+
     function isMoKatering() {
       return request.auth != null
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -772,6 +780,9 @@ service cloud.firestore {
     match /mbg_daily_reports/{reportId} {
       allow read: if isMbgStaff();
       allow write: if isMbgManager() || isDistribusiMbg();
+      // Simpan Cek List Bahan menyalin hasilnya ke laporan harian; distributor katering hanya kolom itu.
+      allow update: if isDistributorKatering()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['inspectionForm', 'updatedAt']);
     }
 
     // -------------------------------------------------------------------
@@ -893,13 +904,13 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /mbg_bahan_documentation/{docId} {
       allow read: if isMbgStaff();
-      allow create, update, delete: if isMbgManager() || isDistribusiMbg();
+      allow create, update, delete: if isMbgManager() || isDistribusiMbg() || isDistributorKatering();
     }
 
     // Satu foto per dokumen agar arsip di atas tidak melewati batas 1 MiB Firestore.
     match /mbg_bahan_photos/{photoId} {
       allow read: if isMbgStaff();
-      allow create, update, delete: if isMbgManager() || isDistribusiMbg();
+      allow create, update, delete: if isMbgManager() || isDistribusiMbg() || isDistributorKatering();
     }
 
     // -------------------------------------------------------------------
@@ -907,7 +918,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------
     match /mbg_inspection_forms/{formId} {
       allow read: if isMbgStaff();
-      allow create, update, delete: if isMbgManager() || isDistribusiMbg();
+      allow create, update, delete: if isMbgManager() || isDistribusiMbg() || isDistributorKatering();
     }
   }
 }

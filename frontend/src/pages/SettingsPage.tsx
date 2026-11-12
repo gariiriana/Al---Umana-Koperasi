@@ -10,6 +10,8 @@ import { useToast } from "@/contexts/ToastContext";
 import { updateProfile } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
+import { CAN_CHANGE_OWN_PASSWORD_ROLES } from "@/components/settings/changePassword";
 
 const DICTIONARY = {
   id: {
@@ -321,6 +323,9 @@ export function SettingsPage() {
           </Card>
         </form>
       )}
+
+      {/* Ganti password sendiri: hanya akun tertentu (lihat CAN_CHANGE_OWN_PASSWORD_ROLES). */}
+      {profile?.role && CAN_CHANGE_OWN_PASSWORD_ROLES.includes(profile.role) && <ChangePasswordCard />}
 
       {/* Card 2: Detail Akun & Keluar */}
       <Card>

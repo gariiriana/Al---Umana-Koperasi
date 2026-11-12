@@ -634,6 +634,7 @@ function RoutesTree() {
                 "distribusi_2",
                 "mo_katering",
                 "co_mo_katering",
+                "produksi_mbg",
               ]}
             >
               <SettingsPage />
@@ -802,7 +803,7 @@ function RoutesTree() {
         path="/mbg/persiapan"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Persiapan" allowedRoles={["distribusi_mbg", "distribusi_mbg_2"]}>
+            <ShelledRoute pageTitle="Persiapan" allowedRoles={["distribusi_mbg", "distribusi_mbg_2", "distribusi"]}>
               <MbgPersiapanPage />
             </ShelledRoute>
           </Protected>

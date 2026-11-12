@@ -43,6 +43,8 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/distribusi/handover",
     "/distribusi/scheduler",
     "/katering/jobdesk",
+    // distributor@alumana.id (Ustadz Dwi) ikut mengisi Cek List & Dokumentasi Bahan MBG.
+    "/mbg/persiapan",
   ],
 
   kurir: [
