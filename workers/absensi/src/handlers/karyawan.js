@@ -2,11 +2,11 @@
 import { CHALLENGE_TTL_MS, FACE_MATCH_THRESHOLD, LATE_REASON_MAX, LATE_REASON_MIN, MAX_LATE_PHOTO_BYTES } from "../../shared/constants.js";
 import { checkLocation } from "../../shared/geo.js";
 import { groupSilahHistory, isSilahOn } from "../../shared/silah.js";
-import { isLateClockIn, workDateWIB } from "../../shared/time.js";
+import { isLateClockIn, isLateClockOut, workDateWIB } from "../../shared/time.js";
 import {
   activateEmployee, closeShift, consumeChallenge, countPendingApprovals, countUnreadNotifications, createChallenge,
   deletePhoto, deleteShiftsForReset, getEmployee, getRequestById, getUnit, insertNotifications, insertPasskey, insertPhoto,
-  insertRequest, insertShift, insertSilahException, insertZoneException, listActiveEmployeesByRole, listAreas, listEmployeeRequests, listSilahHistory,
+  insertLateOutException, insertRequest, insertShift, insertSilahException, insertZoneException, listActiveEmployeesByRole, listAreas, listEmployeeRequests, listSilahHistory,
   listNotifications, listPasskeys, markAllNotificationsRead, markNotificationRead, recentShifts, requestsForMonth,
   resetShiftPulangForSimulasi, shiftsForMonth, unitsHeadedBy,
 } from "../db.js";
@@ -73,6 +73,19 @@ async function checkSilahClockIn(ctx, employee, kind, now, silahReason) {
   if (kind !== "masuk" || !(await isSilahToday(ctx, employee, now))) return false;
   if (!silahReason) throw new AbsensiError("HARI_SILAH", 409);
   return true;
+}
+
+/**
+ * Clock out sesudah ganti hari (lupa clock out) wajib beralasan, lalu menunggu persetujuan kepala unit / admin absensi.
+ * Dicek sebelum challenge terpakai supaya aplikasi versi lama bisa mengulang dengan alasan. Mengembalikan shift yang
+ * ditutup telat, atau null.
+ */
+async function checkLateClockOut(ctx, employee, kind, now, lateOutReason) {
+  if (kind !== "pulang") return null;
+  const { open } = shiftStatus(await recentShifts(ctx.env.DB, employee.uid), now);
+  if (!open || !isLateClockOut(open.masukAt, now)) return null;
+  if (!lateOutReason) throw new AbsensiError("ALASAN_CLOCK_OUT_TELAT", 422);
+  return open;
 }
 
 export async function meView(ctx, employee) {
@@ -210,6 +223,15 @@ function parseSilahReason(body) {
   return reason;
 }
 
+/** Alasan clock out sesudah ganti hari (3–300 karakter). */
+function parseLateOutReason(body) {
+  if (body.lateOutReason === undefined || body.lateOutReason === null) return null;
+  if (typeof body.lateOutReason !== "string") throw new AbsensiError("VALIDATION_ERROR", 400);
+  const reason = body.lateOutReason.replace(/\s+/g, " ").trim();
+  if (reason.length < LATE_REASON_MIN || reason.length > LATE_REASON_MAX) throw new AbsensiError("VALIDATION_ERROR", 400);
+  return reason;
+}
+
 /** Foto bukti alasan terlambat (opsional di server, sama seperti alasannya). Dicek sebelum challenge terpakai. */
 function parseLatePhoto(body) {
   if (body.latePhotoBase64 === undefined || body.latePhotoBase64 === null) return null;
@@ -256,9 +278,11 @@ export async function absen(ctx) {
   const latePhoto = kind === "masuk" ? parseLatePhoto(body) : null;
   const outsideReason = parseOutsideReason(body);
   const silahReason = kind === "masuk" ? parseSilahReason(body) : null;
+  const lateOutReason = kind === "pulang" ? parseLateOutReason(body) : null;
   const now = ctx.deps.now();
   const { env } = ctx;
   const onSilah = await checkSilahClockIn(ctx, employee, kind, now, silahReason);
+  const lateShift = await checkLateClockOut(ctx, employee, kind, now, lateOutReason);
 
   const challenge = await consumeChallenge(env.DB, String(body.challengeId || ""), employee.uid, "absen", now);
   if (!challenge || challenge.kind !== kind) throw new AbsensiError("CHALLENGE_INVALID", 400);
@@ -306,6 +330,9 @@ export async function absen(ctx) {
   if (onSilah && decision.action === "insert") {
     await recordSilahClockIn(ctx, employee, { shiftId, workDate: decision.workDate, now, photoId, reason: silahReason });
   }
+  if (lateShift && decision.action === "close") {
+    await recordLateClockOut(ctx, employee, { shiftId, workDate: lateShift.workDate, now, photoId, reason: lateOutReason });
+  }
   if (area.outside) {
     await recordOutsideZone(ctx, employee, {
       shiftId, kind, now, location, photoId, reason: outsideReason, distanceM: area.outside.distanceM,
@@ -328,6 +355,23 @@ async function recordOutsideZone(ctx, employee, { shiftId, kind, now, location, 
     kind: "pengajuan_baru",
     title: "Absen Luar Zona Perlu Persetujuan",
     body: `${employee.name} ${zoneKindLabel(kind).toLowerCase()} pukul ${jamWIB(now)} WIB di luar zona${jarak}: "${reason}"`,
+    requestId: null,
+    createdAt: now,
+  })));
+}
+
+/** Simpan clock out sesudah ganti hari (status menunggu) dan kabari kepala unit + admin absensi. */
+async function recordLateClockOut(ctx, employee, { shiftId, workDate, now, photoId, reason }) {
+  const { DB } = ctx.env;
+  await insertLateOutException(DB, {
+    id: crypto.randomUUID(), shiftId, uid: employee.uid, workDate, at: now, reason, photoId, createdAt: now,
+  });
+  const recipients = await approverRecipients(DB, employee.uid);
+  await insertNotifications(DB, recipients.map((person) => ({
+    recipientUid: person.uid,
+    kind: "pengajuan_baru",
+    title: "Clock Out Terlambat Perlu Persetujuan",
+    body: `${employee.name} clock out pukul ${jamWIB(now)} WIB untuk absensi ${workDate} (sudah ganti hari): "${reason}"`,
     requestId: null,
     createdAt: now,
   })));

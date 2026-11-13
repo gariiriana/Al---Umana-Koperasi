@@ -1,13 +1,13 @@
 import { Navigate, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 
-import { getTeamApprovals, reviewTeamRequest, reviewTeamSilah, reviewTeamZone } from "@/absensi/api";
+import { getTeamApprovals, reviewTeamLateOut, reviewTeamRequest, reviewTeamSilah, reviewTeamZone } from "@/absensi/api";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
 import { ApprovalBoard } from "@/absensi/components/ApprovalBoard";
 import { EmployeeBottomNav } from "@/absensi/components/EmployeeBottomNav";
 import { NotificationBellButton } from "@/absensi/components/NotificationSheet";
 
-/** Kepala unit: setujui / tolak cuti, pergantian shift, dan absen luar zona anggota unitnya. */
+/** Kepala unit: setujui / tolak cuti, pergantian shift, absen luar zona, masuk Silah, dan clock out telat anggota unitnya. */
 export function TimPage() {
   const navigate = useNavigate();
   const { me, reloadMe } = useAbsensiSession();
@@ -45,6 +45,7 @@ export function TimPage() {
           reviewRequest={reviewTeamRequest}
           reviewZone={reviewTeamZone}
           reviewSilah={reviewTeamSilah}
+          reviewLateOut={reviewTeamLateOut}
           photoScope="tim"
           onChanged={reloadMe}
         />

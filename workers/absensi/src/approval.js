@@ -1,11 +1,11 @@
 // Persetujuan pengajuan & absen luar zona: admin absensi (semua karyawan) atau kepala unit (anggota unitnya).
 import {
-  getRequestById, getSilahException, getZoneException, insertNotifications, listActiveEmployeesByRole, reviewRequest,
-  reviewSilahException, reviewZoneException, unitHeadOf,
+  getLateOutException, getRequestById, getSilahException, getZoneException, insertNotifications, listActiveEmployeesByRole, reviewRequest,
+  reviewLateOutException, reviewSilahException, reviewZoneException, unitHeadOf,
 } from "./db.js";
 import { AbsensiError, readJson } from "./http.js";
 import {
-  requestDetailSummary, requestKindTitle, toRequestView, toSilahExceptionView, toZoneExceptionView,
+  requestDetailSummary, requestKindTitle, toLateOutExceptionView, toRequestView, toSilahExceptionView, toZoneExceptionView,
 } from "./requests.js";
 
 const WIB_OFFSET_MS = 7 * 3600_000;
@@ -133,4 +133,34 @@ export async function reviewSilahAs(ctx, reviewer, id) {
     createdAt: now,
   }]);
   return toSilahExceptionView(updated);
+}
+
+/** Setujui / tolak clock out sesudah ganti hari. Ditolak = shift itu dihitung tidak clock out. */
+export async function reviewLateOutAs(ctx, reviewer, id) {
+  const { approved, note } = await parseReview(ctx.request);
+  const existing = await getLateOutException(ctx.env.DB, id);
+  if (!existing) throw new AbsensiError("NOT_FOUND", 404);
+  if (!(await canReview(ctx.env.DB, reviewer, existing.uid))) throw new AbsensiError("FORBIDDEN", 403);
+
+  const now = ctx.deps.now();
+  const changed = await reviewLateOutException(ctx.env.DB, id, {
+    status: approved ? "approved" : "rejected",
+    reviewedBy: reviewer.uid,
+    reviewedAt: now,
+    reviewNote: note || null,
+  });
+  if (changed === 0) throw new AbsensiError("SUDAH_DIPROSES", 409);
+
+  const updated = await getLateOutException(ctx.env.DB, id);
+  const noteSuffix = note ? ` Catatan: "${note}"` : "";
+  const akibat = approved ? "" : " Absensi tanggal itu dihitung tidak clock out.";
+  await insertNotifications(ctx.env.DB, [{
+    recipientUid: updated.uid,
+    kind: approved ? "pengajuan_disetujui" : "pengajuan_ditolak",
+    title: `Clock Out Terlambat ${approved ? "Disetujui" : "Ditolak"}`,
+    body: `Clock out absensi ${updated.work_date} (pukul ${jamWIB(updated.at)} WIB) telah ${approved ? "disetujui" : "ditolak"} oleh ${reviewerLabel(reviewer)}.${akibat}${noteSuffix}`,
+    requestId: null,
+    createdAt: now,
+  }]);
+  return toLateOutExceptionView(updated);
 }

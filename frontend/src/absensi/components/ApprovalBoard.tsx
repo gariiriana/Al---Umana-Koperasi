@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import { CalendarOff, Check, ExternalLink, ImageIcon, MapPinOff, X } from "lucide-react";
+import { CalendarClock, CalendarOff, Check, ExternalLink, ImageIcon, MapPinOff, X } from "lucide-react";
 
 import { fetchPhotoUrl, type ReviewBody } from "@/absensi/api";
 import { errorMessage } from "@/absensi/errorMessage";
 import {
   LEAVE_TYPE_LABEL,
   REQUEST_STATUS_LABEL,
+  formatDurasi,
+  formatJam,
   formatLogWaktu,
   formatTanggalPanjang,
 } from "@/absensi/logic/format";
-import type { AbsensiRequestView, ApprovalList, RequestStatus, SilahExceptionView, ZoneExceptionView } from "@/absensi/types";
+import type {
+  AbsensiRequestView, ApprovalList, LateOutExceptionView, RequestStatus, SilahExceptionView, ZoneExceptionView,
+} from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
 
 const STATUS_BADGE: Record<RequestStatus, string> = {
@@ -29,7 +33,8 @@ type Filter = RequestStatus | "all";
 type Item =
   | { type: "request"; key: string; status: RequestStatus; createdAt: number; data: AbsensiRequestView }
   | { type: "zone"; key: string; status: RequestStatus; createdAt: number; data: ZoneExceptionView }
-  | { type: "silah"; key: string; status: RequestStatus; createdAt: number; data: SilahExceptionView };
+  | { type: "silah"; key: string; status: RequestStatus; createdAt: number; data: SilahExceptionView }
+  | { type: "lateOut"; key: string; status: RequestStatus; createdAt: number; data: LateOutExceptionView };
 
 export interface ApprovalBoardProps {
   title: string;
@@ -38,6 +43,7 @@ export interface ApprovalBoardProps {
   reviewRequest: (id: string, body: ReviewBody) => Promise<unknown>;
   reviewZone: (id: string, body: ReviewBody) => Promise<unknown>;
   reviewSilah: (id: string, body: ReviewBody) => Promise<unknown>;
+  reviewLateOut: (id: string, body: ReviewBody) => Promise<unknown>;
   /** Asal foto selfie: admin atau kepala unit. */
   photoScope: "admin" | "tim";
   onChanged?: () => Promise<void> | void;
@@ -50,13 +56,20 @@ function mergeItems(list: ApprovalList): Item[] {
     ...(list.zoneExceptions ?? []).map((data) => ({ type: "zone" as const, key: `z-${data.id}`, status: data.status, createdAt: data.createdAt, data })),
     // silahExceptions tidak ada kalau Worker belum versi baru.
     ...(list.silahExceptions ?? []).map((data) => ({ type: "silah" as const, key: `s-${data.id}`, status: data.status, createdAt: data.createdAt, data })),
+    // lateOutExceptions tidak ada kalau Worker belum versi baru.
+    ...(list.lateOutExceptions ?? []).map((data) => ({ type: "lateOut" as const, key: `l-${data.id}`, status: data.status, createdAt: data.createdAt, data })),
   ];
   return items.sort((a, b) =>
     Number(b.status === "pending") - Number(a.status === "pending") || b.createdAt - a.createdAt);
 }
 
-/** Daftar pengajuan cuti/pergantian shift + absen luar zona + masuk di hari Silah yang bisa disetujui atau ditolak. */
-export function ApprovalBoard({ title, subtitle, load, reviewRequest, reviewZone, reviewSilah, photoScope, onChanged }: ApprovalBoardProps) {
+/**
+ * Daftar pengajuan cuti/pergantian shift + absen luar zona + masuk di hari Silah + clock out telat
+ * yang bisa disetujui atau ditolak.
+ */
+export function ApprovalBoard({
+  title, subtitle, load, reviewRequest, reviewZone, reviewSilah, reviewLateOut, photoScope, onChanged,
+}: ApprovalBoardProps) {
   const [filter, setFilter] = useState<Filter>("pending");
   const [items, setItems] = useState<Item[] | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
@@ -90,7 +103,8 @@ export function ApprovalBoard({ title, subtitle, load, reviewRequest, reviewZone
       const body = { action, note: notes[item.key]?.trim() || undefined };
       if (item.type === "request") await reviewRequest(item.data.id, body);
       else if (item.type === "zone") await reviewZone(item.data.id, body);
-      else await reviewSilah(item.data.id, body);
+      else if (item.type === "silah") await reviewSilah(item.data.id, body);
+      else await reviewLateOut(item.data.id, body);
       await refresh(filter);
       await onChanged?.();
     } catch (err) {
@@ -152,6 +166,7 @@ export function ApprovalBoard({ title, subtitle, load, reviewRequest, reviewZone
               {item.type === "request" && <RequestBody req={item.data} />}
               {item.type === "zone" && <ZoneBody zone={item.data} photoScope={photoScope} />}
               {item.type === "silah" && <SilahBody silah={item.data} photoScope={photoScope} />}
+              {item.type === "lateOut" && <LateOutBody lateOut={item.data} photoScope={photoScope} />}
 
               {item.status === "pending" ? (
                 <div className="space-y-2.5 pt-1">
@@ -327,6 +342,41 @@ function SilahBody({ silah, photoScope }: { silah: SilahExceptionView; photoScop
       )}
       {photoUrl && (
         <img src={photoUrl} alt={`Selfie ${silah.employeeName}`} className="max-h-72 rounded-2xl border border-neutral-200 object-contain" />
+      )}
+    </>
+  );
+}
+
+function LateOutBody({ lateOut, photoScope }: { lateOut: LateOutExceptionView; photoScope: "admin" | "tim" }) {
+  const { photoUrl, photoState, showPhoto } = useSelfie(lateOut.photoId, photoScope);
+  const durasi = formatDurasi(Math.floor((lateOut.at - lateOut.masukAt) / 60_000));
+  return (
+    <>
+      <Header
+        name={lateOut.employeeName}
+        unitName={lateOut.unitName}
+        status={lateOut.status}
+        badge={
+          <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-extrabold text-orange-800">
+            <CalendarClock className="h-3 w-3" aria-hidden="true" />
+            Clock out terlambat
+          </span>
+        }
+      />
+      <p className="-mt-1.5 text-xs font-bold text-neutral-600">
+        Absensi {formatTanggalPanjang(lateOut.workDate)} · clock in {formatJam(lateOut.masukAt)} · clock out{" "}
+        {formatLogWaktu(lateOut.at)} WIB · durasi {durasi}
+      </p>
+      <p className="rounded-2xl bg-neutral-50 px-3.5 py-2.5 text-xs text-neutral-700">
+        <span className="font-bold text-neutral-900">Alasan:</span> "{lateOut.reason}"
+      </p>
+      {lateOut.photoId && !photoUrl && (
+        <div className="flex flex-wrap gap-2 text-xs font-bold">
+          <SelfieButton onShow={showPhoto} state={photoState} />
+        </div>
+      )}
+      {photoUrl && (
+        <img src={photoUrl} alt={`Selfie ${lateOut.employeeName}`} className="max-h-72 rounded-2xl border border-neutral-200 object-contain" />
       )}
     </>
   );

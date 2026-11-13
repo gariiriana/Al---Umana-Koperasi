@@ -103,6 +103,12 @@ export const toSilahExceptionView = (row) => ({
   createdAt: row.created_at,
 });
 
+/** Clock out telat yang perlu disetujui; `at` = jam clock out asli. */
+export const toLateOutExceptionView = (row) => ({
+  ...toSilahExceptionView(row),
+  masukAt: row.masuk_at,
+});
+
 export const toNotificationView = (row) => ({
   id: row.id,
   kind: row.kind,

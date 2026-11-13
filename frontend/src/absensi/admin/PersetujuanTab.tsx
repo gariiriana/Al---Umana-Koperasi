@@ -1,8 +1,8 @@
-import { listAdminRequests, reviewAdminRequest, reviewAdminSilah, reviewAdminZone } from "@/absensi/api";
+import { listAdminRequests, reviewAdminLateOut, reviewAdminRequest, reviewAdminSilah, reviewAdminZone } from "@/absensi/api";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
 import { ApprovalBoard } from "@/absensi/components/ApprovalBoard";
 
-/** Tab Admin: setujui / tolak cuti, pergantian shift, dan absen di luar zona semua karyawan. */
+/** Tab Admin: setujui / tolak cuti, pergantian shift, absen luar zona, masuk Silah, dan clock out telat semua karyawan. */
 export function PersetujuanTab() {
   const { reloadMe } = useAbsensiSession();
   return (
@@ -13,6 +13,7 @@ export function PersetujuanTab() {
       reviewRequest={reviewAdminRequest}
       reviewZone={reviewAdminZone}
       reviewSilah={reviewAdminSilah}
+      reviewLateOut={reviewAdminLateOut}
       photoScope="admin"
       onChanged={reloadMe}
     />

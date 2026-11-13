@@ -3,14 +3,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { LATE_REASON_MAX, LATE_REASON_MIN } from "../../../../workers/absensi/shared/constants.js";
 import { checkLocation } from "../../../../workers/absensi/shared/geo.js";
 import { isLateClockIn } from "../../../../workers/absensi/shared/time.js";
-import { absen, absenOptions } from "@/absensi/api";
+import { absen, absenOptions, AbsensiApiError, type AbsenBody } from "@/absensi/api";
 import type { SelfieResult } from "@/absensi/components/SelfieCapture";
 import { blobToBase64 } from "@/absensi/device/selfie";
 import { errorMessage } from "@/absensi/errorMessage";
 import { messageFor } from "@/absensi/messages";
 import type { AbsenKind, LocationInput, Me, ShiftStatus } from "@/absensi/types";
 
-export type ClockStep = "idle" | "alasan" | "lokasi" | "selfie" | "kirim" | "sukses" | "gagal";
+/** "alasanPulang": server menilai clock out sudah lewat ganti hari (jam HP belum); minta alasan lalu kirim ulang. */
+export type ClockStep = "idle" | "alasan" | "lokasi" | "selfie" | "kirim" | "alasanPulang" | "sukses" | "gagal";
 
 /** Rapikan spasi; null kalau alasan terlalu pendek. */
 export function normalizeLateReason(text: string): string | null {
@@ -23,13 +24,18 @@ export interface ClockFlow {
   kind: AbsenKind | null;
   error: string | null;
   result: { kind: AbsenKind; serverTime: number } | null;
-  /** `silahReason`: clock in di hari Silah (menunggu persetujuan); tidak ditanya alasan terlambat. */
-  start: (kind: AbsenKind, opts?: { silahReason?: string }) => void;
+  /**
+   * `silahReason`: clock in di hari Silah (menunggu persetujuan); tidak ditanya alasan terlambat.
+   * `lateOutReason`: clock out sesudah ganti hari (menunggu persetujuan); hanya dikirim untuk clock out.
+   */
+  start: (kind: AbsenKind, opts?: { silahReason?: string; lateOutReason?: string }) => void;
   /** Step "alasan": alasan + foto bukti clock in lewat 08:00; lanjut ke peta lokasi kalau keduanya ada. */
   submitLateReason: (reason: string, photo: Blob | null) => void;
   /** `outsideReason`: absen di luar zona dengan alasan (menunggu persetujuan). */
   confirmLocation: (fix: LocationInput, outsideReason?: string) => void;
   selfieDone: (selfie: SelfieResult) => Promise<void>;
+  /** Step "alasanPulang": kirim ulang absen yang sama (peta & selfie tidak diulang) dengan alasan clock out telat. */
+  submitLateOutReason: (reason: string) => Promise<void>;
   retry: () => void;
   cancel: () => void;
 }
@@ -61,6 +67,9 @@ export function useClockFlow({
   const latePhotoRef = useRef<Blob | null>(null);
   const outsideReasonRef = useRef<string | null>(null);
   const silahReasonRef = useRef<string | null>(null);
+  const lateOutReasonRef = useRef<string | null>(null);
+  // Absen clock out yang ditolak ALASAN_CLOCK_OUT_TELAT; challenge-nya belum terpakai jadi bisa dikirim ulang.
+  const pendingBodyRef = useRef<AbsenBody | null>(null);
   const meRef = useRef(me);
   const onStatusRef = useRef(onStatus);
   const nowRef = useRef(now);
@@ -98,9 +107,11 @@ export function useClockFlow({
     setStep(needReason ? "alasan" : "lokasi");
   }, []);
 
-  const start = useCallback((nextKind: AbsenKind, opts?: { silahReason?: string }) => {
+  const start = useCallback((nextKind: AbsenKind, opts?: { silahReason?: string; lateOutReason?: string }) => {
     const silahReason = opts?.silahReason ? normalizeLateReason(opts.silahReason) : null;
     silahReasonRef.current = nextKind === "masuk" ? silahReason : null;
+    const lateOutReason = opts?.lateOutReason ? normalizeLateReason(opts.lateOutReason) : null;
+    lateOutReasonRef.current = nextKind === "pulang" ? lateOutReason : null;
     begin(nextKind, false);
   }, [begin]);
 
@@ -132,6 +143,7 @@ export function useClockFlow({
     const location = locationRef.current;
     if (!currentKind || !location) return;
     setStep("kirim");
+    let body: AbsenBody | null = null;
     try {
       const options = await absenOptions(currentKind);
       const selfieBase64 = await blobToBase64(selfie.jpeg);
@@ -139,7 +151,7 @@ export function useClockFlow({
       const latePhoto = currentKind === "masuk" ? latePhotoRef.current : null;
       const latePhotoBase64 = latePhoto ? await blobToBase64(latePhoto) : null;
       if (token !== run.current) return;
-      const res = await absen({
+      body = {
         challengeId: options.challengeId,
         kind: currentKind,
         location,
@@ -149,10 +161,42 @@ export function useClockFlow({
         ...(latePhotoBase64 ? { latePhotoBase64 } : {}),
         ...(outsideReasonRef.current ? { outsideReason: outsideReasonRef.current } : {}),
         ...(currentKind === "masuk" && silahReasonRef.current ? { silahReason: silahReasonRef.current } : {}),
-      });
+        ...(currentKind === "pulang" && lateOutReasonRef.current ? { lateOutReason: lateOutReasonRef.current } : {}),
+      };
+      const res = await absen(body);
       if (token !== run.current) return;
       onStatusRef.current(res.status);
       setResult({ kind: currentKind, serverTime: res.serverTime });
+      setStep("sukses");
+    } catch (err) {
+      // Jam server sudah lewat ganti hari padahal jam HP belum (mis. clock out 23:58 selesai sesudah 00:00):
+      // tanya alasan, lalu kirim ulang data yang sama. Server menolak sebelum challenge terpakai.
+      if (
+        token === run.current && body && currentKind === "pulang"
+        && err instanceof AbsensiApiError && err.code === "ALASAN_CLOCK_OUT_TELAT"
+      ) {
+        pendingBodyRef.current = body;
+        setError(null);
+        setStep("alasanPulang");
+        return;
+      }
+      fail(token, errorMessage(err));
+    }
+  }, [fail]);
+
+  const submitLateOutReason = useCallback(async (text: string) => {
+    const token = run.current;
+    const reason = normalizeLateReason(text);
+    const pending = pendingBodyRef.current;
+    if (!reason || !pending) return;
+    lateOutReasonRef.current = reason;
+    pendingBodyRef.current = null;
+    setStep("kirim");
+    try {
+      const res = await absen({ ...pending, lateOutReason: reason });
+      if (token !== run.current) return;
+      onStatusRef.current(res.status);
+      setResult({ kind: pending.kind, serverTime: res.serverTime });
       setStep("sukses");
     } catch (err) {
       fail(token, errorMessage(err));
@@ -169,6 +213,8 @@ export function useClockFlow({
     latePhotoRef.current = null;
     outsideReasonRef.current = null;
     silahReasonRef.current = null;
+    lateOutReasonRef.current = null;
+    pendingBodyRef.current = null;
     setError(null);
     setStep("idle");
   }, []);
@@ -182,6 +228,7 @@ export function useClockFlow({
     submitLateReason,
     confirmLocation,
     selfieDone,
+    submitLateOutReason,
     retry,
     cancel,
   };

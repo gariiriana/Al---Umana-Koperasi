@@ -95,3 +95,22 @@ describe("RiwayatPage (Kalender Absensi & Ringkasan Kehadiran)", () => {
     await waitFor(() => expect(getRiwayat).toHaveBeenCalledWith(prev));
   });
 });
+
+describe("RiwayatPage: clock out telat", () => {
+  it("detail tanggal menampilkan status persetujuan clock out telat", async () => {
+    const bulan = bulanWIB(Date.now());
+    const d1 = `${bulan}-01`;
+    const d2 = `${bulan}-02`;
+    getRiwayat.mockResolvedValue({
+      rows: [{
+        id: "s1", workDate: d1, masukAt: wib(d1, "07:00"), pulangAt: wib(d2, "07:00"), status: "selesai", durationMin: 1440,
+        lateOut: { id: "lx1", status: "pending", reason: "Lupa pencet", at: wib(d2, "07:00") },
+      }],
+      requests: [],
+    });
+    render(<MemoryRouter><RiwayatPage /></MemoryRouter>);
+    await screen.findByText("Kalender Absensi");
+    fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${formatTanggalPanjang(d1)}`) }));
+    expect(await screen.findByText("Perlu review · clock out telat (Lupa pencet)")).toBeTruthy();
+  });
+});

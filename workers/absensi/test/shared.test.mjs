@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { addDays, isLateClockIn, minuteOfDayWIB, workDateWIB } from "../shared/time.js";
+import { addDays, isLateClockIn, isLateClockOut, isShiftExpired, minuteOfDayWIB, workDateWIB } from "../shared/time.js";
 import { checkLocation, distanceToPolygonM, pointInPolygon } from "../shared/geo.js";
 import { payloadChallenge, sha256Hex } from "../shared/binding.js";
 
@@ -76,5 +76,32 @@ describe("binding", () => {
     for (const change of [{ kind: "pulang" }, { lat: base.lat + 1e-7 }, { accuracy: 9.6 }, { selfieSha256Hex: "cd".repeat(32) }, { nonce: "n2" }]) {
       assert.notEqual(await payloadChallenge({ ...base, ...change }), c);
     }
+  });
+});
+
+describe("clock-out rules", () => {
+  const wib = (y, m, d, h, min) => Date.UTC(y, m - 1, d, h - 7, min);
+
+  it("a shift can be closed until 23:59 WIB the next day", () => {
+    assert.equal(isShiftExpired("2026-12-01", wib(2026, 12, 2, 23, 59)), false);
+    assert.equal(isShiftExpired("2026-12-01", wib(2026, 12, 3, 0, 0)), true);
+  });
+
+  it("normal shift: clock out is late once the day has changed", () => {
+    const masuk = wib(2026, 12, 1, 7, 0);
+    assert.equal(isLateClockOut(masuk, wib(2026, 12, 1, 23, 59)), false);
+    assert.equal(isLateClockOut(masuk, wib(2026, 12, 2, 0, 1)), true);
+  });
+
+  it("night shift (clock in from 20:00): late only after 12:00 the next day", () => {
+    const masuk = wib(2026, 12, 1, 23, 0);
+    assert.equal(isLateClockOut(masuk, wib(2026, 12, 2, 7, 0)), false);
+    assert.equal(isLateClockOut(masuk, wib(2026, 12, 2, 12, 0)), false);
+    assert.equal(isLateClockOut(masuk, wib(2026, 12, 2, 12, 1)), true);
+  });
+
+  it("20:00 is the first night-shift minute", () => {
+    assert.equal(isLateClockOut(wib(2026, 12, 1, 20, 0), wib(2026, 12, 2, 6, 0)), false);
+    assert.equal(isLateClockOut(wib(2026, 12, 1, 19, 59), wib(2026, 12, 2, 6, 0)), true);
   });
 });

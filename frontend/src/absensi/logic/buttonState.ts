@@ -1,11 +1,19 @@
 // Tampilan tombol Clock In / Clock Out dari status Worker (tabel spec 5.3).
-import { OPEN_SHIFT_MAX_MS } from "../../../../workers/absensi/shared/constants.js";
-import { workDateWIB } from "../../../../workers/absensi/shared/time.js";
+import { isLateClockOut, isShiftExpired, workDateWIB } from "../../../../workers/absensi/shared/time.js";
 import { formatDurasi, formatJam, formatTanggalPendek } from "@/absensi/logic/format";
 import type { ShiftStatus, ShiftView } from "@/absensi/types";
 
+/** Shift tanggal sebelumnya yang belum di-clock out (masih bisa ditutup sampai 23:59 hari berikutnya). */
+export interface CarryOverView {
+  workDate: string;
+  masukAt: number;
+  /** Sudah ganti hari: clock out perlu alasan + persetujuan (pop-up "Sudah ganti hari"). */
+  late: boolean;
+}
+
 export interface ButtonView {
-  clockIn: { state: "aktif" | "selesai"; label: string };
+  /** "terkunci" = Clock In hari ini menunggu clock out shift kemarin (`carryOver`). */
+  clockIn: { state: "aktif" | "selesai" | "terkunci"; label: string };
   clockOut: { state: "nonaktif" | "aktif" | "selesai" | "tidak_clock_out"; label: string };
   /** Durasi kerja setelah clock out, mis. "9 jam 3 menit". */
   durasi: string | null;
@@ -13,11 +21,13 @@ export interface ButtonView {
   shiftDateLabel: string | null;
   /** "Shift terakhir: 26 Okt, 22:00–06:00 ✓" sesudah clock out shift kemarin. */
   lastShiftLine: string | null;
+  /** Kartu "Absensi <tanggal kemarin>" di atas tombol hari ini; null kalau tidak ada. */
+  carryOver: CarryOverView | null;
 }
 
 function normalizeShift(s: ShiftView | null, nowMs: number): ShiftView | null {
   if (!s) return null;
-  if (s.status === "terbuka" && nowMs - s.masukAt > OPEN_SHIFT_MAX_MS) {
+  if (s.status === "terbuka" && isShiftExpired(s.workDate, nowMs)) {
     return { ...s, status: "lupa_pulang" };
   }
   return s;
@@ -33,6 +43,18 @@ export function buttonState(status: ShiftStatus, nowMs: number): ButtonView {
     : (rawOpen?.workDate === today ? rawOpen : null);
   const shift = openShift ?? todayShift;
 
+  // Lupa clock out kemarin (atau shift malam yang masih berjalan): kartu kemarin dulu, Clock In hari ini menunggu.
+  if (openShift && openShift.workDate < today) {
+    return {
+      clockIn: { state: "terkunci", label: `Selesaikan clock out ${formatTanggalPendek(openShift.workDate)} dulu` },
+      clockOut: { state: "nonaktif", label: "Clock in dulu" },
+      durasi: null,
+      shiftDateLabel: null,
+      lastShiftLine: null,
+      carryOver: { workDate: openShift.workDate, masukAt: openShift.masukAt, late: isLateClockOut(openShift.masukAt, nowMs) },
+    };
+  }
+
   if (!shift) {
     const last = rawToday && rawToday.workDate !== today && rawToday.status !== "terbuka"
       ? rawToday
@@ -47,6 +69,7 @@ export function buttonState(status: ShiftStatus, nowMs: number): ButtonView {
       durasi: null,
       shiftDateLabel: null,
       lastShiftLine,
+      carryOver: null,
     };
   }
 
@@ -54,7 +77,7 @@ export function buttonState(status: ShiftStatus, nowMs: number): ButtonView {
   const shiftDateLabel = shift.workDate !== today ? `Shift ${formatTanggalPendek(shift.workDate)}` : null;
 
   if (shift.status === "terbuka") {
-    return { clockIn, clockOut: { state: "aktif", label: "Clock Out" }, durasi: null, shiftDateLabel, lastShiftLine: null };
+    return { clockIn, clockOut: { state: "aktif", label: "Clock Out" }, durasi: null, shiftDateLabel, lastShiftLine: null, carryOver: null };
   }
   if (shift.status === "lupa_pulang") {
     return {
@@ -63,6 +86,7 @@ export function buttonState(status: ShiftStatus, nowMs: number): ButtonView {
       durasi: null,
       shiftDateLabel,
       lastShiftLine: null,
+      carryOver: null,
     };
   }
   return {
@@ -74,5 +98,6 @@ export function buttonState(status: ShiftStatus, nowMs: number): ButtonView {
     durasi: shift.durationMin !== null ? formatDurasi(shift.durationMin) : null,
     shiftDateLabel,
     lastShiftLine: null,
+    carryOver: null,
   };
 }

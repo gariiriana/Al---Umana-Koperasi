@@ -153,14 +153,22 @@ export const SILAH_STATUS_LABEL: Record<RequestStatus, string> = {
   rejected: "Masuk di hari Silah · ditolak",
 };
 
+/** Label clock out sesudah ganti hari; selama belum disetujui ditulis "Perlu review". */
+export const LATE_OUT_STATUS_LABEL: Record<RequestStatus, string> = {
+  pending: "Perlu review · clock out telat",
+  approved: "Clock out telat · disetujui",
+  rejected: "Clock out telat · ditolak",
+};
+
 type ApprovalStatusFields = {
   zoneMasuk?: { status: RequestStatus; reason: string } | null;
   zonePulang?: { status: RequestStatus; reason: string } | null;
   silahMasuk?: { status: RequestStatus; reason: string } | null;
+  lateOut?: { status: RequestStatus; reason: string } | null;
 };
 
 /**
- * Catatan yang butuh persetujuan untuk satu shift (luar zona + masuk di hari Silah):
+ * Catatan yang butuh persetujuan untuk satu shift (luar zona + masuk di hari Silah + clock out telat):
  * ["Clock in: Perlu verifikasi · absen di luar zona (alasan)", ...].
  */
 export function zoneNotes(shift: ApprovalStatusFields): string[] {
@@ -168,29 +176,34 @@ export function zoneNotes(shift: ApprovalStatusFields): string[] {
   if (shift.silahMasuk) notes.push(`${SILAH_STATUS_LABEL[shift.silahMasuk.status]} (${shift.silahMasuk.reason})`);
   if (shift.zoneMasuk) notes.push(`Clock in: ${ZONE_STATUS_LABEL[shift.zoneMasuk.status]} (${shift.zoneMasuk.reason})`);
   if (shift.zonePulang) notes.push(`Clock out: ${ZONE_STATUS_LABEL[shift.zonePulang.status]} (${shift.zonePulang.reason})`);
+  if (shift.lateOut) notes.push(`${LATE_OUT_STATUS_LABEL[shift.lateOut.status]} (${shift.lateOut.reason})`);
   return notes;
 }
 
-/** Status persetujuan (luar zona / hari Silah) yang paling perlu perhatian: menunggu > ditolak > disetujui. */
+/** Status persetujuan (luar zona / hari Silah / clock out telat) yang paling perlu perhatian: menunggu > ditolak > disetujui. */
 export function worstZoneStatus(shift: {
   zoneMasuk?: { status: RequestStatus } | null;
   zonePulang?: { status: RequestStatus } | null;
   silahMasuk?: { status: RequestStatus } | null;
+  lateOut?: { status: RequestStatus } | null;
 }): RequestStatus | null {
-  const all = [shift.zoneMasuk?.status, shift.zonePulang?.status, shift.silahMasuk?.status]
+  const all = [shift.zoneMasuk?.status, shift.zonePulang?.status, shift.silahMasuk?.status, shift.lateOut?.status]
     .filter((s): s is RequestStatus => Boolean(s));
   if (all.includes("pending")) return "pending";
   if (all.includes("rejected")) return "rejected";
   return all.length ? "approved" : null;
 }
 
-/** Teks badge untuk shift yang ditolak: "Masuk Silah ditolak" atau "Luar zona ditolak". */
+/** Teks badge untuk shift yang ditolak: "Masuk Silah ditolak", "Clock out telat ditolak" atau "Luar zona ditolak". */
 export function rejectedLabel(shift: {
   zoneMasuk?: { status: RequestStatus } | null;
   zonePulang?: { status: RequestStatus } | null;
   silahMasuk?: { status: RequestStatus } | null;
+  lateOut?: { status: RequestStatus } | null;
 }): string {
-  return shift.silahMasuk?.status === "rejected" ? "Masuk Silah ditolak" : "Luar zona ditolak";
+  if (shift.silahMasuk?.status === "rejected") return "Masuk Silah ditolak";
+  if (shift.lateOut?.status === "rejected") return "Clock out telat ditolak";
+  return "Luar zona ditolak";
 }
 
 /** Clock in yang ditolak (luar zona atau masuk di hari Silah) tidak dihitung hadir. */

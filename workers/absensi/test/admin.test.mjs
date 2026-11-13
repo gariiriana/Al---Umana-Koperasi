@@ -106,7 +106,7 @@ describe("admin endpoints", () => {
   it("maps today's shifts to belum / masuk / pulang / tidak_clock_out", async () => {
     await insertShift(env.DB, shift({ id: "t1", uid: "u1", workDate: "2026-10-27" }));
     await insertShift(env.DB, shift({ id: "t2", uid: "u2", workDate: "2026-10-26", masukAt: T0 - 21 * 3600_000 }));
-    await markStaleShifts(env.DB, T0 - 20 * 3600_000);
+    await markStaleShifts(env.DB, "2026-10-27");
     await insertShift(env.DB, shift({ id: "t3", uid: "u2", workDate: "2026-10-27", masukAt: T0 - 3600_000 }));
     await env.DB.prepare("UPDATE shifts SET status = 'lupa_pulang' WHERE id = 't3'").run();
     const { data } = await asAdmin("GET", "/admin/hari-ini");

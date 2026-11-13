@@ -19,18 +19,22 @@ describe("shift rules", () => {
     assert.equal(decideAbsen("masuk", s, now).code, "SUDAH_CLOCK_IN");
   });
 
-  it("open shift older than 20h reads as lupa_pulang before cron ran", () => {
-    const now = wib(2026, 10, 26, 22, 0) + 20 * 3600_000 + 60_000;
-    const s = shiftStatus([row()], now);
+  it("open shift from 2 days ago reads as lupa_pulang before cron ran", () => {
+    const pagi = row({ masuk_at: wib(2026, 10, 26, 7, 0) });
+    const now = wib(2026, 10, 28, 0, 0);
+    const s = shiftStatus([pagi], now);
     assert.equal(s.open, null);
     assert.equal(s.last.status, "lupa_pulang");
     assert.equal(decideAbsen("pulang", s, now).code, "BELUM_CLOCK_IN");
     assert.equal(decideAbsen("masuk", s, now).action, "insert");
   });
 
-  it("open shift just under 20h can still clock out", () => {
-    const now = wib(2026, 10, 26, 22, 0) + 20 * 3600_000 - 60_000;
-    assert.equal(decideAbsen("pulang", shiftStatus([row()], now), now).action, "close");
+  it("open shift can still clock out until 23:59 the next day", () => {
+    const pagi = row({ masuk_at: wib(2026, 10, 26, 7, 0) });
+    const now = wib(2026, 10, 27, 23, 59);
+    const s = shiftStatus([pagi], now);
+    assert.equal(decideAbsen("pulang", s, now).action, "close");
+    assert.equal(decideAbsen("masuk", s, now).code, "SUDAH_CLOCK_IN");
   });
 
   it("one clock in per WIB date", () => {
@@ -51,6 +55,36 @@ describe("shift rules", () => {
       zoneMasuk: null,
       zonePulang: null,
       silahMasuk: null,
+      lateOut: null,
+    });
+  });
+
+  describe("late clock out (clock out telat)", () => {
+    const masuk = wib(2026, 10, 26, 7, 0);
+    const pulang = wib(2026, 10, 27, 7, 0);
+    const closed = (status) => row({
+      masuk_at: masuk, pulang_at: pulang, status: "selesai",
+      late_out_id: "lx1", late_out_status: status, late_out_reason: "Lupa pencet", late_out_at: pulang,
+    });
+    const now = wib(2026, 10, 27, 9, 0);
+
+    for (const status of ["pending", "approved"]) {
+      it(`${status}: keeps the real clock-out time and counts the full duration`, () => {
+        const view = toShiftView(closed(status), now);
+        assert.equal(view.status, "selesai");
+        assert.equal(view.pulangAt, pulang);
+        assert.equal(view.durationMin, 1440);
+        assert.deepEqual(view.lateOut, { id: "lx1", status, reason: "Lupa pencet", at: pulang });
+      });
+    }
+
+    it("rejected: reads as tidak clock out without duration, raw time only in lateOut.at", () => {
+      const view = toShiftView(closed("rejected"), now);
+      assert.equal(view.status, "lupa_pulang");
+      assert.equal(view.pulangAt, null);
+      assert.equal(view.durationMin, null);
+      assert.equal(view.lateOut.at, pulang);
+      assert.equal(view.lateOut.status, "rejected");
     });
   });
 });

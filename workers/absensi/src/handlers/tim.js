@@ -1,10 +1,10 @@
-// Endpoint kepala unit: daftar & keputusan pengajuan / absen luar zona anggota unitnya.
-import { reviewRequestAs, reviewSilahAs, reviewZoneAs, canReview } from "../approval.js";
+// Endpoint kepala unit: daftar & keputusan pengajuan / absen luar zona / Silah / clock out telat anggota unitnya.
+import { reviewLateOutAs, reviewRequestAs, reviewSilahAs, reviewZoneAs, canReview } from "../approval.js";
 import {
-  countPendingApprovals, getPhoto, listSilahExceptions, listTeamRequests, listZoneExceptions, unitsHeadedBy,
+  countPendingApprovals, getPhoto, listLateOutExceptions, listSilahExceptions, listTeamRequests, listZoneExceptions, unitsHeadedBy,
 } from "../db.js";
 import { AbsensiError } from "../http.js";
-import { toRequestView, toSilahExceptionView, toZoneExceptionView } from "../requests.js";
+import { toLateOutExceptionView, toRequestView, toSilahExceptionView, toZoneExceptionView } from "../requests.js";
 import { requireEmployee } from "../session.js";
 
 const FILTERS = new Set(["pending", "approved", "rejected", "all"]);
@@ -20,10 +20,11 @@ export async function getTimPersetujuan(ctx) {
   const { employee, units } = await requireUnitHead(ctx);
   const status = ctx.url.searchParams.get("status") || "all";
   if (!FILTERS.has(status)) throw new AbsensiError("VALIDATION_ERROR", 400);
-  const [requests, zoneExceptions, silahExceptions, pendingCount] = await Promise.all([
+  const [requests, zoneExceptions, silahExceptions, lateOutExceptions, pendingCount] = await Promise.all([
     listTeamRequests(ctx.env.DB, employee.uid, { status }),
     listZoneExceptions(ctx.env.DB, { status, teamOf: employee.uid }),
     listSilahExceptions(ctx.env.DB, { status, teamOf: employee.uid }),
+    listLateOutExceptions(ctx.env.DB, { status, teamOf: employee.uid }),
     countPendingApprovals(ctx.env.DB, { teamOf: employee.uid }),
   ]);
   return {
@@ -31,6 +32,7 @@ export async function getTimPersetujuan(ctx) {
     requests: requests.map(toRequestView),
     zoneExceptions: zoneExceptions.map(toZoneExceptionView),
     silahExceptions: silahExceptions.map(toSilahExceptionView),
+    lateOutExceptions: lateOutExceptions.map(toLateOutExceptionView),
     pendingCount,
   };
 }
@@ -48,6 +50,11 @@ export async function reviewTimLuarZona(ctx) {
 export async function reviewTimSilah(ctx) {
   const { employee } = await requireUnitHead(ctx);
   return reviewSilahAs(ctx, employee, ctx.params[0]);
+}
+
+export async function reviewTimLateOut(ctx) {
+  const { employee } = await requireUnitHead(ctx);
+  return reviewLateOutAs(ctx, employee, ctx.params[0]);
 }
 
 /** Selfie absen anggota tim (untuk memeriksa absen luar zona). */

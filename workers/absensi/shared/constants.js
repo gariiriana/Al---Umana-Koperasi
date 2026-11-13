@@ -11,7 +11,10 @@ export const GOOD_ACCURACY_M = 15;
 export const GPS_SAMPLE_MS = 10_000;
 
 export const CHALLENGE_TTL_MS = 120_000;
-export const OPEN_SHIFT_MAX_MS = 20 * 3600_000;
+// Shift yang lupa di-clock out masih bisa ditutup sampai 23:59 WIB hari berikutnya (lihat isShiftExpired).
+// Clock in mulai 20:00 WIB = shift malam: clock out besok pagi normal, baru dianggap telat lewat 12:00 WIB.
+export const NIGHT_SHIFT_FROM_MINUTE_WIB = 20 * 60;
+export const NIGHT_SHIFT_OUT_UNTIL_MINUTE_WIB = 12 * 60;
 
 export const SELFIE_RETENTION_MS = 90 * 86_400_000;
 export const MAX_SELFIE_BYTES = 200_000;

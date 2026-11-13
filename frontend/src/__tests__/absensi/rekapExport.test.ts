@@ -216,3 +216,41 @@ describe("export", () => {
     expect(rekapFileName("2026-10-01", "2026-10-31", "xlsx")).toBe("Rekap-Absensi_2026-10-01_2026-10-31.xlsx");
   });
 });
+
+describe("clock out telat", () => {
+  const range = { from: "2026-10-01", to: "2026-10-31" };
+  const pending = row({
+    uid: "j", name: "Joko", workDate: "2026-10-20", status: "selesai",
+    pulangAt: wib("2026-10-21", "07:00"), durationMin: 1440,
+    lateOut: { id: "lx1", status: "pending", reason: "Lupa pencet", at: wib("2026-10-21", "07:00") },
+  });
+  // Ditolak: Worker sudah mengirim status lupa_pulang tanpa jam pulang/durasi.
+  const rejected = row({
+    uid: "j", name: "Joko", workDate: "2026-10-22", status: "lupa_pulang", pulangAt: null, durationMin: null,
+    lateOut: { id: "lx2", status: "rejected", reason: "Lupa", at: wib("2026-10-23", "07:00") },
+  });
+
+  it("menunggu: ditandai perlu review, durasi tetap dihitung", () => {
+    const tables = rekapTables([pending], [], range);
+    const cells = tables.detail.find((c) => c[1] === "Joko");
+    expect(cells?.[5]).toContain("Perlu verifikasi");
+    expect(cells?.[6]).toContain("Perlu review · clock out telat (Lupa pencet)");
+    expect(summarizeRekap([pending], [], range)[0].totalMenit).toBe(1440);
+  });
+
+  it("ditolak: tidak clock out, durasi tidak dihitung, ada catatan ditolak", () => {
+    const tables = rekapTables([pending, rejected], [], range);
+    const cells = tables.detail.find((c) => c[1] === "Joko" && c[6].includes("ditolak"));
+    expect(cells?.[5]).toContain("Clock out telat ditolak");
+    expect(cells?.[6]).toContain("Clock out telat · ditolak (Lupa)");
+    const summary = summarizeRekap([pending, rejected], [], range)[0];
+    expect(summary.tidakClockOut).toBe(1);
+    expect(summary.totalMenit).toBe(1440);
+  });
+
+  it("Excel memuat catatan clock out telat", () => {
+    const workbook = buildRekapWorkbook([pending], { ...META, from: range.from, to: range.to }, []);
+    const detail = XLSX.utils.sheet_to_json<string[]>(workbook.Sheets.Detail, { header: 1 });
+    expect(detail.flat().join(" ")).toContain("Perlu review · clock out telat");
+  });
+});

@@ -4,7 +4,7 @@ import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
 import type {
   AbsenKind, AbsenOptions, AbsenResult, AbsensiNotificationView, AbsensiRequestView, AbsensiRole,
   ActivateOptions, ApprovalList, AreaView, CoworkerView, EmployeeView, HariIniRow, LeaveType, LocationInput,
-  Me, RekapRow, RequestStatus, ShiftStatus, ShiftView, SilahEntry, SilahExceptionView, UnitRef, UnitView, ZoneExceptionView,
+  LateOutExceptionView, Me, RekapRow, RequestStatus, ShiftStatus, ShiftView, SilahEntry, SilahExceptionView, UnitRef, UnitView, ZoneExceptionView,
 } from "@/absensi/types";
 
 const BASE = `${import.meta.env.VITE_ABSENSI_API_BASE_URL ?? ""}/api/absensi`;
@@ -84,6 +84,8 @@ export interface AbsenBody {
   outsideReason?: string;
   /** Alasan clock in di hari Silah; tanpa ini server menolak (HARI_SILAH). */
   silahReason?: string;
+  /** Alasan clock out sesudah ganti hari; tanpa ini server menolak (ALASAN_CLOCK_OUT_TELAT). */
+  lateOutReason?: string;
 }
 export const absen = (body: AbsenBody) => post<AbsenResult>("/absen", body);
 
@@ -141,6 +143,9 @@ export const reviewTeamZone = (id: string, body: ReviewBody) =>
 export const reviewTeamSilah = (id: string, body: ReviewBody) =>
   post<SilahExceptionView>(`/tim/silah/${encodeURIComponent(id)}`, body, "PATCH");
 
+export const reviewTeamLateOut = (id: string, body: ReviewBody) =>
+  post<LateOutExceptionView>(`/tim/clockout-telat/${encodeURIComponent(id)}`, body, "PATCH");
+
 // --- Admin ------------------------------------------------------------------
 
 export const getHariIni = () => absensiFetch<{ date: string; rows: HariIniRow[] }>("/admin/hari-ini");
@@ -164,6 +169,9 @@ export const reviewAdminZone = (id: string, body: ReviewBody) =>
 
 export const reviewAdminSilah = (id: string, body: ReviewBody) =>
   post<SilahExceptionView>(`/admin/silah/${encodeURIComponent(id)}`, body, "PATCH");
+
+export const reviewAdminLateOut = (id: string, body: ReviewBody) =>
+  post<LateOutExceptionView>(`/admin/clockout-telat/${encodeURIComponent(id)}`, body, "PATCH");
 
 /** Object URL untuk satu foto, atau null kalau sudah dihapus (lewat 90 hari). `scope` "tim" = kepala unit. */
 export async function fetchPhotoUrl(id: string, scope: "admin" | "tim" = "admin"): Promise<string | null> {

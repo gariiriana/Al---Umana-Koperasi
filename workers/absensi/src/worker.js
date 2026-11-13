@@ -9,9 +9,11 @@ import { createAuthUser, setAuthDisabled, setClaims } from "./identity.js";
 import { runCron } from "./cron.js";
 import {
   createKaryawan, createUnit, getArea, getFoto, getHariIni, getRekap, getUnits, listKaryawan,
-  listPengajuanAdmin, patchKaryawan, patchUnit, putArea, reviewLuarZonaAdmin, reviewPengajuanAdmin, reviewSilahAdmin,
+  listPengajuanAdmin, patchKaryawan, patchUnit, putArea, reviewLateOutAdmin, reviewLuarZonaAdmin, reviewPengajuanAdmin, reviewSilahAdmin,
 } from "./handlers/admin.js";
-import { getTimFoto, getTimPersetujuan, reviewTimLuarZona, reviewTimPengajuan, reviewTimSilah } from "./handlers/tim.js";
+import {
+  getTimFoto, getTimPersetujuan, reviewTimLateOut, reviewTimLuarZona, reviewTimPengajuan, reviewTimSilah,
+} from "./handlers/tim.js";
 import {
   absen, absenOptions, activate, activateOptions, bacaNotifikasi,
   createPengajuan, getMe, getNotifikasi, getRekan, getRiwayat, listPengajuan, resetSimulasi,
@@ -37,6 +39,7 @@ const ROUTES = [
   ["PATCH", /^\/tim\/pengajuan\/([\w-]{1,64})$/, reviewTimPengajuan],
   ["PATCH", /^\/tim\/luar-zona\/([\w-]{1,64})$/, reviewTimLuarZona],
   ["PATCH", /^\/tim\/silah\/([\w-]{1,64})$/, reviewTimSilah],
+  ["PATCH", /^\/tim\/clockout-telat\/([\w-]{1,64})$/, reviewTimLateOut],
   ["GET", /^\/tim\/foto\/([\w-]{1,64})$/, getTimFoto],
   ["GET", /^\/admin\/hari-ini$/, getHariIni],
   ["GET", /^\/admin\/rekap$/, getRekap],
@@ -44,6 +47,7 @@ const ROUTES = [
   ["PATCH", /^\/admin\/pengajuan\/([\w-]{1,64})$/, reviewPengajuanAdmin],
   ["PATCH", /^\/admin\/luar-zona\/([\w-]{1,64})$/, reviewLuarZonaAdmin],
   ["PATCH", /^\/admin\/silah\/([\w-]{1,64})$/, reviewSilahAdmin],
+  ["PATCH", /^\/admin\/clockout-telat\/([\w-]{1,64})$/, reviewLateOutAdmin],
   ["GET", /^\/admin\/unit$/, getUnits],
   ["POST", /^\/admin\/unit$/, createUnit],
   ["PATCH", /^\/admin\/unit\/([\w-]{1,64})$/, patchUnit],

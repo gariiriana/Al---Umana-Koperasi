@@ -28,6 +28,16 @@ export interface ShiftView {
   zonePulang?: ZoneStatusView | null;
   /** Clock in di hari Silah (menunggu / disetujui / ditolak kepala unit atau admin). */
   silahMasuk?: SilahStatusView | null;
+  /** Clock out sesudah ganti hari (lupa clock out). Ditolak = Worker mengirim status lupa_pulang tanpa jam pulang. */
+  lateOut?: LateOutStatusView | null;
+}
+
+export interface LateOutStatusView {
+  id: string;
+  status: RequestStatus;
+  reason: string;
+  /** Jam clock out asli (tetap tersimpan walau ditolak). */
+  at: number;
 }
 
 export interface SilahStatusView {
@@ -110,6 +120,7 @@ export interface RekapRow {
   zoneMasuk?: ZoneStatusView | null;
   zonePulang?: ZoneStatusView | null;
   silahMasuk?: SilahStatusView | null;
+  lateOut?: LateOutStatusView | null;
 }
 
 export interface EmployeeView {
@@ -146,6 +157,7 @@ export interface HariIniRow {
   zoneMasuk?: ZoneStatusView | null;
   zonePulang?: ZoneStatusView | null;
   silahMasuk?: SilahStatusView | null;
+  lateOut?: LateOutStatusView | null;
   leaveType?: LeaveType | null;
   shiftSwap?: {
     fromShift: string;
@@ -231,11 +243,18 @@ export interface SilahExceptionView {
   createdAt: number;
 }
 
+/** Clock out sesudah ganti hari yang perlu disetujui; `at` = jam clock out asli. */
+export interface LateOutExceptionView extends SilahExceptionView {
+  masukAt: number;
+}
+
 export interface ApprovalList {
   requests: AbsensiRequestView[];
   zoneExceptions: ZoneExceptionView[];
   /** Kosong / tidak ada kalau Worker belum versi baru. */
   silahExceptions?: SilahExceptionView[];
+  /** Kosong / tidak ada kalau Worker belum versi baru. */
+  lateOutExceptions?: LateOutExceptionView[];
   pendingCount: number;
 }
 

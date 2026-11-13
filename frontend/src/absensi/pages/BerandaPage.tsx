@@ -14,11 +14,13 @@ import {
 } from "lucide-react";
 
 import { checkLocation } from "../../../../workers/absensi/shared/geo.js";
-import { workDateWIB } from "../../../../workers/absensi/shared/time.js";
+import { isLateClockOut, workDateWIB } from "../../../../workers/absensi/shared/time.js";
 import { getRiwayat, resetSimulasi } from "@/absensi/api";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
+import { CarryOverCard } from "@/absensi/components/CarryOverCard";
 import { ClockButtons } from "@/absensi/components/ClockButtons";
 import { EmployeeBottomNav } from "@/absensi/components/EmployeeBottomNav";
+import { LateOutNoticeModal } from "@/absensi/components/LateOutNoticeModal";
 import { LateReasonForm } from "@/absensi/components/LateReasonForm";
 import { LocationConfirmModal } from "@/absensi/components/LocationConfirmModal";
 import { SilahNoticeModal } from "@/absensi/components/SilahNoticeModal";
@@ -161,8 +163,12 @@ function Beranda({
 
   const flow = useClockFlow({ me, onStatus: setStatus });
   const [silahNotice, setSilahNotice] = useState(false);
+  const [lateOutNotice, setLateOutNotice] = useState(false);
   const view = buttonState(me.status, now);
-  const activeShift = me.status.open ?? (me.status.today?.workDate === workDateWIB(now) ? me.status.today : null);
+  // Kartu kemarin memegang shift yang masih terbuka; tombol hari ini mulai kosong.
+  const activeShift = view.carryOver
+    ? null
+    : me.status.open ?? (me.status.today?.workDate === workDateWIB(now) ? me.status.today : null);
   const recentLogs = useMemo(() => (recentShifts ? buildRecentLogs(recentShifts) : null), [recentShifts]);
 
   const { step, cancel } = flow;
@@ -224,6 +230,18 @@ function Beranda({
 
       {/* Konten Utama */}
       <main className="relative z-10 mx-auto -mt-14 w-full max-w-md space-y-4 px-4">
+        {view.carryOver && (
+          <CarryOverCard
+            carryOver={view.carryOver}
+            onClockOut={() => {
+              // Dicek ulang saat ditekan: halaman bisa terbuka sejak sebelum tengah malam.
+              const carry = view.carryOver;
+              if (carry && isLateClockOut(carry.masukAt, Date.now())) setLateOutNotice(true);
+              else flow.start("pulang");
+            }}
+          />
+        )}
+
         {/* Floating Clock Card */}
         <section className="relative rounded-3xl border border-amber-100 bg-white p-5 shadow-[0_12px_32px_-10px_rgba(17,24,39,0.10)]">
           <div className="absolute right-4 top-4">
@@ -418,6 +436,20 @@ function Beranda({
 
       <EmployeeBottomNav />
 
+      {view.carryOver && (
+        <LateOutNoticeModal
+          open={lateOutNotice}
+          workDate={view.carryOver.workDate}
+          masukAt={view.carryOver.masukAt}
+          now={now}
+          onSubmit={(lateOutReason) => {
+            setLateOutNotice(false);
+            flow.start("pulang", { lateOutReason });
+          }}
+          onClose={() => setLateOutNotice(false)}
+        />
+      )}
+
       <SilahNoticeModal
         open={silahNotice}
         date={workDateWIB(now)}
@@ -444,7 +476,19 @@ function Beranda({
       )}
 
       {/* Langkah 0 (Clock In lewat 08:00): Alasan, lalu Langkah 2–4: Selfie Liveness, Kirim, dan Hasil */}
-      {flow.step !== "idle" && flow.step !== "lokasi" && (
+      {/* Server menilai clock out sudah lewat ganti hari (jam HP belum): alasan, lalu kirim ulang tanpa peta/selfie. */}
+      {flow.step === "alasanPulang" && me.status.open && (
+        <LateOutNoticeModal
+          open
+          workDate={me.status.open.workDate}
+          masukAt={me.status.open.masukAt}
+          now={now}
+          onSubmit={(reason) => void flow.submitLateOutReason(reason)}
+          onClose={cancel}
+        />
+      )}
+
+      {flow.step !== "idle" && flow.step !== "lokasi" && flow.step !== "alasanPulang" && (
         <div
           role="dialog"
           aria-modal="true"

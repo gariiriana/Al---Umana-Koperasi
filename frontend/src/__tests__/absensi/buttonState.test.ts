@@ -63,12 +63,21 @@ describe("buttonState (tabel spec 5.3)", () => {
     expect(view.durasi).toBeNull();
   });
 
-  it("shift malam dari kemarin masih terbuka: tampil dengan tanggalnya", () => {
+  it("shift malam dari kemarin masih terbuka: kartu kemarin tanpa pop-up, Clock In hari ini terkunci", () => {
     const open = shift({ workDate: "2026-10-26", masukAt: wib("2026-10-26", "22:00"), status: "terbuka" });
     const view = buttonState({ today: null, open, last: null }, wib("2026-10-27", "05:00"));
-    expect(view.shiftDateLabel).toBe("Shift 26 Okt");
-    expect(view.clockIn).toEqual({ state: "selesai", label: "✓ Sudah clock in · 22:00" });
-    expect(view.clockOut).toEqual({ state: "aktif", label: "Clock Out" });
+    expect(view.carryOver).toEqual({ workDate: "2026-10-26", masukAt: wib("2026-10-26", "22:00"), late: false });
+    expect(view.clockIn).toEqual({ state: "terkunci", label: "Selesaikan clock out 26 Okt dulu" });
+    expect(view.clockOut).toEqual({ state: "nonaktif", label: "Clock in dulu" });
+    expect(view.shiftDateLabel).toBeNull();
+  });
+
+  it("lupa clock out kemarin pagi: kartu kemarin dengan tanda telat, Clock In hari ini terkunci", () => {
+    const open = shift({ workDate: "2026-10-26", masukAt: wib("2026-10-26", "07:00"), status: "terbuka" });
+    const view = buttonState({ today: null, open, last: null }, wib("2026-10-27", "07:00"));
+    expect(view.carryOver).toEqual({ workDate: "2026-10-26", masukAt: wib("2026-10-26", "07:00"), late: true });
+    expect(view.clockIn.state).toBe("terkunci");
+    expect(view.clockOut.state).toBe("nonaktif");
   });
 
   it("sesudah clock out shift malam jam 06:00: baris shift terakhir dan Clock In aktif lagi", () => {
@@ -109,14 +118,17 @@ describe("buttonState (tabel spec 5.3)", () => {
     expect(view.clockOut).toEqual({ state: "nonaktif", label: "Clock in dulu" });
   });
 
-  it("mengubah shift terbuka yang lewat 20 jam menjadi Tidak clock out secara reaktif", () => {
-    const staleOpen = shift({
-      workDate: "2026-10-27",
-      masukAt: wib("2026-10-27", "01:00"),
-      status: "terbuka",
-    });
-    const view = buttonState({ today: staleOpen, open: staleOpen, last: staleOpen }, wib("2026-10-27", "21:30"));
-    expect(view.clockIn).toEqual({ state: "selesai", label: "✓ Sudah clock in · 01:00" });
-    expect(view.clockOut).toEqual({ state: "tidak_clock_out", label: "Tidak clock out" });
+  it("shift terbuka hari ini tetap bisa clock out walau sudah lebih dari 20 jam", () => {
+    const open = shift({ workDate: "2026-10-27", masukAt: wib("2026-10-27", "01:00"), status: "terbuka" });
+    const view = buttonState({ today: open, open, last: open }, wib("2026-10-27", "23:30"));
+    expect(view.clockOut).toEqual({ state: "aktif", label: "Clock Out" });
+    expect(view.carryOver).toBeNull();
+  });
+
+  it("shift terbuka dari 2 hari lalu: tidak bisa ditutup lagi, Clock In hari ini aktif", () => {
+    const stale = shift({ workDate: "2026-10-25", masukAt: wib("2026-10-25", "07:00"), status: "terbuka" });
+    const view = buttonState({ today: null, open: stale, last: null }, wib("2026-10-27", "07:00"));
+    expect(view.carryOver).toBeNull();
+    expect(view.clockIn).toEqual({ state: "aktif", label: "Clock In" });
   });
 });

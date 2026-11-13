@@ -4,7 +4,8 @@ import { addEmployee, makeEnv, T0 } from "./helpers.mjs";
 import {
   closeShift, consumeChallenge, createChallenge, getPhoto, insertPasskey, insertPhoto, insertShift,
   listAreas, listPasskeys, purgeSelfies, rekapShifts, replaceAreas, resetEmployeeDevice, activateEmployee,
-  getEmployee,
+  getEmployee, countPendingApprovals, deleteShiftsForReset, getLateOutException, insertLateOutException,
+  listLateOutExceptions, resetShiftPulangForSimulasi, reviewLateOutException,
 } from "../src/db.js";
 
 const shift = (o = {}) => ({
@@ -74,5 +75,37 @@ describe("db", () => {
     const employee = await getEmployee(env.DB, "u1");
     assert.equal(employee.activated_at, null);
     assert.equal(employee.face_descriptor, null);
+  });
+
+  it("late clock-out exceptions: list, review once, count pending, removed by test resets", async () => {
+    await insertShift(env.DB, shift({ id: "lx-s1", workDate: "2026-10-20", masukAt: T0 - 7 * 86_400_000 }));
+    await closeShift(env.DB, "lx-s1", { ...pulang, pulangAt: T0 - 6 * 86_400_000 });
+    await insertLateOutException(env.DB, {
+      id: "lx1", shiftId: "lx-s1", uid: "u1", workDate: "2026-10-20", at: T0 - 6 * 86_400_000, reason: "Lupa pencet", photoId: "p2", createdAt: T0,
+    });
+    const before = await countPendingApprovals(env.DB);
+    assert.ok(before >= 1);
+    const [item] = await listLateOutExceptions(env.DB, { status: "pending" });
+    assert.equal(item.id, "lx1");
+    assert.equal(item.employee_name, "Budi");
+    assert.equal(item.masuk_at, T0 - 7 * 86_400_000);
+    const rekap = await rekapShifts(env.DB, { from: "2026-10-20", to: "2026-10-20" });
+    assert.equal(rekap[0].late_out_status, "pending");
+    assert.equal(rekap[0].late_out_at, T0 - 6 * 86_400_000);
+
+    const review = { status: "approved", reviewedBy: "adm", reviewedAt: T0, reviewNote: null };
+    assert.equal(await reviewLateOutException(env.DB, "lx1", review), 1);
+    assert.equal(await reviewLateOutException(env.DB, "lx1", { ...review, status: "rejected" }), 0);
+    assert.equal((await getLateOutException(env.DB, "lx1")).status, "approved");
+    assert.equal(await countPendingApprovals(env.DB), before - 1);
+
+    await insertShift(env.DB, shift({ id: "lx-s2", uid: "u1", workDate: "2026-10-21", masukAt: T0 - 6 * 86_400_000 }));
+    await closeShift(env.DB, "lx-s2", pulang);
+    await insertLateOutException(env.DB, { id: "lx2", shiftId: "lx-s2", uid: "u1", workDate: "2026-10-21", at: pulang.pulangAt, reason: "Lupa", photoId: null, createdAt: T0 });
+    await resetShiftPulangForSimulasi(env.DB, "u1", "2026-10-21");
+    assert.equal(await getLateOutException(env.DB, "lx2"), null);
+    await insertLateOutException(env.DB, { id: "lx3", shiftId: "lx-s2", uid: "u1", workDate: "2026-10-21", at: pulang.pulangAt, reason: "Lupa", photoId: null, createdAt: T0 });
+    await deleteShiftsForReset(env.DB, "u1", "2026-10-21");
+    assert.equal(await getLateOutException(env.DB, "lx3"), null);
   });
 });

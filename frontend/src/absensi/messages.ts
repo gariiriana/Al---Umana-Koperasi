@@ -16,6 +16,7 @@ const MESSAGES: Record<string, string> = {
   PASSKEY_TIDAK_DIDUKUNG: "Browser ini belum mendukung sidik jari/Face ID. Pakai Chrome atau Safari terbaru.",
   PASSKEY_TIDAK_DIKENAL: "HP ini belum terdaftar. Minta admin absensi reset HP kamu.",
   SUDAH_CLOCK_IN: "Kamu sudah clock in.",
+  ALASAN_CLOCK_OUT_TELAT: "Sudah ganti hari. Isi alasan clock out terlambat, lalu kirim lagi.",
   BELUM_CLOCK_IN: "Kamu belum clock in.",
   SUDAH_CLOCK_IN_HARI_INI: "Kamu sudah clock in dan clock out hari ini. Clock in berikutnya besok.",
   HARI_SILAH:
