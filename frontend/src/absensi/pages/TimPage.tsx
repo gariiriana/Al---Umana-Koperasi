@@ -1,7 +1,7 @@
 import { Navigate, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 
-import { getTeamApprovals, reviewTeamRequest, reviewTeamZone } from "@/absensi/api";
+import { getTeamApprovals, reviewTeamRequest, reviewTeamSilah, reviewTeamZone } from "@/absensi/api";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
 import { ApprovalBoard } from "@/absensi/components/ApprovalBoard";
 import { EmployeeBottomNav } from "@/absensi/components/EmployeeBottomNav";
@@ -44,6 +44,7 @@ export function TimPage() {
           load={getTeamApprovals}
           reviewRequest={reviewTeamRequest}
           reviewZone={reviewTeamZone}
+          reviewSilah={reviewTeamSilah}
           photoScope="tim"
           onChanged={reloadMe}
         />

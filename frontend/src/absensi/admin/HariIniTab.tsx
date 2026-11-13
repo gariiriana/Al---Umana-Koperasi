@@ -5,7 +5,7 @@ import { LatePhotoDialog } from "@/absensi/admin/ShiftPhoto";
 import { getHariIni } from "@/absensi/api";
 import { errorMessage } from "@/absensi/errorMessage";
 import {
-  LEAVE_TYPE_LABEL, formatJam, formatTanggalPanjang, formatTerlambat, worstZoneStatus, zoneNotes,
+  LEAVE_TYPE_LABEL, formatJam, formatTanggalPanjang, formatTerlambat, rejectedLabel, worstZoneStatus, zoneNotes,
 } from "@/absensi/logic/format";
 import type { HariIniRow } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
@@ -175,7 +175,7 @@ export function HariIniTab() {
                 )}
                 {worstZoneStatus(row) === "rejected" && (
                   <span className="rounded-full border border-rose-300 bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">
-                    Luar zona ditolak
+                    {rejectedLabel(row)}
                   </span>
                 )}
                 {terlambat && (

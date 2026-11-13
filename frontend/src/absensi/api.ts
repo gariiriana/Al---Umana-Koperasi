@@ -4,7 +4,7 @@ import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
 import type {
   AbsenKind, AbsenOptions, AbsenResult, AbsensiNotificationView, AbsensiRequestView, AbsensiRole,
   ActivateOptions, ApprovalList, AreaView, CoworkerView, EmployeeView, HariIniRow, LeaveType, LocationInput,
-  Me, RekapRow, RequestStatus, ShiftStatus, ShiftView, SilahEntry, UnitRef, UnitView, ZoneExceptionView,
+  Me, RekapRow, RequestStatus, ShiftStatus, ShiftView, SilahEntry, SilahExceptionView, UnitRef, UnitView, ZoneExceptionView,
 } from "@/absensi/types";
 
 const BASE = `${import.meta.env.VITE_ABSENSI_API_BASE_URL ?? ""}/api/absensi`;
@@ -82,6 +82,8 @@ export interface AbsenBody {
   latePhotoBase64?: string;
   /** Alasan absen di luar zona; tanpa ini server menolak lokasi di luar zona. */
   outsideReason?: string;
+  /** Alasan clock in di hari Silah; tanpa ini server menolak (HARI_SILAH). */
+  silahReason?: string;
 }
 export const absen = (body: AbsenBody) => post<AbsenResult>("/absen", body);
 
@@ -136,6 +138,9 @@ export const reviewTeamRequest = (id: string, body: ReviewBody) =>
 export const reviewTeamZone = (id: string, body: ReviewBody) =>
   post<ZoneExceptionView>(`/tim/luar-zona/${encodeURIComponent(id)}`, body, "PATCH");
 
+export const reviewTeamSilah = (id: string, body: ReviewBody) =>
+  post<SilahExceptionView>(`/tim/silah/${encodeURIComponent(id)}`, body, "PATCH");
+
 // --- Admin ------------------------------------------------------------------
 
 export const getHariIni = () => absensiFetch<{ date: string; rows: HariIniRow[] }>("/admin/hari-ini");
@@ -156,6 +161,9 @@ export const reviewAdminRequest = (id: string, body: { action: "approve" | "reje
 
 export const reviewAdminZone = (id: string, body: ReviewBody) =>
   post<ZoneExceptionView>(`/admin/luar-zona/${encodeURIComponent(id)}`, body, "PATCH");
+
+export const reviewAdminSilah = (id: string, body: ReviewBody) =>
+  post<SilahExceptionView>(`/admin/silah/${encodeURIComponent(id)}`, body, "PATCH");
 
 /** Object URL untuk satu foto, atau null kalau sudah dihapus (lewat 90 hari). `scope` "tim" = kepala unit. */
 export async function fetchPhotoUrl(id: string, scope: "admin" | "tim" = "admin"): Promise<string | null> {

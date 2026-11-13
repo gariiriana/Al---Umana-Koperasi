@@ -8,6 +8,8 @@ import {
   formatDurasi,
   formatJam,
   formatTanggalPanjang,
+  isClockInRejected,
+  rejectedLabel,
   worstZoneStatus,
   zoneNotes,
 } from "@/absensi/logic/format";
@@ -148,7 +150,8 @@ export function buildUnifiedRekapItems(
       ? `Alasan terlambat: ${row.lateReason}${row.latePhotoId ? " (ada foto bukti)" : ""}`
       : null;
     const zoneStatus = worstZoneStatus(row);
-    const silahNote = silahDays.has(key) ? SILAH_SHIFT_NOTE : null;
+    // Shift dengan status persetujuan Silah sudah punya catatan sendiri dari zoneNotes.
+    const silahNote = silahDays.has(key) && !row.silahMasuk ? SILAH_SHIFT_NOTE : null;
     const notes = [...zoneNotes(row), lateNote, swapNote, silahNote].filter((note): note is string => Boolean(note));
     const infoParts = [row.areaName, ...notes].filter(Boolean);
     return {
@@ -163,7 +166,7 @@ export function buildUnifiedRekapItems(
       statusLabel: zoneStatus === "pending"
         ? `${SHIFT_STATUS_LABEL[row.status]} · Perlu verifikasi`
         : zoneStatus === "rejected"
-          ? `${SHIFT_STATUS_LABEL[row.status]} · Luar zona ditolak`
+          ? `${SHIFT_STATUS_LABEL[row.status]} · ${rejectedLabel(row)}`
           : SHIFT_STATUS_LABEL[row.status],
       badgeTone: row.status,
       late: isLateClockIn(row.masukAt),
@@ -247,8 +250,8 @@ export function summarizeRekap(
   for (const row of rows) {
     shiftDates.add(`${row.uid}:${row.workDate}`);
     const summary = byUid.get(row.uid) ?? emptySummary(row.uid, row.name);
-    // Clock in luar zona yang ditolak kepala unit / admin tidak dihitung hadir.
-    if (row.zoneMasuk?.status !== "rejected") summary.hariHadir += 1;
+    // Clock in luar zona / di hari Silah yang ditolak kepala unit / admin tidak dihitung hadir.
+    if (!isClockInRejected(row)) summary.hariHadir += 1;
     if (row.status === "lupa_pulang") summary.tidakClockOut += 1;
     if (row.status === "selesai" && row.durationMin !== null) summary.totalMenit += row.durationMin;
     byUid.set(row.uid, summary);

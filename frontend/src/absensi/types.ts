@@ -26,6 +26,14 @@ export interface ShiftView {
   zoneMasuk?: ZoneStatusView | null;
   /** Clock out di luar zona. */
   zonePulang?: ZoneStatusView | null;
+  /** Clock in di hari Silah (menunggu / disetujui / ditolak kepala unit atau admin). */
+  silahMasuk?: SilahStatusView | null;
+}
+
+export interface SilahStatusView {
+  id: string;
+  status: RequestStatus;
+  reason: string;
 }
 
 export interface ZoneStatusView {
@@ -64,7 +72,7 @@ export interface Me {
   headOf?: UnitRef[];
   /** Pengajuan + absen luar zona anggota tim yang menunggu persetujuan kepala unit ini. */
   teamPending?: number;
-  /** Hari ini jadwal Silah (libur mingguan) akun ini; clock in ditolak server. */
+  /** Hari ini jadwal Silah (libur mingguan) akun ini; clock in perlu alasan + persetujuan. */
   silahToday?: boolean;
 }
 
@@ -101,6 +109,7 @@ export interface RekapRow {
   latePhotoId?: string | null;
   zoneMasuk?: ZoneStatusView | null;
   zonePulang?: ZoneStatusView | null;
+  silahMasuk?: SilahStatusView | null;
 }
 
 export interface EmployeeView {
@@ -136,6 +145,7 @@ export interface HariIniRow {
   latePhotoId?: string | null;
   zoneMasuk?: ZoneStatusView | null;
   zonePulang?: ZoneStatusView | null;
+  silahMasuk?: SilahStatusView | null;
   leaveType?: LeaveType | null;
   shiftSwap?: {
     fromShift: string;
@@ -202,9 +212,30 @@ export interface ZoneExceptionView {
   createdAt: number;
 }
 
+/** Clock in di hari Silah yang perlu disetujui. */
+export interface SilahExceptionView {
+  id: string;
+  shiftId: string;
+  uid: string;
+  employeeName: string;
+  unitName: string | null;
+  workDate: string;
+  at: number;
+  reason: string;
+  photoId: string | null;
+  status: RequestStatus;
+  reviewedBy: string | null;
+  reviewerName: string | null;
+  reviewedAt: number | null;
+  reviewNote: string | null;
+  createdAt: number;
+}
+
 export interface ApprovalList {
   requests: AbsensiRequestView[];
   zoneExceptions: ZoneExceptionView[];
+  /** Kosong / tidak ada kalau Worker belum versi baru. */
+  silahExceptions?: SilahExceptionView[];
   pendingCount: number;
 }
 

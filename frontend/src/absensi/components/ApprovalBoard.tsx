@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, ExternalLink, ImageIcon, MapPinOff, X } from "lucide-react";
+import { CalendarOff, Check, ExternalLink, ImageIcon, MapPinOff, X } from "lucide-react";
 
 import { fetchPhotoUrl, type ReviewBody } from "@/absensi/api";
 import { errorMessage } from "@/absensi/errorMessage";
@@ -9,7 +9,7 @@ import {
   formatLogWaktu,
   formatTanggalPanjang,
 } from "@/absensi/logic/format";
-import type { AbsensiRequestView, ApprovalList, RequestStatus, ZoneExceptionView } from "@/absensi/types";
+import type { AbsensiRequestView, ApprovalList, RequestStatus, SilahExceptionView, ZoneExceptionView } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
 
 const STATUS_BADGE: Record<RequestStatus, string> = {
@@ -28,7 +28,8 @@ const FILTERS = [
 type Filter = RequestStatus | "all";
 type Item =
   | { type: "request"; key: string; status: RequestStatus; createdAt: number; data: AbsensiRequestView }
-  | { type: "zone"; key: string; status: RequestStatus; createdAt: number; data: ZoneExceptionView };
+  | { type: "zone"; key: string; status: RequestStatus; createdAt: number; data: ZoneExceptionView }
+  | { type: "silah"; key: string; status: RequestStatus; createdAt: number; data: SilahExceptionView };
 
 export interface ApprovalBoardProps {
   title: string;
@@ -36,6 +37,7 @@ export interface ApprovalBoardProps {
   load: (filter: Filter) => Promise<ApprovalList>;
   reviewRequest: (id: string, body: ReviewBody) => Promise<unknown>;
   reviewZone: (id: string, body: ReviewBody) => Promise<unknown>;
+  reviewSilah: (id: string, body: ReviewBody) => Promise<unknown>;
   /** Asal foto selfie: admin atau kepala unit. */
   photoScope: "admin" | "tim";
   onChanged?: () => Promise<void> | void;
@@ -46,13 +48,15 @@ function mergeItems(list: ApprovalList): Item[] {
     ...(list.requests ?? []).map((data) => ({ type: "request" as const, key: `r-${data.id}`, status: data.status, createdAt: data.createdAt, data })),
     // zoneExceptions bisa kosong kalau Worker belum versi baru.
     ...(list.zoneExceptions ?? []).map((data) => ({ type: "zone" as const, key: `z-${data.id}`, status: data.status, createdAt: data.createdAt, data })),
+    // silahExceptions tidak ada kalau Worker belum versi baru.
+    ...(list.silahExceptions ?? []).map((data) => ({ type: "silah" as const, key: `s-${data.id}`, status: data.status, createdAt: data.createdAt, data })),
   ];
   return items.sort((a, b) =>
     Number(b.status === "pending") - Number(a.status === "pending") || b.createdAt - a.createdAt);
 }
 
-/** Daftar pengajuan cuti/pergantian shift + absen luar zona yang bisa disetujui atau ditolak. */
-export function ApprovalBoard({ title, subtitle, load, reviewRequest, reviewZone, photoScope, onChanged }: ApprovalBoardProps) {
+/** Daftar pengajuan cuti/pergantian shift + absen luar zona + masuk di hari Silah yang bisa disetujui atau ditolak. */
+export function ApprovalBoard({ title, subtitle, load, reviewRequest, reviewZone, reviewSilah, photoScope, onChanged }: ApprovalBoardProps) {
   const [filter, setFilter] = useState<Filter>("pending");
   const [items, setItems] = useState<Item[] | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
@@ -85,7 +89,8 @@ export function ApprovalBoard({ title, subtitle, load, reviewRequest, reviewZone
     try {
       const body = { action, note: notes[item.key]?.trim() || undefined };
       if (item.type === "request") await reviewRequest(item.data.id, body);
-      else await reviewZone(item.data.id, body);
+      else if (item.type === "zone") await reviewZone(item.data.id, body);
+      else await reviewSilah(item.data.id, body);
       await refresh(filter);
       await onChanged?.();
     } catch (err) {
@@ -144,9 +149,9 @@ export function ApprovalBoard({ title, subtitle, load, reviewRequest, reviewZone
         <ul className="space-y-3">
           {items.map((item) => (
             <li key={item.key} className="space-y-3 rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-xs">
-              {item.type === "request"
-                ? <RequestBody req={item.data} />
-                : <ZoneBody zone={item.data} photoScope={photoScope} />}
+              {item.type === "request" && <RequestBody req={item.data} />}
+              {item.type === "zone" && <ZoneBody zone={item.data} photoScope={photoScope} />}
+              {item.type === "silah" && <SilahBody silah={item.data} photoScope={photoScope} />}
 
               {item.status === "pending" ? (
                 <div className="space-y-2.5 pt-1">
@@ -256,24 +261,79 @@ function RequestBody({ req }: { req: AbsensiRequestView }) {
   );
 }
 
-function ZoneBody({ zone, photoScope }: { zone: ZoneExceptionView; photoScope: "admin" | "tim" }) {
+type PhotoState = "idle" | "loading" | "missing";
+
+/** Selfie absen yang baru dimuat saat tombol "Lihat selfie" ditekan. */
+function useSelfie(photoId: string | null, photoScope: "admin" | "tim") {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [photoState, setPhotoState] = useState<"idle" | "loading" | "missing">("idle");
+  const [photoState, setPhotoState] = useState<PhotoState>("idle");
   useEffect(() => () => {
     if (photoUrl) URL.revokeObjectURL(photoUrl);
   }, [photoUrl]);
 
   const showPhoto = async () => {
-    if (!zone.photoId) return;
+    if (!photoId) return;
     setPhotoState("loading");
     try {
-      const url = await fetchPhotoUrl(zone.photoId, photoScope);
+      const url = await fetchPhotoUrl(photoId, photoScope);
       setPhotoUrl(url);
       setPhotoState(url ? "idle" : "missing");
     } catch {
       setPhotoState("missing");
     }
   };
+  return { photoUrl, photoState, showPhoto };
+}
+
+function SelfieButton({ onShow, state }: { onShow: () => Promise<void>; state: PhotoState }) {
+  return (
+    <button
+      type="button"
+      onClick={() => void onShow()}
+      disabled={state === "loading"}
+      className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-3 py-1.5 text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
+    >
+      <ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />
+      {state === "loading" ? "Memuat..." : state === "missing" ? "Foto sudah terhapus" : "Lihat selfie"}
+    </button>
+  );
+}
+
+function SilahBody({ silah, photoScope }: { silah: SilahExceptionView; photoScope: "admin" | "tim" }) {
+  const { photoUrl, photoState, showPhoto } = useSelfie(silah.photoId, photoScope);
+  return (
+    <>
+      <Header
+        name={silah.employeeName}
+        unitName={silah.unitName}
+        status={silah.status}
+        badge={
+          <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-extrabold text-teal-800">
+            <CalendarOff className="h-3 w-3" aria-hidden="true" />
+            Masuk di hari Silah
+          </span>
+        }
+      />
+      <p className="-mt-1.5 text-xs font-bold text-neutral-600">
+        {formatTanggalPanjang(silah.workDate)} · clock in {formatLogWaktu(silah.at)} WIB
+      </p>
+      <p className="rounded-2xl bg-neutral-50 px-3.5 py-2.5 text-xs text-neutral-700">
+        <span className="font-bold text-neutral-900">Alasan masuk:</span> "{silah.reason}"
+      </p>
+      {silah.photoId && !photoUrl && (
+        <div className="flex flex-wrap gap-2 text-xs font-bold">
+          <SelfieButton onShow={showPhoto} state={photoState} />
+        </div>
+      )}
+      {photoUrl && (
+        <img src={photoUrl} alt={`Selfie ${silah.employeeName}`} className="max-h-72 rounded-2xl border border-neutral-200 object-contain" />
+      )}
+    </>
+  );
+}
+
+function ZoneBody({ zone, photoScope }: { zone: ZoneExceptionView; photoScope: "admin" | "tim" }) {
+  const { photoUrl, photoState, showPhoto } = useSelfie(zone.photoId, photoScope);
 
   return (
     <>
@@ -305,17 +365,7 @@ function ZoneBody({ zone, photoScope }: { zone: ZoneExceptionView; photoScope: "
           <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
           Lihat lokasi (±{Math.round(zone.accuracy)} m)
         </a>
-        {zone.photoId && !photoUrl && (
-          <button
-            type="button"
-            onClick={() => void showPhoto()}
-            disabled={photoState === "loading"}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-3 py-1.5 text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
-          >
-            <ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />
-            {photoState === "loading" ? "Memuat..." : photoState === "missing" ? "Foto sudah terhapus" : "Lihat selfie"}
-          </button>
-        )}
+        {zone.photoId && !photoUrl && <SelfieButton onShow={showPhoto} state={photoState} />}
       </div>
       {photoUrl && (
         <img src={photoUrl} alt={`Selfie ${zone.employeeName}`} className="max-h-72 rounded-2xl border border-neutral-200 object-contain" />

@@ -146,24 +146,57 @@ export const ZONE_STATUS_LABEL: Record<RequestStatus, string> = {
   rejected: "Luar zona · ditolak",
 };
 
-/** Catatan luar zona untuk satu shift: ["Clock in: Perlu verifikasi · absen di luar zona", ...]. */
-export function zoneNotes(shift: {
+/** Label clock in di hari Silah; selama belum disetujui ditulis "Perlu verifikasi". */
+export const SILAH_STATUS_LABEL: Record<RequestStatus, string> = {
+  pending: "Perlu verifikasi · masuk di hari Silah",
+  approved: "Masuk di hari Silah · disetujui",
+  rejected: "Masuk di hari Silah · ditolak",
+};
+
+type ApprovalStatusFields = {
   zoneMasuk?: { status: RequestStatus; reason: string } | null;
   zonePulang?: { status: RequestStatus; reason: string } | null;
-}): string[] {
+  silahMasuk?: { status: RequestStatus; reason: string } | null;
+};
+
+/**
+ * Catatan yang butuh persetujuan untuk satu shift (luar zona + masuk di hari Silah):
+ * ["Clock in: Perlu verifikasi · absen di luar zona (alasan)", ...].
+ */
+export function zoneNotes(shift: ApprovalStatusFields): string[] {
   const notes: string[] = [];
+  if (shift.silahMasuk) notes.push(`${SILAH_STATUS_LABEL[shift.silahMasuk.status]} (${shift.silahMasuk.reason})`);
   if (shift.zoneMasuk) notes.push(`Clock in: ${ZONE_STATUS_LABEL[shift.zoneMasuk.status]} (${shift.zoneMasuk.reason})`);
   if (shift.zonePulang) notes.push(`Clock out: ${ZONE_STATUS_LABEL[shift.zonePulang.status]} (${shift.zonePulang.reason})`);
   return notes;
 }
 
-/** Status luar zona yang paling perlu perhatian: menunggu > ditolak > disetujui. */
+/** Status persetujuan (luar zona / hari Silah) yang paling perlu perhatian: menunggu > ditolak > disetujui. */
 export function worstZoneStatus(shift: {
   zoneMasuk?: { status: RequestStatus } | null;
   zonePulang?: { status: RequestStatus } | null;
+  silahMasuk?: { status: RequestStatus } | null;
 }): RequestStatus | null {
-  const all = [shift.zoneMasuk?.status, shift.zonePulang?.status].filter((s): s is RequestStatus => Boolean(s));
+  const all = [shift.zoneMasuk?.status, shift.zonePulang?.status, shift.silahMasuk?.status]
+    .filter((s): s is RequestStatus => Boolean(s));
   if (all.includes("pending")) return "pending";
   if (all.includes("rejected")) return "rejected";
   return all.length ? "approved" : null;
+}
+
+/** Teks badge untuk shift yang ditolak: "Masuk Silah ditolak" atau "Luar zona ditolak". */
+export function rejectedLabel(shift: {
+  zoneMasuk?: { status: RequestStatus } | null;
+  zonePulang?: { status: RequestStatus } | null;
+  silahMasuk?: { status: RequestStatus } | null;
+}): string {
+  return shift.silahMasuk?.status === "rejected" ? "Masuk Silah ditolak" : "Luar zona ditolak";
+}
+
+/** Clock in yang ditolak (luar zona atau masuk di hari Silah) tidak dihitung hadir. */
+export function isClockInRejected(shift: {
+  zoneMasuk?: { status: RequestStatus } | null;
+  silahMasuk?: { status: RequestStatus } | null;
+}): boolean {
+  return shift.zoneMasuk?.status === "rejected" || shift.silahMasuk?.status === "rejected";
 }

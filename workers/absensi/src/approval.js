@@ -1,10 +1,12 @@
 // Persetujuan pengajuan & absen luar zona: admin absensi (semua karyawan) atau kepala unit (anggota unitnya).
 import {
-  getRequestById, getZoneException, insertNotifications, listActiveEmployeesByRole, reviewRequest,
-  reviewZoneException, unitHeadOf,
+  getRequestById, getSilahException, getZoneException, insertNotifications, listActiveEmployeesByRole, reviewRequest,
+  reviewSilahException, reviewZoneException, unitHeadOf,
 } from "./db.js";
 import { AbsensiError, readJson } from "./http.js";
-import { requestDetailSummary, requestKindTitle, toRequestView, toZoneExceptionView } from "./requests.js";
+import {
+  requestDetailSummary, requestKindTitle, toRequestView, toSilahExceptionView, toZoneExceptionView,
+} from "./requests.js";
 
 const WIB_OFFSET_MS = 7 * 3600_000;
 
@@ -102,4 +104,33 @@ export async function reviewZoneAs(ctx, reviewer, id) {
     createdAt: now,
   }]);
   return toZoneExceptionView(updated);
+}
+
+/** Setujui / tolak clock in di hari Silah. Ditolak = hari itu tidak dihitung hadir di rekap. */
+export async function reviewSilahAs(ctx, reviewer, id) {
+  const { approved, note } = await parseReview(ctx.request);
+  const existing = await getSilahException(ctx.env.DB, id);
+  if (!existing) throw new AbsensiError("NOT_FOUND", 404);
+  if (!(await canReview(ctx.env.DB, reviewer, existing.uid))) throw new AbsensiError("FORBIDDEN", 403);
+
+  const now = ctx.deps.now();
+  const changed = await reviewSilahException(ctx.env.DB, id, {
+    status: approved ? "approved" : "rejected",
+    reviewedBy: reviewer.uid,
+    reviewedAt: now,
+    reviewNote: note || null,
+  });
+  if (changed === 0) throw new AbsensiError("SUDAH_DIPROSES", 409);
+
+  const updated = await getSilahException(ctx.env.DB, id);
+  const noteSuffix = note ? ` Catatan: "${note}"` : "";
+  await insertNotifications(ctx.env.DB, [{
+    recipientUid: updated.uid,
+    kind: approved ? "pengajuan_disetujui" : "pengajuan_ditolak",
+    title: `Masuk di Hari Silah ${approved ? "Disetujui" : "Ditolak"}`,
+    body: `Clock in di hari Silah (${updated.work_date} ${jamWIB(updated.at)}) telah ${approved ? "disetujui" : "ditolak"} oleh ${reviewerLabel(reviewer)}.${noteSuffix}`,
+    requestId: null,
+    createdAt: now,
+  }]);
+  return toSilahExceptionView(updated);
 }

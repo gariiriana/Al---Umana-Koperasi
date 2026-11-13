@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { addEmployee, call, fakeDeps, fakeWebauthn, JPEG_BASE64, makeEnv, T0 } from "./helpers.mjs";
-import { activateEmployee, insertPasskey, insertPhoto, recentShifts, replaceAreas } from "../src/db.js";
+import { activateEmployee, insertPasskey, insertPhoto, recentShifts, replaceAreas, setSilah } from "../src/db.js";
 import { payloadChallenge, sha256Hex } from "../shared/binding.js";
 
 const PIN = { lat: -6.9735229, lng: 106.8651559 };
@@ -194,6 +194,44 @@ describe("unit kerja, kepala unit, dan absen luar zona", () => {
     const ok = await send("adm", "PATCH", `/admin/luar-zona/${zone.id}`, { action: "approve" });
     assert.equal(ok.data.status, "approved");
     assert.equal(ok.data.reviewerName, "Admin");
+  });
+
+  it("masuk di hari Silah: notifikasi ke kepala unit + admin, kepala unitnya menolak, rekap ikut", async () => {
+    now = T0 + 3 * HOUR; // Selasa 27 Okt 10:00 WIB, Silah Febri (sekarang anggota Kasma, kepala Inas)
+    await setSilah(env.DB, { uid: "febri", days: [2], effectiveFrom: "2026-10-01", nowMs: T0, byUid: "adm" });
+    const inasBefore = (await get("inas", "/notifikasi")).data.unreadCount;
+    const masuk = await send("febri", "POST", "/absen", await signedBody("febri", "masuk", inside, { silahReason: "Ada pesanan katering besar" }));
+    assert.equal(masuk.status, 200, JSON.stringify(masuk.data));
+    assert.equal(masuk.data.status.today.silahMasuk.status, "pending");
+
+    assert.equal((await get("inas", "/notifikasi")).data.unreadCount, inasBefore + 1);
+    const inasNotif = (await get("inas", "/notifikasi")).data.notifications[0];
+    assert.equal(inasNotif.title, "Masuk di Hari Silah Perlu Persetujuan");
+    assert.match(inasNotif.body, /Febri clock in pukul 10:00 WIB di hari Silah-nya: "Ada pesanan katering besar"/);
+    assert.ok((await get("inas", "/me")).data.teamPending >= 1);
+
+    const team = await get("inas", "/tim/persetujuan?status=pending");
+    const item = team.data.silahExceptions.find((x) => x.employeeName === "Febri");
+    assert.equal(item.workDate, "2026-10-27");
+    assert.equal(item.unitName, "Kasma Katering");
+    assert.ok(item.photoId);
+    assert.equal((await get("prianka", "/tim/persetujuan?status=pending")).data.silahExceptions.length, 0);
+
+    assert.equal((await send("prianka", "PATCH", `/tim/silah/${item.id}`, { action: "approve" })).status, 403);
+    assert.equal((await send("febri", "PATCH", `/tim/silah/${item.id}`, { action: "approve" })).status, 403);
+    const rejected = await send("inas", "PATCH", `/tim/silah/${item.id}`, { action: "reject", note: "Tidak ada jadwal tambahan" });
+    assert.equal(rejected.status, 200, JSON.stringify(rejected.data));
+    assert.equal(rejected.data.status, "rejected");
+    assert.equal((await send("adm", "PATCH", `/admin/silah/${item.id}`, { action: "approve" })).status, 409);
+    const febriNotif = (await get("febri", "/notifikasi")).data.notifications[0];
+    assert.equal(febriNotif.title, "Masuk di Hari Silah Ditolak");
+    assert.match(febriNotif.body, /ditolak oleh Inas \(kepala unit\)\. Catatan: "Tidak ada jadwal tambahan"/);
+
+    const rekap = await get("adm", "/admin/rekap?from=2026-10-27&to=2026-10-27&uid=febri");
+    assert.equal(rekap.data.rows[0].silahMasuk.status, "rejected");
+    const hariIni = (await get("adm", "/admin/hari-ini")).data.rows.find((r) => r.uid === "febri");
+    assert.equal(hariIni.silahMasuk.status, "rejected");
+    assert.equal((await get("adm", "/admin/pengajuan?status=rejected")).data.silahExceptions.length, 1);
   });
 
   it("admin mengganti kepala unit", async () => {

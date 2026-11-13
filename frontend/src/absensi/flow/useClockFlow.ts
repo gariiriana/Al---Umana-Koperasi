@@ -23,7 +23,8 @@ export interface ClockFlow {
   kind: AbsenKind | null;
   error: string | null;
   result: { kind: AbsenKind; serverTime: number } | null;
-  start: (kind: AbsenKind) => void;
+  /** `silahReason`: clock in di hari Silah (menunggu persetujuan); tidak ditanya alasan terlambat. */
+  start: (kind: AbsenKind, opts?: { silahReason?: string }) => void;
   /** Step "alasan": alasan + foto bukti clock in lewat 08:00; lanjut ke peta lokasi kalau keduanya ada. */
   submitLateReason: (reason: string, photo: Blob | null) => void;
   /** `outsideReason`: absen di luar zona dengan alasan (menunggu persetujuan). */
@@ -59,6 +60,7 @@ export function useClockFlow({
   const lateReasonRef = useRef<string | null>(null);
   const latePhotoRef = useRef<Blob | null>(null);
   const outsideReasonRef = useRef<string | null>(null);
+  const silahReasonRef = useRef<string | null>(null);
   const meRef = useRef(me);
   const onStatusRef = useRef(onStatus);
   const nowRef = useRef(now);
@@ -84,16 +86,23 @@ export function useClockFlow({
       lateReasonRef.current = null;
       latePhotoRef.current = null;
     }
+    if (nextKind !== "masuk") silahReasonRef.current = null;
     setKind(nextKind);
     setError(null);
     setResult(null);
+    // Hari Silah tidak punya jam masuk, jadi tidak ada alasan terlambat.
     const needReason = nextKind === "masuk"
+      && silahReasonRef.current === null
       && (lateReasonRef.current === null || latePhotoRef.current === null)
       && isLateClockIn(nowRef.current());
     setStep(needReason ? "alasan" : "lokasi");
   }, []);
 
-  const start = useCallback((nextKind: AbsenKind) => begin(nextKind, false), [begin]);
+  const start = useCallback((nextKind: AbsenKind, opts?: { silahReason?: string }) => {
+    const silahReason = opts?.silahReason ? normalizeLateReason(opts.silahReason) : null;
+    silahReasonRef.current = nextKind === "masuk" ? silahReason : null;
+    begin(nextKind, false);
+  }, [begin]);
 
   const submitLateReason = useCallback((text: string, photo: Blob | null) => {
     const reason = normalizeLateReason(text);
@@ -139,6 +148,7 @@ export function useClockFlow({
         ...(lateReason ? { lateReason } : {}),
         ...(latePhotoBase64 ? { latePhotoBase64 } : {}),
         ...(outsideReasonRef.current ? { outsideReason: outsideReasonRef.current } : {}),
+        ...(currentKind === "masuk" && silahReasonRef.current ? { silahReason: silahReasonRef.current } : {}),
       });
       if (token !== run.current) return;
       onStatusRef.current(res.status);
@@ -158,6 +168,7 @@ export function useClockFlow({
     lateReasonRef.current = null;
     latePhotoRef.current = null;
     outsideReasonRef.current = null;
+    silahReasonRef.current = null;
     setError(null);
     setStep("idle");
   }, []);

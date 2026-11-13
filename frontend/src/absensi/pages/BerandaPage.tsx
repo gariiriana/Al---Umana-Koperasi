@@ -267,7 +267,7 @@ function Beranda({
               view={view}
               activeShift={activeShift}
               onPress={(kind) => {
-                // Hari Silah: langsung pop-up, tanpa lewat peta/selfie (server juga menolak).
+                // Hari Silah: pop-up alasan dulu, lalu peta + selfie seperti biasa (menunggu persetujuan).
                 if (kind === "masuk" && me.silahToday) setSilahNotice(true);
                 else flow.start(kind);
               }}
@@ -278,7 +278,8 @@ function Beranda({
 
         {me.silahToday && (
           <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-xs font-semibold text-teal-900">
-            Hari ini jadwal Silah (libur) Anda. Perlu masuk? Hubungi Ustadzah Santi untuk mengubah jadwal Silah.
+            Hari ini jadwal Silah (libur) Anda. Perlu masuk? Tekan Clock In dan cantumkan alasannya, clock in akan
+            menunggu persetujuan kepala unit / admin absensi.
           </div>
         )}
 
@@ -420,6 +421,10 @@ function Beranda({
       <SilahNoticeModal
         open={silahNotice}
         date={workDateWIB(now)}
+        onSubmit={(silahReason) => {
+          setSilahNotice(false);
+          flow.start("masuk", { silahReason });
+        }}
         onClose={() => {
           setSilahNotice(false);
           // Kalau admin baru mengubah jadwal Silah, ketukan berikutnya sudah memakai data terbaru.

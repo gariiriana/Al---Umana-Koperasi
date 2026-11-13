@@ -75,23 +75,40 @@ describe("BerandaPage", () => {
     await screen.findByText("Belum ada catatan absensi terbaru.");
   });
 
-  it("hari Silah: Clock In memunculkan pop-up hubungi Ustadzah Santi, tanpa masuk alur peta/selfie", async () => {
+  it("hari Silah: Clock In minta alasan, lalu lanjut ke peta tanpa pop-up terlambat", async () => {
     session.silahToday = true;
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-11-13T07:30:00+07:00")); // Jumat
+    vi.setSystemTime(new Date("2026-11-13T09:30:00+07:00")); // Jumat, lewat 08:00
     try {
       render(<MemoryRouter><BerandaPage /></MemoryRouter>);
       expect(screen.getByText((text) => text.startsWith("Hari ini jadwal Silah (libur) Anda."))).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: /^Clock In$/ }));
       const dialog = await screen.findByRole("dialog", { name: "Hari Ini Jadwal Silah Anda" });
       expect(dialog.textContent).toContain("Jumat");
-      expect(dialog.textContent).toContain("Ustadzah Santi");
+      expect(dialog.textContent).toContain("cantumkan alasan clock in");
+      expect(dialog.textContent).toContain("kepala unit");
+
+      const lanjut = screen.getByRole("button", { name: "Lanjut Clock In" }) as HTMLButtonElement;
+      expect(lanjut.disabled).toBe(true);
+      fireEvent.change(screen.getByLabelText("Alasan clock in di hari Silah"), { target: { value: "  Gantiin   Ani sakit " } });
+      expect(lanjut.disabled).toBe(false);
+      fireEvent.click(lanjut);
+
+      expect(await screen.findByRole("dialog", { name: "Konfirmasi Clock In" })).toBeTruthy();
+      expect(screen.queryByRole("dialog", { name: "Hari Ini Jadwal Silah Anda" })).toBeNull();
       expect(screen.queryByText("Clock in lewat jam 08:00")).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: "Baik, Mengerti" }));
-      expect(screen.queryByRole("dialog")).toBeNull();
-      expect(session.reloadMe).toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("hari Silah: Batal menutup pop-up tanpa clock in", async () => {
+    session.silahToday = true;
+    render(<MemoryRouter><BerandaPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: /^Clock In$/ }));
+    await screen.findByRole("dialog", { name: "Hari Ini Jadwal Silah Anda" });
+    fireEvent.click(screen.getByRole("button", { name: "Batal, saya libur hari ini" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(session.reloadMe).toHaveBeenCalled();
   });
 });

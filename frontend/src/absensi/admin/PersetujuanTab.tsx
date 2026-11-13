@@ -1,4 +1,4 @@
-import { listAdminRequests, reviewAdminRequest, reviewAdminZone } from "@/absensi/api";
+import { listAdminRequests, reviewAdminRequest, reviewAdminSilah, reviewAdminZone } from "@/absensi/api";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
 import { ApprovalBoard } from "@/absensi/components/ApprovalBoard";
 
@@ -12,6 +12,7 @@ export function PersetujuanTab() {
       load={listAdminRequests}
       reviewRequest={reviewAdminRequest}
       reviewZone={reviewAdminZone}
+      reviewSilah={reviewAdminSilah}
       photoScope="admin"
       onChanged={reloadMe}
     />

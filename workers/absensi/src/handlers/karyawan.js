@@ -6,7 +6,7 @@ import { isLateClockIn, workDateWIB } from "../../shared/time.js";
 import {
   activateEmployee, closeShift, consumeChallenge, countPendingApprovals, countUnreadNotifications, createChallenge,
   deletePhoto, deleteShiftsForReset, getEmployee, getRequestById, getUnit, insertNotifications, insertPasskey, insertPhoto,
-  insertRequest, insertShift, insertZoneException, listActiveEmployeesByRole, listAreas, listEmployeeRequests, listSilahHistory,
+  insertRequest, insertShift, insertSilahException, insertZoneException, listActiveEmployeesByRole, listAreas, listEmployeeRequests, listSilahHistory,
   listNotifications, listPasskeys, markAllNotificationsRead, markNotificationRead, recentShifts, requestsForMonth,
   resetShiftPulangForSimulasi, shiftsForMonth, unitsHeadedBy,
 } from "../db.js";
@@ -65,9 +65,14 @@ async function isSilahToday(ctx, employee, now) {
   return isSilahOn(history.get(employee.uid) ?? [], today);
 }
 
-/** Clock in di hari Silah ditolak; karyawan diminta menghubungi admin untuk mengubah jadwal Silah. Clock out tetap boleh. */
-async function rejectClockInOnSilah(ctx, employee, kind, now) {
-  if (kind === "masuk" && (await isSilahToday(ctx, employee, now))) throw new AbsensiError("HARI_SILAH", 409);
+/**
+ * Clock in di hari Silah hanya boleh dengan alasan; shift itu lalu menunggu persetujuan kepala unit / admin absensi.
+ * Tanpa alasan (aplikasi versi lama) tetap ditolak HARI_SILAH. Clock out selalu boleh. Mengembalikan true kalau hari Silah.
+ */
+async function checkSilahClockIn(ctx, employee, kind, now, silahReason) {
+  if (kind !== "masuk" || !(await isSilahToday(ctx, employee, now))) return false;
+  if (!silahReason) throw new AbsensiError("HARI_SILAH", 409);
+  return true;
 }
 
 export async function meView(ctx, employee) {
@@ -196,6 +201,15 @@ function parseOutsideReason(body) {
   return reason;
 }
 
+/** Alasan clock in di hari Silah (3–300 karakter). */
+function parseSilahReason(body) {
+  if (body.silahReason === undefined || body.silahReason === null) return null;
+  if (typeof body.silahReason !== "string") throw new AbsensiError("VALIDATION_ERROR", 400);
+  const reason = body.silahReason.replace(/\s+/g, " ").trim();
+  if (reason.length < LATE_REASON_MIN || reason.length > LATE_REASON_MAX) throw new AbsensiError("VALIDATION_ERROR", 400);
+  return reason;
+}
+
 /** Foto bukti alasan terlambat (opsional di server, sama seperti alasannya). Dicek sebelum challenge terpakai. */
 function parseLatePhoto(body) {
   if (body.latePhotoBase64 === undefined || body.latePhotoBase64 === null) return null;
@@ -212,7 +226,7 @@ export async function absenOptions(ctx) {
   const employee = await requireActivatedEmployee(ctx);
   const kind = parseKind(await readJson(ctx.request));
   const now = ctx.deps.now();
-  await rejectClockInOnSilah(ctx, employee, kind, now);
+  // Hari Silah tidak ditolak di sini: alasannya baru dikirim bersama /absen.
   await currentDecision(ctx, employee, kind, now);
   const { nonce } = randomNonce();
   const challengeId = await createChallenge(ctx.env.DB, {
@@ -241,9 +255,10 @@ export async function absen(ctx) {
   const lateReason = kind === "masuk" ? parseLateReason(body) : null;
   const latePhoto = kind === "masuk" ? parseLatePhoto(body) : null;
   const outsideReason = parseOutsideReason(body);
+  const silahReason = kind === "masuk" ? parseSilahReason(body) : null;
   const now = ctx.deps.now();
   const { env } = ctx;
-  await rejectClockInOnSilah(ctx, employee, kind, now);
+  const onSilah = await checkSilahClockIn(ctx, employee, kind, now, silahReason);
 
   const challenge = await consumeChallenge(env.DB, String(body.challengeId || ""), employee.uid, "absen", now);
   if (!challenge || challenge.kind !== kind) throw new AbsensiError("CHALLENGE_INVALID", 400);
@@ -265,7 +280,8 @@ export async function absen(ctx) {
   const photoId = crypto.randomUUID();
   const fields = { ...location, areaId: area.areaId, faceDistance, photoId };
   // Alasan & foto alasan hanya disimpan kalau menurut jam server clock in-nya memang lewat 08:00.
-  const late = decision.action === "insert" && isLateClockIn(now);
+  // Di hari Silah tidak ada jam masuk, jadi tidak dianggap terlambat.
+  const late = decision.action === "insert" && !onSilah && isLateClockIn(now);
   const latePhotoId = late && latePhoto ? crypto.randomUUID() : null;
   const shiftId = decision.action === "insert" ? crypto.randomUUID() : decision.shiftId;
   if (decision.action === "insert") {
@@ -286,6 +302,9 @@ export async function absen(ctx) {
   if (latePhotoId) {
     // kind "selfie" = foto absen dengan retensi 90 hari (cron purgeSelfies).
     await insertPhoto(env.PHOTOS, { id: latePhotoId, uid: employee.uid, kind: "selfie", jpeg: latePhoto, createdAt: now });
+  }
+  if (onSilah && decision.action === "insert") {
+    await recordSilahClockIn(ctx, employee, { shiftId, workDate: decision.workDate, now, photoId, reason: silahReason });
   }
   if (area.outside) {
     await recordOutsideZone(ctx, employee, {
@@ -309,6 +328,23 @@ async function recordOutsideZone(ctx, employee, { shiftId, kind, now, location, 
     kind: "pengajuan_baru",
     title: "Absen Luar Zona Perlu Persetujuan",
     body: `${employee.name} ${zoneKindLabel(kind).toLowerCase()} pukul ${jamWIB(now)} WIB di luar zona${jarak}: "${reason}"`,
+    requestId: null,
+    createdAt: now,
+  })));
+}
+
+/** Simpan clock in di hari Silah (status menunggu) dan kabari kepala unit + admin absensi. */
+async function recordSilahClockIn(ctx, employee, { shiftId, workDate, now, photoId, reason }) {
+  const { DB } = ctx.env;
+  await insertSilahException(DB, {
+    id: crypto.randomUUID(), shiftId, uid: employee.uid, workDate, at: now, reason, photoId, createdAt: now,
+  });
+  const recipients = await approverRecipients(DB, employee.uid);
+  await insertNotifications(DB, recipients.map((person) => ({
+    recipientUid: person.uid,
+    kind: "pengajuan_baru",
+    title: "Masuk di Hari Silah Perlu Persetujuan",
+    body: `${employee.name} clock in pukul ${jamWIB(now)} WIB di hari Silah-nya: "${reason}"`,
     requestId: null,
     createdAt: now,
   })));

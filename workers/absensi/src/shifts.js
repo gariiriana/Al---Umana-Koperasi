@@ -21,6 +21,9 @@ export function toShiftView(row, nowMs) {
     latePhotoId: row.late_photo_id ?? null,
     zoneMasuk: zoneView(row, "masuk"),
     zonePulang: zoneView(row, "pulang"),
+    silahMasuk: row.silah_ex_id
+      ? { id: row.silah_ex_id, status: row.silah_ex_status, reason: row.silah_ex_reason ?? "" }
+      : null,
   };
 }
 

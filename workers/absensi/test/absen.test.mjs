@@ -57,28 +57,33 @@ describe("clock in / clock out", () => {
   });
   after(() => dispose());
 
-  it("rejects clock in on the employee's Silah day until the schedule changes, but still allows clock out", async () => {
-    now = T0; // Selasa 27 Okt, 07:00 WIB
+  it("on the employee's Silah day, clock in needs a reason and waits for approval; clock out is free", async () => {
+    now = T0 + 2 * HOUR; // Selasa 27 Okt, 09:00 WIB (lewat 08:00, tapi hari Silah tidak dianggap terlambat)
     await setSilah(env.DB, { uid: "u16", days: [2], effectiveFrom: "2026-10-01", nowMs: T0, byUid: "adm" });
     const me = await call(env, deps, "GET", "/me", { token: "u16" });
     assert.equal(me.data.silahToday, true);
-    const opts = await options("u16", "masuk");
-    assert.equal(opts.status, 409);
-    assert.equal(opts.data.error.code, "HARI_SILAH");
 
-    // Challenge yang sempat dibuat sebelum hari Silah juga tidak bisa dipakai untuk clock in.
-    await setSilah(env.DB, { uid: "u16", days: [], effectiveFrom: "2026-10-27", nowMs: T0, byUid: "adm" });
-    const body = await signedBody("u16", "masuk");
-    await setSilah(env.DB, { uid: "u16", days: [2], effectiveFrom: "2026-10-27", nowMs: T0, byUid: "adm" });
-    assert.equal((await absen("u16", body)).data.error.code, "HARI_SILAH");
+    // Aplikasi versi lama (tanpa alasan) tetap ditolak; alasan terlalu pendek juga.
+    const noReason = await absen("u16", await signedBody("u16", "masuk"));
+    assert.equal(noReason.status, 409);
+    assert.equal(noReason.data.error.code, "HARI_SILAH");
+    assert.equal((await absen("u16", await signedBody("u16", "masuk", { silahReason: "x" }))).status, 400);
 
-    // Admin mengubah jadwal (Silah pindah ke Sabtu) → bisa clock in, dan clock out tetap boleh.
-    await setSilah(env.DB, { uid: "u16", days: [6], effectiveFrom: "2026-10-27", nowMs: T0, byUid: "adm" });
-    assert.equal((await call(env, deps, "GET", "/me", { token: "u16" })).data.silahToday, false);
-    assert.equal((await absen("u16", await signedBody("u16", "masuk"))).status, 200);
-    await setSilah(env.DB, { uid: "u16", days: [2], effectiveFrom: "2026-10-27", nowMs: T0, byUid: "adm" });
-    now = T0 + 9 * HOUR;
-    assert.equal((await absen("u16", await signedBody("u16", "pulang"))).status, 200);
+    const res = await absen("u16", await signedBody("u16", "masuk", {
+      silahReason: "  Ganti   teman yang sakit ", lateReason: "macet", latePhotoBase64: LATE_PHOTO_BASE64,
+    }));
+    assert.equal(res.status, 200, JSON.stringify(res.data));
+    assert.deepEqual(
+      { ...res.data.status.today.silahMasuk, id: undefined },
+      { id: undefined, status: "pending", reason: "Ganti teman yang sakit" },
+    );
+    assert.equal(res.data.status.today.lateReason, null);
+    assert.equal(res.data.status.today.latePhotoId, null);
+
+    now = T0 + 10 * HOUR;
+    const pulang = await absen("u16", await signedBody("u16", "pulang"));
+    assert.equal(pulang.status, 200, JSON.stringify(pulang.data));
+    assert.equal(pulang.data.status.last.silahMasuk.status, "pending");
   });
 
   it("clocks in on server time, ignores client time, and never records the same body twice", async () => {

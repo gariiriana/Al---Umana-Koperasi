@@ -48,6 +48,7 @@ const SHIFT_PRESETS = [
   "Shift Siang (15:00 - 23:00)",
   "Shift Malam (23:00 - 07:00)",
   "Shift Reguler (08:00 - 17:00)",
+  "Shift Dini Hari (01:00 - 12:00)",
 ];
 
 const BULAN_PENDEK_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

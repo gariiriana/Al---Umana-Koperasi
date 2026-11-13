@@ -2,15 +2,15 @@
 import { MAX_TOLERANCE_M, MIN_PASSWORD_LENGTH, REKAP_MAX_DAYS } from "../../shared/constants.js";
 import { groupSilahHistory, isSilahOn, normalizeSilahDays, parseSilahDays, silahDaysOn } from "../../shared/silah.js";
 import { workDateWIB } from "../../shared/time.js";
-import { reviewRequestAs, reviewZoneAs } from "../approval.js";
+import { reviewRequestAs, reviewSilahAs, reviewZoneAs } from "../approval.js";
 import {
   approvedRequestsInRange, countPendingApprovals, deletePhoto, getEmployee, getPhoto, getUnit,
-  insertEmployee, insertUnit, listAdminRequests, listAreas, listEmployees, listUnits, listZoneExceptions,
+  insertEmployee, insertUnit, listAdminRequests, listAreas, listEmployees, listUnits, listSilahExceptions, listZoneExceptions,
   listSilahHistory, rekapShifts, replaceAreas, resetEmployeeDevice, setEmployeeStatus, setEmployeeUnit, setFaceRequired, setSilah,
   todayOverview, updateUnit,
 } from "../db.js";
 import { AbsensiError, readJson } from "../http.js";
-import { DAY_MS, parseIsoDate, toRequestView, toZoneExceptionView } from "../requests.js";
+import { DAY_MS, parseIsoDate, toRequestView, toSilahExceptionView, toZoneExceptionView } from "../requests.js";
 import { requireEmployee } from "../session.js";
 import { toShiftView } from "../shifts.js";
 
@@ -103,6 +103,7 @@ export async function getHariIni(ctx) {
       latePhotoId: shown?.latePhotoId ?? null,
       zoneMasuk: shown?.zoneMasuk ?? null,
       zonePulang: shown?.zonePulang ?? null,
+      silahMasuk: shown?.silahMasuk ?? null,
       leaveType: leaveByUid.get(uid) ?? null,
       shiftSwap: swapByUid.get(uid) ?? null,
       silah: isSilahOn(silahHistory.get(uid) ?? [], date),
@@ -133,7 +134,7 @@ export async function getRekap(ctx) {
         pulangAt: view.pulangAt, durationMin: view.durationMin, status: view.status, areaName: row.area_name ?? null,
         masukPhotoId: row.masuk_photo_id, pulangPhotoId: row.pulang_photo_id ?? null,
         lateReason: view.lateReason, latePhotoId: view.latePhotoId,
-        zoneMasuk: view.zoneMasuk, zonePulang: view.zonePulang,
+        zoneMasuk: view.zoneMasuk, zonePulang: view.zonePulang, silahMasuk: view.silahMasuk,
       };
     }),
     requests: requests.map(toRequestView),
@@ -147,14 +148,16 @@ export async function listPengajuanAdmin(ctx) {
   await requireAdmin(ctx);
   const status = ctx.url.searchParams.get("status") || "all";
   if (!REQUEST_FILTERS.has(status)) throw invalid();
-  const [rows, zoneExceptions, pendingCount] = await Promise.all([
+  const [rows, zoneExceptions, silahExceptions, pendingCount] = await Promise.all([
     listAdminRequests(ctx.env.DB, { status }),
     listZoneExceptions(ctx.env.DB, { status }),
+    listSilahExceptions(ctx.env.DB, { status }),
     countPendingApprovals(ctx.env.DB),
   ]);
   return {
     requests: rows.map(toRequestView),
     zoneExceptions: zoneExceptions.map(toZoneExceptionView),
+    silahExceptions: silahExceptions.map(toSilahExceptionView),
     pendingCount,
   };
 }
@@ -167,6 +170,11 @@ export async function reviewPengajuanAdmin(ctx) {
 export async function reviewLuarZonaAdmin(ctx) {
   const admin = await requireAdmin(ctx);
   return reviewZoneAs(ctx, admin, ctx.params[0]);
+}
+
+export async function reviewSilahAdmin(ctx) {
+  const admin = await requireAdmin(ctx);
+  return reviewSilahAs(ctx, admin, ctx.params[0]);
 }
 
 export async function getFoto(ctx) {

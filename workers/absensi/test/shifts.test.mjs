@@ -50,6 +50,7 @@ describe("shift rules", () => {
       latePhotoId: null,
       zoneMasuk: null,
       zonePulang: null,
+      silahMasuk: null,
     });
   });
 });

@@ -85,6 +85,24 @@ export const toZoneExceptionView = (row) => ({
   createdAt: row.created_at,
 });
 
+export const toSilahExceptionView = (row) => ({
+  id: row.id,
+  shiftId: row.shift_id,
+  uid: row.uid,
+  employeeName: row.employee_name ?? "",
+  unitName: row.unit_name ?? null,
+  workDate: row.work_date,
+  at: row.at,
+  reason: row.reason,
+  photoId: row.photo_id ?? null,
+  status: row.status,
+  reviewedBy: row.reviewed_by ?? null,
+  reviewerName: row.reviewer_name ?? null,
+  reviewedAt: row.reviewed_at ?? null,
+  reviewNote: row.review_note ?? null,
+  createdAt: row.created_at,
+});
+
 export const toNotificationView = (row) => ({
   id: row.id,
   kind: row.kind,
