@@ -91,6 +91,7 @@ const MbgDistributionPage = safeLazy(() => import("@/pages/mbg/MbgDistributionPa
 const MbgDeliveryPage = safeLazy(() => import("@/pages/mbg/MbgDeliveryPage").then(module => ({ default: module.MbgDeliveryPage })));
 const MbgArchivePage = safeLazy(() => import("@/pages/mbg/MbgArchivePage").then(module => ({ default: module.MbgArchivePage })));
 const MbgPersiapanPage = safeLazy(() => import("@/pages/mbg/MbgPersiapanPage").then(module => ({ default: module.MbgPersiapanPage })));
+const TugasSayaPage = safeLazy(() => import("@/pages/kurir/TugasSayaPage").then(module => ({ default: module.TugasSayaPage })));
 const PerformancePage = safeLazy(() => import("@/pages/PerformancePage").then(module => ({ default: module.PerformancePage })));
 const SuperAdminControlCenterPage = safeLazy(() => import("@/pages/SuperAdminControlCenterPage").then(module => ({ default: module.SuperAdminControlCenterPage })));
 const UnitControlCenterPage = safeLazy(() => import("@/pages/SuperAdminControlCenterPage").then(module => ({ default: module.UnitControlCenterPage })));
@@ -591,12 +592,22 @@ function RoutesTree() {
         }
       />
       <Route
+        path="/kurir/tugas"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Tugas Saya" allowedRoles={["kurir", "kurir_mbg"]}>
+              <TugasSayaPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
+      <Route
         path="/distribusi/delivery"
         element={
           <Protected>
             <ShelledRoute
-              pageTitle="Delivery"
-              allowedRoles={["kurir"]}
+              pageTitle="Antar Katering"
+              allowedRoles={["kurir", "kurir_mbg"]}
             >
               <DeliveryPage />
             </ShelledRoute>
@@ -793,7 +804,7 @@ function RoutesTree() {
         path="/mbg/delivery"
         element={
           <Protected>
-            <ShelledRoute pageTitle="Kurir MBG" allowedRoles={["kurir_mbg", "distribusi_mbg_2", "admin_mbg"]}>
+            <ShelledRoute pageTitle="Kurir MBG" allowedRoles={["kurir_mbg", "kurir", "distribusi_mbg_2", "admin_mbg"]}>
               <MbgDeliveryPage />
             </ShelledRoute>
           </Protected>

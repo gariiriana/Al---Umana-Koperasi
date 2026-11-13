@@ -310,6 +310,8 @@ export interface MbgDeliveryDocument {
   tanggalBatch: string;
   petugasName: string;
   petugasId: string;
+  /** Kenek perjalanan ini (laporan sejak 2026-11-13), supaya kenek juga melihatnya di arsip. */
+  kenekId?: string;
   documentType: 'delivery_report';
   fileName: string;
   totalInstitusi: number;
@@ -380,6 +382,34 @@ export function subscribeBatchDeliveryDocuments(
     docs.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     callback(docs);
   }, onError);
+}
+
+/**
+ * Arsip untuk akun kurir: hanya laporan miliknya (kurir utama atau kenek). Rules menolak query
+ * arsip tanpa filter dari akun kurir. Tanpa orderBy supaya tidak butuh composite index.
+ */
+export function subscribeMyDeliveryDocuments(
+  uid: string,
+  callback: (docs: MbgDeliveryDocument[]) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  const parts: Record<'petugasId' | 'kenekId', MbgDeliveryDocument[] | null> = { petugasId: null, kenekId: null };
+  const emit = () => {
+    if (!parts.petugasId || !parts.kenekId) return;
+    const merged = new Map<string, MbgDeliveryDocument>();
+    for (const report of [...parts.petugasId, ...parts.kenekId]) merged.set(report.id, report);
+    callback([...merged.values()].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
+  };
+  const listen = (field: 'petugasId' | 'kenekId') => onSnapshot(
+    query(collection(db, DOCUMENTS_COLLECTION), where(field, '==', uid)),
+    (snap) => {
+      parts[field] = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MbgDeliveryDocument));
+      emit();
+    },
+    onError,
+  );
+  const unsubscribers = [listen('petugasId'), listen('kenekId')];
+  return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
 }
 
 export function subscribeAllDeliveryDocuments(

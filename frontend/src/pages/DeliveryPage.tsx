@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   MapPin, Clock, Package, CheckCircle2, ChevronRight, ArrowLeft,
@@ -25,6 +25,7 @@ import { pushNotification } from "@/services/notificationWriter";
 import { uploadFileInChunks } from "@/services/chunkUploadService";
 import {
   canStartCourierDelivery,
+  getOrderDeadline,
   isActiveCourierAssignment,
   isAssignedToCourier,
 } from "@/lib/deliveryAssignment";
@@ -431,21 +432,6 @@ function StartDeliveryForm({ order, onStart, onCancel }: StartDeliveryFormProps)
     </div>
   );
 }
-
-const getOrderDeadline = (order: Order): number => {
-  const dateStr = order.eventDate || order.createdAt;
-  if (!dateStr) return Infinity;
-  const datePart = dateStr.slice(0, 10);
-  let time = "12:00";
-  if (order.deliveryTime) {
-    const match = order.deliveryTime.match(/(\d{2})[:.](\d{2})/);
-    if (match) {
-      time = `${match[1]}:${match[2]}`;
-    }
-  }
-  const ts = Date.parse(`${datePart}T${time}`);
-  return isNaN(ts) ? Infinity : ts;
-};
 
 const getCourierStatusMeta = (status: Order["status"]) => {
   if (status === "READY_TO_DELIVER" || status === "READY") {
@@ -936,6 +922,21 @@ export function DeliveryPage() {
       setStep("proof");
     }
   };
+
+  // Kartu "Tugas Saya" membuka halaman ini dengan ?order=<id>: langsung ke pesanan itu, sekali saja.
+  const linkedOrderHandled = useRef(false);
+  useEffect(() => {
+    if (linkedOrderHandled.current) return;
+    const linkedOrderId = new URLSearchParams(window.location.search).get("order");
+    if (!linkedOrderId) {
+      linkedOrderHandled.current = true;
+      return;
+    }
+    const linked = myDeliveries.find((o) => o.id === linkedOrderId);
+    if (!linked) return; // pesanan belum termuat, atau bukan milik kurir ini
+    linkedOrderHandled.current = true;
+    open(linked);
+  }, [myDeliveries]);
 
 
   return (

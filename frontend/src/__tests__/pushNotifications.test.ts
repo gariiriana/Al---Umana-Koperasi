@@ -6,7 +6,7 @@ vi.mock("@/services/notificationWriter", () => ({ notifyQuietly: notify }));
 
 import {
   canonicalJobDeskRole, formatTanggal, notifyJobDeskReviewed, notifyJobDeskSubmitted,
-  notifyJobDesksAssigned, notifyTaskAssigned, notifyTaskSubmitted, setNotificationActorRole,
+  notifyJobDesksAssigned, notifyMbgBatchStatus, notifyMbgCooking, notifyTaskAssigned, notifyTaskSubmitted, setNotificationActorRole,
 } from "@/services/flowNotifications";
 import { describePlatform, sha256Hex } from "@/services/pushService";
 import { ALL_ROLES } from "@/constants/roles";
@@ -71,12 +71,27 @@ describe("notifikasi task Super Admin", () => {
   });
 });
 
+// Sejak 2026-11-13 kurir katering juga bisa ditugasi MBG, jadi ikut dapat kabar masakan siap diantar.
+describe("notifikasi MBG ke kurir", () => {
+  it("masakan siap diantar sampai ke kurir MBG dan kurir katering", async () => {
+    notifyMbgCooking("batch", "cooked");
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(notify.mock.calls[0][0]).toEqual(expect.arrayContaining(["kurir_mbg", "kurir"]));
+  });
+
+  it("status batch COOKED juga sampai ke kurir katering", async () => {
+    notifyMbgBatchStatus("batch", "COOKED");
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(notify.mock.calls[0][0]).toEqual(expect.arrayContaining(["kurir_mbg", "kurir"]));
+  });
+});
+
 describe("Worker push mengenal semua penerima", () => {
   it("setiap role penerima di aplikasi punya alias di Worker", () => {
     const recipients = [
       "admin", "tim_produksi", "distribusi", "super_admin", "mo_katering", "co_mo_katering",
       "produksi_1", "distribusi_1", "produksi_2", "distribusi_2",
-      "admin_mbg", "produksi_mbg", "distribusi_mbg", "kurir_mbg",
+      "admin_mbg", "produksi_mbg", "distribusi_mbg", "kurir_mbg", "kurir",
     ];
     for (const r of recipients) expect(ROLE_ALIASES[r], r).toBeDefined();
   });

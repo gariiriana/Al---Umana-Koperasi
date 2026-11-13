@@ -49,6 +49,14 @@ export function isMbgTaskAssignedTo(task: Pick<MbgDeliveryTask, 'petugasId' | 'k
   return Boolean(uid && (task.petugasId === uid || task.kenekId === uid));
 }
 
+/** Laporan MBG milik kurir ini: sebagai kurir utama, kenek, atau pembuat laporan (laporan lama belum punya kenekId). */
+export function isOwnDeliveryDocument(
+  report: { petugasId?: string; kenekId?: string; createdBy?: string },
+  uid: string,
+): boolean {
+  return Boolean(uid && (report.petugasId === uid || report.kenekId === uid || report.createdBy === uid));
+}
+
 export function hasCompleteMbgProof(entry: Pick<MbgPmEntry,
   'photoMenuUrl' | 'photoPenerimaUrl' | 'photoSerahTerimaUrl' | 'photoSuratJalanUrl'>): boolean {
   return Boolean(entry.photoMenuUrl && entry.photoPenerimaUrl && entry.photoSerahTerimaUrl && entry.photoSuratJalanUrl);

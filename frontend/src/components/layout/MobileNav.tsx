@@ -27,7 +27,7 @@ export function MobileNav({ userRole, onOpenMenu }: MobileNavProps) {
       className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E5E7EB] pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_24px_rgba(0,0,0,0.06)]"
     >
       <ul className="flex items-stretch justify-around gap-0.5 px-1.5 py-1">
-        {tabs.map(({ to, label, icon: Icon }) => (
+        {tabs.map(({ to, label, shortLabel, icon: Icon }) => (
           <li key={to} className="flex-1 min-w-0">
             <NavLink to={to} end={to === "/admin/orders" || to === "/admin/production"} className={({ isActive }) => `${TAB} ${isActive ? "text-[#111827]" : "text-[#6B7280]"}`}>
               {({ isActive }) => (
@@ -35,7 +35,7 @@ export function MobileNav({ userRole, onOpenMenu }: MobileNavProps) {
                   <span className={`inline-flex h-7 w-12 items-center justify-center rounded-full transition-colors ${isActive ? "bg-[#FBBF24]" : ""}`}>
                     <Icon className="h-[19px] w-[19px]" aria-hidden="true" />
                   </span>
-                  <span className="max-w-full truncate">{MOBILE_SHORT_LABELS[to] ?? label}</span>
+                  <span className="max-w-full truncate">{shortLabel ?? MOBILE_SHORT_LABELS[to] ?? label}</span>
                 </>
               )}
             </NavLink>

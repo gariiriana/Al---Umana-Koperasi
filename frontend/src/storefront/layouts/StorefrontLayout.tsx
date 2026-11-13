@@ -25,6 +25,7 @@ import {
 import type { ReactNode } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { isCourierRole } from "@/constants/roles";
 import { ToastProvider, useToast } from "@/contexts/ToastContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Footer } from "@/components/layout/Footer";
@@ -171,7 +172,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
     if (profile.role === "admin" || profile.role === "monitoring") return "/admin/dashboard";
     if (profile.role === "tim_produksi") return "/admin/production";
     if (profile.role === "distribusi") return "/distribusi/handover";
-    if (profile.role === "kurir") return "/distribusi/delivery";
+    if (isCourierRole(profile.role)) return "/kurir/tugas";
     return "/";
   })();
   const { showToast } = useToast();

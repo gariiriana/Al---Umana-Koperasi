@@ -47,8 +47,14 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "/mbg/persiapan",
   ],
 
+  /**
+   * Kurir katering & kurir MBG satu pool sejak 2026-11-13: keduanya bisa menerima
+   * pesanan katering maupun tugas MBG, dengan "Tugas Saya" sebagai halaman utama.
+   */
   kurir: [
+    "/kurir/tugas",
     "/distribusi/delivery",
+    "/mbg/delivery",
   ],
 
   monitoring: [
@@ -164,9 +170,12 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
 
   /**
-   * Kurir MBG: serah terima, antar makanan, bukti foto, export PDF.
+   * Kurir MBG: serah terima, antar makanan, bukti foto, export PDF — dan sejak
+   * 2026-11-13 juga pesanan katering (menu sama dengan `kurir`).
    */
   kurir_mbg: [
+    "/kurir/tugas",
+    "/distribusi/delivery",
     "/mbg/delivery",
   ],
 
@@ -222,6 +231,13 @@ export const UNIT_ROLES: readonly string[] = ["kepala_unit", "tim_unit"];
  * kurir katering & MBG, serta akun Produksi 2 dan Distribusi 2.
  */
 export const NO_TASK_ROLES: readonly string[] = ["kurir", "kurir_mbg", "produksi_2", "distribusi_2"];
+
+/** Akun kurir (katering & MBG): satu pool, menu dan halaman utama sama. */
+export const COURIER_ROLES: readonly string[] = ["kurir", "kurir_mbg"];
+
+export function isCourierRole(role?: string | null): boolean {
+  return Boolean(role && COURIER_ROLES.includes(role));
+}
 
 /** Role yang tidak tampil di Monitoring KPI dan tidak bisa diberi task. */
 export const KPI_EXCLUDED_ROLES: readonly string[] = ["super_admin", "developer", "pelanggan", "customer", ...NO_TASK_ROLES];
@@ -298,7 +314,7 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   monitoring: "/admin/dashboard",
   tim_produksi: "/admin/production",
   distribusi: "/distribusi/handover",
-  kurir: "/distribusi/delivery",
+  kurir: "/kurir/tugas",
   // New katering operational roles
   produksi_1: "/katering/jobdesk",
   distribusi_1: "/katering/jobdesk",
@@ -311,7 +327,7 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   produksi_mbg: "/mbg/production",
   dokumentasi_produksiMBG: "/mbg/production",
   distribusi_mbg: "/mbg/persiapan",
-  kurir_mbg: "/mbg/delivery",
+  kurir_mbg: "/kurir/tugas",
   MBG2: "/katering/jobdesk",
   mbg2: "/katering/jobdesk",
   produksi_mbg_2: "/katering/jobdesk",

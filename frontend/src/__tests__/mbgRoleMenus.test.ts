@@ -24,7 +24,7 @@ describe("menu akun MBG", () => {
   it("Cek List & Dokumentasi Bahan tidak ada di menu adminmbg@, produksimbg@, maupun akun kurir", () => {
     expect(menu("admin_mbg")).not.toContain("Persiapan");
     expect(menu("produksi_mbg")).not.toContain("Persiapan");
-    expect(menu("kurir_mbg")).toEqual(["Kurir MBG"]);
+    expect(menu("kurir_mbg")).toEqual(["Tugas Saya", "Antar Katering", "Antar MBG"]);
   });
 
   it("distributor@ (distribusi katering, Ustadz Dwi) juga bisa membuka Persiapan", () => {

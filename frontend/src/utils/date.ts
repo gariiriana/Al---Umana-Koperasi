@@ -7,6 +7,15 @@ export function getJakartaDate(date = new Date()): string {
   return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
+/** "2026-10-10" → "Sab, 10 Okt" (zona waktu lokal). */
+export function formatTanggal(tanggal: string | undefined): string {
+  if (!tanggal) return "";
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(tanggal);
+  if (!match) return tanggal;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return date.toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" });
+}
+
 /** Moves a YYYY-MM-DD operational date by whole days. */
 export function addDays(date: string, days: number): string {
   const d = new Date(`${date}T12:00:00+07:00`);

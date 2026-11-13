@@ -11,6 +11,9 @@ const fake = vi.hoisted(() => ({
   complete: vi.fn().mockResolvedValue(undefined),
   toast: vi.fn(),
   rotate: vi.fn().mockResolvedValue(undefined),
+  allDocs: vi.fn(() => () => {}),
+  myDocs: [] as unknown[],
+  myDocsUid: '',
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: fake.user, profile: fake.profile }) }));
@@ -28,7 +31,8 @@ vi.mock('@/services/mbgAdminService', () => ({
 }));
 vi.mock('@/services/mbgDeliveryService', () => ({
   subscribeKurirTasks: (_batch: string, _uid: string, _email: string, _name: string, callback: (data: MbgDeliveryTask[]) => void) => { callback(fake.tasks); return () => {}; },
-  subscribeAllDeliveryDocuments: () => () => {},
+  subscribeAllDeliveryDocuments: fake.allDocs,
+  subscribeMyDeliveryDocuments: (uid: string, callback: (docs: unknown[]) => void) => { fake.myDocsUid = uid; callback(fake.myDocs); return () => {}; },
   saveDeliveryDocument: fake.archive, completeTaskAndBatch: fake.complete,
   updateTaskStatus: vi.fn(), setHandoverPhoto: vi.fn(), addDeliveryPhoto: vi.fn(),
   updateSchoolDeliveryProof: vi.fn(), deleteSchoolDeliveryProof: vi.fn(), updatePhotoDescription: vi.fn(),
@@ -53,6 +57,36 @@ beforeEach(() => {
     qtPobiaNasi: 0, jadwalPengantaran: '08.00', menuItems: [], menuKeringanItems: [], isSekolahLibur: false,
     notes: '', sortOrder: 0, createdBy: 'distribution', createdAt: 'now', updatedAt: 'now',
     photoMenuUrl: 'menu', photoSerahTerimaUrl: 'handover', photoSuratJalanUrl: 'letter', photoPenerimaUrl: 'container' }];
+});
+
+describe('Arsip Dokumen untuk akun kurir', () => {
+  it('shows only reports where the courier is the driver or kenek', async () => {
+    fake.myDocs = [{ id: 'old', batchId: 'lama', tanggalBatch: '2026-09-01', petugasName: 'Andi', petugasId: 'driver',
+      documentType: 'delivery_report', fileName: 'Laporan_Andi_lama.pdf', totalInstitusi: 1, totalPorsi: 5, completedCount: 1,
+      createdAt: '2026-09-01T08:00:00Z', createdBy: 'driver' }];
+    fake.entries = [...fake.entries, { ...fake.entries[0], id: 'school-budi', institutionName: 'SDN 2',
+      assignedPetugasId: 'budi', assignedPetugasName: 'Budi', photoMenuUrl: 'menu-budi' }];
+    render(<MbgDeliveryPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /Arsip Dokumen/ }));
+    await waitFor(() => expect(screen.queryAllByText('Laporan_Andi_lama.pdf').length).toBeGreaterThan(0));
+    expect(screen.queryAllByText('Budi')).toHaveLength(0);
+    expect(fake.myDocsUid).toBe('driver');
+    expect(fake.allDocs).not.toHaveBeenCalled();
+  });
+});
+
+describe('Antar MBG dibuka dari Tugas Saya', () => {
+  it('selects the batch from ?batch= over the remembered one', async () => {
+    fake.batches = [...fake.batches, { ...fake.batches[0], id: 'batch2', tanggal: '2026-10-04' }];
+    sessionStorage.setItem('mbg_delivery_selected_batch', 'batch');
+    window.history.pushState({}, '', '/mbg/delivery?batch=batch2');
+    try {
+      render(<MbgDeliveryPage />);
+      await waitFor(() => expect(sessionStorage.getItem('mbg_delivery_selected_batch')).toBe('batch2'));
+    } finally {
+      window.history.pushState({}, '', '/');
+    }
+  });
 });
 
 describe('MBG delivery PDF and completion actions', () => {

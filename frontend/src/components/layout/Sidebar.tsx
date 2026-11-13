@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { NavLink, Link } from "react-router-dom";
 import { motion } from "motion/react";
-import { ROLE_DEFAULT_REDIRECT } from "@/constants/roles";
+import { ROLE_DEFAULT_REDIRECT, isCourierRole } from "@/constants/roles";
 import { navItemsForRole } from "./navItems";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -151,11 +151,11 @@ export function Sidebar({
 
   useEffect(() => {
     if (!userRole) return;
-    const isRelevantRole = ["admin", "tim_produksi", "distribusi", "monitoring", "kurir", "produksi_1", "distribusi_1", "produksi_2", "distribusi_2", "mo_katering", "co_mo_katering"].includes(userRole);
+    const isRelevantRole = isCourierRole(userRole) || ["admin", "tim_produksi", "distribusi", "monitoring", "produksi_1", "distribusi_1", "produksi_2", "distribusi_2", "mo_katering", "co_mo_katering"].includes(userRole);
     if (!isRelevantRole) return;
 
     const onError = (err: Error) => console.error("Sidebar orders subscription error:", err);
-    if (userRole === 'kurir') {
+    if (isCourierRole(userRole)) {
       if (!user?.uid) return;
       return subscribeCourierOrders(user.uid, (orders: Order[]) =>
         setHasPastDeadlineOrders(orders.some(isOrderPastDeadline)), onError);

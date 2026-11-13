@@ -164,7 +164,8 @@ export function HandoverPage() {
     const fetchCouriers = async () => {
       try {
         const { collection, getDocs, query, where } = await import("firebase/firestore");
-        const q = query(collection(db, "users"), where("role", "in", ["kurir", "kurir_katering"]));
+        // Kurir MBG juga bisa ditugasi pesanan katering sejak 2026-11-13.
+        const q = query(collection(db, "users"), where("role", "in", ["kurir", "kurir_katering", "kurir_mbg"]));
         const snap = await getDocs(q);
         const list = snap.docs.map(doc => {
           const data = doc.data();

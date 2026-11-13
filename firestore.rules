@@ -239,8 +239,10 @@ service cloud.firestore {
     function isOrderStaff() {
       return isAdmin() || isSuperAdmin() || isTimProduksi() || isDistribusi() || isKurirMbg() || isMoKatering() || isCoMoKatering() || isAnyMbg();
     }
+    // Sejak 2026-11-13 kurir katering & kurir MBG satu pool: keduanya bisa ditugasi pesanan katering.
+    // Karena itu helper ini sekarang berarti "akun kurir apa pun" (kurir, kurir_katering, kurir_mbg).
     function isCateringCourier() {
-      return request.auth != null && getUserRole() in ['kurir', 'kurir_katering'];
+      return request.auth != null && getUserRole() in ['kurir', 'kurir_katering', 'kurir_mbg'];
     }
     function isOrderEditor() {
       return isAdmin() || isSuperAdmin() || isTimProduksi() || isDistribusi() || isMoKatering() || isCoMoKatering();
@@ -886,7 +888,11 @@ service cloud.firestore {
     // MBG Delivery Documents (arsip dokumen PDF kurir)
     // -------------------------------------------------------------------
     match /mbg_delivery_documents/{docId} {
-      allow read: if isMbgStaff();
+      // Akun kurir hanya membaca laporan miliknya (kurir utama, kenek, atau pembuat), sejak 2026-11-13.
+      allow read: if isMbgStaff() && (!isCateringCourier()
+        || resource.data.get('petugasId', '') == request.auth.uid
+        || resource.data.get('kenekId', '') == request.auth.uid
+        || resource.data.get('createdBy', '') == request.auth.uid);
       allow create: if isMbgDeliveryTeam() && request.resource.data.createdBy == request.auth.uid;
       allow update, delete: if isMbgManager() || isDistribusiMbg();
     }

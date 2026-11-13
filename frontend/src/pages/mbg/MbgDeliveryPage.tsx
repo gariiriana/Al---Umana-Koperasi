@@ -24,7 +24,7 @@ import {
   RotateCw,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { hasCompleteMbgProof, isMbgTaskAssignedTo } from '@/lib/mbgCourierAssignment';
+import { hasCompleteMbgProof, isMbgTaskAssignedTo, isOwnDeliveryDocument } from '@/lib/mbgCourierAssignment';
 import { useToast } from '@/contexts/ToastContext';
 import type { MbgPmBatch, MbgDeliveryTask, MbgPmEntry } from '@/types/mbg';
 import { subscribeBatches, subscribeEntries } from '@/services/mbgAdminService';
@@ -45,6 +45,7 @@ import {
   updatePhotoDescription,
   saveDeliveryDocument,
   subscribeAllDeliveryDocuments,
+  subscribeMyDeliveryDocuments,
   type MbgDeliveryDocument,
 } from '@/services/mbgDeliveryService';
 import { LiveCamera } from '@/components/LiveCamera';
@@ -67,6 +68,8 @@ export function MbgDeliveryPage() {
   const [tasks, setTasks] = useState<MbgDeliveryTask[]>([]);
   const [entries, setEntries] = useState<MbgPmEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  // ?batch= hanya dipakai sekali; snapshot batch berikutnya tidak boleh membatalkan pilihan kurir.
+  const linkedBatchApplied = useRef(false);
 
   // Page tab: tugas aktif vs arsip dokumen
   const [pageTab, setPageTab] = useState<'active' | 'archive'>('active');
@@ -98,8 +101,14 @@ export function MbgDeliveryPage() {
       const activeBatches = data.filter((b) => !b.isBackup && b.status !== 'DRAFT');
       setBatches(activeBatches);
       const todayStr = getJakartaDate();
+      // Kartu "Tugas Saya" membuka halaman ini dengan ?batch=<id>; itu menang atas pilihan terakhir.
+      const linkedBatchId = new URLSearchParams(window.location.search).get('batch');
       const savedBatchId = sessionStorage.getItem('mbg_delivery_selected_batch');
-      if (savedBatchId && activeBatches.some((b) => b.id === savedBatchId)) {
+      if (linkedBatchId && activeBatches.some((b) => b.id === linkedBatchId) && !linkedBatchApplied.current) {
+        linkedBatchApplied.current = true;
+        setSelectedBatchId(linkedBatchId);
+        sessionStorage.setItem('mbg_delivery_selected_batch', linkedBatchId);
+      } else if (savedBatchId && activeBatches.some((b) => b.id === savedBatchId)) {
         setSelectedBatchId(savedBatchId);
       } else {
         const todayBatch = activeBatches.find((b) => b.tanggal === todayStr);
@@ -126,17 +135,20 @@ export function MbgDeliveryPage() {
     return batches.find((b) => b.tanggal === todayStr)?.id || null;
   }, [batches]);
 
-  // Subscribe arsip dokumen only when archive tab is active
-  useEffect(() => {
-    if (pageTab !== 'archive') return;
-    const unsub = subscribeAllDeliveryDocuments(setArchiveDocs);
-    return unsub;
-  }, [pageTab]);
-
   // Role detection: Kurir vs Admin/Supervisor
   const isAdminOrSupervisor = useMemo(() => {
     return ['admin', 'admin_mbg', 'produksi_mbg', 'distribusi_mbg', 'distribusi_mbg_2', 'super_admin', 'developer'].includes(profile?.role || '');
   }, [profile?.role]);
+
+  // Subscribe arsip dokumen only when archive tab is active. Akun kurir hanya laporan miliknya.
+  const myUid = user?.uid || '';
+  useEffect(() => {
+    if (pageTab !== 'archive') return;
+    if (isAdminOrSupervisor) return subscribeAllDeliveryDocuments(setArchiveDocs);
+    if (!myUid) return;
+    return subscribeMyDeliveryDocuments(myUid, setArchiveDocs, (error) =>
+      showToast({ message: `Gagal memuat arsip: ${error.message}`, variant: 'error' }));
+  }, [pageTab, isAdminOrSupervisor, myUid, showToast]);
 
   // Initialize the courier's team selector using the logged-in profile.
   useEffect(() => {
@@ -578,6 +590,7 @@ export function MbgDeliveryPage() {
         tanggalBatch: batch?.tanggal || '',
         petugasName: activeTask.petugasName,
         petugasId: activeTask.petugasId,
+        kenekId: activeTask.kenekId || '',
         documentType: 'delivery_report',
         fileName,
         totalInstitusi: activeEntries.length,
@@ -663,23 +676,26 @@ export function MbgDeliveryPage() {
               tanggalBatch: batchTanggal,
               petugasName: pName,
               petugasId: pEntries[0]?.assignedPetugasId || pKey.replace(/\s+/g, '-'),
+              kenekId: pEntries[0]?.assignedKenekId || '',
               documentType: 'delivery_report',
               fileName: `Laporan_Distribusi_MBG_${pName.replace(/\s+/g, '_')}_${batchTanggal}.pdf`,
               totalInstitusi: pEntries.length,
               totalPorsi,
               completedCount,
               createdAt: new Date().toISOString(),
-              createdBy: user?.uid || pName,
+              // Laporan sementara bukan buatan yang sedang login; pemiliknya kurir utama perjalanan ini.
+              createdBy: pEntries[0]?.assignedPetugasId || pName,
             });
           }
         }
       });
     }
 
-    return Array.from(docMap.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-  }, [archiveDocs, entries, batches, selectedBatchId, activeTask, user?.uid]);
+    // Akun kurir hanya melihat laporan miliknya (kurir utama atau kenek), termasuk laporan sementara batch ini.
+    return Array.from(docMap.values())
+      .filter((d) => isAdminOrSupervisor || isOwnDeliveryDocument(d, user?.uid || ''))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [archiveDocs, entries, batches, selectedBatchId, activeTask, user?.uid, isAdminOrSupervisor]);
 
   const filteredArchiveDocs = useMemo(() => {
     if (!archiveSearchQuery.trim()) return combinedArchiveDocs;

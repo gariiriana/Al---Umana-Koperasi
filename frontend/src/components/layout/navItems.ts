@@ -6,6 +6,7 @@ import {
   FileText,
   History,
   LayoutDashboard,
+  ListChecks,
   Package,
   Package2,
   ShieldCheck,
@@ -16,16 +17,20 @@ import {
   UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
-import { ROLE_DEFAULT_REDIRECT, ROLE_PERMISSIONS } from "@/constants/roles";
+import { ROLE_DEFAULT_REDIRECT, ROLE_PERMISSIONS, isCourierRole } from "@/constants/roles";
 
 export interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
+  /** Label tab bawah HP khusus role ini (mengalahkan MOBILE_SHORT_LABELS). */
+  shortLabel?: string;
 }
 
 /** Satu daftar menu untuk sidebar desktop dan navigasi bawah HP (selalu sinkron). */
 export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
+  // --- Kurir (katering & MBG) ---
+  { to: "/kurir/tugas", label: "Tugas Saya", icon: ListChecks },
   // --- Catering ---
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
@@ -55,21 +60,33 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/developer/control-center", label: "Developer Control", icon: ShieldCheck },
 ] as const;
 
+/** Kurir mengerjakan dua jenis tugas, jadi menunya diberi nama yang langsung jelas. */
+const COURIER_NAV_LABELS: Record<string, { label: string; shortLabel: string }> = {
+  "/kurir/tugas": { label: "Tugas Saya", shortLabel: "Tugas" },
+  "/distribusi/delivery": { label: "Antar Katering", shortLabel: "Katering" },
+  "/mbg/delivery": { label: "Antar MBG", shortLabel: "MBG" },
+};
+
 /** Menu yang boleh dibuka role ini, urutan sama dengan sidebar. */
 export function navItemsForRole(role: string | undefined): NavItem[] {
   if (!role) return [];
   const allowed = ROLE_PERMISSIONS[role] || [];
-  return SIDEBAR_NAV_ITEMS.filter((item) => {
+  const items = SIDEBAR_NAV_ITEMS.filter((item) => {
     if (item.to === "/performance") return allowed.includes("/performance");
     if (item.to === "/super-admin/control-center") return role === "super_admin";
     if (item.to === "/developer/control-center") return role === "developer";
+    // Halaman pribadi kurir: isinya tugas milik akun yang login, tidak berguna bagi admin.
+    if (item.to === "/kurir/tugas") return allowed.includes(item.to);
     if (role === "admin") return true;
     return allowed.includes(item.to);
   });
+  if (!isCourierRole(role)) return items;
+  return items.map((item) => (COURIER_NAV_LABELS[item.to] ? { ...item, ...COURIER_NAV_LABELS[item.to] } : item));
 }
 
 /** Label pendek untuk tab bawah (lebar ±75px per tab di HP). */
 export const MOBILE_SHORT_LABELS: Record<string, string> = {
+  "/kurir/tugas": "Tugas",
   "/admin/dashboard": "Dasbor",
   "/admin/orders": "Pesanan",
   "/admin/invoices": "Catatan",

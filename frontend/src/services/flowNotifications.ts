@@ -10,6 +10,7 @@
 import { getDocFromCache, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { unitName } from "@/constants/units";
+import { formatTanggal } from "@/utils/date";
 import { notifyQuietly, type NotificationType } from "./notificationWriter";
 import type { MbgBatchStatus, MbgProductionCookingStatus } from "@/types/mbg";
 
@@ -24,14 +25,7 @@ function send(recipients: Array<string | null | undefined>, type: NotificationTy
   notifyQuietly(recipients, { type, title, titleEn: title, message, messageEn: message, actorRole, link });
 }
 
-/** "2026-10-10" → "Sab, 10 Okt" (zona waktu lokal). */
-export function formatTanggal(tanggal: string | undefined): string {
-  if (!tanggal) return "";
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(tanggal);
-  if (!match) return tanggal;
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return date.toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" });
-}
+export { formatTanggal };
 
 // ---------------------------------------------------------------------------
 // Job desk katering
@@ -141,7 +135,7 @@ const BATCH_STATUS_NOTIFICATIONS: Partial<Record<MbgBatchStatus, { to: string[];
   QC_PASSED: { to: ["produksi_mbg", "admin_mbg"], title: "QC bahan lolos", message: "Bahan siap dimasak.", link: "/mbg/production" },
   QC_FAILED: { to: ["admin_mbg", "produksi_mbg"], title: "QC bahan gagal", message: "Ada bahan yang ditolak saat QC." },
   COOKING: { to: ["admin_mbg", "distribusi_mbg"], title: "Mulai memasak", message: "Tim produksi mulai memasak." },
-  COOKED: { to: ["distribusi_mbg", "kurir_mbg", "admin_mbg"], title: "Masakan siap diantar", message: "Produksi selesai memasak, siap distribusi.", link: "/mbg/distribution" },
+  COOKED: { to: ["distribusi_mbg", "kurir_mbg", "kurir", "admin_mbg"], title: "Masakan siap diantar", message: "Produksi selesai memasak, siap distribusi.", link: "/mbg/distribution" },
   DELIVERED: { to: ["admin_mbg", "distribusi_mbg"], title: "Pengiriman selesai", message: "Semua kurir sudah menyelesaikan pengiriman." },
 };
 
@@ -157,7 +151,8 @@ export function notifyMbgCooking(batchId: string, status: MbgProductionCookingSt
     if (status === "cooking") {
       send(["admin_mbg", "distribusi_mbg"], "mbg", `${label}: Mulai memasak`, "Tim produksi mulai memasak.");
     } else {
-      send(["distribusi_mbg", "kurir_mbg", "admin_mbg"], "mbg", `${label}: Masakan siap diantar`,
+      // Kurir katering & MBG satu pool sejak 2026-11-13, jadi keduanya dikabari.
+      send(["distribusi_mbg", "kurir_mbg", "kurir", "admin_mbg"], "mbg", `${label}: Masakan siap diantar`,
         "Produksi selesai memasak, siap distribusi.", "/mbg/delivery");
     }
   });

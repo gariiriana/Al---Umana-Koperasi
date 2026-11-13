@@ -29,3 +29,19 @@ export function canStartCourierDelivery(status: OrderStatus): boolean {
   return status === "READY_TO_DELIVER" || status === "READY";
 }
 
+/** Waktu antar pesanan (ms): tanggal acara + jam antar, default 12:00; Infinity bila tak bertanggal. */
+export function getOrderDeadline(order: Pick<Order, "eventDate" | "createdAt" | "deliveryTime">): number {
+  const dateStr = order.eventDate || order.createdAt;
+  if (!dateStr) return Infinity;
+  const datePart = dateStr.slice(0, 10);
+  let time = "12:00";
+  if (order.deliveryTime) {
+    const match = order.deliveryTime.match(/(\d{2})[:.](\d{2})/);
+    if (match) {
+      time = `${match[1]}:${match[2]}`;
+    }
+  }
+  const ts = Date.parse(`${datePart}T${time}`);
+  return isNaN(ts) ? Infinity : ts;
+}
+
