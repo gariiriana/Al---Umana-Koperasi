@@ -12,6 +12,9 @@ export default tseslint.config(
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.browser,
+      // Explicit root: with a second checkout (git worktree) open, typescript-eslint
+      // otherwise finds two candidate tsconfig roots and refuses to parse.
+      parserOptions: { tsconfigRootDir: import.meta.dirname },
     },
     plugins: {
       "react-hooks": reactHooks,
