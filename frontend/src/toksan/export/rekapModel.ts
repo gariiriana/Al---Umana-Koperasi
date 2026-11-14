@@ -142,7 +142,8 @@ export function buildRekapModel(data: RekapData, jenis: JenisRekap, adminName: s
     sections,
     obral: obralSection(data),
     grandTotal: formatRupiah(t.omzet + t.obralOmzet),
-    footer: { tempatTanggal: `Sukabumi, ${formatTanggal(dicetak)}`, jabatan: "Admin Toksan", nama: adminName },
+    // No holder name: leave a line to sign by hand instead of printing the account name.
+    footer: { tempatTanggal: `Sukabumi, ${formatTanggal(dicetak)}`, jabatan: "Admin Toksan", nama: adminName.trim() || "( ................................ )" },
     fileName: `Rekap-Toksan-${JUDUL[jenis]}-${range}`,
   };
 }

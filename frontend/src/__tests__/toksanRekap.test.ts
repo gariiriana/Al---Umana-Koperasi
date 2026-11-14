@@ -90,6 +90,11 @@ describe("buildRekapModel", () => {
     expect(weekly.footer).toEqual({ tempatTanggal: "Sukabumi, 15 November 2026", jabatan: "Admin Toksan", nama: "Nabila" });
   });
 
+  it("without a holder name the signature is a blank line to sign by hand", () => {
+    const unnamed = buildRekapModel(DATA, "mingguan", "  ", "2026-11-15");
+    expect(unnamed.footer.nama).toBe("( ................................ )");
+  });
+
   it("no obral → no obral table", () => {
     expect(buildRekapModel({ ...DATA, obral: [] }, "mingguan", "Nabila", "2026-11-15").obral).toBeNull();
   });

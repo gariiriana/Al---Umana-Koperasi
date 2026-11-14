@@ -68,7 +68,7 @@ export function RekapPage() {
   const [exporting, setExporting] = useState<"pdf" | "docx" | null>(null);
 
   const range = useMemo(() => rangeOf(jenis, anchor), [jenis, anchor]);
-  const adminName = profile?.holderName || profile?.displayName || "Admin Toksan";
+  const adminName = profile?.holderName ?? "";
 
   useEffect(() => {
     let alive = true;
