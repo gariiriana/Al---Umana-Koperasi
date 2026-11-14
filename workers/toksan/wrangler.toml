@@ -17,7 +17,7 @@ ALLOWED_ORIGIN = "https://koperasi-alumana.com"
 [[d1_databases]]
 binding = "DB"
 database_name = "toksan"
-database_id = "REPLACE_AFTER_wrangler_d1_create"
+database_id = "62999ce0-9e23-49fc-b9df-b6d4e0c54016"
 migrations_dir = "migrations"
 
 # Encrypted secrets (never in this file or the repository), same service account as absensi:
