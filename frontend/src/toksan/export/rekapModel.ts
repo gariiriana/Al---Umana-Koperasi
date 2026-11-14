@@ -116,6 +116,15 @@ function obralSection(data: RekapData): RekapSection | null {
   };
 }
 
+export type RingkasanItem = { label: string; value: string };
+
+/** Summary two pairs per row; an odd last item gets a row of its own (spanned by the renderers, no empty cells). */
+export function ringkasanRows(items: RingkasanItem[]): RingkasanItem[][] {
+  const rows: RingkasanItem[][] = [];
+  for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2));
+  return rows;
+}
+
 export function buildRekapModel(data: RekapData, jenis: JenisRekap, adminName: string, dicetak: string = todayWib()): RekapModel {
   const t = data.totals;
   const pihak = (p: "rijal" | "nisaa") => data.perPihak.find((x) => x.pihak === p)?.omzet ?? 0;

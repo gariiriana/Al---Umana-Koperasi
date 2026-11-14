@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
-import { buildRekapModel } from "@/toksan/export/rekapModel";
+import { buildRekapModel, ringkasanRows } from "@/toksan/export/rekapModel";
 import { buildRekapDocxBlob } from "@/toksan/export/rekapDocx";
 import type { RekapData } from "@/toksan/types";
 
@@ -114,6 +114,16 @@ describe("buildRekapModel", () => {
   });
 });
 
+describe("ringkasanRows", () => {
+  it("pairs the summary two per row and gives an odd last item a row of its own (no empty cells)", () => {
+    const rows = ringkasanRows(buildRekapModel(DATA, "mingguan", "Nabila", "2026-11-15").ringkasan);
+    expect(rows.slice(0, -1).every((r) => r.length === 2)).toBe(true);
+    expect(rows.at(-1)!.map((i) => i.label)).toEqual(["Total keseluruhan"]);
+    const even = ringkasanRows([{ label: "a", value: "1" }, { label: "b", value: "2" }]);
+    expect(even).toEqual([[{ label: "a", value: "1" }, { label: "b", value: "2" }]]);
+  });
+});
+
 describe("rekap PDF", () => {
   it("renders the letterhead, tables and page numbers", async () => {
     const { readFileSync, writeFileSync } = await import("node:fs");
@@ -143,5 +153,13 @@ describe("rekap DOCX", () => {
     expect(xml).toContain("Rp1.049.100");
     expect(xml).not.toContain("Admin Toksan");
     expect(xml).not.toContain("Sukabumi,");
+  });
+
+  it("the lone Total keseluruhan row spans the summary table instead of leaving two empty cells", async () => {
+    const blob = await buildRekapDocxBlob(buildRekapModel(DATA, "mingguan", "Nabila", "2026-11-15"), null);
+    const xml = await (await JSZip.loadAsync(await blob.arrayBuffer())).file("word/document.xml")!.async("string");
+    const lastRow = xml.slice(xml.indexOf("Total keseluruhan")).split("</w:tr>")[0];
+    expect(lastRow).toContain('<w:gridSpan w:val="3"/>');
+    expect((lastRow.match(/<w:tc>/g) ?? []).length).toBe(1);
   });
 });

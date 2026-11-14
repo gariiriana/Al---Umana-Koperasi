@@ -1,7 +1,7 @@
 // Rekap Toksan sebagai PDF A4, isi sama persis dengan DOCX (lihat rekapModel.ts).
 import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
-import { NUMERIC_COLUMNS, type RekapModel, type RekapSection } from "@/toksan/export/rekapModel";
+import autoTable, { type RowInput } from "jspdf-autotable";
+import { NUMERIC_COLUMNS, ringkasanRows, type RekapModel, type RekapSection } from "@/toksan/export/rekapModel";
 import { bytesToDataUrl, loadLogoBytes } from "@/toksan/export/logo";
 
 const MARGIN = 14;
@@ -72,12 +72,8 @@ export function buildRekapPdf(model: RekapModel, logoDataUrl: string | null): js
   doc.line(MARGIN, 33.3, width - MARGIN, 33.3);
 
   // Ringkasan: label/nilai berpasangan, dua per baris.
-  const pairs: string[][] = [];
-  for (let i = 0; i < model.ringkasan.length; i += 2) {
-    const a = model.ringkasan[i];
-    const b = model.ringkasan[i + 1];
-    pairs.push([a.label, a.value, b?.label ?? "", b?.value ?? ""]);
-  }
+  const pairs: RowInput[] = ringkasanRows(model.ringkasan).map(([a, b]) =>
+    b ? [a.label, a.value, b.label, b.value] : [a.label, { content: a.value, colSpan: 3 }]);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10.5);
   doc.setTextColor(...DARK);

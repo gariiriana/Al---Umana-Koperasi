@@ -2,7 +2,7 @@
 import {
   AlignmentType, BorderStyle, Document, ImageRun, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, VerticalAlign, WidthType,
 } from "docx";
-import { NUMERIC_COLUMNS, type RekapModel, type RekapSection } from "@/toksan/export/rekapModel";
+import { NUMERIC_COLUMNS, ringkasanRows, type RekapModel, type RekapSection } from "@/toksan/export/rekapModel";
 import { downloadBlob, loadLogoBytes } from "@/toksan/export/logo";
 
 const AMBER = "FBBF24";
@@ -16,8 +16,9 @@ const NO_BORDERS = { top: NONE, bottom: NONE, left: NONE, right: NONE, insideHor
 const text = (value: string, opts: { bold?: boolean; size?: number; color?: string } = {}) =>
   new TextRun({ text: value, bold: opts.bold, size: opts.size ?? 18, color: opts.color ?? DARK, font: FONT });
 
-function cell(value: string, opts: { bold?: boolean; fill?: string; right?: boolean; size?: number } = {}) {
+function cell(value: string, opts: { bold?: boolean; fill?: string; right?: boolean; size?: number; span?: number } = {}) {
   return new TableCell({
+    columnSpan: opts.span,
     shading: opts.fill ? { type: ShadingType.CLEAR, color: "auto", fill: opts.fill } : undefined,
     margins: { top: 50, bottom: 50, left: 90, right: 90 },
     verticalAlign: VerticalAlign.CENTER,
@@ -63,17 +64,11 @@ export async function buildRekapDocxBlob(model: RekapModel, logo: Uint8Array | n
     })],
   });
 
-  const pairs: TableRow[] = [];
-  for (let i = 0; i < model.ringkasan.length; i += 2) {
-    const a = model.ringkasan[i];
-    const b = model.ringkasan[i + 1];
-    pairs.push(new TableRow({
-      children: [
-        cell(a.label, { fill: SOFT, size: 17 }), cell(a.value, { bold: true, right: true }),
-        cell(b?.label ?? "", { fill: SOFT, size: 17 }), cell(b?.value ?? "", { bold: true, right: true }),
-      ],
-    }));
-  }
+  const pairs = ringkasanRows(model.ringkasan).map(([a, b]) => new TableRow({
+    children: b
+      ? [cell(a.label, { fill: SOFT, size: 17 }), cell(a.value, { bold: true, right: true }), cell(b.label, { fill: SOFT, size: 17 }), cell(b.value, { bold: true, right: true })]
+      : [cell(a.label, { fill: SOFT, size: 17 }), cell(a.value, { bold: true, right: true, span: 3 })],
+  }));
 
   const children: (Paragraph | Table)[] = [kop, heading("Ringkasan"), new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: pairs })];
   for (const section of model.sections) children.push(heading(section.title), sectionTable(section));
