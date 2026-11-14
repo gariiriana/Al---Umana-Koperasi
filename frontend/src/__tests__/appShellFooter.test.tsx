@@ -23,4 +23,26 @@ describe("staff AppShell", () => {
     expect(screen.queryByRole("contentinfo")).toBeNull();
     expect(screen.queryByText("Hubungi Kami")).toBeNull();
   });
+
+  it("hides the mobile sidebar hamburger button for toksan role", () => {
+    render(
+      <MemoryRouter initialEntries={["/toksan/input"]}>
+        <AppShell userRole="toksan" userName="Admin Toksan">
+          <p>Isi Toksan</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTitle("Open Sidebar")).toBeNull();
+  });
+
+  it("shows the mobile sidebar hamburger button for other roles (e.g. admin)", () => {
+    render(
+      <MemoryRouter initialEntries={["/admin/dashboard"]}>
+        <AppShell userRole="admin" userName="Admin">
+          <p>Isi Admin</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTitle("Open Sidebar")).toBeTruthy();
+  });
 });

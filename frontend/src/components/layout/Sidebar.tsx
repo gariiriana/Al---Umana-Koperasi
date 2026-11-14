@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { NavLink, Link } from "react-router-dom";
+import { NavLink, Link, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
 import { ROLE_DEFAULT_REDIRECT, isCourierRole } from "@/constants/roles";
 import { navItemsForRole } from "./navItems";
@@ -157,8 +157,11 @@ export function Sidebar({
 }: SidebarProps) {
   const { lang } = useLanguage();
   const { user, profile } = useAuth();
+  const location = useLocation();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [hasPastDeadlineOrders, setHasPastDeadlineOrders] = useState(false);
+
+  const isToksan = userRole === "toksan" || location.pathname.startsWith("/toksan");
 
   useEffect(() => {
     if (!userRole) return;
@@ -182,7 +185,7 @@ export function Sidebar({
   return (
     <>
       {/* Mobile Backdrop */}
-      {isMobileOpen && (
+      {isMobileOpen && !isToksan && (
         <div
           className="fixed inset-0 bg-black/40 z-[45] md:hidden animate-in fade-in duration-200"
           onClick={onClose}
@@ -195,7 +198,7 @@ export function Sidebar({
           fixed inset-y-0 left-0 z-50 w-64 md:w-60 bg-white border-r border-[#E5E7EB] flex flex-col shrink-0 h-full min-h-screen
           transition-transform duration-300 ease-in-out
           md:translate-x-0
-          ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
+          ${isToksan ? "hidden md:flex" : (isMobileOpen ? "translate-x-0" : "-translate-x-full")}
         `}
       >
         {/* Logo */}

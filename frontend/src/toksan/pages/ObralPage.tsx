@@ -102,7 +102,7 @@ export function ObralPage() {
   const numberField = "mt-1 w-full rounded-xl border px-3 py-2 text-base font-semibold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FDE68A]";
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 px-4 py-5 pb-40 font-['Hanken_Grotesk',system-ui,sans-serif] md:pb-28">
+    <div className="mx-auto max-w-3xl space-y-4 px-3 sm:px-4 py-4 sm:py-5 pb-52 font-['Hanken_Grotesk',system-ui,sans-serif] md:pb-28">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[#111827]">Obral</h1>
@@ -184,19 +184,19 @@ export function ObralPage() {
         </ul>
       )}
 
-      <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+72px)] z-30 px-4 md:bottom-4 md:left-60">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
+      <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+72px)] z-30 px-3 sm:px-4 md:bottom-4 md:left-60">
+        <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white/95 px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-lg backdrop-blur">
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-[#6B7280]">Total obral{invalidCount > 0 ? ` · ${invalidCount} baris belum lengkap` : ""}</p>
-            <p className="text-lg font-bold text-[#111827]">{formatRupiah(total)}</p>
+            <p className="text-[11px] sm:text-xs text-[#6B7280]">Total obral{invalidCount > 0 ? ` · ${invalidCount} baris belum lengkap` : ""}</p>
+            <p className="text-base sm:text-lg font-bold text-[#111827]">{formatRupiah(total)}</p>
           </div>
           <button
             type="button"
             onClick={() => void save()}
             disabled={saving || !dirty || invalidCount > 0}
-            className="flex items-center gap-2 rounded-full bg-[#FBBF24] px-5 py-3 text-base font-bold text-[#111827] shadow-sm hover:bg-[#F59E0B] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-2 rounded-full bg-[#FBBF24] px-4 py-2 sm:px-5 sm:py-3 text-sm sm:text-base font-bold text-[#111827] shadow-sm hover:bg-[#F59E0B] disabled:cursor-not-allowed disabled:opacity-50 shrink-0 cursor-pointer"
           >
-            {saving ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Save className="h-5 w-5" aria-hidden="true" />}
+            {saving ? <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />}
             Simpan
           </button>
         </div>

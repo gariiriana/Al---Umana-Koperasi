@@ -1,6 +1,6 @@
 import { LogOut, Settings, Bell, Globe, HelpCircle, Tag, Menu } from "lucide-react";
 import { useState, useEffect, ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUnreadCount } from "@/services/notificationService";
@@ -36,10 +36,13 @@ export function AppShell({
 }: AppShellProps) {
   const { lang, setLang } = useLanguage();
   const { user, profile } = useAuth();
+  const location = useLocation();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  const isToksan = userRole === "toksan" || location.pathname.startsWith("/toksan");
 
   useEffect(() => {
     if (!user) {
@@ -97,15 +100,17 @@ export function AppShell({
         <header className="sticky top-0 z-30 bg-gradient-to-b from-[#FBBF24] to-[#F59E0B] text-white shadow-md px-2.5 py-2 md:px-4 md:py-3 flex items-center justify-between gap-1.5 md:gap-4 font-['Hanken_Grotesk',system-ui,sans-serif] inset-x-0">
           {/* Left: Logo & Cooperative Name */}
           <div className="flex items-center gap-1 md:gap-2 shrink-0 min-w-0">
-            <button
-              type="button"
-              onClick={() => setIsMobileSidebarOpen(true)}
-              className="md:hidden p-1.5 hover:bg-white/10 rounded-lg text-white transition-colors cursor-pointer mr-1"
-              title="Open Sidebar"
-              aria-label="Open Sidebar"
-            >
-              <Menu className="h-6 w-6" />
-            </button>
+            {!isToksan && (
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="md:hidden p-1.5 hover:bg-white/10 rounded-lg text-white transition-colors cursor-pointer mr-1"
+                title="Open Sidebar"
+                aria-label="Open Sidebar"
+              >
+                <Menu className="h-6 w-6" />
+              </button>
+            )}
             <Link to={userRole ? (ROLE_DEFAULT_REDIRECT[userRole] ?? "/") : "/"} className="flex items-center gap-1 md:gap-2 min-w-0">
               <img
                 src="/logo.png"
