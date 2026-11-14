@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, FileDown, FileText, Loader2 } from "lucide-r
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getRekap } from "@/toksan/api";
+import { InvoicePanel } from "@/toksan/components/InvoicePanel";
 import { NUMERIC_COLUMNS, buildRekapModel, type JenisRekap, type RekapSection } from "@/toksan/export/rekapModel";
 import { toksanErrorMessage } from "@/toksan/format";
 import { addDays, monthRange, todayWib, weekRange, type Range } from "@/toksan/logic/period";
@@ -62,6 +63,7 @@ export function RekapPage() {
   const { profile } = useAuth();
   const today = todayWib();
   const [jenis, setJenis] = useState<JenisRekap>("harian");
+  const [invoice, setInvoice] = useState(false);
   const [anchor, setAnchor] = useState(today);
   const [data, setData] = useState<RekapData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -101,24 +103,34 @@ export function RekapPage() {
     <div className="mx-auto max-w-4xl space-y-4 px-4 py-5 pb-28 font-['Hanken_Grotesk',system-ui,sans-serif]">
       <header>
         <h1 className="text-2xl font-bold text-[#111827]">Rekap Penjualan</h1>
-        <p className="mt-0.5 text-sm text-[#6B7280]">Pilih periode, cek pratinjaunya, lalu unduh PDF atau Word.</p>
+        <p className="mt-0.5 text-sm text-[#6B7280]">Pilih periode, cek pratinjaunya, lalu unduh PDF atau Word. Tab Invoice untuk tagihan dapur.</p>
       </header>
 
-      <div role="tablist" aria-label="Jenis rekap" className="inline-flex rounded-full border border-[#E5E7EB] bg-white p-1">
+      <div role="tablist" aria-label="Jenis rekap" className="inline-flex max-w-full overflow-x-auto rounded-full border border-[#E5E7EB] bg-white p-1">
         {TABS.map((tab) => (
           <button
             key={tab.value}
             role="tab"
             type="button"
-            aria-selected={jenis === tab.value}
-            onClick={() => setJenis(tab.value)}
-            className={`rounded-full px-4 py-2 text-sm font-bold transition-colors ${jenis === tab.value ? "bg-[#FBBF24] text-[#111827]" : "text-[#6B7280] hover:text-[#111827]"}`}
+            aria-selected={!invoice && jenis === tab.value}
+            onClick={() => { setInvoice(false); setJenis(tab.value); }}
+            className={`rounded-full px-4 py-2 text-sm font-bold transition-colors ${!invoice && jenis === tab.value ? "bg-[#FBBF24] text-[#111827]" : "text-[#6B7280] hover:text-[#111827]"}`}
           >
             {tab.label}
           </button>
         ))}
+        <button
+          role="tab"
+          type="button"
+          aria-selected={invoice}
+          onClick={() => setInvoice(true)}
+          className={`rounded-full px-4 py-2 text-sm font-bold transition-colors ${invoice ? "bg-[#FBBF24] text-[#111827]" : "text-[#6B7280] hover:text-[#111827]"}`}
+        >
+          Invoice
+        </button>
       </div>
 
+      {invoice ? <InvoicePanel /> : (<>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" aria-label="Periode sebelumnya" onClick={() => setAnchor(shift(jenis, anchor, -1))} className="rounded-full border border-[#E5E7EB] bg-white p-2 hover:border-[#FBBF24]">
           <ChevronLeft className="h-5 w-5" aria-hidden="true" />
@@ -204,6 +216,7 @@ export function RekapPage() {
           )}
         </article>
       )}
+      </>)}
     </div>
   );
 }

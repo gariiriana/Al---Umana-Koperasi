@@ -4,9 +4,10 @@ import type { RekapData } from "@/toksan/types";
 
 const NABILA = { displayName: "toksan@alumana.id", holderName: "Nabila", role: "toksan" };
 const fake = vi.hoisted(() => ({
-  toast: vi.fn(), getRekap: vi.fn(), pdf: vi.fn(), docx: vi.fn(),
+  toast: vi.fn(), getRekap: vi.fn(), pdf: vi.fn(), docx: vi.fn(), invoice: vi.fn(),
   profile: null as null | { displayName: string; holderName?: string; role: string },
 }));
+vi.mock("@/toksan/export/invoicePdf", () => ({ exportInvoicePdf: fake.invoice }));
 
 vi.mock("@/contexts/ToastContext", () => ({ useToast: () => ({ showToast: fake.toast }) }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ profile: fake.profile }) }));
@@ -76,5 +77,44 @@ describe("Rekap page", () => {
     fireEvent.click(screen.getByRole("button", { name: /Export PDF/ }));
     await waitFor(() => expect(fake.pdf).toHaveBeenCalled());
     expect(fake.pdf.mock.calls[0][0].footer.nama).toBe("( ................................ )");
+  });
+});
+
+describe("Rekap page: Invoice tab", () => {
+  const sold = (productId: string, productName: string, dapur: "bakery" | "hangat_saji", harga: number, terjual: number) =>
+    ({ productId, productName, dapur, harga, produksi: terjual, terjual, retur: 0, omzet: terjual * harga });
+
+  beforeEach(() => {
+    fake.getRekap.mockImplementation(async (dari: string, sampai: string) => rekap({
+      dari, sampai,
+      totals: { produksi: 106, terjual: 106, retur: 0, omzet: 860_600, obralJumlah: 0, obralOmzet: 0, produkTerjual: 2 },
+      produk: [sold("p1", "Risol Mayo", "bakery", 3500, 10), sold("p2", "Dimsum", "hangat_saji", 8600, 96)],
+    }));
+  });
+
+  it("bills one dapur for the chosen dates and exports the invoice PDF", async () => {
+    render(<RekapPage />);
+    fireEvent.click(screen.getByRole("tab", { name: "Invoice" }));
+    await waitFor(() => expect(fake.getRekap).toHaveBeenLastCalledWith("2026-11-09", "2026-11-14"));
+    fireEvent.click(screen.getByRole("button", { name: "Hangat Saji" }));
+    expect(await screen.findByText("Dimsum")).toBeTruthy();
+    expect(screen.queryByText("Risol Mayo")).toBeNull();
+    expect(screen.getByText("DELAPAN RATUS DUA PULUH LIMA RIBU ENAM RATUS RUPIAH")).toBeTruthy();
+    expect((screen.getByLabelText("No. Faktur") as HTMLInputElement).value).toBe("TKS-HS-20261114");
+
+    fireEvent.change(screen.getByLabelText("Diskon (Rp)"), { target: { value: "600" } });
+    fireEvent.click(screen.getByRole("button", { name: /Export Invoice PDF/ }));
+    await waitFor(() => expect(fake.invoice).toHaveBeenCalled());
+    const model = fake.invoice.mock.calls[0][0];
+    expect([model.unit, model.pelanggan, model.total, model.jatuhTempo]).toEqual(["Dapur Hangat Saji", "Toko Santri (Toksan)", "825.000,00", "21-11-2026"]);
+  });
+
+  it("changing the dates reloads the sales for that range", async () => {
+    render(<RekapPage />);
+    fireEvent.click(screen.getByRole("tab", { name: "Invoice" }));
+    await waitFor(() => expect(fake.getRekap).toHaveBeenLastCalledWith("2026-11-09", "2026-11-14"));
+    fireEvent.change(screen.getByLabelText("Dari"), { target: { value: "2026-11-01" } });
+    await waitFor(() => expect(fake.getRekap).toHaveBeenLastCalledWith("2026-11-01", "2026-11-14"));
+    expect((screen.getByRole("button", { name: /Export Invoice PDF/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
