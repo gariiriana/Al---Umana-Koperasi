@@ -30,7 +30,7 @@ export interface UserProfile {
     | "produksi_1" | "distribusi_1" | "produksi_2" | "distribusi_2" | "mo_katering" | "co_mo_katering"
     | "admin_mbg" | "produksi_mbg" | "distribusi_mbg" | "kurir_mbg"
     | "MBG2" | "mbg2" | "produksi_mbg_2" | "distribusi_mbg_2" | "dokumentasi_produksiMBG" | "super_admin" | "developer"
-    | "kepala_unit" | "tim_unit";
+    | "kepala_unit" | "tim_unit" | "toksan";
   /** Nama orang yang memegang akun ini, diisi Super Admin (akun dipakai per role). */
   holderName?: string;
   /** Kepala Unit: unit usaha yang dipimpin (lihat constants/units.ts). */

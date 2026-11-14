@@ -489,6 +489,7 @@ export function DashboardPage() {
                     produksi_mbg: "Produksi MBG",
                     distribusi_mbg: "Distribusi MBG",
                     kurir_mbg: "Kurir MBG",
+                    toksan: "Admin Toksan",
                     mo_katering: "Manager Operasional (MO)",
                     co_mo_katering: "Wakil Kepala MO (CO_MO)",
                     produksi_1: "Tim Produksi 1 (Ust. Joko)",

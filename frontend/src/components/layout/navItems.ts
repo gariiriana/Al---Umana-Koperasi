@@ -11,13 +11,15 @@ import {
   Package2,
   ShieldCheck,
   ShoppingCart,
+  Tag,
+  TrendingUp,
   Truck,
   Trophy,
   Users,
   UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
-import { ROLE_DEFAULT_REDIRECT, ROLE_PERMISSIONS, isCourierRole } from "@/constants/roles";
+import { ROLE_DEFAULT_REDIRECT, ROLE_PERMISSIONS, TOKSAN_PATHS, isCourierRole } from "@/constants/roles";
 
 export interface NavItem {
   to: string;
@@ -53,6 +55,12 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/mbg/distribution", label: "Distribusi MBG", icon: ClipboardCheck },
   { to: "/mbg/persiapan", label: "Persiapan", icon: ClipboardCheck },
   { to: "/mbg/delivery", label: "Kurir MBG", icon: Truck },
+  // --- Toko Santri (Toksan) ---
+  { to: "/toksan/input", label: "Input Harian", icon: ClipboardList, shortLabel: "Input" },
+  { to: "/toksan/obral", label: "Obral", icon: Tag },
+  { to: "/toksan/rekap", label: "Rekap", icon: FileText },
+  { to: "/toksan/trafik", label: "Trafik Produk", icon: TrendingUp, shortLabel: "Trafik" },
+  { to: "/toksan/produk", label: "Produk Toksan", icon: Package2, shortLabel: "Produk" },
   // --- Unit usaha ---
   { to: "/unit/control-center", label: "KPI & Task Unit", icon: Users },
   { to: "/performance", label: "Performa Saya", icon: Trophy },
@@ -77,6 +85,8 @@ export function navItemsForRole(role: string | undefined): NavItem[] {
     if (item.to === "/developer/control-center") return role === "developer";
     // Halaman pribadi kurir: isinya tugas milik akun yang login, tidak berguna bagi admin.
     if (item.to === "/kurir/tugas") return allowed.includes(item.to);
+    // Toksan hanya untuk admin Toksan (dan super_admin/developer), bukan admin katering.
+    if (TOKSAN_PATHS.includes(item.to)) return allowed.includes(item.to);
     if (role === "admin") return true;
     return allowed.includes(item.to);
   });
@@ -106,6 +116,11 @@ export const MOBILE_SHORT_LABELS: Record<string, string> = {
   "/mbg/distribution": "Distribusi",
   "/mbg/persiapan": "Persiapan",
   "/mbg/delivery": "Kurir",
+  "/toksan/input": "Input",
+  "/toksan/obral": "Obral",
+  "/toksan/rekap": "Rekap",
+  "/toksan/trafik": "Trafik",
+  "/toksan/produk": "Produk",
   "/unit/control-center": "KPI Unit",
   "/performance": "Performa",
   "/super-admin/control-center": "KPI",

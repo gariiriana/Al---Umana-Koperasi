@@ -5,9 +5,12 @@
  * collides with the public Storefront routes (e.g. `/orders`,
  * `/category/:name`).
  */
+/** Halaman Toko Santri (Toksan): hanya admin Toksan, plus super_admin/developer untuk mengecek. */
+export const TOKSAN_PATHS: readonly string[] = ["/toksan/input", "/toksan/obral", "/toksan/rekap", "/toksan/trafik", "/toksan/produk"];
+
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
-  developer: ["/developer/control-center", "/super-admin/control-center"],
-  super_admin: ["/super-admin/control-center"],
+  developer: ["/developer/control-center", "/super-admin/control-center", ...TOKSAN_PATHS],
+  super_admin: ["/super-admin/control-center", ...TOKSAN_PATHS],
   /**
    * Admin: mengelola pesanan, invoice, dan melihat dashboard.
    */
@@ -217,6 +220,9 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
 
   /** Tim Unit: mengerjakan task dari Kepala Unit-nya (menu Performa Saya). */
   tim_unit: [],
+
+  /** Admin Toko Santri: input penjualan harian, obral, rekap, trafik produk, master produk. */
+  toksan: TOKSAN_PATHS,
 };
 
 /**
@@ -230,7 +236,7 @@ export const UNIT_ROLES: readonly string[] = ["kepala_unit", "tim_unit"];
  * Role yang tidak pernah diberi task oleh Super Admin, jadi tidak punya KPI:
  * kurir katering & MBG, serta akun Produksi 2 dan Distribusi 2.
  */
-export const NO_TASK_ROLES: readonly string[] = ["kurir", "kurir_mbg", "produksi_2", "distribusi_2"];
+export const NO_TASK_ROLES: readonly string[] = ["kurir", "kurir_mbg", "produksi_2", "distribusi_2", "toksan"];
 
 /** Akun kurir (katering & MBG): satu pool, menu dan halaman utama sama. */
 export const COURIER_ROLES: readonly string[] = ["kurir", "kurir_mbg"];
@@ -275,6 +281,7 @@ export const ADMIN_SHELL_ROLES = [
   "distribusi_mbg_2",
   "kepala_unit",
   "tim_unit",
+  "toksan",
 ] as const;
 
 export const ALL_ROLES = [
@@ -301,6 +308,7 @@ export const ALL_ROLES = [
   "mbg2",
   "produksi_mbg_2",
   "distribusi_mbg_2",
+  "toksan",
 ] as const;
 
 /**
@@ -335,4 +343,6 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   // Unit usaha
   kepala_unit: "/unit/control-center",
   tim_unit: "/performance",
+  // Toko Santri
+  toksan: "/toksan/input",
 };
