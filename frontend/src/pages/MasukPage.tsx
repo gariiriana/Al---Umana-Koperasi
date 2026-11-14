@@ -5,6 +5,7 @@ import { Briefcase, ChevronRight, Fingerprint, ShoppingBag } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext";
 import { useAbsensiAuthUser } from "@/absensi/authUser";
 import { ROLE_DEFAULT_REDIRECT } from "@/constants/roles";
+import { HoneycombBackdrop } from "@/components/layout/HoneycombBackdrop";
 
 interface DoorProps {
   to: string;
@@ -46,20 +47,11 @@ export function MasukPage() {
   const absensiName = absensiUser ? absensiUser.displayName || absensiUser.email : null;
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
-      <video
-        src="https://www.alumanaa.com/wp-content/uploads/2020/03/Hero-Video-Compressed.mp4"
-        className="absolute inset-0 h-full w-full object-cover"
-        autoPlay
-        muted
-        loop
-        playsInline
-        aria-hidden="true"
-      />
-      <div className="absolute inset-0 bg-gradient-to-br from-[#111827]/80 via-[#1c1005]/70 to-[#78350F]/60" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0E2E24] px-4 py-8">
+      <HoneycombBackdrop />
 
       <div className="relative z-10 w-full max-w-md">
-        <div className="rounded-3xl border border-white/10 bg-[#111827]/40 p-4 shadow-[0_24px_50px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl sm:p-8">
+        <div className="rounded-3xl border border-[#FCE7A6]/12 bg-[#0A231B]/75 p-4 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-md sm:p-8">
           <div className="mb-6 text-center">
             <img
               src="/logo-mark.png"

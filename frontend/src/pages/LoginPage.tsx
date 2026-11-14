@@ -11,6 +11,7 @@ import { ABSENSI_ACCOUNT_NOTICE, isAbsensiAccount } from "@/services/absensiAcco
 import { signOut as authSignOut } from "@/services/authService";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
+import { HoneycombBackdrop } from "@/components/layout/HoneycombBackdrop";
 
 const DICTIONARY = {
   id: {
@@ -61,7 +62,11 @@ export function LoginPage() {
     setError(null);
     clearAccountNotice();
 
-    if (!turnstileToken) {
+    // Widget bisa masih tampil "Success" walau state token sudah kosong
+    // (token expired / halaman di-reload), jadi ambil langsung dari widget.
+    const token = turnstileToken ?? turnstileRef.current?.getResponse() ?? null;
+    if (!token) {
+      turnstileRef.current?.reset();
       setError(
         lang === "id"
           ? "Silakan verifikasi bahwa Anda manusia melalui Cloudflare Turnstile."
@@ -121,24 +126,12 @@ export function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center px-4 overflow-hidden">
-
-      <video
-        src="https://www.alumanaa.com/wp-content/uploads/2020/03/Hero-Video-Compressed.mp4"
-        className="absolute inset-0 w-full h-full object-cover"
-        autoPlay
-        muted
-        loop
-        playsInline
-        aria-hidden="true"
-      />
-
-      {/* ── Dark amber overlay ───────────────────────────────────────────── */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#111827]/80 via-[#1c1005]/70 to-[#78350F]/60" />
+    <div className="relative min-h-screen flex items-center justify-center px-4 py-8 overflow-hidden bg-[#0E2E24]">
+      <HoneycombBackdrop />
 
       {/* ── Card ─────────────────────────────────────────────────────────── */}
       <div className="relative z-10 w-full max-w-md">
-        <div className="bg-[#111827]/40 backdrop-blur-xl border border-white/10 rounded-3xl p-4 sm:p-8 shadow-[0_24px_50px_-12px_rgba(0,0,0,0.6)]">
+        <div className="bg-[#0A231B]/75 backdrop-blur-md border border-[#FCE7A6]/12 rounded-3xl p-4 sm:p-8 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)]">
           
           {/* Brand Logo & Text unified inside the card */}
           <div className="text-center mb-6">

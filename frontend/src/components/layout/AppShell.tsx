@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUnreadCount } from "@/services/notificationService";
 import { Sidebar } from "./Sidebar";
 import { MobileNav } from "./MobileNav";
+import { HoneycombBackdrop } from "./HoneycombBackdrop";
 import { ROLE_DEFAULT_REDIRECT } from "@/constants/roles";
 
 export interface AppShellProps {
@@ -74,7 +75,10 @@ export function AppShell({
   };
 
   return (
-    <div className="min-h-screen w-full flex bg-[#F3F4F6] overflow-x-hidden">
+    <div className="isolate min-h-screen w-full flex bg-[#F3F4F6] overflow-x-hidden">
+      {/* Sarang lebah di pojok area kerja (di belakang konten, diam saat scroll). */}
+      <HoneycombBackdrop variant="light" className="fixed inset-0 -z-10 md:left-60" />
+
       <Sidebar
         userName={userName}
         userEmail={userEmail}
@@ -277,7 +281,7 @@ export function AppShell({
 
         {/* ── Main content ───────────────────────────────────────── */}
         {/* Di HP: ruang bawah untuk navigasi tab. Footer situs hanya di toko pelanggan, tidak di aplikasi staf. */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F3F4F6] flex flex-col min-w-0 w-full pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-w-0 w-full pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0">
           <div className="px-3 sm:px-4 md:px-6 py-4 md:py-5 w-full min-w-0">{children}</div>
         </main>
       </div>

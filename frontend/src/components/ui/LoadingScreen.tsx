@@ -11,8 +11,10 @@ export function LoadingScreen({ message = "Memuat data...", fullscreen = true }:
 
   return (
     <div
-      className={`flex flex-col items-center justify-center bg-gradient-to-br from-[#111827] via-[#1c1005] to-[#78350F]/80 text-white ${
-        fullscreen ? "fixed inset-0 z-50 min-h-screen" : "w-full py-12 rounded-2xl border border-white/5 bg-black/20 backdrop-blur-md"
+      className={`flex flex-col items-center justify-center text-white ${
+        fullscreen
+          ? "fixed inset-0 z-50 min-h-screen bg-[#0E2E24] bg-[radial-gradient(ellipse_at_50%_42%,#17473A_0%,#0E2E24_45%,#071A14_100%)]"
+          : "w-full py-12 rounded-2xl border border-white/5 bg-gradient-to-br from-[#111827] via-[#1c1005] to-[#78350F]/80 backdrop-blur-md"
       }`}
     >
       {/* Outer ambient glow */}
