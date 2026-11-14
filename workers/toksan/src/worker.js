@@ -7,6 +7,7 @@ import { verifyIdToken } from "./auth.js";
 import { ToksanError, corsHeaders, errorResponse, json } from "./http.js";
 import { getUserProfile } from "./profile.js";
 import { requireStaff } from "./session.js";
+import { createProduk, listProduk, patchProduk } from "./handlers/produk.js";
 
 const PREFIX = "/api/toksan";
 
@@ -14,6 +15,9 @@ const getMe = (ctx) => requireStaff(ctx);
 
 const ROUTES = [
   ["GET", /^\/me$/, getMe],
+  ["GET", /^\/produk$/, listProduk],
+  ["POST", /^\/produk$/, createProduk],
+  ["PATCH", /^\/produk\/([\w-]{1,64})$/, patchProduk],
 ];
 
 export async function handleRequest(request, env, deps) {
