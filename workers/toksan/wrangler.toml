@@ -1,0 +1,25 @@
+name = "al-umana-toksan"
+account_id = "42957b053de047bdb5d17c57be5bda9b"
+main = "src/worker.js"
+compatibility_date = "2026-09-22"
+compatibility_flags = ["nodejs_compat"]
+routes = [
+  { pattern = "koperasi-alumana.com/api/toksan/*", zone_name = "koperasi-alumana.com" }
+]
+
+[observability]
+enabled = true
+
+[vars]
+FIREBASE_PROJECT_ID = "al-umana-koperasi"
+ALLOWED_ORIGIN = "https://koperasi-alumana.com"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "toksan"
+database_id = "REPLACE_AFTER_wrangler_d1_create"
+migrations_dir = "migrations"
+
+# Encrypted secrets (never in this file or the repository), same service account as absensi:
+#   npx wrangler secret put FIREBASE_CLIENT_EMAIL
+#   npx wrangler secret put FIREBASE_PRIVATE_KEY
