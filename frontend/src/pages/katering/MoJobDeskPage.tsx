@@ -352,6 +352,8 @@ export function MoJobDeskPage() {
     entry: MbgPmEntry;
   } | null>(null);
   const [detailJobDeskModal, setDetailJobDeskModal] = useState<CateringJobDesk | null>(null);
+  // Tanggal MBG yang job desk-nya sudah disusun: MO hanya melihat daftar tugasnya.
+  const [mbgJobDeskList, setMbgJobDeskList] = useState<MbgDateGroup | null>(null);
 
   // Filter state for table view
   const [searchQuery, setSearchQuery] = useState("");
@@ -1862,6 +1864,16 @@ export function MoJobDeskPage() {
                               )}
                             </button>
 
+                            {group.isAssigned ? (
+                            <button
+                              type="button"
+                              onClick={() => setMbgJobDeskList(group)}
+                              className="h-11 sm:h-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold text-emerald-800 bg-white border border-emerald-300 hover:bg-emerald-50 cursor-pointer transition-colors"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              <span>Lihat Job Desk ({group.jobDesks.length})</span>
+                            </button>
+                            ) : (
                             <button
                               type="button"
                               onClick={() => handleGenerateMbgJobDesksForDate(group)}
@@ -1880,6 +1892,7 @@ export function MoJobDeskPage() {
                                 </>
                               )}
                             </button>
+                            )}
                           </div>
                         </div>
 
@@ -2887,6 +2900,52 @@ export function MoJobDeskPage() {
       {/* MODAL 3: DETAIL JOB DESK SPESIFIK */}
       {/* ========================================================================= */}
       <AnimatePresence>
+        {mbgJobDeskList && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setMbgJobDeskList(null)}>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Job Desk MBG ${mbgJobDeskList.hari}, ${formatIndoDate(mbgJobDeskList.date)}`}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white w-full sm:max-w-2xl max-h-[88vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden"
+            >
+              <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-emerald-100 bg-emerald-50/50">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Job Desk MBG — {mbgJobDeskList.hari}, {formatIndoDate(mbgJobDeskList.date)}</h3>
+                  <p className="text-xs text-slate-600 mt-0.5">{mbgJobDeskList.jobDesks.length} tugas sudah disusun • {mbgJobDeskList.menuName}</p>
+                </div>
+                <button type="button" aria-label="Tutup" onClick={() => setMbgJobDeskList(null)} className="p-2 rounded-full text-slate-500 hover:bg-slate-100 cursor-pointer">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <ul className="flex-1 overflow-y-auto divide-y divide-slate-100 px-2">
+                {mbgJobDeskList.jobDesks.map((jd) => (
+                  <li key={jd.id}>
+                    <button
+                      type="button"
+                      onClick={() => setDetailJobDeskModal(jd)}
+                      className="w-full flex items-center gap-3 px-3 py-3 text-left rounded-xl hover:bg-slate-50 cursor-pointer"
+                    >
+                      <span className="w-14 shrink-0 text-xs font-bold text-slate-500">{jd.startTime || "-"}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-bold text-slate-900">{jd.kegiatan || jd.title || "-"}</span>
+                        <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-slate-100 text-slate-800">{jd.pic}</span>
+                        {jd.mbgInstitutionName && <span className="ml-2 text-[11px] text-slate-500">{jd.mbgInstitutionName}</span>}
+                      </span>
+                      {hasJobDeskSubmission(jd) ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-extrabold text-emerald-800"><CheckCircle2 className="h-3 w-3" /> Sudah Submit</span>
+                      ) : (
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-extrabold text-slate-600"><Clock className="h-3 w-3" /> Belum Submit</span>
+                      )}
+                      <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
         {detailJobDeskModal && (
           <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
             <motion.div

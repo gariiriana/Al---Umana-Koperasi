@@ -11,6 +11,7 @@ const fake = vi.hoisted(() => ({
   }>(),
   create: vi.fn(async (inputs: unknown[]) => inputs.length),
   ordersFrom: '',
+  desks: [] as Record<string, unknown>[],
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { uid: 'mo-uid' } }) }));
@@ -23,7 +24,7 @@ vi.mock('@/services/mbgProductionService', () => ({
   subscribeAllDailyReports: (cb: (reports: unknown[]) => void) => { cb([]); return () => {}; },
 }));
 vi.mock('@/services/cateringJobDeskService', () => ({
-  subscribeAllJobDesks: (cb: (desks: unknown[]) => void) => { cb([]); return () => {}; },
+  subscribeAllJobDesks: (cb: (desks: unknown[]) => void) => { cb(fake.desks); return () => {}; },
   batchCreateJobDesks: fake.create,
   deleteJobDesk: vi.fn(),
 }));
@@ -72,6 +73,7 @@ beforeEach(() => {
   fake.listeners.clear();
   fake.create.mockClear();
   fake.ordersFrom = '';
+  fake.desks = [];
   fake.batches = [
     // Today's batch is being delivered: its rows carry the couriers' photos (~5 MB).
     batch('b26', '2026-10-26', '2026-10-23T12:24:02.583Z', { status: 'DELIVERING', totalJumlah: 2835, totalInstitusi: 31 }),
@@ -148,6 +150,33 @@ describe('MO job desk: PM rows entered by Admin MBG', () => {
     expect(screen.getByText('Selasa, 27 Oktober 2026')).toBeTruthy();
     expect(screen.queryByText('Senin, 26 Oktober 2026')).toBeNull();
     expect(screen.queryByText('Jumat, 23 Oktober 2026')).toBeNull();
+  });
+});
+
+describe('MO job desk: a date whose job desk is already arranged', () => {
+  const desk = (id: string, pic: string, kegiatan: string, extra: Record<string, unknown> = {}) =>
+    ({ id, division: 'mbg', tanggal: '2026-10-23', pic, kegiatan, title: kegiatan, startTime: '06:00', status: 'pending', ...extra });
+
+  it('offers only a view button, which lists the arranged tasks', () => {
+    fake.desks = [
+      desk('d1', 'Hashifah', 'Produksi MBG (Dapur Utama)'),
+      desk('d2', 'Dwi', 'Pengantaran ke SPS CEMPAKA 10', { mbgInstitutionName: 'SPS CEMPAKA 10' }),
+    ];
+    openMbg();
+    const card = cardOf('Jumat, 23 Oktober 2026');
+    expect(card.queryByRole('button', { name: /Susun Job Desk/ })).toBeNull();
+    fireEvent.click(card.getByRole('button', { name: /Lihat Job Desk/ }));
+
+    const list = within(screen.getByRole('dialog', { name: /Job Desk MBG/ }));
+    expect(list.getByText('Produksi MBG (Dapur Utama)')).toBeTruthy();
+    expect(list.getByText('Pengantaran ke SPS CEMPAKA 10')).toBeTruthy();
+    expect(list.getByText('Dwi')).toBeTruthy();
+    expect(fake.create).not.toHaveBeenCalled();
+  });
+
+  it('a date without a job desk still offers Susun Job Desk', () => {
+    openMbg();
+    expect(cardOf('Jumat, 23 Oktober 2026').getByRole('button', { name: /Susun Job Desk/ })).toBeTruthy();
   });
 });
 
