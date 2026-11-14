@@ -62,7 +62,7 @@ export function MasukPage() {
         <div className="rounded-3xl border border-white/10 bg-[#111827]/40 p-4 shadow-[0_24px_50px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl sm:p-8">
           <div className="mb-6 text-center">
             <img
-              src="/logo.png"
+              src="/logo-mark.png"
               alt="Pondok Pesantren Modern Al Umanaa"
               className="mx-auto h-20 object-contain drop-shadow-md"
             />
