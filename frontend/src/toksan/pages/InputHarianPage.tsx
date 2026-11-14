@@ -248,97 +248,6 @@ export function InputHarianPage() {
         </label>
       </header>
 
-      {serverRows.length > 0 && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 sm:p-4 shadow-xs">
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
-                <p className="text-sm font-bold text-emerald-950">
-                  Data Tersimpan di Rekap Hari Ini
-                </p>
-                <span className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
-                  {serverRows.length} entri
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-emerald-700">
-                Total tersimpan: <span className="font-bold text-emerald-900">{formatRupiah(dayTotal(serverRows))}</span> · Sesi otomatis disatukan di menu Rekap.
-              </p>
-            </div>
-            <a
-              href="/toksan/rekap"
-              className="inline-flex items-center justify-center self-start sm:self-auto rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-emerald-700 shrink-0"
-            >
-              Buka Rekap →
-            </a>
-          </div>
-
-          <div className="mt-3 border-t border-emerald-200/80 pt-3">
-            <div className="space-y-2">
-              {serverRows.map((sr) => {
-                const { terjual, total } = rowTotal(sr);
-                const sesiLabel = sr.sesi ? SESI_LABEL[sr.sesi] : "-";
-                const pihakLabel = sr.pihak ? PIHAK_LABEL[sr.pihak] : "-";
-                return (
-                  <div
-                    key={sr.id ?? sr.key}
-                    className="rounded-xl border border-emerald-100 bg-white p-3 shadow-2xs"
-                  >
-                    {/* Baris 1: Nama Produk, Sesi-Pihak badge, Harga/pcs di kiri; Total Rupiah & Terjual di kanan */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-bold text-sm text-[#111827]">{sr.productName}</span>
-                          <span className="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
-                            {sesiLabel} · {pihakLabel}
-                          </span>
-                        </div>
-                        <p className="mt-0.5 text-xs text-[#6B7280]">
-                          Harga: <span className="font-semibold text-[#374151]">{formatRupiah(sr.harga)}/pcs</span>
-                        </p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <span className="block font-bold text-sm text-[#111827]">{formatRupiah(total)}</span>
-                        <span className="block text-[11px] text-[#6B7280]">({formatAngka(terjual)} terjual)</span>
-                      </div>
-                    </div>
-
-                    {/* Baris 2: Breakdown Jumlah, Retur, Terjual di kiri; Tombol Edit & Hapus di kanan */}
-                    <div className="mt-2.5 flex items-center justify-between border-t border-emerald-50/80 pt-2 text-xs">
-                      <div className="text-[11px] sm:text-xs text-[#6B7280]">
-                        <span>Jml: <strong className="text-[#111827]">{formatAngka(sr.jumlah ?? 0)}</strong></span>
-                        <span className="mx-1.5 text-gray-300">·</span>
-                        <span>Retur: <strong className="text-[#111827]">{formatAngka(sr.retur ?? 0)}</strong></span>
-                        <span className="mx-1.5 text-gray-300">·</span>
-                        <span>Terjual: <strong className="text-emerald-700">{formatAngka(terjual)}</strong></span>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          aria-label={`Edit ${sr.productName}`}
-                          onClick={() => editServerRow(sr)}
-                          className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Hapus ${sr.productName}`}
-                          onClick={() => void deleteServerRow(sr)}
-                          className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
-                        >
-                          Hapus
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
       <button
         type="button"
         onClick={() => setSheetOpen(true)}
@@ -528,6 +437,97 @@ export function InputHarianPage() {
             );
           })}
         </ul>
+      )}
+
+      {serverRows.length > 0 && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 sm:p-4 shadow-xs">
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
+                <p className="text-sm font-bold text-emerald-950">
+                  Data Tersimpan di Rekap Hari Ini
+                </p>
+                <span className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
+                  {serverRows.length} entri
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-emerald-700">
+                Total tersimpan: <span className="font-bold text-emerald-900">{formatRupiah(dayTotal(serverRows))}</span> · Sesi otomatis disatukan di menu Rekap.
+              </p>
+            </div>
+            <a
+              href="/toksan/rekap"
+              className="inline-flex items-center justify-center self-start sm:self-auto rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-emerald-700 shrink-0"
+            >
+              Buka Rekap →
+            </a>
+          </div>
+
+          <div className="mt-3 border-t border-emerald-200/80 pt-3">
+            <div className="space-y-2">
+              {serverRows.map((sr) => {
+                const { terjual, total } = rowTotal(sr);
+                const sesiLabel = sr.sesi ? SESI_LABEL[sr.sesi] : "-";
+                const pihakLabel = sr.pihak ? PIHAK_LABEL[sr.pihak] : "-";
+                return (
+                  <div
+                    key={sr.id ?? sr.key}
+                    className="rounded-xl border border-emerald-100 bg-white p-3 shadow-2xs"
+                  >
+                    {/* Baris 1: Nama Produk, Sesi-Pihak badge, Harga/pcs di kiri; Total Rupiah & Terjual di kanan */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-bold text-sm text-[#111827]">{sr.productName}</span>
+                          <span className="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                            {sesiLabel} · {pihakLabel}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-[#6B7280]">
+                          Harga: <span className="font-semibold text-[#374151]">{formatRupiah(sr.harga)}/pcs</span>
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="block font-bold text-sm text-[#111827]">{formatRupiah(total)}</span>
+                        <span className="block text-[11px] text-[#6B7280]">({formatAngka(terjual)} terjual)</span>
+                      </div>
+                    </div>
+
+                    {/* Baris 2: Breakdown Jumlah, Retur, Terjual di kiri; Tombol Edit & Hapus di kanan */}
+                    <div className="mt-2.5 flex items-center justify-between border-t border-emerald-50/80 pt-2 text-xs">
+                      <div className="text-[11px] sm:text-xs text-[#6B7280]">
+                        <span>Jml: <strong className="text-[#111827]">{formatAngka(sr.jumlah ?? 0)}</strong></span>
+                        <span className="mx-1.5 text-gray-300">·</span>
+                        <span>Retur: <strong className="text-[#111827]">{formatAngka(sr.retur ?? 0)}</strong></span>
+                        <span className="mx-1.5 text-gray-300">·</span>
+                        <span>Terjual: <strong className="text-emerald-700">{formatAngka(terjual)}</strong></span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          aria-label={`Edit ${sr.productName}`}
+                          onClick={() => editServerRow(sr)}
+                          className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Hapus ${sr.productName}`}
+                          onClick={() => void deleteServerRow(sr)}
+                          className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
+                        >
+                          Hapus
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+72px)] z-30 px-3 sm:px-4 md:bottom-4 md:left-60">

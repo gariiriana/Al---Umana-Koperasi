@@ -70,6 +70,13 @@ describe("Input Harian", () => {
     expect(screen.getByTestId("total-hari").textContent).toContain("Rp98.000");
   });
 
+  it("the input (Pilih Produk) comes first, the saved rows below it", async () => {
+    render(<InputHarianPage />);
+    const saved = await screen.findByText(/Data Tersimpan di Rekap Hari Ini/);
+    const pick = screen.getByRole("button", { name: /Pilih Produk/ });
+    expect(pick.compareDocumentPosition(saved) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("the picker only offers active products", async () => {
     render(<InputHarianPage />);
     await screen.findByText("Risol Mayo");
