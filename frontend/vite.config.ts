@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
         // main.tsx mendaftarkan service worker sendiri lewat virtual:pwa-register.
         registerType: "prompt",
         injectRegister: false,
-        includeAssets: ["logo.png", "icons/*.png"],
+        includeAssets: ["logo.png", "logo-mark.png", "kasma-logo.svg", "favicon.ico", "icons/*.png"],
         // Satu-satunya manifest aplikasi (dulu ada public/manifest.json ganda yang
         // terbaca duluan oleh browser). Ikon dibuat oleh scripts/pwa/generate-pwa-icons.ps1.
         manifest: {

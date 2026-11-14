@@ -909,7 +909,8 @@ export async function generate8PageDailyReportPdf(
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-  const logoAlUmanaa = (await getBase64ImageFromUrl('/logo.png')) || (await getBase64ImageFromUrl('/logo_alumana.png'));
+  // MBG tetap memakai logo Al Umanaa (logo.png sekarang logo Kasma).
+  const logoAlUmanaa = await getBase64ImageFromUrl('/logo_alumana.png');
   const logoBadanGizi = await getBase64ImageFromUrl('/logo_badan_gizi.png');
 
   const tanggalStr = report.tanggal || batch?.tanggal || new Date().toISOString().split('T')[0];
