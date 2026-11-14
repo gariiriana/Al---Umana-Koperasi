@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { terbilang } from "@/toksan/logic/terbilang";
-import { buildInvoiceModel, defaultInvoiceNumber } from "@/toksan/export/invoiceModel";
+import { INVOICE_TAGS, buildInvoiceModel, defaultInvoiceNumber, defaultInvoiceTag } from "@/toksan/export/invoiceModel";
 import type { RekapData } from "@/toksan/types";
 
 describe("terbilang", () => {
@@ -42,6 +42,7 @@ const INPUT = {
   diskon: 1_500,
   catatan: "Penjualan Toko Santri 9 – 14 November 2026",
   pesan: "Transfer ke BNI 123",
+  tags: ["1.2 Dapur Bakery"],
 };
 
 describe("buildInvoiceModel", () => {
@@ -60,9 +61,16 @@ describe("buildInvoiceModel", () => {
     expect(m.penjual).toBe("KOPERASI AL UMANAA SEJAHTERA MANDIRI");
     expect(m.unit).toBe("Dapur Bakery");
     expect(m.pelanggan).toBe("Toko Santri (Toksan)");
-    expect(m.tags).toBe("Toko Santri, Dapur Bakery");
+    expect(m.tags).toBe("1.2 Dapur Bakery");
+    expect(buildInvoiceModel(DATA, { ...INPUT, tags: ["1. Kasma Katering", "1.2 Dapur Bakery"] }).tags).toBe("1. Kasma Katering, 1.2 Dapur Bakery");
+    expect(buildInvoiceModel(DATA, { ...INPUT, tags: [] }).tags).toBe("-");
     expect([m.nomor, m.tanggal, m.jatuhTempo]).toEqual(["TKS-BKR-20261114", "14-11-2026", "21-11-2026"]);
     expect(m.fileName).toBe("Invoice-TKS-BKR-20261114");
+  });
+
+  it("offers the Kasma tag list and picks the dapur tag by default", () => {
+    expect(INVOICE_TAGS).toEqual(["1. Kasma Katering", "1.1 Dapur Katering", "1.2 Dapur Bakery", "1.2 Katering Internal", "1.3 Dapur Hangat Saji"]);
+    expect([defaultInvoiceTag("bakery"), defaultInvoiceTag("hangat_saji")]).toEqual(["1.2 Dapur Bakery", "1.3 Dapur Hangat Saji"]);
   });
 
   it("a discount larger than the subtotal never makes the total negative", () => {

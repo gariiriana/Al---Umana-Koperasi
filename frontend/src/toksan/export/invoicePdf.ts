@@ -2,7 +2,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { InvoiceModel } from "@/toksan/export/invoiceModel";
-import { bytesToDataUrl, loadLogoBytes } from "@/toksan/export/logo";
+import { LOCKUP_PATH, bytesToDataUrl, loadLogoBytes } from "@/toksan/export/logo";
 
 const L = 11; // left margin (mm)
 const R = 199; // right edge (mm)
@@ -46,14 +46,21 @@ export function buildInvoicePdf(model: InvoiceModel, logoDataUrl: string | null)
   const doc: Doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
   doc.setTextColor(...BLACK);
 
-  // Kop: logo, nama penjual, unit.
-  if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", L, 9, 15, 15, undefined, "FAST");
+  // Kop: logo Kasma lengkap (dengan tulisan KASMA + nama koperasi di bawahnya), lalu nama penjual dan unit.
+  let textX = L;
+  if (logoDataUrl) {
+    const { width, height } = doc.getImageProperties(logoDataUrl);
+    const h = 36;
+    const w = (h * width) / height;
+    doc.addImage(logoDataUrl, "PNG", L, 6, w, h, undefined, "FAST");
+    textX = L + w + 6;
+  }
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
-  doc.text(model.penjual, L, 33);
+  doc.text(model.penjual, textX, 21);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
-  doc.text(model.unit, L, 43);
+  doc.text(model.unit, textX, 28);
 
   // Faktur & tanggal (kanan).
   doc.setFont("helvetica", "bold");
@@ -164,6 +171,6 @@ export function buildInvoicePdf(model: InvoiceModel, logoDataUrl: string | null)
 }
 
 export async function exportInvoicePdf(model: InvoiceModel): Promise<void> {
-  const bytes = await loadLogoBytes();
+  const bytes = await loadLogoBytes(LOCKUP_PATH);
   buildInvoicePdf(model, bytes ? bytesToDataUrl(bytes) : null).save(`${model.fileName}.pdf`);
 }

@@ -1,9 +1,12 @@
 // Lambang Al-Umanaa tanpa teks untuk kop rekap (teks yayasan sudah ditulis di kop).
 export const LOGO_PATH = "/logo-mark.png?v=2";
 
-export async function loadLogoBytes(): Promise<Uint8Array | null> {
+/** Logo Kasma lengkap (hexagon + KASMA + nama koperasi) untuk kop invoice. */
+export const LOCKUP_PATH = "/kasma-lockup.png?v=1";
+
+export async function loadLogoBytes(path: string = LOGO_PATH): Promise<Uint8Array | null> {
   try {
-    const response = await fetch(LOGO_PATH);
+    const response = await fetch(path);
     if (!response.ok) return null;
     return new Uint8Array(await response.arrayBuffer());
   } catch {

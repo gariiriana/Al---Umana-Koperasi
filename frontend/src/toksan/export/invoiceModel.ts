@@ -15,6 +15,8 @@ export interface InvoiceInput {
   diskon: number;
   catatan: string;
   pesan: string;
+  /** Chosen from INVOICE_TAGS. */
+  tags: string[];
 }
 
 export interface InvoiceLine {
@@ -47,6 +49,15 @@ export interface InvoiceModel {
   fileName: string;
 }
 
+/** Tag list as in Kasma (the numbering is part of each tag name). */
+export const INVOICE_TAGS = ["1. Kasma Katering", "1.1 Dapur Katering", "1.2 Dapur Bakery", "1.2 Katering Internal", "1.3 Dapur Hangat Saji"] as const;
+
+const DAPUR_TAG: Record<Dapur, string> = { bakery: "1.2 Dapur Bakery", hangat_saji: "1.3 Dapur Hangat Saji", depan: "1. Kasma Katering" };
+
+export function defaultInvoiceTag(dapur: Dapur): string {
+  return DAPUR_TAG[dapur];
+}
+
 const DAPUR_CODE: Record<Dapur, string> = { bakery: "BKR", hangat_saji: "HS", depan: "DPN" };
 
 /** "8.500,00": the Kasma invoice money format. */
@@ -71,7 +82,7 @@ export function buildInvoiceModel(data: RekapData, input: InvoiceInput): Invoice
     tanggal: tgl(input.tanggal),
     jatuhTempo: tgl(input.jatuhTempo),
     pelanggan: "Toko Santri (Toksan)",
-    tags: `Toko Santri, ${unit}`,
+    tags: INVOICE_TAGS.filter((t) => input.tags.includes(t)).join(", ") || "-",
     lines: sold.map((p, i) => ({
       no: i + 1,
       keterangan: p.productName,

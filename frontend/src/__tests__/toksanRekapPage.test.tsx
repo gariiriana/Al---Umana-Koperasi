@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { RekapData } from "@/toksan/types";
 
 const NABILA = { displayName: "toksan@alumana.id", holderName: "Nabila", role: "toksan" };
@@ -101,12 +101,17 @@ describe("Rekap page: Invoice tab", () => {
     expect(screen.queryByText("Risol Mayo")).toBeNull();
     expect(screen.getByText("DELAPAN RATUS DUA PULUH LIMA RIBU ENAM RATUS RUPIAH")).toBeTruthy();
     expect((screen.getByLabelText("No. Faktur") as HTMLInputElement).value).toBe("TKS-HS-20261114");
+    const tags = within(screen.getByRole("group", { name: "Tag" }));
+    expect(tags.getAllByRole("button").map((b) => b.textContent)).toEqual(["1. Kasma Katering", "1.1 Dapur Katering", "1.2 Dapur Bakery", "1.2 Katering Internal", "1.3 Dapur Hangat Saji"]);
+    expect(tags.getByRole("button", { name: "1.3 Dapur Hangat Saji" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(tags.getByRole("button", { name: "1. Kasma Katering" }));
 
     fireEvent.change(screen.getByLabelText("Diskon (Rp)"), { target: { value: "600" } });
     fireEvent.click(screen.getByRole("button", { name: /Export Invoice PDF/ }));
     await waitFor(() => expect(fake.invoice).toHaveBeenCalled());
     const model = fake.invoice.mock.calls[0][0];
     expect([model.unit, model.pelanggan, model.total, model.jatuhTempo]).toEqual(["Dapur Hangat Saji", "Toko Santri (Toksan)", "825.000,00", "21-11-2026"]);
+    expect(model.tags).toBe("1. Kasma Katering, 1.3 Dapur Hangat Saji");
   });
 
   it("changing the dates reloads the sales for that range", async () => {

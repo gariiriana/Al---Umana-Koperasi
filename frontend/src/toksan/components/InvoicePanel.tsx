@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FileDown, Loader2 } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
 import { getRekap } from "@/toksan/api";
-import { buildInvoiceModel, defaultInvoiceNumber } from "@/toksan/export/invoiceModel";
+import { INVOICE_TAGS, buildInvoiceModel, defaultInvoiceNumber, defaultInvoiceTag } from "@/toksan/export/invoiceModel";
 import { DAPUR_LABEL, toksanErrorMessage } from "@/toksan/format";
 import { digitsOnly } from "@/toksan/logic/inputRows";
 import { addDays, todayWib, weekLabel, weekRange } from "@/toksan/logic/period";
@@ -31,6 +31,7 @@ export function InvoicePanel() {
   const [diskon, setDiskon] = useState<number | null>(null);
   const [catatanEdited, setCatatanEdited] = useState<string | null>(null);
   const [pesan, setPesan] = useState(() => readPesan("bakery"));
+  const [tags, setTags] = useState<string[]>([defaultInvoiceTag("bakery")]);
   const [data, setData] = useState<RekapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -52,14 +53,15 @@ export function InvoicePanel() {
   }, [dari, sampai, rangeValid, showToast]);
 
   const model = useMemo(
-    () => (data ? buildInvoiceModel(data, { dapur, nomor, tanggal, jatuhTempo, diskon: diskon ?? 0, catatan, pesan }) : null),
-    [data, dapur, nomor, tanggal, jatuhTempo, diskon, catatan, pesan],
+    () => (data ? buildInvoiceModel(data, { dapur, nomor, tanggal, jatuhTempo, diskon: diskon ?? 0, catatan, pesan, tags }) : null),
+    [data, dapur, nomor, tanggal, jatuhTempo, diskon, catatan, pesan, tags],
   );
 
   const pickDapur = (d: Dapur) => {
     setDapur(d);
     setNomorEdited(null);
     setPesan(readPesan(d));
+    setTags([defaultInvoiceTag(d)]);
   };
 
   const runExport = async () => {
@@ -114,6 +116,25 @@ export function InvoicePanel() {
           <label className={labelCls}>Diskon (Rp)
             <input inputMode="numeric" aria-label="Diskon (Rp)" value={diskon ?? ""} placeholder="0" onChange={(e) => setDiskon(digitsOnly(e.target.value))} className={`mt-1 ${field}`} />
           </label>
+          <div className="sm:col-span-2">
+            <p className={labelCls} id="invoice-tag-label">Tag</p>
+            <div role="group" aria-labelledby="invoice-tag-label" className="mt-1 flex flex-wrap gap-2">
+              {INVOICE_TAGS.map((t) => {
+                const on = tags.includes(t);
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setTags((prev) => (on ? prev.filter((x) => x !== t) : [...prev, t]))}
+                    className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${on ? "border-[#F59E0B] bg-[#FBBF24] text-[#111827]" : "border-[#E5E7EB] bg-white text-[#4B5563] hover:border-[#FBBF24]"}`}
+                  >
+                    {t}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <label className={`${labelCls} sm:col-span-2`}>Catatan
             <input aria-label="Catatan" value={catatan} onChange={(e) => setCatatanEdited(e.target.value)} className={`mt-1 ${field}`} />
           </label>
