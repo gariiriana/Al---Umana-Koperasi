@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { NavLink, Link, useLocation } from "react-router-dom";
+import { NavLink, Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { ROLE_DEFAULT_REDIRECT, isCourierRole } from "@/constants/roles";
 import { navItemsForRole } from "./navItems";
@@ -157,11 +157,11 @@ export function Sidebar({
 }: SidebarProps) {
   const { lang } = useLanguage();
   const { user, profile } = useAuth();
-  const location = useLocation();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [hasPastDeadlineOrders, setHasPastDeadlineOrders] = useState(false);
 
-  const isToksan = userRole === "toksan" || location.pathname.startsWith("/toksan");
+  // Only the toksan role (5 items in the bottom bar) goes without the drawer; super_admin/developer keep it on /toksan pages.
+  const isToksan = userRole === "toksan";
 
   useEffect(() => {
     if (!userRole) return;

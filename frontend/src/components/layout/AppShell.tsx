@@ -1,6 +1,6 @@
 import { LogOut, Settings, Bell, Globe, HelpCircle, Tag, Menu } from "lucide-react";
 import { useState, useEffect, ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUnreadCount } from "@/services/notificationService";
@@ -36,13 +36,13 @@ export function AppShell({
 }: AppShellProps) {
   const { lang, setLang } = useLanguage();
   const { user, profile } = useAuth();
-  const location = useLocation();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  const isToksan = userRole === "toksan" || location.pathname.startsWith("/toksan");
+  // Only the toksan role (5 items in the bottom bar) goes without the drawer; super_admin/developer keep it on /toksan pages.
+  const isToksan = userRole === "toksan";
 
   useEffect(() => {
     if (!user) {

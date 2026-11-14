@@ -45,4 +45,15 @@ describe("staff AppShell", () => {
     );
     expect(screen.getByTitle("Open Sidebar")).toBeTruthy();
   });
+
+  it("keeps the hamburger for super_admin even on a Toksan page (else Lainnya/menu is unreachable)", () => {
+    render(
+      <MemoryRouter initialEntries={["/toksan/input"]}>
+        <AppShell userRole="super_admin" userName="Gari">
+          <p>Isi Toksan</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTitle("Open Sidebar")).toBeTruthy();
+  });
 });
