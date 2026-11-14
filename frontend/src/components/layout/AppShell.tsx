@@ -5,7 +5,6 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUnreadCount } from "@/services/notificationService";
 import { Sidebar } from "./Sidebar";
-import { Footer } from "./Footer";
 import { MobileNav } from "./MobileNav";
 import { ROLE_DEFAULT_REDIRECT } from "@/constants/roles";
 
@@ -277,10 +276,9 @@ export function AppShell({
         </header>
 
         {/* ── Main content ───────────────────────────────────────── */}
-        {/* Di HP: ruang bawah untuk navigasi tab; footer situs disembunyikan (tampilan aplikasi). */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F3F4F6] flex flex-col justify-between min-w-0 w-full pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0">
+        {/* Di HP: ruang bawah untuk navigasi tab. Footer situs hanya di toko pelanggan, tidak di aplikasi staf. */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F3F4F6] flex flex-col min-w-0 w-full pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0">
           <div className="px-3 sm:px-4 md:px-6 py-4 md:py-5 w-full min-w-0">{children}</div>
-          <div className="hidden md:block"><Footer /></div>
         </main>
       </div>
 
