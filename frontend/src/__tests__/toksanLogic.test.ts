@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { datesBetween, monthLabel, monthRange, todayWib, weekLabel, weekRange } from "@/toksan/logic/period";
-import { addProduct, applyToSelected, dayTotal, fromPenjualan, rowTotal, toPayload, validateRows, type InputRow } from "@/toksan/logic/inputRows";
+import { addProduct, addProducts, applyToSelected, dayTotal, fromPenjualan, rowTotal, toPayload, validateRows, type InputRow } from "@/toksan/logic/inputRows";
 import type { Produk } from "@/toksan/types";
 
 const produk = (over: Partial<Produk> = {}): Produk => ({
@@ -110,5 +110,29 @@ describe("input rows", () => {
       { id: "s1", productId: "p1", sesi: "pagi", pihak: "rijal", jumlah: 30, retur: 2 },
       { productId: "p2", sesi: "siang", pihak: "nisaa", jumlah: 4, retur: 0 },
     ]);
+  });
+});
+
+describe("addProducts (Pilih Produk sheet)", () => {
+  const risol = produk();
+  const dimsum = produk({ id: "p2", name: "Dimsum", dapur: "hangat_saji", harga: 8600 });
+
+  it("adds every picked product with sesi and pihak already set", () => {
+    const out = addProducts([], [risol, dimsum], "siang", "nisaa");
+    expect(out.rows.map((r) => [r.productName, r.sesi, r.pihak, r.jumlah, r.harga])).toEqual([
+      ["Risol Mayo", "siang", "nisaa", null, 3500],
+      ["Dimsum", "siang", "nisaa", null, 8600],
+    ]);
+    expect(out.focusKey).toBe(out.rows[0].key);
+    expect(validateRows(out.rows)[out.rows[0].key]).toEqual(["jumlah"]);
+  });
+
+  it("skips a product already on the day for the same sesi and pihak, and focuses that row", () => {
+    const first = addProducts([], [risol], "pagi", "rijal").rows;
+    const out = addProducts(first, [risol, dimsum], "pagi", "rijal");
+    expect(out.rows.map((r) => r.productName)).toEqual(["Risol Mayo", "Dimsum"]);
+    expect(out.skipped).toEqual(["Risol Mayo"]);
+    expect(out.focusKey).toBe(out.rows[1].key);
+    expect(addProducts(first, [risol], "pagi", "nisaa").rows).toHaveLength(2);
   });
 });

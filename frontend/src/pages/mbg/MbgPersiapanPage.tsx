@@ -87,7 +87,7 @@ export function MbgPersiapanPage() {
   }, [allDailyReports, selectedBatchId]);
 
   return (
-    <div className="min-h-screen bg-slate-50 font-['Hanken_Grotesk',system-ui,sans-serif] px-1 sm:px-4 pt-2 sm:pt-4">
+    <div className="min-h-screen font-['Hanken_Grotesk',system-ui,sans-serif] px-1 sm:px-4 pt-2 sm:pt-4">
       {/* Header: judul + pemilih batch bersama */}
       <div className="max-w-4xl mx-auto bg-white border border-slate-200 rounded-2xl shadow-xs px-4 py-3 mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">

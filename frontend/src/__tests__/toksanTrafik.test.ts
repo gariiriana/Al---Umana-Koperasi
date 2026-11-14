@@ -17,7 +17,10 @@ const DATA: RekapData = {
     line("p2", "Dimsum", "hangat_saji", 8600, 96, 0),
     line("p5", "Paket Kosong", "hangat_saji", 5000, 4, 4), // nothing sold
   ],
-  produkPerSesi: [],
+  produkPerSesi: [
+    { productId: "p1", productName: "Risol Mayo", dapur: "bakery", harga: 3500, sesi: "pagi", produksi: 40, terjual: 37, retur: 3, omzet: 129_500 },
+    { productId: "p2", productName: "Dimsum", dapur: "hangat_saji", harga: 8600, sesi: "siang", produksi: 96, terjual: 96, retur: 0, omzet: 825_600 },
+  ],
   produkPerPihak: [
     { productId: "p1", productName: "Risol Mayo", dapur: "bakery", pihak: "rijal", produksi: 40, terjual: 37, retur: 3, omzet: 129_500 },
     { productId: "p2", productName: "Dimsum", dapur: "hangat_saji", pihak: "nisaa", produksi: 96, terjual: 96, retur: 0, omzet: 825_600 },
@@ -57,6 +60,12 @@ describe("buildTrafik", () => {
     const t = buildTrafik(DATA, { dapur: "semua", pihak: "nisaa" });
     expect(t.terlaris.map((p) => p.name)).toEqual(["Dimsum"]);
     expect(t.kpi.omzet).toBe(825_600);
+  });
+
+  it("sesi filter uses per-sesi product data", () => {
+    const t = buildTrafik(DATA, { dapur: "semua", pihak: "semua", sesi: "pagi" });
+    expect(t.terlaris.map((p) => p.name)).toEqual(["Risol Mayo"]);
+    expect(t.kpi.omzet).toBe(129_500);
   });
 
   it("highest retur: produksi >= 10, sorted by percentage", () => {

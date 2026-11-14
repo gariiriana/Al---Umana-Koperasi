@@ -17,6 +17,7 @@ import {
   type ISectionOptions,
 } from 'docx';
 import type { MbgPmEntry } from '@/types/mbg';
+import { exportInstitutionName } from '@/lib/mbgExportInstitutionName';
 
 function dataUriToUint8Array(dataUri: string): Uint8Array | null {
   try {
@@ -396,7 +397,7 @@ export async function generateMbgDistributionDocx(
               children: [
                 new Paragraph({
                   children: [
-                    new TextRun({ text: entry.institutionName, bold: true, size: 18 }),
+                    new TextRun({ text: exportInstitutionName(entry.institutionName), bold: true, size: 18 }),
                     new TextRun({
                       text: `\nPorsi: ${entry.jumlah}`,
                       size: 16,

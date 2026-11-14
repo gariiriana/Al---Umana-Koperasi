@@ -112,12 +112,14 @@ describe("rekap PDF", () => {
     expect(raw).toContain("YAYASAN LEMBAGA WAKAF AL UMANAA");
     expect(raw).toContain("Risol Mayo");
     expect(raw).toContain(`Halaman 1 dari ${doc.getNumberOfPages()}`);
+    expect(raw).not.toContain("Admin Toksan");
+    expect(raw).not.toContain("Sukabumi,");
     if (process.env.TOKSAN_PDF_OUT) writeFileSync(process.env.TOKSAN_PDF_OUT, new Uint8Array(doc.output("arraybuffer")));
   });
 });
 
 describe("rekap DOCX", () => {
-  it("contains the letterhead and the product rows", async () => {
+  it("contains the letterhead and the product rows without TTD block", async () => {
     const blob = await buildRekapDocxBlob(buildRekapModel(DATA, "mingguan", "Nabila", "2026-11-15"), null);
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
     const xml = await zip.file("word/document.xml")!.async("string");
@@ -125,5 +127,7 @@ describe("rekap DOCX", () => {
     expect(xml).toContain("TOKO SANTRI — Rekap Penjualan Mingguan");
     expect(xml).toContain("Risol Mayo");
     expect(xml).toContain("Rp1.049.100");
+    expect(xml).not.toContain("Admin Toksan");
+    expect(xml).not.toContain("Sukabumi,");
   });
 });

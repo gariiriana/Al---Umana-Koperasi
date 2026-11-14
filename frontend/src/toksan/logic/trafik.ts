@@ -5,6 +5,7 @@ import type { Dapur, Pihak, RekapData, Sesi } from "@/toksan/types";
 export interface TrafikFilter {
   dapur: Dapur | "semua";
   pihak: Pihak | "semua";
+  sesi?: Sesi | "semua";
 }
 
 export interface ProdukTrafik {
@@ -33,9 +34,19 @@ const oneDecimal = (n: number) => Math.round(n * 10) / 10;
 const byName = (a: ProdukTrafik, b: ProdukTrafik) => a.name.localeCompare(b.name, "id");
 
 function products(data: RekapData, filter: TrafikFilter): ProdukTrafik[] {
-  const source = filter.pihak === "semua" ? data.produk : data.produkPerPihak.filter((p) => p.pihak === filter.pihak);
+  const sesi = filter.sesi ?? "semua";
+  let list: (RekapData["produk"][number] | RekapData["produkPerSesi"][number] | RekapData["produkPerPihak"][number])[];
+  if (sesi !== "semua" && filter.pihak !== "semua" && data.produkDetail) {
+    list = data.produkDetail.filter((p) => p.sesi === sesi && p.pihak === filter.pihak);
+  } else if (sesi !== "semua") {
+    list = data.produkPerSesi.filter((p) => p.sesi === sesi);
+  } else if (filter.pihak !== "semua") {
+    list = data.produkPerPihak.filter((p) => p.pihak === filter.pihak);
+  } else {
+    list = data.produk;
+  }
   const merged = new Map<string, ProdukTrafik>();
-  for (const p of source) {
+  for (const p of list) {
     if (filter.dapur !== "semua" && p.dapur !== filter.dapur) continue;
     const current = merged.get(p.productId) ?? { productId: p.productId, name: p.productName, dapur: p.dapur, produksi: 0, terjual: 0, retur: 0, omzet: 0 };
     current.produksi += p.produksi;

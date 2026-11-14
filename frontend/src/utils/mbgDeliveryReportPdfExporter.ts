@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { MbgDeliveryDocument } from '@/services/mbgDeliveryService';
 import type { MbgPmEntry, MbgDeliveryTask } from '@/types/mbg';
+import { exportInstitutionName } from '@/lib/mbgExportInstitutionName';
 
 export interface LoadedImageInfo {
   dataUrl: string;
@@ -428,7 +429,7 @@ export async function exportMbgDeliveryReportPdf({
     const tableRows = activeEntries.map((entry, idx) => {
       return [
         `${idx + 1}.`,
-        `${entry.institutionName || '-'}\n(${entry.jumlah || 0} Porsi)`,
+        `${exportInstitutionName(entry.institutionName)}\n(${entry.jumlah || 0} Porsi)`,
         '', // MENU photo cell
         '', // SERAH TERIMA photo cell
         '', // SURAT JALAN photo cell
@@ -863,7 +864,7 @@ export async function exportMbgDailyDistributionReportPdf({
       const scheduleText = entry.jadwalPengantaran ? `\nJam: ${entry.jadwalPengantaran}` : '';
       return [
         `${idx + 1}.`,
-        `${entry.institutionName || '-'}\n(${entry.jumlah || 0} Porsi)${scheduleText}`,
+        `${exportInstitutionName(entry.institutionName)}\n(${entry.jumlah || 0} Porsi)${scheduleText}`,
         '', // MENU photo cell
         '', // SERAH TERIMA photo cell
         '', // SURAT JALAN photo cell

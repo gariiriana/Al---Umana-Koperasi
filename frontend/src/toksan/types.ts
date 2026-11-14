@@ -92,6 +92,7 @@ export interface RekapData {
   produk: (ProdukLine & { harga: number })[];
   produkPerSesi: (ProdukLine & { harga: number; sesi: Sesi })[];
   produkPerPihak: (ProdukLine & { pihak: Pihak })[];
+  produkDetail?: (ProdukLine & { harga: number; sesi: Sesi; pihak: Pihak })[];
   perHari: (Sums & { tanggal: string })[];
   perSesi: { sesi: Sesi; terjual: number; omzet: number }[];
   perPihak: { pihak: Pihak; terjual: number; omzet: number }[];

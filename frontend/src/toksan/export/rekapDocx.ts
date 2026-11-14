@@ -80,9 +80,6 @@ export async function buildRekapDocxBlob(model: RekapModel, logo: Uint8Array | n
   if (model.obral) children.push(heading(model.obral.title), sectionTable(model.obral));
   children.push(
     new Paragraph({ spacing: { before: 240 }, alignment: AlignmentType.RIGHT, children: [text("TOTAL KESELURUHAN  ", { bold: true, size: 22 }), text(model.grandTotal, { bold: true, size: 26 })] }),
-    new Paragraph({ spacing: { before: 480 }, alignment: AlignmentType.RIGHT, children: [text(model.footer.tempatTanggal)] }),
-    new Paragraph({ alignment: AlignmentType.RIGHT, children: [text(model.footer.jabatan)] }),
-    new Paragraph({ spacing: { before: 900 }, alignment: AlignmentType.RIGHT, children: [new TextRun({ text: model.footer.nama, bold: true, underline: {}, size: 18, font: FONT })] }),
   );
 
   const doc = new Document({

@@ -110,18 +110,7 @@ export function buildRekapPdf(model: RekapModel, logoDataUrl: string | null): js
   doc.setFontSize(12);
   doc.text(model.grandTotal, width - MARGIN - 4, y + 1.4, { align: "right" });
 
-  const signX = width - MARGIN - 45;
-  y = ensureSpace(doc, y + 16, 30);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
-  doc.text(model.footer.tempatTanggal, signX, y, { align: "center" });
-  doc.text(model.footer.jabatan, signX, y + 5, { align: "center" });
-  doc.setFont("helvetica", "bold");
-  doc.text(model.footer.nama, signX, y + 26, { align: "center" });
-  const nameWidth = doc.getTextWidth(model.footer.nama);
-  doc.setLineWidth(0.3);
-  doc.setDrawColor(...DARK);
-  doc.line(signX - nameWidth / 2, y + 27, signX + nameWidth / 2, y + 27);
+
 
   const pages = doc.getNumberOfPages();
   for (let p = 1; p <= pages; p++) {

@@ -1,16 +1,17 @@
 // Input Harian Toksan: pilih produk, centang sesi & pihak sekaligus, ketik jumlah & retur saja.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Save, Trash2 } from "lucide-react";
+import { Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
 import { ToksanApiError, getPenjualan, listProduk, savePenjualan } from "@/toksan/api";
 import { ChipToggle } from "@/toksan/components/ChipToggle";
 import { ProductPicker } from "@/toksan/components/ProductPicker";
+import { ProductSheet } from "@/toksan/components/ProductSheet";
 import { DAPUR_LABEL, PIHAK_LABEL, SESI_LABEL, formatAngka, formatRupiah, formatTanggalPanjang, toksanErrorMessage } from "@/toksan/format";
 import {
-  addProduct, applyToSelected, dayTotal, digitsOnly, fromPenjualan, rowTotal, toPayload, validateRows, type InputRow, type RowProblem,
+  addProduct, addProducts, applyToSelected, dayTotal, digitsOnly, fromPenjualan, rowTotal, toPayload, validateRows, type InputRow, type RowProblem,
 } from "@/toksan/logic/inputRows";
 import { todayWib } from "@/toksan/logic/period";
-import { PIHAK_LIST, SESI_LIST, type Produk, type Sesi } from "@/toksan/types";
+import { PIHAK_LIST, SESI_LIST, type Pihak, type Produk, type Sesi } from "@/toksan/types";
 
 const SESI_OPTIONS = SESI_LIST.map((value) => ({ value, label: SESI_LABEL[value] }));
 const PIHAK_OPTIONS = PIHAK_LIST.map((value) => ({ value, label: PIHAK_LABEL[value] }));
@@ -20,7 +21,7 @@ const PROBLEM_TEXT: Record<RowProblem, string> = {
   pihak: "pilih Rijal/Nisaa",
   jumlah: "isi jumlah",
   retur: "retur melebihi jumlah",
-  duplikat: "dobel (produk, sesi & pihak sama)",
+  duplikat: "dobel (sudah ada untuk sesi & pihak ini)",
 };
 
 // Draft per tanggal di browser ini: pindah menu / tutup aplikasi tidak menghapus isian yang belum disimpan.
@@ -30,13 +31,21 @@ function readDraft(tanggal: string): Draft | null {
   try {
     const raw = localStorage.getItem(draftKey(tanggal));
     const draft = raw ? (JSON.parse(raw) as Draft) : null;
-    return draft && Array.isArray(draft.rows) && Array.isArray(draft.hapus) ? draft : null;
+    return draft && Array.isArray(draft.rows) && Array.isArray(draft.hapus) && (draft.rows.length > 0 || draft.hapus.length > 0)
+      ? draft
+      : null;
   } catch {
     return null;
   }
 }
 function writeDraft(tanggal: string, draft: Draft) {
-  try { localStorage.setItem(draftKey(tanggal), JSON.stringify(draft)); } catch { /* storage penuh/diblok: tetap jalan tanpa draft */ }
+  try {
+    if (draft.rows.length === 0 && draft.hapus.length === 0) {
+      localStorage.removeItem(draftKey(tanggal));
+    } else {
+      localStorage.setItem(draftKey(tanggal), JSON.stringify(draft));
+    }
+  } catch { /* storage penuh/diblok: tetap jalan tanpa draft */ }
 }
 function clearDraft(tanggal: string) {
   try { localStorage.removeItem(draftKey(tanggal)); } catch { /* ignore */ }
@@ -53,6 +62,8 @@ export function InputHarianPage() {
   const [rows, setRows] = useState<InputRow[]>([]);
   const [hapus, setHapus] = useState<string[]>([]);
   const [lastSesi, setLastSesi] = useState<Sesi>("pagi");
+  const [lastPihak, setLastPihak] = useState<Pihak | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -69,6 +80,7 @@ export function InputHarianPage() {
     setLoading(true);
     setLoadError(false);
     setRows([]);
+    setServerRows([]);
     setHapus([]);
     setDirty(false);
     setDraftRestored(false);
@@ -79,13 +91,14 @@ export function InputHarianPage() {
       setProduk(list);
       setServerRows(fromServer);
       const draft = readDraft(date);
-      if (draft) {
+      if (draft && draft.rows.length > 0) {
         setRows(draft.rows);
         setHapus(draft.hapus);
         setDirty(true);
         setDraftRestored(true);
       } else {
-        setRows(fromServer);
+        clearDraft(date);
+        setRows([]);
       }
     } catch (err) {
       if (seq !== loadSeq.current) return;
@@ -99,7 +112,9 @@ export function InputHarianPage() {
   useEffect(() => { void load(tanggal); }, [load, tanggal]);
 
   useEffect(() => {
-    if (dirty && !loading) writeDraft(tanggal, { rows, hapus });
+    if (dirty && !loading && (rows.length > 0 || hapus.length > 0)) {
+      writeDraft(tanggal, { rows, hapus });
+    }
   }, [dirty, loading, tanggal, rows, hapus]);
 
   useEffect(() => {
@@ -113,7 +128,7 @@ export function InputHarianPage() {
     if (focusKey) rowRefs.current.get(focusKey)?.scrollIntoView?.({ behavior: "smooth", block: "center" });
   }, [focusKey]);
 
-  const problems = useMemo(() => validateRows(rows), [rows]);
+  const problems = useMemo(() => validateRows(rows, serverRows), [rows, serverRows]);
   const problemCount = Object.keys(problems).length;
   const selectedCount = rows.filter((r) => r.selected).length;
   const allSelected = rows.length > 0 && selectedCount === rows.length;
@@ -132,9 +147,50 @@ export function InputHarianPage() {
     setFocusKey(result.focusKey);
   };
 
+  const onAddProducts = (picked: Produk[], sesi: Sesi, pihak: Pihak) => {
+    setSheetOpen(false);
+    setLastSesi(sesi);
+    setLastPihak(pihak);
+    if (loading || loadError) return;
+    const result = addProducts(rows, picked, sesi, pihak);
+    if (result.rows !== rows) update(result.rows);
+    setFocusKey(result.focusKey);
+    if (result.skipped.length) {
+      showToast({ message: `Sudah ada di ${SESI_LABEL[sesi]} · ${PIHAK_LABEL[pihak]}: ${result.skipped.join(", ")}`, variant: "info" });
+    }
+  };
+
   const removeRow = (row: InputRow) => {
     if (row.id) setHapus((ids) => [...ids, row.id as string]);
     update(rows.filter((r) => r.key !== row.key));
+  };
+
+  const deleteServerRow = async (row: InputRow) => {
+    if (!row.id) return;
+    const sesiLabel = row.sesi ? SESI_LABEL[row.sesi] : "-";
+    const pihakLabel = row.pihak ? PIHAK_LABEL[row.pihak] : "-";
+    if (!window.confirm(`Hapus entri ${row.productName} (${sesiLabel} · ${pihakLabel}) dari rekap?`)) return;
+    setSaving(true);
+    try {
+      const saved = await savePenjualan(tanggal, [], [row.id]);
+      const fresh = fromPenjualan(saved);
+      setServerRows(fresh);
+      showToast({ message: `${row.productName} berhasil dihapus dari rekap.`, variant: "success" });
+    } catch (err) {
+      showToast({ message: toksanErrorMessage(err), variant: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editServerRow = (row: InputRow) => {
+    if (rows.some((r) => r.id === row.id)) {
+      setFocusKey(row.id ?? row.key);
+      return;
+    }
+    update([...rows, { ...row, selected: false }]);
+    setFocusKey(row.key);
+    showToast({ message: `${row.productName} dimasukkan ke form untuk diedit.`, variant: "info" });
   };
 
   const changeDate = (next: string) => {
@@ -143,6 +199,7 @@ export function InputHarianPage() {
     if (dirty) clearDraft(tanggal);
     // Same render as the date change, so the draft effect never files these rows under the new date.
     setRows([]);
+    setServerRows([]);
     setHapus([]);
     setDirty(false);
     setLoading(true);
@@ -151,25 +208,26 @@ export function InputHarianPage() {
 
   const discardDraft = () => {
     clearDraft(tanggal);
-    setRows(serverRows);
+    setRows([]);
     setHapus([]);
     setDirty(false);
     setDraftRestored(false);
   };
 
   const save = async () => {
+    if (rows.length === 0 && hapus.length === 0) return;
     setSaving(true);
     try {
       const saved = await savePenjualan(tanggal, toPayload(rows), hapus);
       const fresh = fromPenjualan(saved);
       clearDraft(tanggal);
-      setRows(fresh);
+      setRows([]); // Form input harian kosong lagi, siap untuk input sesi berikutnya!
       setServerRows(fresh);
       setHapus([]);
       setDirty(false);
       setDraftRestored(false);
       setFocusKey(null);
-      showToast({ message: "Penjualan tersimpan.", variant: "success" });
+      showToast({ message: "Penjualan berhasil disimpan dan masuk ke rekap.", variant: "success" });
     } catch (err) {
       const index = err instanceof ToksanApiError ? err.details?.row : undefined;
       if (index !== undefined && rows[index]) setFocusKey(rows[index].key);
@@ -198,7 +256,97 @@ export function InputHarianPage() {
         </label>
       </header>
 
-      <ProductPicker produk={produk} onPick={onPick} />
+      {serverRows.length > 0 && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
+                <p className="text-sm font-bold text-emerald-950">
+                  Data Tersimpan di Rekap Hari Ini: {serverRows.length} entri ({formatRupiah(dayTotal(serverRows))})
+                </p>
+              </div>
+              <p className="mt-0.5 text-xs text-emerald-700">
+                Data pagi, siang, dan sore otomatis disatukan di menu Rekap. Form di bawah siap untuk input sesi baru.
+              </p>
+            </div>
+            <a
+              href="/toksan/rekap"
+              className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-emerald-700"
+            >
+              Buka Rekap →
+            </a>
+          </div>
+
+          <div className="mt-3 border-t border-emerald-200/80 pt-3">
+            <div className="space-y-2">
+              {serverRows.map((sr) => {
+                const { terjual, total } = rowTotal(sr);
+                return (
+                  <div
+                    key={sr.id ?? sr.key}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-white px-3 py-2 text-xs shadow-2xs"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <span className="font-bold text-[#111827]">{sr.productName}</span>
+                      <span className="ml-2 inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                        {sr.sesi ? SESI_LABEL[sr.sesi] : "-"} · {sr.pihak ? PIHAK_LABEL[sr.pihak] : "-"}
+                      </span>
+                      <p className="mt-0.5 text-[#6B7280]">
+                        Jumlah: {formatAngka(sr.jumlah ?? 0)} · Retur: {formatAngka(sr.retur ?? 0)} · Terjual: {formatAngka(terjual)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-[#111827]">{formatRupiah(total)}</span>
+                      <button
+                        type="button"
+                        aria-label={`Edit ${sr.productName}`}
+                        onClick={() => editServerRow(sr)}
+                        className="rounded-lg bg-amber-50 px-2 py-1 font-semibold text-amber-800 hover:bg-amber-100"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Hapus ${sr.productName}`}
+                        onClick={() => void deleteServerRow(sr)}
+                        className="rounded-lg bg-red-50 px-2 py-1 font-semibold text-red-600 hover:bg-red-100"
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="min-w-0 flex-1">
+          <ProductPicker produk={produk} onPick={onPick} />
+        </div>
+        <button
+          type="button"
+          onClick={() => setSheetOpen(true)}
+          disabled={loading || loadError}
+          className="flex shrink-0 items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#F59E0B] bg-white px-4 py-3 text-base font-bold text-[#92400E] shadow-xs hover:bg-[#FFFBEB] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Plus className="h-5 w-5 text-[#B45309]" aria-hidden="true" /> Pilih Produk
+        </button>
+      </div>
+      {sheetOpen && (
+        <ProductSheet
+          produk={produk}
+          rows={rows}
+          serverRows={serverRows}
+          initialSesi={lastSesi}
+          initialPihak={lastPihak}
+          onAdd={onAddProducts}
+          onClose={() => setSheetOpen(false)}
+        />
+      )}
 
       <div
         role="toolbar"
@@ -243,7 +391,7 @@ export function InputHarianPage() {
         </div>
       </div>
 
-      {draftRestored && (
+      {draftRestored && rows.length > 0 && (
         <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#FCD34D] bg-[#FEF3C7] px-4 py-3 text-sm text-[#92400E]">
           <span className="font-semibold">Isian yang belum disimpan sudah dipulihkan. Cek lalu tekan Simpan.</span>
           <button type="button" onClick={discardDraft} className="rounded-full border border-[#F59E0B] bg-white px-3 py-1 font-semibold hover:bg-[#FFFBEB]">
@@ -266,8 +414,14 @@ export function InputHarianPage() {
         </div>
       ) : rows.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[#E5E7EB] bg-white px-6 py-10 text-center">
-          <p className="text-lg font-bold text-[#111827]">Belum ada penjualan di tanggal ini</p>
-          <p className="mt-1 text-sm text-[#6B7280]">Cari produk di atas untuk mulai menambah.</p>
+          <p className="text-lg font-bold text-[#111827]">
+            {serverRows.length > 0 ? "Form input kosong, siap untuk sesi berikutnya" : "Belum ada penjualan di tanggal ini"}
+          </p>
+          <p className="mt-1 text-sm text-[#6B7280]">
+            {serverRows.length > 0
+              ? "Ketik nama produk di atas atau gunakan tombol \"Pilih Produk\" untuk menambah penjualan sesi Siang / Sore."
+              : "Cari produk di atas atau gunakan tombol \"Pilih Produk\" untuk mulai menambah."}
+          </p>
         </div>
       ) : (
         <ul className="space-y-3">
@@ -368,13 +522,21 @@ export function InputHarianPage() {
       <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+72px)] z-30 px-4 md:bottom-4 md:left-60">
         <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-[#6B7280]">Total hari ini{problemCount > 0 ? ` · ${problemCount} baris belum lengkap` : ""}</p>
-            <p data-testid="total-hari" className="text-lg font-bold text-[#111827]">{formatRupiah(dayTotal(rows))}</p>
+            <p className="text-xs text-[#6B7280]">
+              {rows.length > 0
+                ? `Total input saat ini${problemCount > 0 ? ` · ${problemCount} baris belum lengkap` : ""}`
+                : serverRows.length > 0
+                ? `Total hari ini (tersimpan di rekap)`
+                : `Total hari ini`}
+            </p>
+            <p data-testid="total-hari" className="text-lg font-bold text-[#111827]">
+              {rows.length > 0 ? formatRupiah(dayTotal(rows)) : formatRupiah(dayTotal(serverRows))}
+            </p>
           </div>
           <button
             type="button"
             onClick={() => void save()}
-            disabled={saving || loading || loadError || !dirty || problemCount > 0}
+            disabled={saving || loading || loadError || rows.length === 0 || !dirty || problemCount > 0}
             className="flex items-center gap-2 rounded-full bg-[#FBBF24] px-5 py-3 text-base font-bold text-[#111827] shadow-sm hover:bg-[#F59E0B] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Save className="h-5 w-5" aria-hidden="true" />}

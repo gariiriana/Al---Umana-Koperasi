@@ -55,6 +55,35 @@ export function addProduct(rows: InputRow[], produk: Produk, lastSesi: Sesi | nu
   return { rows: [...rows, row], focusKey: row.key };
 }
 
+/**
+ * Adds every picked product as a complete row (sesi + pihak set; only jumlah/retur left to type).
+ * A product already on the day for the same sesi and pihak is skipped, not doubled.
+ * Focus goes to the first new row, or to the first skipped one when nothing was new.
+ */
+export function addProducts(
+  rows: InputRow[], picked: Produk[], sesi: Sesi, pihak: Pihak,
+): { rows: InputRow[]; focusKey: string | null; skipped: string[] } {
+  const existing = new Map(rows.filter((r) => r.sesi === sesi && r.pihak === pihak).map((r) => [r.productId, r.key]));
+  const added: InputRow[] = [];
+  const skipped: string[] = [];
+  let firstSkippedKey: string | null = null;
+  for (const p of picked) {
+    const key = existing.get(p.id);
+    if (key) {
+      skipped.push(p.name);
+      firstSkippedKey ??= key;
+      continue;
+    }
+    const row: InputRow = {
+      key: newKey(), productId: p.id, productName: p.name, dapur: p.dapur, harga: p.harga,
+      sesi, pihak, jumlah: null, retur: null, selected: false,
+    };
+    existing.set(p.id, row.key);
+    added.push(row);
+  }
+  return { rows: added.length ? [...rows, ...added] : rows, focusKey: added[0]?.key ?? firstSkippedKey, skipped };
+}
+
 export function applyToSelected(rows: InputRow[], patch: { sesi?: Sesi; pihak?: Pihak }): InputRow[] {
   return rows.map((r) => (r.selected ? { ...r, ...patch } : r));
 }
@@ -62,9 +91,14 @@ export function applyToSelected(rows: InputRow[], patch: { sesi?: Sesi; pihak?: 
 const isCount = (n: number | null): n is number => typeof n === "number" && Number.isInteger(n) && n >= 0;
 
 /** Problems per row key; an empty object means the day can be saved. */
-export function validateRows(rows: InputRow[]): Record<string, RowProblem[]> {
+export function validateRows(rows: InputRow[], serverRows: InputRow[] = []): Record<string, RowProblem[]> {
   const problems: Record<string, RowProblem[]> = {};
   const seen = new Set<string>();
+  const serverKeys = new Set(
+    serverRows
+      .filter((s) => s.sesi && s.pihak)
+      .map((s) => `${s.productId}|${s.sesi}|${s.pihak}`),
+  );
   for (const r of rows) {
     const list: RowProblem[] = [];
     if (!r.sesi) list.push("sesi");
@@ -73,7 +107,7 @@ export function validateRows(rows: InputRow[]): Record<string, RowProblem[]> {
     if (r.retur !== null && (!isCount(r.retur) || (isCount(r.jumlah) && r.retur > r.jumlah))) list.push("retur");
     if (r.sesi && r.pihak) {
       const key = `${r.productId}|${r.sesi}|${r.pihak}`;
-      if (seen.has(key)) list.push("duplikat");
+      if (seen.has(key) || (!r.id && serverKeys.has(key))) list.push("duplikat");
       seen.add(key);
     }
     if (list.length) problems[r.key] = list;

@@ -34,6 +34,7 @@ export async function getRekap(ctx) {
   const produk = await all(`SELECT product_id, ${LATEST_NAME}, dapur, harga, ${SUMS} ${WHERE} GROUP BY product_id, dapur, harga ORDER BY ${DAPUR_ORDER}, product_name COLLATE NOCASE, harga`);
   const produkPerSesi = await all(`SELECT product_id, ${LATEST_NAME}, dapur, harga, sesi, ${SUMS} ${WHERE} GROUP BY product_id, dapur, harga, sesi ORDER BY ${DAPUR_ORDER}, product_name COLLATE NOCASE, harga, ${SESI_ORDER}`);
   const produkPerPihak = await all(`SELECT product_id, ${LATEST_NAME}, dapur, pihak, ${SUMS} ${WHERE} GROUP BY product_id, dapur, pihak ORDER BY ${DAPUR_ORDER}, product_name COLLATE NOCASE, ${PIHAK_ORDER}`);
+  const produkDetail = await all(`SELECT product_id, ${LATEST_NAME}, dapur, harga, sesi, pihak, ${SUMS} ${WHERE} GROUP BY product_id, dapur, harga, sesi, pihak ORDER BY ${DAPUR_ORDER}, product_name COLLATE NOCASE, harga, ${SESI_ORDER}, ${PIHAK_ORDER}`);
   const perHari = await all(`SELECT tanggal, ${SUMS} ${WHERE} GROUP BY tanggal ORDER BY tanggal`);
   const perSesi = await all(`SELECT sesi, ${SUMS} ${WHERE} GROUP BY sesi ORDER BY ${SESI_ORDER}`);
   const perPihak = await all(`SELECT pihak, ${SUMS} ${WHERE} GROUP BY pihak ORDER BY ${PIHAK_ORDER}`);
@@ -52,6 +53,7 @@ export async function getRekap(ctx) {
     produk: produk.map((r) => ({ ...productLine(r), harga: r.harga, ...sums(r) })),
     produkPerSesi: produkPerSesi.map((r) => ({ ...productLine(r), harga: r.harga, sesi: r.sesi, ...sums(r) })),
     produkPerPihak: produkPerPihak.map((r) => ({ ...productLine(r), pihak: r.pihak, ...sums(r) })),
+    produkDetail: produkDetail.map((r) => ({ ...productLine(r), harga: r.harga, sesi: r.sesi, pihak: r.pihak, ...sums(r) })),
     perHari: perHari.map((r) => ({ tanggal: r.tanggal, ...sums(r) })),
     perSesi: perSesi.map((r) => ({ sesi: r.sesi, terjual: r.terjual, omzet: r.omzet })),
     perPihak: perPihak.map((r) => ({ pihak: r.pihak, terjual: r.terjual, omzet: r.omzet })),

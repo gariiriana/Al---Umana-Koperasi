@@ -19,7 +19,7 @@ export function TrafikPage() {
   const today = todayWib();
   const [periode, setPeriode] = useState<Periode>("minggu");
   const [custom, setCustom] = useState<Range>(() => weekRange(today));
-  const [filter, setFilter] = useState<TrafikFilter>({ dapur: "semua", pihak: "semua" });
+  const [filter, setFilter] = useState<TrafikFilter>({ dapur: "semua", pihak: "semua", sesi: "semua" });
   const [data, setData] = useState<RekapData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -73,6 +73,10 @@ export function TrafikPage() {
         <select aria-label="Pihak" value={filter.pihak} onChange={(e) => setFilter({ ...filter, pihak: e.target.value as TrafikFilter["pihak"] })} className={select}>
           <option value="semua">Rijal & Nisaa</option>
           {PIHAK_LIST.map((p) => <option key={p} value={p}>{PIHAK_LABEL[p]}</option>)}
+        </select>
+        <select aria-label="Sesi" value={filter.sesi} onChange={(e) => setFilter({ ...filter, sesi: e.target.value as TrafikFilter["sesi"] })} className={select}>
+          <option value="semua">Semua sesi</option>
+          {SESI_LIST.map((s) => <option key={s} value={s}>{SESI_LABEL[s]}</option>)}
         </select>
       </div>
 
