@@ -43,12 +43,35 @@ beforeEach(() => {
   fake.saveObral.mockResolvedValue([]);
 });
 
+// Obral: produk ditambah lewat tombol Pilih Produk (centang di sheet), sama seperti Input Harian.
+async function pickObral(...names: string[]) {
+  fireEvent.click(await screen.findByRole("button", { name: /Pilih Produk/ }));
+  const sheet = within(screen.getByRole("dialog", { name: "Pilih Produk" }));
+  for (const name of names) {
+    if (!sheet.queryByRole("checkbox", { name: new RegExp(name) })) fireEvent.click(sheet.getByRole("tab", { name: /Hangat Saji/ }));
+    fireEvent.click(sheet.getByRole("checkbox", { name: new RegExp(name) }));
+  }
+  fireEvent.click(sheet.getByRole("button", { name: /Tambahkan/ }));
+}
+
 describe("Obral", () => {
+  it("adds products through Pilih Produk, with no search box and no sesi or Rijal/Nisaa", async () => {
+    render(<ObralPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Pilih Produk/ }));
+    expect(screen.queryByLabelText("Cari produk yang diobral")).toBeNull();
+    const sheet = within(screen.getByRole("dialog", { name: "Pilih Produk" }));
+    expect(sheet.queryByRole("group", { name: "Pihak" })).toBeNull();
+    expect(sheet.queryByText("Rijal / Nisaa")).toBeNull();
+    fireEvent.click(sheet.getByRole("checkbox", { name: /Risol Mayo/ }));
+    fireEvent.click(sheet.getByRole("button", { name: /Tambahkan 1 produk/ }));
+    expect(screen.getByRole("listitem", { name: "Obral Risol Mayo" })).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("shows the normal price, computes the total and saves numbers", async () => {
     render(<ObralPage />);
     await waitFor(() => expect(fake.getObral).toHaveBeenCalledWith("2026-11-14"));
-    fireEvent.change(await screen.findByLabelText("Cari produk"), { target: { value: "risol" } });
-    fireEvent.click(await screen.findByRole("option", { name: /Risol Mayo/ }));
+    await pickObral("Risol Mayo");
     const card = screen.getByRole("listitem", { name: "Obral Risol Mayo" });
     expect(within(card).getByText(/Normal Rp3\.500/)).toBeTruthy();
     fireEvent.change(within(card).getByLabelText("Harga obral Risol Mayo"), { target: { value: "2000" } });
@@ -62,8 +85,7 @@ describe("Obral", () => {
 
   it("Simpan stays disabled while jumlah is empty", async () => {
     render(<ObralPage />);
-    fireEvent.change(await screen.findByLabelText("Cari produk"), { target: { value: "dim" } });
-    fireEvent.click(await screen.findByRole("option", { name: /Dimsum/ }));
+    await pickObral("Dimsum");
     fireEvent.change(screen.getByLabelText("Harga obral Dimsum"), { target: { value: "5000" } });
     expect((screen.getByRole("button", { name: /Simpan/ }) as HTMLButtonElement).disabled).toBe(true);
   });

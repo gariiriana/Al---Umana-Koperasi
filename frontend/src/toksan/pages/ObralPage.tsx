@@ -1,9 +1,9 @@
 // Obral: produk dari dapur mana pun dijual lagi dengan harga yang diketik admin.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Save, Tag, Trash2 } from "lucide-react";
+import { Loader2, Plus, Save, Tag, Trash2 } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
 import { getObral, listProduk, saveObral } from "@/toksan/api";
-import { ProductPicker } from "@/toksan/components/ProductPicker";
+import { ProductSheet } from "@/toksan/components/ProductSheet";
 import { DAPUR_LABEL, formatRupiah, formatTanggalPanjang, toksanErrorMessage } from "@/toksan/format";
 import { digitsOnly } from "@/toksan/logic/inputRows";
 import { todayWib } from "@/toksan/logic/period";
@@ -62,10 +62,14 @@ export function ObralPage() {
   const invalidCount = useMemo(() => rows.filter((r) => !isValid(r)).length, [rows]);
   const total = rows.reduce((sum, r) => sum + rowTotal(r), 0);
 
-  const onPick = (p: Produk) => update([...rows, {
-    key: `o${(counter++).toString(36)}`, productId: p.id, productName: p.name, dapur: p.dapur,
-    hargaNormal: p.harga, hargaObral: null, jumlah: null, catatan: "",
-  }]);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const onPick = (picked: Produk[]) => {
+    update([...rows, ...picked.map((p) => ({
+      key: `o${(counter++).toString(36)}`, productId: p.id, productName: p.name, dapur: p.dapur,
+      hargaNormal: p.harga, hargaObral: null, jumlah: null, catatan: "",
+    }))]);
+    setSheetOpen(false);
+  };
 
   const remove = (row: ObralRow) => {
     if (row.id) setHapus((ids) => [...ids, row.id as string]);
@@ -120,7 +124,24 @@ export function ObralPage() {
         </label>
       </header>
 
-      <ProductPicker produk={produk} onPick={onPick} placeholder="Cari produk yang diobral" />
+      <button
+        type="button"
+        onClick={() => setSheetOpen(true)}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#F59E0B] bg-white px-4 py-4 text-base font-bold text-[#B45309] hover:bg-[#FFFBEB]"
+      >
+        <Plus className="h-5 w-5 text-[#B45309]" aria-hidden="true" /> Pilih Produk
+      </button>
+      {sheetOpen && (
+        <ProductSheet
+          forObral
+          produk={produk}
+          rows={[]}
+          initialSesi="pagi"
+          initialPihak={null}
+          onAdd={(picked) => onPick(picked)}
+          onClose={() => setSheetOpen(false)}
+        />
+      )}
 
       {loading ? (
         <p role="status" className="flex items-center justify-center gap-2 rounded-2xl bg-white p-6 text-[#6B7280]">
@@ -130,7 +151,7 @@ export function ObralPage() {
         <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-[#E5E7EB] bg-white px-6 py-10 text-center">
           <Tag className="h-10 w-10 text-[#D1D5DB]" aria-hidden="true" />
           <p className="text-lg font-bold text-[#111827]">Belum ada obral di tanggal ini</p>
-          <p className="text-sm text-[#6B7280]">Cari produk di atas, lalu ketik harga obral dan jumlahnya.</p>
+          <p className="text-sm text-[#6B7280]">Tekan "Pilih Produk" di atas, lalu ketik harga obral dan jumlahnya.</p>
         </div>
       ) : (
         <ul className="space-y-3">

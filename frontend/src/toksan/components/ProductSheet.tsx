@@ -18,11 +18,14 @@ interface ProductSheetProps {
   initialPihak: Pihak | null;
   onAdd: (picked: Produk[], sesi: Sesi, pihak: Pihak) => void;
   onClose: () => void;
+  /** Obral: no sesi or Rijal/Nisaa, and a product may be added again (another obral price). */
+  forObral?: boolean;
 }
 
-export function ProductSheet({ produk, rows, serverRows = [], initialSesi, initialPihak, onAdd, onClose }: ProductSheetProps) {
+export function ProductSheet({ produk, rows, serverRows = [], initialSesi, initialPihak, onAdd, onClose, forObral = false }: ProductSheetProps) {
   const [sesi, setSesi] = useState<Sesi>(initialSesi);
-  const [pihak, setPihak] = useState<Pihak | null>(initialPihak);
+  const [pihakChoice, setPihak] = useState<Pihak | null>(initialPihak);
+  const pihak: Pihak | null = forObral ? "rijal" : pihakChoice; // obral ignores pihak
   const [tab, setTab] = useState<Dapur>("bakery");
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -39,8 +42,8 @@ export function ProductSheet({ produk, rows, serverRows = [], initialSesi, initi
   );
   const allRows = useMemo(() => [...rows, ...serverRows], [rows, serverRows]);
   const already = useMemo(
-    () => new Set(pihak ? allRows.filter((r) => r.sesi === sesi && r.pihak === pihak).map((r) => r.productId) : []),
-    [allRows, sesi, pihak],
+    () => new Set(pihak && !forObral ? allRows.filter((r) => r.sesi === sesi && r.pihak === pihak).map((r) => r.productId) : []),
+    [allRows, sesi, pihak, forObral],
   );
   const q = query.trim().toLowerCase();
   const shown = q ? active.filter((p) => p.name.toLowerCase().includes(q)) : active.filter((p) => p.dapur === tab);
@@ -70,6 +73,7 @@ export function ProductSheet({ produk, rows, serverRows = [], initialSesi, initi
         </header>
 
         <div className="space-y-3 border-b border-[#F3F4F6] px-5 py-3">
+          {!forObral && (<>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <span className="w-24 text-sm font-semibold text-[#374151]">Sesi</span>
             <ChipToggle label="Sesi" options={SESI_OPTIONS} value={sesi} onChange={setSesi} />
@@ -78,6 +82,7 @@ export function ProductSheet({ produk, rows, serverRows = [], initialSesi, initi
             <span className="w-24 text-sm font-semibold text-[#374151]">Rijal / Nisaa</span>
             <ChipToggle label="Pihak" options={PIHAK_OPTIONS} value={pihak} onChange={setPihak} invalid={!pihak && picked.size > 0} />
           </div>
+          </>)}
           <label className="flex items-center gap-2 rounded-xl border border-[#E5E7EB] px-3 py-2 focus-within:border-[#FBBF24]">
             <Search className="h-4 w-4 text-[#9CA3AF]" aria-hidden="true" />
             <input
@@ -144,7 +149,7 @@ export function ProductSheet({ produk, rows, serverRows = [], initialSesi, initi
             className="w-full rounded-full bg-[#FBBF24] px-5 py-3 text-base font-bold text-[#111827] shadow-sm hover:bg-[#F59E0B] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {toAdd.length > 0 ? `Tambahkan ${toAdd.length} produk` : "Tambahkan"}
-            {pihak && toAdd.length > 0 && <span aria-hidden="true">{` · ${SESI_LABEL[sesi]} · ${PIHAK_LABEL[pihak]}`}</span>}
+            {!forObral && pihak && toAdd.length > 0 && <span aria-hidden="true">{` · ${SESI_LABEL[sesi]} · ${PIHAK_LABEL[pihak]}`}</span>}
           </button>
         </footer>
       </div>
