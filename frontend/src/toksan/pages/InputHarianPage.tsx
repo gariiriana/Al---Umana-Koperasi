@@ -288,16 +288,21 @@ export function InputHarianPage() {
                     className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-white px-3 py-2 text-xs shadow-2xs"
                   >
                     <div className="min-w-0 flex-1">
-                      <span className="font-bold text-[#111827]">{sr.productName}</span>
-                      <span className="ml-2 inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
-                        {sr.sesi ? SESI_LABEL[sr.sesi] : "-"} · {sr.pihak ? PIHAK_LABEL[sr.pihak] : "-"}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-bold text-[#111827]">{sr.productName}</span>
+                        <span className="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                          {sr.sesi ? SESI_LABEL[sr.sesi] : "-"} · {sr.pihak ? PIHAK_LABEL[sr.pihak] : "-"}
+                        </span>
+                      </div>
                       <p className="mt-0.5 text-[#6B7280]">
-                        Jumlah: {formatAngka(sr.jumlah ?? 0)} · Retur: {formatAngka(sr.retur ?? 0)} · Terjual: {formatAngka(terjual)}
+                        Harga: <span className="font-semibold text-[#374151]">{formatRupiah(sr.harga)}/pcs</span> · Jumlah: {formatAngka(sr.jumlah ?? 0)} · Retur: {formatAngka(sr.retur ?? 0)} · Terjual: {formatAngka(terjual)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-[#111827]">{formatRupiah(total)}</span>
+                      <div className="text-right">
+                        <span className="block font-bold text-[#111827]">{formatRupiah(total)}</span>
+                        <span className="block text-[10px] text-[#6B7280]">(@ {formatRupiah(sr.harga)})</span>
+                      </div>
                       <button
                         type="button"
                         aria-label={`Edit ${sr.productName}`}
