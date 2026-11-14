@@ -60,4 +60,18 @@ describe("obral API", () => {
     assert.equal((await put([row({ productId: "nope" })])).data.error.code, "PRODUK_TIDAK_ADA");
     assert.equal((await put([row()], [], "2026-11-15")).data.error.code, "TANGGAL_TIDAK_VALID");
   });
+
+  it("an unchanged row keeps who last changed it", async () => {
+    const saved = (await put([row(), row({ hargaObral: 1500 })])).data.rows;
+    const a = saved.find((r) => r.hargaObral === 2000);
+    const b = saved.find((r) => r.hargaObral === 1500);
+    const res = await call(ctx.env, deps, "PUT", "/obral", {
+      token: "boss",
+      body: { tanggal: TODAY, hapus: [], rows: [{ id: a.id, productId: risol, hargaObral: 2000, jumlah: 12 }, { id: b.id, productId: risol, hargaObral: 1500, jumlah: 9 }] },
+    });
+    assert.equal(res.status, 200);
+    const { results } = await ctx.env.DB.prepare("SELECT id, updated_by FROM obral").all();
+    const by = Object.fromEntries(results.map((r) => [r.id, r.updated_by]));
+    assert.deepEqual([by[a.id], by[b.id]], ["admin", "boss"]);
+  });
 });

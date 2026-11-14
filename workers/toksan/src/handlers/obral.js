@@ -50,6 +50,8 @@ export async function putObral(ctx) {
     const catatan = row.catatan?.trim() || null;
     if (row.id) {
       if (!stored.has(row.id) || hapus.includes(row.id)) throw new ToksanError("BARIS_TIDAK_ADA", 404, { row: i });
+      const old = stored.get(row.id);
+      if (old.harga_obral === row.hargaObral && old.jumlah === row.jumlah && (old.catatan ?? null) === catatan) continue;
       statements.push(db.prepare("UPDATE obral SET harga_obral = ?, jumlah = ?, catatan = ?, updated_at = ?, updated_by = ? WHERE id = ?")
         .bind(row.hargaObral, row.jumlah, catatan, now, staff.uid, row.id));
       continue;

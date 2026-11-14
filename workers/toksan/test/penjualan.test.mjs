@@ -1,6 +1,6 @@
 import { after, before, beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { TODAY, call, fakeDeps, makeEnv } from "./helpers.mjs";
+import { NOW, TODAY, call, fakeDeps, makeEnv } from "./helpers.mjs";
 
 describe("penjualan API", () => {
   let ctx;
@@ -136,5 +136,51 @@ describe("penjualan API", () => {
     const rows = Array.from({ length: 301 }, (_, i) => row({ jumlah: i }));
     const res = await put(rows);
     assert.equal(res.status, 400);
+  });
+
+  it("unchanged rows keep who last changed them; only the edited row is re-stamped", async () => {
+    const [a, b] = (await put([row(), row({ sesi: "siang", jumlah: 20 })])).data.rows;
+    const later = fakeDeps({ now: () => NOW + 60_000 });
+    const res = await call(ctx.env, later, "PUT", "/penjualan", {
+      token: "boss",
+      body: { tanggal: TODAY, hapus: [], rows: [{ ...row(), id: a.id }, { ...row({ sesi: "siang", jumlah: 25 }), id: b.id }] },
+    });
+    assert.equal(res.status, 200);
+    const byId = Object.fromEntries(res.data.rows.map((r) => [r.id, r]));
+    assert.deepEqual([byId[a.id].updatedBy, byId[a.id].updatedAt], ["admin", NOW]);
+    assert.deepEqual([byId[b.id].updatedBy, byId[b.id].updatedAt, byId[b.id].jumlah], ["boss", NOW + 60_000, 25]);
+  });
+
+  it("a 300-row save runs a small fixed number of queries (D1 per-request limit)", async () => {
+    const ids = [];
+    const insert = [];
+    for (let i = 0; i < 50; i++) {
+      const id = `bulk${i}`;
+      ids.push(id);
+      insert.push(ctx.env.DB.prepare(
+        "INSERT INTO products (id, name, name_key, dapur, kategori, harga, active, created_at, updated_at, updated_by) VALUES (?, ?, ?, 'bakery', 'makanan', 1000, 1, 0, 0, 'seed')",
+      ).bind(id, `Bulk ${i}`, `bulk ${i}`));
+    }
+    await ctx.env.DB.batch(insert);
+    let prepared = 0;
+    const db = ctx.env.DB;
+    const counting = { prepare: (sql) => { prepared += 1; return db.prepare(sql); }, batch: (s) => db.batch(s) };
+    const env = { ...ctx.env, DB: counting };
+    const rows = ids.flatMap((productId) => ["pagi", "siang", "sore"].flatMap((sesi) => ["rijal", "nisaa"].map((pihak) => ({ productId, sesi, pihak, jumlah: 5, retur: 0 }))));
+    assert.equal(rows.length, 300);
+
+    const first = await call(env, deps, "PUT", "/penjualan", { token: "admin", body: { tanggal: TODAY, rows, hapus: [] } });
+    assert.equal(first.status, 200);
+    assert.equal(first.data.rows.length, 300);
+    assert.ok(prepared <= 6, `first save prepared ${prepared} statements`);
+
+    prepared = 0;
+    const edited = first.data.rows.map((r) => ({ id: r.id, productId: r.productId, sesi: r.sesi, pihak: r.pihak, jumlah: 6, retur: 1 }));
+    const second = await call(env, deps, "PUT", "/penjualan", { token: "admin", body: { tanggal: TODAY, rows: edited, hapus: [] } });
+    assert.equal(second.status, 200);
+    assert.ok(second.data.rows.every((r) => r.jumlah === 6 && r.retur === 1));
+    assert.ok(prepared <= 6, `edit save prepared ${prepared} statements`);
+    await ctx.env.DB.prepare("DELETE FROM sales").run();
+    await ctx.env.DB.prepare("DELETE FROM products WHERE id LIKE 'bulk%'").run();
   });
 });

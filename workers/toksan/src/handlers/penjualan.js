@@ -53,16 +53,13 @@ export async function putPenjualan(ctx) {
 
   const stored = new Map((await rowsOf(db, tanggal)).map((r) => [r.id, r]));
   const deleted = new Set(hapus);
-  const products = new Map();
-  const productOf = async (id) => {
-    if (!products.has(id)) products.set(id, await db.prepare("SELECT * FROM products WHERE id = ?").bind(id).first());
-    return products.get(id);
-  };
+  const products = await productsById(db, rows.filter((r) => !r.id).map((r) => r.productId));
 
   const key = (r) => `${r.productId ?? r.product_id}|${r.sesi}|${r.pihak}`;
-  const updatedIds = new Set(rows.filter((r) => r.id).map((r) => r.id));
-  const taken = new Set([...stored.values()].filter((r) => !deleted.has(r.id) && !updatedIds.has(r.id)).map(key));
+  const referenced = new Set(rows.filter((r) => r.id).map((r) => r.id));
+  const taken = new Set([...stored.values()].filter((r) => !deleted.has(r.id) && !referenced.has(r.id)).map(key));
 
+  const changedIds = [];
   const writes = [];
   for (const [i, row] of rows.entries()) {
     let base;
@@ -71,24 +68,44 @@ export async function putPenjualan(ctx) {
       if (!base || deleted.has(row.id)) throw new ToksanError("BARIS_TIDAK_ADA", 404, { row: i });
       row.productId = base.product_id;
     } else {
-      const product = await productOf(row.productId);
+      const product = products.get(row.productId);
       if (!product) throw new ToksanError("PRODUK_TIDAK_ADA", 400, { row: i });
       if (product.active !== 1) throw new ToksanError("PRODUK_NONAKTIF", 400, { row: i });
       base = { id: newId(), product_name: product.name, dapur: product.dapur, harga: product.harga, created_at: now, created_by: staff.uid };
     }
     if (taken.has(key(row))) throw new ToksanError("DUPLIKAT", 409, { row: i });
     taken.add(key(row));
-    writes.push({ ...base, row });
+    // An untouched row keeps its updated_at/updated_by: who last changed it stays true.
+    if (row.id && base.sesi === row.sesi && base.pihak === row.pihak && base.jumlah === row.jumlah && base.retur === row.retur) continue;
+    if (row.id) changedIds.push(row.id);
+    writes.push({
+      id: base.id, product_id: row.productId, product_name: base.product_name, dapur: base.dapur, harga: base.harga,
+      sesi: row.sesi, pihak: row.pihak, jumlah: row.jumlah, retur: row.retur, created_at: base.created_at, created_by: base.created_by,
+    });
   }
 
   // Changed rows are deleted and re-inserted with the same id, so swapping sesi/pihak between rows never trips UNIQUE.
-  const removeIds = [...deleted, ...updatedIds].filter((id) => stored.has(id));
-  const statements = removeIds.map((id) => db.prepare("DELETE FROM sales WHERE id = ?").bind(id));
-  for (const w of writes) {
+  // One DELETE and one INSERT for the whole day (json_each), whatever the row count: D1 caps queries per request.
+  const removeIds = [...[...deleted].filter((id) => stored.has(id)), ...changedIds];
+  const statements = [];
+  if (removeIds.length) {
+    statements.push(db.prepare("DELETE FROM sales WHERE id IN (SELECT value FROM json_each(?))").bind(JSON.stringify(removeIds)));
+  }
+  if (writes.length) {
+    const col = (name) => `json_extract(value, '$.${name}')`;
     statements.push(db.prepare(
-      "INSERT INTO sales (id, tanggal, product_id, product_name, dapur, harga, sesi, pihak, jumlah, retur, created_at, created_by, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    ).bind(w.id, tanggal, w.row.productId, w.product_name, w.dapur, w.harga, w.row.sesi, w.row.pihak, w.row.jumlah, w.row.retur, w.created_at, w.created_by, now, staff.uid));
+      `INSERT INTO sales (id, tanggal, product_id, product_name, dapur, harga, sesi, pihak, jumlah, retur, created_at, created_by, updated_at, updated_by)
+       SELECT ${col("id")}, ?, ${col("product_id")}, ${col("product_name")}, ${col("dapur")}, ${col("harga")}, ${col("sesi")}, ${col("pihak")},
+              ${col("jumlah")}, ${col("retur")}, ${col("created_at")}, ${col("created_by")}, ?, ? FROM json_each(?)`,
+    ).bind(tanggal, now, staff.uid, JSON.stringify(writes)));
   }
   if (statements.length) await db.batch(statements);
   return { tanggal, rows: (await rowsOf(db, tanggal)).map(penjualanView) };
+}
+
+async function productsById(db, ids) {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return new Map();
+  const { results } = await db.prepare("SELECT * FROM products WHERE id IN (SELECT value FROM json_each(?))").bind(JSON.stringify(unique)).all();
+  return new Map(results.map((p) => [p.id, p]));
 }
