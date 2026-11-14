@@ -11,6 +11,12 @@ export interface InputRow extends PenjualanInput {
 
 export type RowProblem = "sesi" | "pihak" | "jumlah" | "retur" | "duplikat";
 
+/** Only whole numbers can be typed; an empty box means "not filled". */
+export const digitsOnly = (raw: string): number | null => {
+  const digits = raw.replace(/\D/g, "");
+  return digits === "" ? null : Number(digits);
+};
+
 let counter = 0;
 const newKey = () => `r${Date.now().toString(36)}${(counter++).toString(36)}`;
 
