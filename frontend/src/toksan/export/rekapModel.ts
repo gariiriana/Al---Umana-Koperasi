@@ -134,9 +134,13 @@ export function buildRekapModel(data: RekapData, jenis: JenisRekap, adminName: s
       { label: "Terjual", value: `${formatAngka(t.terjual)} pcs` },
       { label: "Retur", value: `${formatAngka(t.retur)} pcs (${persen(t.retur, t.produksi)})` },
       { label: "Produk terjual", value: `${formatAngka(t.produkTerjual)} jenis` },
+      ...(["pagi", "siang", "sore"] as const).map((s) => {
+        const row = data.perSesi.find((x) => x.sesi === s);
+        return { label: `Sesi ${SESI_LABEL[s]}`, value: `${formatRupiah(row?.omzet ?? 0)} (${formatAngka(row?.terjual ?? 0)} pcs)` };
+      }),
+      { label: "Obral", value: `${formatRupiah(t.obralOmzet)} (${formatAngka(t.obralJumlah)} pcs)` },
       { label: "Rijal", value: formatRupiah(pihak("rijal")) },
       { label: "Nisaa", value: formatRupiah(pihak("nisaa")) },
-      { label: "Obral", value: `${formatRupiah(t.obralOmzet)} (${formatAngka(t.obralJumlah)} pcs)` },
       { label: "Total keseluruhan", value: formatRupiah(t.omzet + t.obralOmzet) },
     ],
     sections,

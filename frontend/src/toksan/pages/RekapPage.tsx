@@ -189,7 +189,7 @@ export function RekapPage() {
             <>
               <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {model.ringkasan.map((item) => (
-                  <div key={item.label} className={`rounded-xl px-3 py-2 ${item.label === "Total keseluruhan" ? "bg-[#FBBF24]" : "bg-[#FFFBEB]"}`}>
+                  <div key={item.label} className={`rounded-xl px-3 py-2 ${item.label === "Total keseluruhan" ? "col-span-2 bg-[#FBBF24]" : "bg-[#FFFBEB]"}`}>
                     <dt className="text-xs text-[#6B7280]">{item.label}</dt>
                     <dd className="text-sm font-bold text-[#111827]">{item.value}</dd>
                   </div>

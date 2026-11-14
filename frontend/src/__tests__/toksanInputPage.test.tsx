@@ -78,14 +78,12 @@ describe("Input Harian", () => {
     expect(within(sheet).queryByRole("checkbox", { name: /Pukis Lama/ })).toBeNull();
   });
 
-  it("allows adding a product directly via the quick search box (Cara 1)", async () => {
+  it("products are added only through the Pilih Produk button, no search box on the page", async () => {
     render(<InputHarianPage />);
     await screen.findByText("Risol Mayo");
-    const searchInput = screen.getByRole("combobox", { name: "Cari produk" });
-    fireEvent.change(searchInput, { target: { value: "Dimsum" } });
-    const option = await screen.findByRole("option", { name: /Dimsum/i });
-    fireEvent.click(option);
-    expect(screen.getByRole("group", { name: "Pihak Dimsum" })).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Cari produk" })).toBeNull();
+    expect(screen.queryByLabelText("Cari produk")).toBeNull();
+    expect(screen.getByRole("button", { name: /Pilih Produk/ })).toBeTruthy();
   });
 
   it("Pilih Produk lists products per dapur and adds several at once with sesi and pihak already set", async () => {

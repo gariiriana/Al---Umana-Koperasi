@@ -55,6 +55,20 @@ describe("buildRekapModel", () => {
     expect(weekly.grandTotal).toBe("Rp1.049.100");
   });
 
+  it("summary shows how much each sesi (Pagi, Siang, Sore) sold", () => {
+    const model = buildRekapModel({ ...DATA, perSesi: [
+      { sesi: "pagi", terjual: 120, omzet: 420_000 },
+      { sesi: "siang", terjual: 30, omzet: 105_000 },
+    ] }, "mingguan", "Nabila", "2026-11-15");
+    const values = Object.fromEntries(model.ringkasan.map((r) => [r.label, r.value]));
+    expect([values["Sesi Pagi"], values["Sesi Siang"], values["Sesi Sore"]]).toEqual(["Rp420.000 (120 pcs)", "Rp105.000 (30 pcs)", "Rp0 (0 pcs)"]);
+    expect(model.ringkasan.map((r) => r.label)).toEqual([
+      "Omzet penjualan", "Terjual", "Retur", "Produk terjual",
+      "Sesi Pagi", "Sesi Siang", "Sesi Sore", "Obral",
+      "Rijal", "Nisaa", "Total keseluruhan",
+    ]);
+  });
+
   it("one section per dapur with sales, empty dapur omitted, with subtotals", () => {
     const titles = weekly.sections.map((s) => s.title);
     expect(titles).toEqual(["Bakery", "Hangat Saji", "Omzet per Hari"]);

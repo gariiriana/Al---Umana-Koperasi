@@ -68,7 +68,7 @@ export function TrafikPage() {
         )}
         <select aria-label="Dapur" value={filter.dapur} onChange={(e) => setFilter({ ...filter, dapur: e.target.value as TrafikFilter["dapur"] })} className={select}>
           <option value="semua">Semua dapur</option>
-          {DAPUR_LIST.map((d) => <option key={d} value={d}>{DAPUR_LABEL[d]}</option>)}
+          {DAPUR_LIST.filter((d) => d !== "depan").map((d) => <option key={d} value={d}>{DAPUR_LABEL[d]}</option>)}
         </select>
         <select aria-label="Pihak" value={filter.pihak} onChange={(e) => setFilter({ ...filter, pihak: e.target.value as TrafikFilter["pihak"] })} className={select}>
           <option value="semua">Rijal & Nisaa</option>

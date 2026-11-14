@@ -4,11 +4,10 @@ import { Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
 import { ToksanApiError, getPenjualan, listProduk, savePenjualan } from "@/toksan/api";
 import { ChipToggle } from "@/toksan/components/ChipToggle";
-import { ProductPicker } from "@/toksan/components/ProductPicker";
 import { ProductSheet } from "@/toksan/components/ProductSheet";
 import { DAPUR_LABEL, PIHAK_LABEL, SESI_LABEL, formatAngka, formatRupiah, formatTanggalPanjang, toksanErrorMessage } from "@/toksan/format";
 import {
-  addProduct, addProducts, applyToSelected, dayTotal, digitsOnly, fromPenjualan, rowTotal, toPayload, validateRows, type InputRow, type RowProblem,
+  addProducts, applyToSelected, dayTotal, digitsOnly, fromPenjualan, rowTotal, toPayload, validateRows, type InputRow, type RowProblem,
 } from "@/toksan/logic/inputRows";
 import { todayWib } from "@/toksan/logic/period";
 import { PIHAK_LIST, SESI_LIST, type Pihak, type Produk, type Sesi } from "@/toksan/types";
@@ -139,13 +138,6 @@ export function InputHarianPage() {
   };
   const patchRow = (key: string, patch: Partial<InputRow>) => update(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const toggleSelect = (key: string) => setRows(rows.map((r) => (r.key === key ? { ...r, selected: !r.selected } : r)));
-
-  const onPick = (p: Produk) => {
-    if (loading || loadError) return;
-    const result = addProduct(rows, p, lastSesi);
-    if (result.rows !== rows) update(result.rows);
-    setFocusKey(result.focusKey);
-  };
 
   const onAddProducts = (picked: Produk[], sesi: Sesi, pihak: Pihak) => {
     setSheetOpen(false);
@@ -347,19 +339,14 @@ export function InputHarianPage() {
         </div>
       )}
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="min-w-0 flex-1">
-          <ProductPicker produk={produk} onPick={onPick} />
-        </div>
-        <button
-          type="button"
-          onClick={() => setSheetOpen(true)}
-          disabled={loading || loadError}
-          className="flex shrink-0 items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#F59E0B] bg-white px-4 py-3 text-base font-bold text-[#92400E] shadow-xs hover:bg-[#FFFBEB] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Plus className="h-5 w-5 text-[#B45309]" aria-hidden="true" /> Pilih Produk
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={() => setSheetOpen(true)}
+        disabled={loading || loadError}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#F59E0B] bg-white px-4 py-4 text-base font-bold text-[#92400E] shadow-xs hover:bg-[#FFFBEB] disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <Plus className="h-5 w-5 text-[#B45309]" aria-hidden="true" /> Pilih Produk
+      </button>
       {sheetOpen && (
         <ProductSheet
           produk={produk}
@@ -443,8 +430,8 @@ export function InputHarianPage() {
           </p>
           <p className="mt-1 text-sm text-[#6B7280]">
             {serverRows.length > 0
-              ? "Ketik nama produk di atas atau gunakan tombol \"Pilih Produk\" untuk menambah penjualan sesi Siang / Sore."
-              : "Cari produk di atas atau gunakan tombol \"Pilih Produk\" untuk mulai menambah."}
+              ? "Tekan \"Pilih Produk\" di atas untuk menambah penjualan sesi Siang / Sore."
+              : "Tekan \"Pilih Produk\" di atas untuk mulai menambah."}
           </p>
         </div>
       ) : (
