@@ -136,7 +136,7 @@ export function LoginPage() {
           {/* Brand Logo & Text unified inside the card */}
           <div className="text-center mb-6">
             <img
-              src="/logo-mark.png"
+              src="/logo-mark.png?v=2"
               alt="Pondok Pesantren Modern Al Umanaa"
               className="h-20 mx-auto object-contain drop-shadow-md"
             />

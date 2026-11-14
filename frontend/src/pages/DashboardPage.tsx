@@ -251,7 +251,7 @@ export function DashboardPage() {
     let y = 14;
 
     // Load Logo
-    const logoBase64 = await getBase64ImageFromUrl("/logo.png");
+    const logoBase64 = await getBase64ImageFromUrl("/logo.png?v=2");
     
     // ─── Header branding ───
     if (logoBase64) {

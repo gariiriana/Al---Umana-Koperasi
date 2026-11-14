@@ -309,7 +309,7 @@ export function SchedulesPage() {
       const white: [number, number, number] = [255, 255, 255];
 
       // Draw PDF Header
-      const logoBase64 = await getBase64ImageFromUrl("/logo.png");
+      const logoBase64 = await getBase64ImageFromUrl("/logo.png?v=2");
       if (logoBase64) {
         doc.addImage(logoBase64, "PNG", 14, 12, 18, 18);
       }

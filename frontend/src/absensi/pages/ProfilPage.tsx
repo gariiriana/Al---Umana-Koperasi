@@ -169,7 +169,7 @@ export function ProfilPage() {
       <header className="sticky top-0 z-30 border-b border-neutral-200/80 bg-white/95 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-md items-center justify-between px-4">
           <div className="flex items-center gap-1.5">
-            <img src="/logo.png" alt="Al Umanaa" className="h-8 w-8 object-contain" />
+            <img src="/logo.png?v=2" alt="Al Umanaa" className="h-8 w-8 object-contain" />
             <div className="leading-none">
               <span className="block font-['Manrope',system-ui,sans-serif] text-[11px] font-black tracking-tight text-amber-700">
                 AL UMANAA

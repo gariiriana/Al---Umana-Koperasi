@@ -205,7 +205,7 @@ export function Sidebar({
         <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-center relative">
           <Link to={userRole ? (ROLE_DEFAULT_REDIRECT[userRole] ?? "/") : "/"} onClick={() => onClose?.()}>
             <img
-              src="/logo.png"
+              src="/logo.png?v=2"
               alt="Pondok Pesantren Modern Al Umanaa"
               className="h-14 object-contain cursor-pointer hover:opacity-90 transition-opacity"
             />

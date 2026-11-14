@@ -1,5 +1,5 @@
 // Lambang Al-Umanaa tanpa teks untuk kop rekap (teks yayasan sudah ditulis di kop).
-export const LOGO_PATH = "/logo-mark.png";
+export const LOGO_PATH = "/logo-mark.png?v=2";
 
 export async function loadLogoBytes(): Promise<Uint8Array | null> {
   try {

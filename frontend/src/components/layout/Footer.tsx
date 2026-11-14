@@ -38,7 +38,7 @@ export function Footer() {
         <div className="space-y-4">
           <Link to="/" className="flex items-center gap-2.5">
             <img
-              src="/logo.png"
+              src="/logo.png?v=2"
               alt="Al Umanaa"
               className="h-10 w-10 object-contain bg-white rounded-full p-0.5"
             />

@@ -32,7 +32,7 @@ export function LoadingScreen({ message = "Memuat data...", fullscreen = true }:
         <div className="relative w-12 h-12 bg-amber-500/10 border border-amber-500/30 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(245,158,11,0.2)]">
           {!imgError ? (
             <img
-              src="/logo.png"
+              src="/logo.png?v=2"
               alt="Al-Umanaa"
               className="w-8 h-8 object-contain animate-[pulse_2s_infinite]"
               onError={() => setImgError(true)}

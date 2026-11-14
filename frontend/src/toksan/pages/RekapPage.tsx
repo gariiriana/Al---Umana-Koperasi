@@ -186,7 +186,7 @@ export function RekapPage() {
       ) : !model ? null : (
         <article className="space-y-5 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm sm:p-6">
           <div className="flex items-center gap-4 border-b-4 border-double border-[#FBBF24] pb-3">
-            <img src="/logo-mark.png" alt="" className="h-14 w-14 object-contain" />
+            <img src="/logo-mark.png?v=2" alt="" className="h-14 w-14 object-contain" />
             <div className="flex-1 text-center">
               <p className="text-base font-extrabold tracking-wide text-[#111827] sm:text-lg">{model.kop}</p>
               <p className="text-sm font-bold text-[#111827]">{model.judul}</p>

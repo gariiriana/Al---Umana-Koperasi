@@ -56,7 +56,7 @@ export function AbsensiLoginPage() {
         <div className="rounded-3xl border border-amber-200/80 bg-white p-6 shadow-[0_24px_50px_-14px_rgba(17,24,39,0.16)] sm:p-8">
           <div className="mb-5 text-center">
             <img
-              src="/logo-mark.png"
+              src="/logo-mark.png?v=2"
               alt="Pondok Pesantren Modern Al Umanaa"
               className="mx-auto h-20 object-contain drop-shadow-md"
             />

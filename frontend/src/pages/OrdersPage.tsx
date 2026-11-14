@@ -644,7 +644,7 @@ export function OrdersPage() {
       let y = 14;
 
       // Load Logo
-      const logoBase64 = await getBase64ImageFromUrl("/logo.png");
+      const logoBase64 = await getBase64ImageFromUrl("/logo.png?v=2");
       if (logoBase64) {
         doc.addImage(logoBase64, "PNG", 14, 12, 20, 20);
       }
@@ -1186,7 +1186,7 @@ export function OrdersPage() {
     let y = 14;
 
     // Load Logo
-    const logoBase64 = await getBase64ImageFromUrl("/logo.png");
+    const logoBase64 = await getBase64ImageFromUrl("/logo.png?v=2");
     
     // ─── Header branding ───
     if (logoBase64) {

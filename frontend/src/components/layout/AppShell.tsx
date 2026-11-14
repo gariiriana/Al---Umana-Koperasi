@@ -113,7 +113,7 @@ export function AppShell({
             )}
             <Link to={userRole ? (ROLE_DEFAULT_REDIRECT[userRole] ?? "/") : "/"} className="flex items-center gap-1 md:gap-2 min-w-0">
               <img
-                src="/logo.png"
+                src="/logo.png?v=2"
                 alt="Al Umanaa"
                 className="h-7 w-7 md:h-9 md:w-9 object-contain bg-white rounded-full p-0.5 border border-amber-200 shrink-0"
               />

@@ -435,7 +435,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-1 shrink-0 min-w-0">
             <Link to="/" className="flex items-center gap-1 min-w-0">
               <img
-                src="/logo.png"
+                src="/logo.png?v=2"
                 alt="Al Umanaa"
                 className="h-7 w-7 object-contain bg-white rounded-full p-0.5 border border-amber-200 shrink-0"
               />
@@ -931,7 +931,7 @@ function StorefrontLayoutInner({ children }: { children: ReactNode }) {
             {/* Logo / Brand */}
             <Link to="/" className="flex items-center gap-2 shrink-0">
               <img
-                src="/logo.png"
+                src="/logo.png?v=2"
                 alt="Al Umanaa"
                 className="h-11 w-11 object-contain bg-white rounded-full p-1 border border-amber-200"
               />

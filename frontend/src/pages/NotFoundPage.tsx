@@ -16,7 +16,7 @@ export function NotFoundPage() {
       <div className="relative z-10 w-full max-w-md text-center">
         {/* Brand Logo */}
         <img
-          src="/logo.png"
+          src="/logo.png?v=2"
           alt="Al-Umanaa"
           className="h-16 mx-auto object-contain mb-8 drop-shadow-md"
         />
