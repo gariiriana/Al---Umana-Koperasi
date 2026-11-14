@@ -92,6 +92,11 @@ const MbgDeliveryPage = safeLazy(() => import("@/pages/mbg/MbgDeliveryPage").the
 const MbgArchivePage = safeLazy(() => import("@/pages/mbg/MbgArchivePage").then(module => ({ default: module.MbgArchivePage })));
 const MbgPersiapanPage = safeLazy(() => import("@/pages/mbg/MbgPersiapanPage").then(module => ({ default: module.MbgPersiapanPage })));
 const TugasSayaPage = safeLazy(() => import("@/pages/kurir/TugasSayaPage").then(module => ({ default: module.TugasSayaPage })));
+const ToksanInputHarianPage = safeLazy(() => import("@/toksan/pages/InputHarianPage").then(module => ({ default: module.InputHarianPage })));
+const ToksanObralPage = safeLazy(() => import("@/toksan/pages/ObralPage").then(module => ({ default: module.ObralPage })));
+const ToksanRekapPage = safeLazy(() => import("@/toksan/pages/RekapPage").then(module => ({ default: module.RekapPage })));
+const ToksanTrafikPage = safeLazy(() => import("@/toksan/pages/TrafikPage").then(module => ({ default: module.TrafikPage })));
+const ToksanProdukPage = safeLazy(() => import("@/toksan/pages/ProdukPage").then(module => ({ default: module.ProdukPage })));
 const PerformancePage = safeLazy(() => import("@/pages/PerformancePage").then(module => ({ default: module.PerformancePage })));
 const SuperAdminControlCenterPage = safeLazy(() => import("@/pages/SuperAdminControlCenterPage").then(module => ({ default: module.SuperAdminControlCenterPage })));
 const UnitControlCenterPage = safeLazy(() => import("@/pages/SuperAdminControlCenterPage").then(module => ({ default: module.UnitControlCenterPage })));
@@ -158,6 +163,9 @@ function RootRoute() {
     </StorefrontLayout>
   );
 }
+
+/** Toksan: admin Toko Santri, plus super_admin/developer untuk mengecek. */
+const TOKSAN_ROLES = ["toksan", "super_admin", "developer"];
 
 function ShelledRoute({
   pageTitle,
@@ -823,6 +831,12 @@ function RoutesTree() {
       <Route path="/mbg/checklist-bahan" element={<Navigate to="/mbg/persiapan" replace />} />
       <Route path="/performance" element={<Protected><ShelledRoute pageTitle="Performa Saya" allowedRoles={["admin", "monitoring", "tim_produksi", "distribusi", "produksi_1", "distribusi_1", "mo_katering", "co_mo_katering", "admin_mbg", "produksi_mbg", "dokumentasi_produksiMBG", "distribusi_mbg", "MBG2", "mbg2", "produksi_mbg_2", "distribusi_mbg_2", "kepala_unit", "tim_unit"]}><PerformancePage /></ShelledRoute></Protected>} />
       <Route path="/super-admin/control-center" element={<Protected><ShelledRoute pageTitle="SDM Performance Control Center" allowedRoles={["super_admin", "developer"]}><SuperAdminControlCenterPage /></ShelledRoute></Protected>} />
+      {/* Toko Santri (Toksan) */}
+      <Route path="/toksan/input" element={<Protected><ShelledRoute pageTitle="Input Harian" allowedRoles={TOKSAN_ROLES}><ToksanInputHarianPage /></ShelledRoute></Protected>} />
+      <Route path="/toksan/obral" element={<Protected><ShelledRoute pageTitle="Obral" allowedRoles={TOKSAN_ROLES}><ToksanObralPage /></ShelledRoute></Protected>} />
+      <Route path="/toksan/rekap" element={<Protected><ShelledRoute pageTitle="Rekap" allowedRoles={TOKSAN_ROLES}><ToksanRekapPage /></ShelledRoute></Protected>} />
+      <Route path="/toksan/trafik" element={<Protected><ShelledRoute pageTitle="Trafik Produk" allowedRoles={TOKSAN_ROLES}><ToksanTrafikPage /></ShelledRoute></Protected>} />
+      <Route path="/toksan/produk" element={<Protected><ShelledRoute pageTitle="Produk Toksan" allowedRoles={TOKSAN_ROLES}><ToksanProdukPage /></ShelledRoute></Protected>} />
       <Route path="/unit/control-center" element={<Protected><ShelledRoute pageTitle="KPI & Task Unit" allowedRoles={["kepala_unit"]}><UnitControlCenterPage /></ShelledRoute></Protected>} />
       <Route path="/developer/control-center" element={<Protected><ShelledRoute pageTitle="Developer Control Center" allowedRoles={["developer"]}><DeveloperControlCenterPage /></ShelledRoute></Protected>} />
 

@@ -28,6 +28,8 @@ export const ROLE_ALIASES = {
   produksi_mbg: ["produksi_mbg", "MBG2", "mbg2", "produksi_mbg_2", "dokumentasi_produksiMBG"],
   distribusi_mbg: ["distribusi_mbg", "distribusi_mbg_2"],
   kurir_mbg: ["kurir_mbg"],
+  // Toko Santri: belum ada notifikasi, alias ini hanya supaya setiap role bisa dijangkau.
+  toksan: ["toksan"],
   pelanggan: ["pelanggan"],
   customer: ["customer"],
 };
