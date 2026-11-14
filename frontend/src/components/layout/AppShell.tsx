@@ -123,7 +123,17 @@ export function AppShell({
             </Link>
           </div>
 
-          {/* Right: Actions */}
+          {/* Right: Actions. Toksan: tanpa Tutorial, lonceng, bahasa, dan avatar; cukup tombol Keluar di HP
+              (di desktop Keluar ada di kartu profil sidebar). */}
+          {isToksan ? (
+            <button
+              type="button"
+              onClick={() => onSignOut?.()}
+              className="md:hidden flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-bold text-[#DC2626] shadow-sm cursor-pointer"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" /> Keluar
+            </button>
+          ) : (
           <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
             {/* Tutorial Button */}
             <Link
@@ -282,6 +292,7 @@ export function AppShell({
               )}
             </div>
           </div>
+          )}
         </header>
 
         {/* ── Main content ───────────────────────────────────────── */}

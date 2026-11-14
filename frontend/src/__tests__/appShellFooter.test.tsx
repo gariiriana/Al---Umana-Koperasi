@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ lang: "id", setLang: vi.fn() }) }));
@@ -55,5 +55,33 @@ describe("staff AppShell", () => {
       </MemoryRouter>,
     );
     expect(screen.getByTitle("Open Sidebar")).toBeTruthy();
+  });
+
+  it("toksan header has no Tutorial, bell, language or avatar menu, only a Keluar button", () => {
+    const signOut = vi.fn();
+    render(
+      <MemoryRouter initialEntries={["/toksan/input"]}>
+        <AppShell userRole="toksan" userName="Admin Toksan" onSignOut={signOut}>
+          <p>Isi Toksan</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+    const header = screen.getByRole("banner");
+    expect(header.textContent).not.toMatch(/Tutorial/);
+    expect(header.querySelector('a[href="/help"]')).toBeNull();
+    expect(header.querySelectorAll("button").length).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: /Keluar/ }));
+    expect(signOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("other roles keep Tutorial and the header menus", () => {
+    render(
+      <MemoryRouter initialEntries={["/admin/dashboard"]}>
+        <AppShell userRole="admin" userName="Admin">
+          <p>Isi Admin</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("banner").querySelector('a[href="/help"]')).toBeTruthy();
   });
 });
