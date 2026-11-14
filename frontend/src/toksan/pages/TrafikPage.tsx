@@ -107,6 +107,7 @@ export function TrafikPage() {
               <h2 id="sepi" className="mb-2 text-base font-bold text-[#111827]">Paling sepi</h2>
               <BarList
                 items={trafik.palingSepi.map((p) => ({ name: p.name, value: p.terjual }))}
+                max={trafik.terlaris[0]?.terjual}
                 emptyText={trafik.terlaris.length ? "Semua produk yang terjual sudah masuk daftar terlaris." : "Belum ada penjualan."}
               />
             </section>

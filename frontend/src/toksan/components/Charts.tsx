@@ -1,5 +1,5 @@
 // Grafik ringan untuk Trafik Produk: SVG/HTML polos, satu sumbu, hover tooltip, warna tetap per entitas.
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { formatAngka, formatRupiah, formatTanggal } from "@/toksan/format";
 
 /** Single-series mark color (amber-600: passes 3:1 on white). */
@@ -13,9 +13,10 @@ const shortRupiah = (n: number) => {
   return formatRupiah(n);
 };
 
-export function BarList({ items, emptyText }: { items: { name: string; value: number }[]; emptyText: string }) {
+/** `max` lets two lists share one scale (Paling sepi is drawn against the Terlaris top value). */
+export function BarList({ items, emptyText, max: sharedMax }: { items: { name: string; value: number }[]; emptyText: string; max?: number }) {
   if (items.length === 0) return <p className="py-4 text-sm text-[#6B7280]">{emptyText}</p>;
-  const max = Math.max(...items.map((i) => i.value), 1);
+  const max = Math.max(sharedMax ?? 0, ...items.map((i) => i.value), 1);
   return (
     <ol className="space-y-1.5">
       {items.map((item, i) => (
@@ -58,14 +59,29 @@ export function SplitBar({ parts, unit = "terjual" }: { parts: { label: string; 
   );
 }
 
-const W = 640;
+const DEFAULT_W = 640;
+const MIN_W = 280;
 const H = 220;
 const PAD = { top: 16, right: 12, bottom: 28, left: 64 };
 
 export function LineChart({ points, label }: { points: { tanggal: string; omzet: number }[]; label: string }) {
   const id = useId();
   const [hover, setHover] = useState<number | null>(null);
-  if (points.length < 2) return <p className="text-sm text-[#6B7280]">Grafik muncul kalau periode lebih dari satu hari.</p>;
+  // Draw at the real container width (1 unit = 1 px) so 11px labels stay 11px on a phone.
+  const [W, setW] = useState(DEFAULT_W);
+  const figureRef = useRef<HTMLElement>(null);
+  const drawn = points.length >= 2;
+  useEffect(() => {
+    const el = figureRef.current;
+    if (!drawn || !el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const width = Math.round(entries[0]?.contentRect.width ?? 0);
+      if (width > 0) setW(Math.max(MIN_W, width));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [drawn]);
+  if (!drawn) return <p className="text-sm text-[#6B7280]">Grafik muncul kalau periode lebih dari satu hari.</p>;
 
   const max = Math.max(...points.map((p) => p.omzet), 1);
   const niceMax = Math.ceil(max / 4 / 50_000) * 50_000 * 4 || max;
@@ -77,7 +93,7 @@ export function LineChart({ points, label }: { points: { tanggal: string; omzet:
   const active = hover === null ? null : points[hover];
 
   return (
-    <figure className="relative">
+    <figure ref={figureRef} className="relative">
       <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-labelledby={`${id}-t`} onMouseLeave={() => setHover(null)}>
         <title id={`${id}-t`}>{label}</title>
         {ticks.map((t) => (
