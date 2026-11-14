@@ -8,6 +8,7 @@ import { ToksanError, corsHeaders, errorResponse, json } from "./http.js";
 import { getUserProfile } from "./profile.js";
 import { requireStaff } from "./session.js";
 import { createProduk, listProduk, patchProduk } from "./handlers/produk.js";
+import { getPenjualan, putPenjualan } from "./handlers/penjualan.js";
 
 const PREFIX = "/api/toksan";
 
@@ -18,6 +19,8 @@ const ROUTES = [
   ["GET", /^\/produk$/, listProduk],
   ["POST", /^\/produk$/, createProduk],
   ["PATCH", /^\/produk\/([\w-]{1,64})$/, patchProduk],
+  ["GET", /^\/penjualan$/, getPenjualan],
+  ["PUT", /^\/penjualan$/, putPenjualan],
 ];
 
 export async function handleRequest(request, env, deps) {
