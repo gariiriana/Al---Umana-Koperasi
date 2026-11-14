@@ -68,6 +68,21 @@ describe("buildTrafik", () => {
     ]);
   });
 
+  it("omzet per hari shows days without sales as 0, up to today only", () => {
+    const data: RekapData = { ...DATA, perHari: [
+      { tanggal: "2026-11-10", produksi: 1, terjual: 1, retur: 0, omzet: 500 },
+      { tanggal: "2026-11-12", produksi: 1, terjual: 1, retur: 0, omzet: 700 },
+    ] };
+    const t = buildTrafik(data, { dapur: "semua", pihak: "semua" }, "2026-11-13");
+    expect(t.harian).toEqual([
+      { tanggal: "2026-11-09", omzet: 0 },
+      { tanggal: "2026-11-10", omzet: 500 },
+      { tanggal: "2026-11-11", omzet: 0 },
+      { tanggal: "2026-11-12", omzet: 700 },
+      { tanggal: "2026-11-13", omzet: 0 },
+    ]);
+  });
+
   it("empty data gives zeros and empty lists", () => {
     const empty: RekapData = { ...DATA, produk: [], produkPerPihak: [], perHari: [], perSesi: [], perPihak: [] };
     const t = buildTrafik(empty, { dapur: "semua", pihak: "semua" });

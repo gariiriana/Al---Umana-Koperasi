@@ -1,4 +1,5 @@
 // Angka untuk halaman Trafik Produk, dihitung dari data rekap yang sama dengan export.
+import { datesBetween } from "@/toksan/logic/period";
 import type { Dapur, Pihak, RekapData, Sesi } from "@/toksan/types";
 
 export interface TrafikFilter {
@@ -46,7 +47,15 @@ function products(data: RekapData, filter: TrafikFilter): ProdukTrafik[] {
   return [...merged.values()];
 }
 
-export function buildTrafik(data: RekapData, filter: TrafikFilter): Trafik {
+/** Every day from `dari` to min(`sampai`, today) so quiet days show as 0 instead of vanishing; future days are left out. */
+function harianFilled(data: RekapData, today?: string): { tanggal: string; omzet: number }[] {
+  if (data.perHari.length === 0) return [];
+  const byDate = new Map(data.perHari.map((d) => [d.tanggal, d.omzet]));
+  const end = today && today < data.sampai ? today : data.sampai;
+  return datesBetween(data.dari, end).map((tanggal) => ({ tanggal, omzet: byDate.get(tanggal) ?? 0 }));
+}
+
+export function buildTrafik(data: RekapData, filter: TrafikFilter, today?: string): Trafik {
   const list = products(data, filter);
   const sold = list.filter((p) => p.terjual > 0);
   const terlaris = [...sold].sort((a, b) => b.terjual - a.terjual || byName(a, b)).slice(0, TOP);
@@ -65,7 +74,7 @@ export function buildTrafik(data: RekapData, filter: TrafikFilter): Trafik {
     },
     terlaris,
     palingSepi,
-    harian: data.perHari.map((d) => ({ tanggal: d.tanggal, omzet: d.omzet })),
+    harian: harianFilled(data, today),
     pihak: data.perPihak,
     sesi: data.perSesi,
     returTertinggi: list

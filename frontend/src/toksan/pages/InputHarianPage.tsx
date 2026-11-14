@@ -23,6 +23,25 @@ const PROBLEM_TEXT: Record<RowProblem, string> = {
   duplikat: "dobel (produk, sesi & pihak sama)",
 };
 
+// Draft per tanggal di browser ini: pindah menu / tutup aplikasi tidak menghapus isian yang belum disimpan.
+interface Draft { rows: InputRow[]; hapus: string[] }
+const draftKey = (tanggal: string) => `toksan:input-draft:${tanggal}`;
+function readDraft(tanggal: string): Draft | null {
+  try {
+    const raw = localStorage.getItem(draftKey(tanggal));
+    const draft = raw ? (JSON.parse(raw) as Draft) : null;
+    return draft && Array.isArray(draft.rows) && Array.isArray(draft.hapus) ? draft : null;
+  } catch {
+    return null;
+  }
+}
+function writeDraft(tanggal: string, draft: Draft) {
+  try { localStorage.setItem(draftKey(tanggal), JSON.stringify(draft)); } catch { /* storage penuh/diblok: tetap jalan tanpa draft */ }
+}
+function clearDraft(tanggal: string) {
+  try { localStorage.removeItem(draftKey(tanggal)); } catch { /* ignore */ }
+}
+
 const BULK_BUTTON =
   "rounded-full border border-[#F59E0B] bg-white px-3 py-1.5 text-sm font-semibold text-[#92400E] hover:bg-[#FEF3C7] disabled:cursor-not-allowed disabled:opacity-40";
 
@@ -35,31 +54,57 @@ export function InputHarianPage() {
   const [hapus, setHapus] = useState<string[]>([]);
   const [lastSesi, setLastSesi] = useState<Sesi>("pagi");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [serverRows, setServerRows] = useState<InputRow[]>([]);
+  const [draftRestored, setDraftRestored] = useState(false);
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
+  const loadSeq = useRef(0);
 
   const load = useCallback(async (date: string) => {
+    // Rows of the previous date never stay on screen under a new date; only the latest request may fill the page.
+    const seq = ++loadSeq.current;
     setLoading(true);
+    setLoadError(false);
+    setRows([]);
+    setHapus([]);
+    setDirty(false);
+    setDraftRestored(false);
     try {
       const [list, saved] = await Promise.all([listProduk(), getPenjualan(date)]);
+      if (seq !== loadSeq.current) return;
+      const fromServer = fromPenjualan(saved);
       setProduk(list);
-      setRows(fromPenjualan(saved));
-      setHapus([]);
-      setDirty(false);
+      setServerRows(fromServer);
+      const draft = readDraft(date);
+      if (draft) {
+        setRows(draft.rows);
+        setHapus(draft.hapus);
+        setDirty(true);
+        setDraftRestored(true);
+      } else {
+        setRows(fromServer);
+      }
     } catch (err) {
+      if (seq !== loadSeq.current) return;
+      setLoadError(true);
       showToast({ message: toksanErrorMessage(err), variant: "error" });
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [showToast]);
 
   useEffect(() => { void load(tanggal); }, [load, tanggal]);
 
   useEffect(() => {
+    if (dirty && !loading) writeDraft(tanggal, { rows, hapus });
+  }, [dirty, loading, tanggal, rows, hapus]);
+
+  useEffect(() => {
     if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
@@ -81,6 +126,7 @@ export function InputHarianPage() {
   const toggleSelect = (key: string) => setRows(rows.map((r) => (r.key === key ? { ...r, selected: !r.selected } : r)));
 
   const onPick = (p: Produk) => {
+    if (loading || loadError) return;
     const result = addProduct(rows, p, lastSesi);
     if (result.rows !== rows) update(result.rows);
     setFocusKey(result.focusKey);
@@ -94,16 +140,34 @@ export function InputHarianPage() {
   const changeDate = (next: string) => {
     if (!next || next === tanggal) return;
     if (dirty && !window.confirm("Perubahan belum disimpan. Pindah tanggal dan buang perubahan?")) return;
+    if (dirty) clearDraft(tanggal);
+    // Same render as the date change, so the draft effect never files these rows under the new date.
+    setRows([]);
+    setHapus([]);
+    setDirty(false);
+    setLoading(true);
     setTanggal(next);
+  };
+
+  const discardDraft = () => {
+    clearDraft(tanggal);
+    setRows(serverRows);
+    setHapus([]);
+    setDirty(false);
+    setDraftRestored(false);
   };
 
   const save = async () => {
     setSaving(true);
     try {
       const saved = await savePenjualan(tanggal, toPayload(rows), hapus);
-      setRows(fromPenjualan(saved));
+      const fresh = fromPenjualan(saved);
+      clearDraft(tanggal);
+      setRows(fresh);
+      setServerRows(fresh);
       setHapus([]);
       setDirty(false);
+      setDraftRestored(false);
       setFocusKey(null);
       showToast({ message: "Penjualan tersimpan.", variant: "success" });
     } catch (err) {
@@ -179,10 +243,27 @@ export function InputHarianPage() {
         </div>
       </div>
 
+      {draftRestored && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#FCD34D] bg-[#FEF3C7] px-4 py-3 text-sm text-[#92400E]">
+          <span className="font-semibold">Isian yang belum disimpan sudah dipulihkan. Cek lalu tekan Simpan.</span>
+          <button type="button" onClick={discardDraft} className="rounded-full border border-[#F59E0B] bg-white px-3 py-1 font-semibold hover:bg-[#FFFBEB]">
+            Buang draft
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <p role="status" className="flex items-center justify-center gap-2 rounded-2xl bg-white p-6 text-[#6B7280]">
           <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> Memuat...
         </p>
+      ) : loadError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-8 text-center">
+          <p className="text-base font-bold text-red-700">Data tanggal ini gagal dimuat.</p>
+          <p className="mt-1 text-sm text-red-600">Cek koneksi, lalu coba lagi.</p>
+          <button type="button" onClick={() => void load(tanggal)} className="mt-3 rounded-full bg-white px-4 py-2 text-sm font-bold text-red-700 shadow-sm hover:bg-red-100">
+            Coba lagi
+          </button>
+        </div>
       ) : rows.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[#E5E7EB] bg-white px-6 py-10 text-center">
           <p className="text-lg font-bold text-[#111827]">Belum ada penjualan di tanggal ini</p>
@@ -293,7 +374,7 @@ export function InputHarianPage() {
           <button
             type="button"
             onClick={() => void save()}
-            disabled={saving || !dirty || problemCount > 0}
+            disabled={saving || loading || loadError || !dirty || problemCount > 0}
             className="flex items-center gap-2 rounded-full bg-[#FBBF24] px-5 py-3 text-base font-bold text-[#111827] shadow-sm hover:bg-[#F59E0B] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Save className="h-5 w-5" aria-hidden="true" />}

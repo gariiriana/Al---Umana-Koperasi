@@ -42,7 +42,7 @@ export function TrafikPage() {
     return () => { alive = false; };
   }, [range.dari, range.sampai, rangeValid, showToast]);
 
-  const trafik = useMemo(() => (data ? buildTrafik(data, filter) : null), [data, filter]);
+  const trafik = useMemo(() => (data ? buildTrafik(data, filter, today) : null), [data, filter, today]);
   const rangeText = range.dari === range.sampai ? formatTanggal(range.dari) : weekLabel(range);
 
   return (

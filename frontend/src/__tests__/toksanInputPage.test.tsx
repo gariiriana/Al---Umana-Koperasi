@@ -36,6 +36,8 @@ const SAVED: Penjualan[] = [
 beforeEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
+  localStorage.clear();
   fake.listProduk.mockResolvedValue(PRODUK);
   fake.getPenjualan.mockResolvedValue(SAVED);
   fake.savePenjualan.mockImplementation(async () => SAVED);
@@ -107,5 +109,73 @@ describe("Input Harian", () => {
     fireEvent.click(screen.getByRole("button", { name: "Hapus Risol Mayo" }));
     fireEvent.click(screen.getByRole("button", { name: /Simpan/ }));
     await waitFor(() => expect(fake.savePenjualan).toHaveBeenCalledWith("2026-11-14", [], ["s1"]));
+  });
+});
+
+const jumlahRisol = () => (screen.getByLabelText("Jumlah Risol Mayo") as HTMLInputElement).value;
+const simpanDisabled = () => (screen.getByRole("button", { name: /Simpan/ }) as HTMLButtonElement).disabled;
+
+describe("Input Harian: unsaved work", () => {
+  it("typed changes survive leaving the page (menu tap) and come back as a draft", async () => {
+    const first = render(<InputHarianPage />);
+    await screen.findByText("Risol Mayo");
+    fireEvent.change(screen.getByLabelText("Jumlah Risol Mayo"), { target: { value: "45" } });
+    first.unmount();
+
+    render(<InputHarianPage />);
+    await screen.findByText(/belum disimpan.*dipulihkan/i);
+    expect(jumlahRisol()).toBe("45");
+    expect(simpanDisabled()).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Buang draft" }));
+    expect(jumlahRisol()).toBe("30");
+    expect(screen.queryByText(/dipulihkan/i)).toBeNull();
+  });
+
+  it("a successful save clears the draft", async () => {
+    const first = render(<InputHarianPage />);
+    await screen.findByText("Risol Mayo");
+    fireEvent.change(screen.getByLabelText("Jumlah Risol Mayo"), { target: { value: "45" } });
+    fireEvent.click(screen.getByRole("button", { name: /Simpan/ }));
+    await waitFor(() => expect(fake.toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "success" })));
+    first.unmount();
+
+    render(<InputHarianPage />);
+    await screen.findByText("Risol Mayo");
+    expect(jumlahRisol()).toBe("30");
+    expect(screen.queryByText(/dipulihkan/i)).toBeNull();
+  });
+
+  it("a failed load for the new date clears the old rows and keeps Simpan off until retried", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<InputHarianPage />);
+    await screen.findByText("Risol Mayo");
+    fireEvent.change(screen.getByLabelText("Jumlah Risol Mayo"), { target: { value: "45" } });
+
+    fake.getPenjualan.mockRejectedValueOnce(new Error("offline"));
+    fireEvent.change(screen.getByLabelText("Tanggal"), { target: { value: "2026-11-13" } });
+    const retry = await screen.findByRole("button", { name: "Coba lagi" });
+    expect(screen.queryByText("Risol Mayo")).toBeNull();
+    expect(simpanDisabled()).toBe(true);
+
+    fake.getPenjualan.mockResolvedValueOnce([]);
+    fireEvent.click(retry);
+    await screen.findByText("Belum ada penjualan di tanggal ini");
+    expect(fake.getPenjualan).toHaveBeenLastCalledWith("2026-11-13");
+  });
+
+  it("a slow answer for an earlier date does not overwrite the date now on screen", async () => {
+    render(<InputHarianPage />);
+    await screen.findByText("Risol Mayo");
+    let releaseOld: (rows: Penjualan[]) => void = () => {};
+    fake.getPenjualan.mockImplementationOnce(() => new Promise<Penjualan[]>((resolve) => { releaseOld = resolve; }));
+    fake.getPenjualan.mockResolvedValueOnce([]);
+    fireEvent.change(screen.getByLabelText("Tanggal"), { target: { value: "2026-11-13" } });
+    fireEvent.change(screen.getByLabelText("Tanggal"), { target: { value: "2026-11-12" } });
+    await screen.findByText("Belum ada penjualan di tanggal ini");
+    releaseOld(SAVED);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText("Risol Mayo")).toBeNull();
+    expect(screen.getByText("Belum ada penjualan di tanggal ini")).toBeTruthy();
   });
 });
