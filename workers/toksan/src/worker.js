@@ -10,6 +10,7 @@ import { requireStaff } from "./session.js";
 import { createProduk, listProduk, patchProduk } from "./handlers/produk.js";
 import { getPenjualan, putPenjualan } from "./handlers/penjualan.js";
 import { getObral, putObral } from "./handlers/obral.js";
+import { getRekap } from "./handlers/rekap.js";
 
 const PREFIX = "/api/toksan";
 
@@ -24,6 +25,7 @@ const ROUTES = [
   ["PUT", /^\/penjualan$/, putPenjualan],
   ["GET", /^\/obral$/, getObral],
   ["PUT", /^\/obral$/, putObral],
+  ["GET", /^\/rekap$/, getRekap],
 ];
 
 export async function handleRequest(request, env, deps) {
