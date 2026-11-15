@@ -16,6 +16,20 @@ async function setup() {
   return { AppUpdatePrompt, updateServiceWorker, options: () => options };
 }
 
+type FakeWorker = EventTarget & { state: string; finish: (state: string) => void };
+
+/** A service worker stand-in whose state changes like a real one (statechange event). */
+function fakeWorker(state: string): FakeWorker {
+  const worker = Object.assign(new EventTarget(), {
+    state,
+    finish(next: string) {
+      worker.state = next;
+      worker.dispatchEvent(new Event('statechange'));
+    },
+  });
+  return worker;
+}
+
 beforeEach(() => {
   cleanup();
   Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true });
@@ -54,6 +68,8 @@ describe('app update prompt', () => {
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Perbarui' }));
 
+
+    
     // Tab must not move focus to the page behind (fireEvent returns false once it is prevented).
     expect(fireEvent.keyDown(document.activeElement as Element, { key: 'Tab' })).toBe(false);
     expect(fireEvent.keyDown(document.activeElement as Element, { key: 'Tab', shiftKey: true })).toBe(false);
@@ -85,6 +101,7 @@ describe('app update prompt', () => {
     expect(screen.getByText(/Tutup aplikasi sepenuhnya/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Coba lagi' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); }); // asks the server for a newer version first
     expect(updateServiceWorker).toHaveBeenCalledTimes(2);
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     expect(reload).not.toHaveBeenCalled();
@@ -106,6 +123,50 @@ describe('app update prompt', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Perbarui' }));
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('installs the newest deploy, not an older waiting one, so the pop-up does not come back seconds later', async () => {
+    // B waits since an earlier visit; C was deployed later and is still downloading when
+    // Perbarui is pressed. Activating B would reload straight into a new pop-up for C.
+    const { AppUpdatePrompt, updateServiceWorker, options } = await setup();
+    vi.useFakeTimers();
+    const versionB = fakeWorker('installed');
+    const versionC = fakeWorker('installing');
+    const registration = { installing: null as FakeWorker | null, waiting: versionB as FakeWorker | null, update: vi.fn(async () => {
+      registration.installing = versionC; // the server has C; the browser starts installing it
+    }) };
+    options().onRegisteredSW?.('/sw.js', registration as unknown as ServiceWorkerRegistration);
+    render(<AppUpdatePrompt />);
+    act(() => options().onNeedRefresh?.());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Perbarui' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(registration.update).toHaveBeenCalledTimes(1);
+    expect(updateServiceWorker).not.toHaveBeenCalled(); // still waiting for C
+    expect(screen.getByRole('button', { name: 'Memperbarui…' })).toBeTruthy();
+
+    // C finishes installing and replaces B as the waiting version.
+    registration.installing = null;
+    registration.waiting = versionC;
+    act(() => versionC.finish('installed'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(updateServiceWorker).toHaveBeenCalledTimes(1);
+  });
+
+  it('still installs the waiting version when the newest one is offline or very slow', async () => {
+    const { AppUpdatePrompt, updateServiceWorker, options } = await setup();
+    vi.useFakeTimers();
+    const stalled = fakeWorker('installing');
+    const registration = { installing: stalled, waiting: fakeWorker('installed'), update: vi.fn(() => new Promise<void>(() => {})) };
+    options().onRegisteredSW?.('/sw.js', registration as unknown as ServiceWorkerRegistration);
+    render(<AppUpdatePrompt />);
+    act(() => options().onNeedRefresh?.());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Perbarui' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(updateServiceWorker).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(25_000); });
+    expect(updateServiceWorker).toHaveBeenCalledTimes(1);
   });
 
   it('looks for a new version when the app returns to the screen and every 10 minutes', async () => {

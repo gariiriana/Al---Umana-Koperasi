@@ -19,6 +19,8 @@ export type AppUpdateStatus = "idle" | "ready" | "applying" | "stuck" | "dismiss
 const CHECK_EVERY_MS = 10 * 60_000;
 /** Batas tunggu versi baru mengambil alih setelah Perbarui ditekan (biasanya beberapa milidetik). */
 const TAKEOVER_TIMEOUT_MS = 8_000;
+/** Batas tunggu mengunduh versi terbaru sebelum Perbarui memasang versi yang sudah siap. */
+const NEWEST_VERSION_WAIT_MS = 30_000;
 
 let updateServiceWorker: UpdateServiceWorker | null = null;
 let registration: ServiceWorkerRegistration | null = null;
@@ -75,12 +77,45 @@ export function onAppUpdateChange(fn: () => void): () => void {
 export async function applyAppUpdate(): Promise<void> {
   window.clearTimeout(takeoverTimer);
   setStatus("applying");
+  if (registration) await settleNewestVersion(registration);
   takeoverTimer = window.setTimeout(() => {
     if (registration?.waiting) setStatus("stuck");
     // Versi baru sudah aktif atau tidak ada lagi, tapi halaman belum dimuat ulang.
     else window.location.reload();
   }, TAKEOVER_TIMEOUT_MS);
   await updateServiceWorker?.(true);
+}
+
+/**
+ * Versi yang menunggu bisa sudah usang: ia terpasang saat kunjungan sebelumnya, lalu ada deploy
+ * lagi. Bila versi itu yang dipasang, aplikasi dimuat ulang dan beberapa detik kemudian pop-up
+ * muncul lagi untuk deploy terbaru. Jadi tanyakan dulu versi terbaru ke server dan tunggu
+ * unduhannya selesai, supaya satu kali Perbarui langsung memasang versi paling baru. Bila
+ * offline atau terlalu lama, pasang saja versi yang sudah siap.
+ */
+async function settleNewestVersion(reg: ServiceWorkerRegistration): Promise<void> {
+  let timer: number | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = window.setTimeout(resolve, NEWEST_VERSION_WAIT_MS);
+  });
+  const newest = (async () => {
+    await reg.update().catch(() => {
+      // Offline atau server tidak terjangkau: pakai versi yang sudah menunggu.
+    });
+    const installing = reg.installing;
+    if (!installing) return;
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        if (installing.state === "installing") return;
+        installing.removeEventListener("statechange", done);
+        resolve();
+      };
+      installing.addEventListener("statechange", done);
+      done();
+    });
+  })();
+  await Promise.race([newest, timeout]);
+  window.clearTimeout(timer);
 }
 
 /** Setelah tertunda, pengguna boleh lanjut memakai versi ini; pop-up muncul lagi saat dibuka ulang. */
