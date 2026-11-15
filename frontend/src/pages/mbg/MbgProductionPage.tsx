@@ -32,6 +32,7 @@ import { export8PageDailyReportPdf } from '@/utils/dailyReportPdfExporter';
 import { exportProductionDocx } from '@/utils/mbgProductionDocxGenerator';
 import { parseProductionSheetRows, parsePenerimaManfaatSheet, createEmptyReport } from '@/utils/productionSheetParser';
 import { parsePesananBahanSheet } from '@/utils/pesananBahanSheetParser';
+import { batchToShowAfterImport, defaultImportTargetOption } from '@/utils/mbgImportTarget';
 import { readSheetsLink } from '@/utils/sheetsLinkReader';
 import { updateBatchStatus, updateBatch, updateBatchCookingStatus } from '@/services/mbgAdminService';
 import { getJakartaDate } from '@/utils/date';
@@ -426,8 +427,8 @@ export function MbgProductionPage() {
     setImportTargetBatch(
       selectedBatch ? { id: selectedBatch.id, tanggal: selectedBatch.tanggal } : null
     );
-    // Tab pesanan bahan dinamai per tanggal, jadi default-nya ikut tanggal pada nama tab
-    setImportTargetOption(mode === 'bahan' ? 'sheet_date' : 'current_batch');
+    // Default selalu Batch Aktif; "Sesuai Tanggal pada Nama Tab" hanya bila dipilih sendiri
+    setImportTargetOption(defaultImportTargetOption());
     setImportMode(mode);
     // Workbook selalu dibaca ulang dari link, jangan pakai hasil baca sebelumnya
     resetLoadedWorkbook();
@@ -1980,15 +1981,22 @@ export function MbgProductionPage() {
         }
       );
 
-      setSelectedBatchId(targetBatchId);
+      // Batch yang sedang dibuka tetap terpilih, meski datanya masuk ke batch lain
+      const viewedBatch = importTargetBatch || (selectedBatch ? { id: selectedBatch.id, tanggal: selectedBatch.tanggal } : null);
+      const batchToShow = batchToShowAfterImport(viewedBatch?.id, targetBatchId);
+      setSelectedBatchId(batchToShow);
       setShowImportedDetails(true);
       setDailyReportSubTab('po');
       setShowSheetsImportModal(false);
       setActiveTab('pm-data');
 
+      const stayedNote = batchToShow !== targetBatchId && viewedBatch
+        ? ` Batch yang dibuka tetap ${viewedBatch.tanggal}.`
+        : '';
       showToast({
-        message: `Berhasil meng-import ${finalParsed.poRows.length} item Daftar Pesanan Bahan (${sheetName}) ke Batch ${targetBatchTanggal}. Total belanja Rp ${finalParsed.totalPengeluaran.toLocaleString('id-ID')}.`,
+        message: `Berhasil meng-import ${finalParsed.poRows.length} item Daftar Pesanan Bahan (${sheetName}) ke Batch ${targetBatchTanggal}. Total belanja Rp ${finalParsed.totalPengeluaran.toLocaleString('id-ID')}.${stayedNote}`,
         variant: 'success',
+        durationMs: stayedNote ? 10000 : undefined,
       });
     } catch (err: unknown) {
       console.error('Import Daftar Pesanan Bahan error:', err);
