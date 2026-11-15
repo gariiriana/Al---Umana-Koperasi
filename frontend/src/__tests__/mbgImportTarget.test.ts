@@ -1,23 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { batchToShowAfterImport, defaultImportTargetOption } from "@/utils/mbgImportTarget";
+import { parseSheetNameToDate, sheetDateMismatch } from "@/utils/mbgImportTarget";
 
-describe("defaultImportTargetOption", () => {
-  it("imports into the open batch by default (Pesanan Bahan and Laporan Harian alike)", () => {
-    expect(defaultImportTargetOption()).toBe("current_batch");
+describe("parseSheetNameToDate", () => {
+  it("reads the tab name formats used in the MBG spreadsheets", () => {
+    expect(parseSheetNameToDate("21112026")).toBe("2026-11-21");
+    expect(parseSheetNameToDate("2026-11-21")).toBe("2026-11-21");
+    expect(parseSheetNameToDate("1/10/2026")).toBe("2026-10-01");
+    expect(parseSheetNameToDate("011026")).toBe("2026-10-01");
+  });
+
+  it("returns null for a tab name that is not a date", () => {
+    expect(parseSheetNameToDate("21")).toBeNull();
+    expect(parseSheetNameToDate("Penerima Manfaat")).toBeNull();
+    expect(parseSheetNameToDate("")).toBeNull();
   });
 });
 
-describe("batchToShowAfterImport", () => {
-  it("keeps the batch the user had open (21 Nov) even when the data went to another batch (20 Nov)", () => {
-    expect(batchToShowAfterImport("batch-21", "batch-20")).toBe("batch-21");
+describe("sheetDateMismatch", () => {
+  it("is null when the tab is for the selected batch", () => {
+    expect(sheetDateMismatch("21112026", "2026-11-21")).toBeNull();
   });
 
-  it("stays on the open batch when the data went into it", () => {
-    expect(batchToShowAfterImport("batch-21", "batch-21")).toBe("batch-21");
+  it("returns the tab date when the tab is for another day, so the user is asked first", () => {
+    expect(sheetDateMismatch("20112026", "2026-11-21")).toBe("2026-11-20");
+    expect(sheetDateMismatch("01102026", "2026-11-01")).toBe("2026-10-01");
   });
 
-  it("opens the imported batch when no batch was open", () => {
-    expect(batchToShowAfterImport(null, "batch-20")).toBe("batch-20");
-    expect(batchToShowAfterImport(undefined, "batch-20")).toBe("batch-20");
+  it("is null when the tab name carries no date (nothing to compare)", () => {
+    expect(sheetDateMismatch("21", "2026-11-21")).toBeNull();
   });
 });

@@ -32,7 +32,7 @@ import { export8PageDailyReportPdf } from '@/utils/dailyReportPdfExporter';
 import { exportProductionDocx } from '@/utils/mbgProductionDocxGenerator';
 import { parseProductionSheetRows, parsePenerimaManfaatSheet, createEmptyReport } from '@/utils/productionSheetParser';
 import { parsePesananBahanSheet } from '@/utils/pesananBahanSheetParser';
-import { batchToShowAfterImport, defaultImportTargetOption } from '@/utils/mbgImportTarget';
+import { parseSheetNameToDate, sheetDateMismatch } from '@/utils/mbgImportTarget';
 import { readSheetsLink } from '@/utils/sheetsLinkReader';
 import { updateBatchStatus, updateBatch, updateBatchCookingStatus } from '@/services/mbgAdminService';
 import { getJakartaDate } from '@/utils/date';
@@ -176,7 +176,6 @@ export function MbgProductionPage() {
   const [loadedWorkbookSource, setLoadedWorkbookSource] = useState<{ label: string; url: string } | null>(null);
   // Error baca link/file ditampilkan di dalam modal; toast saja mudah terlewat
   const [sheetsImportError, setSheetsImportError] = useState<string | null>(null);
-  const [importTargetOption, setImportTargetOption] = useState<'current_batch' | 'sheet_date'>('current_batch');
   const [importTargetBatch, setImportTargetBatch] = useState<{ id: string; tanggal: string } | null>(null);
   const [pmImportWeek, setPmImportWeek] = useState<1 | 2 | 3 | 4>(1);
   const [dailyReport, setDailyReport] = useState<MbgProductionDailyReport | null>(null);
@@ -423,12 +422,16 @@ export function MbgProductionPage() {
     setSheetsImportError(null);
   };
 
+  // Import selalu masuk ke batch yang sedang dipilih, jadi harus ada batch terpilih.
   const openSheetsImportModal = (mode: 'produksi' | 'bahan') => {
-    setImportTargetBatch(
-      selectedBatch ? { id: selectedBatch.id, tanggal: selectedBatch.tanggal } : null
-    );
-    // Default selalu Batch Aktif; "Sesuai Tanggal pada Nama Tab" hanya bila dipilih sendiri
-    setImportTargetOption(defaultImportTargetOption());
+    if (!selectedBatch) {
+      showToast({
+        message: 'Pilih batch tanggal dulu. Import selalu masuk ke batch yang sedang dipilih.',
+        variant: 'error',
+      });
+      return;
+    }
+    setImportTargetBatch({ id: selectedBatch.id, tanggal: selectedBatch.tanggal });
     setImportMode(mode);
     // Workbook selalu dibaca ulang dari link, jangan pakai hasil baca sebelumnya
     resetLoadedWorkbook();
@@ -1662,40 +1665,6 @@ export function MbgProductionPage() {
     }
   };
 
-  const parseSheetNameToDate = (sheetName: string): string | null => {
-    if (!sheetName) return null;
-    const clean = sheetName.trim();
-
-    // Pattern 1: DDMMYYYY (8 digits, e.g. 04092026 or 11092026)
-    const ddmmyyyy = clean.match(/^(\d{2})(\d{2})(\d{4})$/);
-    if (ddmmyyyy) {
-      const [, d, m, y] = ddmmyyyy;
-      return `${y}-${m}-${d}`;
-    }
-
-    // Pattern 2: YYYY-MM-DD
-    const yyyymmdd = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (yyyymmdd) {
-      return clean;
-    }
-
-    // Pattern 3: DD-MM-YYYY or DD/MM/YYYY
-    const ddmmyyyySep = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
-    if (ddmmyyyySep) {
-      const [, d, m, y] = ddmmyyyySep;
-      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    }
-
-    // Pattern 4: DDMMYY (6 digits, e.g. 040926)
-    const ddmmyy = clean.match(/^(\d{2})(\d{2})(\d{2})$/);
-    if (ddmmyy) {
-      const [, d, m, y] = ddmmyy;
-      return `20${y}-${m}-${d}`;
-    }
-
-    return null;
-  };
-
   // Produksi hanya memuat batch yang sudah dikirim Admin MBG (bukan DRAFT). Import menurut
   // tanggal tab bisa mendarat di batch Draft: datanya tersimpan, tetapi memilih batch itu
   // langsung dibatalkan auto-pilih batch sehingga tabel tetap menampilkan batch lama.
@@ -1782,24 +1751,23 @@ export function MbgProductionPage() {
       const ws = sheetWorkbook.Sheets[sheetName];
       const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-      const parsedDateFromSheet = parseSheetNameToDate(sheetName);
-
-      // Determine target batch based on user choice
-      let targetBatchTanggal: string;
-      if (importTargetOption === 'current_batch' && (importTargetBatch?.tanggal || selectedBatch?.tanggal)) {
-        targetBatchTanggal = importTargetBatch?.tanggal || selectedBatch?.tanggal || getJakartaDate();
-      } else {
-        targetBatchTanggal = parsedDateFromSheet || selectedBatch?.tanggal || getJakartaDate();
+      // Laporan Harian selalu masuk ke batch yang sedang dipilih (dibekukan saat dialog dibuka).
+      if (!importTargetBatch) {
+        showToast({ message: 'Pilih batch tanggal dulu sebelum import.', variant: 'error' });
+        return;
       }
+      const targetBatchId = importTargetBatch.id;
+      const targetBatchTanggal = importTargetBatch.tanggal;
+      const targetBatch = batches.find((b) => b.id === targetBatchId);
 
-      let targetBatchId = importTargetOption === 'current_batch' ? (importTargetBatch?.id || selectedBatchId || '') : '';
-      let targetBatch = targetBatchId ? batches.find((b) => b.id === targetBatchId) : batches.find((b) => b.tanggal === targetBatchTanggal);
-
-      if (targetBatch) {
-        targetBatchId = targetBatch.id;
-      } else {
-        targetBatchId = await createBatch(targetBatchTanggal, user?.uid || 'user', false, weeklySchedule);
-        targetBatch = batches.find((b) => b.id === targetBatchId);
+      const otherSheetDate = sheetDateMismatch(sheetName, targetBatchTanggal);
+      if (
+        otherSheetDate &&
+        !window.confirm(
+          `Tab '${sheetName}' adalah data tanggal ${otherSheetDate}, tetapi batch yang dipilih ${targetBatchTanggal}.\n\nTetap import ke batch ${targetBatchTanggal}?`
+        )
+      ) {
+        return;
       }
 
       const parsedReport = parseProductionSheetRows(rows, targetBatchId, targetBatchTanggal, sheetName, sheetWorkbook);
@@ -1910,58 +1878,28 @@ export function MbgProductionPage() {
     try {
       setImportingSheets(true);
 
-      // Tanggal batch mengikuti nama tab (mis. 02102026). Kolom TANGGAL pada sheet
-      // berisi tanggal belanja sehingga hanya dipakai bila nama tab bukan tanggal.
-      const sheetDate = parseSheetNameToDate(sheetName);
-      const useCurrentBatch = importTargetOption === 'current_batch' && !!(importTargetBatch?.tanggal || selectedBatch?.tanggal);
-      const activeBatchTanggal = importTargetBatch?.tanggal || selectedBatch?.tanggal || '';
+      // Daftar Pesanan Bahan selalu masuk ke batch yang sedang dipilih (dibekukan saat
+      // dialog dibuka). Nama tab hanya dipakai untuk mengingatkan bila tab-nya untuk hari lain.
+      if (!importTargetBatch) {
+        showToast({ message: 'Pilih batch tanggal dulu sebelum import.', variant: 'error' });
+        return;
+      }
+      const targetBatchId = importTargetBatch.id;
+      const targetBatchTanggal = importTargetBatch.tanggal;
+      const otherSheetDate = sheetDateMismatch(sheetName, targetBatchTanggal);
       if (
-        useCurrentBatch &&
-        sheetDate &&
-        sheetDate !== activeBatchTanggal &&
+        otherSheetDate &&
         !window.confirm(
-          `Tab '${sheetName}' adalah data tanggal ${sheetDate}, tetapi target import adalah Batch Aktif ${activeBatchTanggal}.\n\nTetap import ke batch ${activeBatchTanggal}?`
+          `Tab '${sheetName}' adalah data tanggal ${otherSheetDate}, tetapi batch yang dipilih ${targetBatchTanggal}.\n\nTetap import ke batch ${targetBatchTanggal}?`
         )
       ) {
         return;
       }
-      const fallbackTanggal = useCurrentBatch
-        ? (importTargetBatch?.tanggal || selectedBatch?.tanggal || getJakartaDate())
-        : (sheetDate || selectedBatch?.tanggal || getJakartaDate());
 
-      // Validasi isi sheet dulu sebelum membuat/memilih batch
-      const finalParsed = parsePesananBahanSheet(ws, { fallbackTanggal });
+      const finalParsed = parsePesananBahanSheet(ws, { fallbackTanggal: targetBatchTanggal });
       if (finalParsed.poRows.length === 0) {
         showToast({ message: `Tidak ada baris bahan yang terbaca di sheet '${sheetName}'.`, variant: 'error' });
         return;
-      }
-
-      let targetBatchTanggal = !useCurrentBatch && !sheetDate && finalParsed.tanggal ? finalParsed.tanggal : fallbackTanggal;
-      let targetBatchId = useCurrentBatch ? (importTargetBatch?.id || selectedBatchId || '') : '';
-      if (!targetBatchId) {
-        // Produksi hanya bisa membuka batch yang sudah dikirim Admin MBG. Batch tanggal ini
-        // yang masih Draft (atau belum dibuat) tidak akan pernah tampil di tabel, jadi
-        // tawarkan batch yang sedang dibuka sebagai gantinya.
-        const existingBatch = batches.find((b) => b.tanggal === targetBatchTanggal);
-        const openBatch = importTargetBatch || (selectedBatch ? { id: selectedBatch.id, tanggal: selectedBatch.tanggal } : null);
-        if (existingBatch) {
-          targetBatchId = existingBatch.id;
-        } else if (
-          openBatch &&
-          window.confirm(
-            `Batch ${targetBatchTanggal} belum dikirim Admin MBG (masih Draft atau belum dibuat), jadi tidak bisa dibuka di Produksi.\n\nImport Daftar Pesanan Bahan ke batch yang sedang dibuka (${openBatch.tanggal})?`
-          )
-        ) {
-          targetBatchId = openBatch.id;
-          targetBatchTanggal = openBatch.tanggal;
-        } else {
-          showToast({
-            message: `Import dibatalkan. Batch ${targetBatchTanggal} belum dikirim Admin MBG, jadi Daftar Pesanan Bahan-nya tidak bisa tampil di Produksi. Minta Admin MBG mengirim PM batch ${targetBatchTanggal} dulu, lalu import ulang.`,
-            variant: 'error',
-            durationMs: 15000,
-          });
-          return;
-        }
       }
 
       await saveDailyReportPesananBahan(
@@ -1981,22 +1919,15 @@ export function MbgProductionPage() {
         }
       );
 
-      // Batch yang sedang dibuka tetap terpilih, meski datanya masuk ke batch lain
-      const viewedBatch = importTargetBatch || (selectedBatch ? { id: selectedBatch.id, tanggal: selectedBatch.tanggal } : null);
-      const batchToShow = batchToShowAfterImport(viewedBatch?.id, targetBatchId);
-      setSelectedBatchId(batchToShow);
+      setSelectedBatchId(targetBatchId);
       setShowImportedDetails(true);
       setDailyReportSubTab('po');
       setShowSheetsImportModal(false);
       setActiveTab('pm-data');
 
-      const stayedNote = batchToShow !== targetBatchId && viewedBatch
-        ? ` Batch yang dibuka tetap ${viewedBatch.tanggal}.`
-        : '';
       showToast({
-        message: `Berhasil meng-import ${finalParsed.poRows.length} item Daftar Pesanan Bahan (${sheetName}) ke Batch ${targetBatchTanggal}. Total belanja Rp ${finalParsed.totalPengeluaran.toLocaleString('id-ID')}.${stayedNote}`,
+        message: `Berhasil meng-import ${finalParsed.poRows.length} item Daftar Pesanan Bahan (${sheetName}) ke Batch ${targetBatchTanggal}. Total belanja Rp ${finalParsed.totalPengeluaran.toLocaleString('id-ID')}.`,
         variant: 'success',
-        durationMs: stayedNote ? 10000 : undefined,
       });
     } catch (err: unknown) {
       console.error('Import Daftar Pesanan Bahan error:', err);
@@ -3976,32 +3907,13 @@ export function MbgProductionPage() {
               {/* Import Daftar Pesanan Bahan: pilih tab tanggal */}
               {importMode === 'bahan' && availableSheetNames.length > 0 && (
                 <div className="space-y-4 pt-1">
-                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
                     <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block">
-                      🎯 Target Batch Tanggal:
+                      🎯 Import ke Batch: <span className="text-amber-700">{importTargetBatch?.tanggal}</span>
                     </span>
-                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-5">
-                      <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="importTargetOptionBahan"
-                          checked={importTargetOption === 'current_batch'}
-                          onChange={() => setImportTargetOption('current_batch')}
-                          className="text-amber-600 focus:ring-amber-500"
-                        />
-                        <span>Batch Aktif ({importTargetBatch?.tanggal || selectedBatch?.tanggal || 'Hari Ini'})</span>
-                      </label>
-                      <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="importTargetOptionBahan"
-                          checked={importTargetOption === 'sheet_date'}
-                          onChange={() => setImportTargetOption('sheet_date')}
-                          className="text-amber-600 focus:ring-amber-500"
-                        />
-                        <span>Sesuai Tanggal pada Nama Tab</span>
-                      </label>
-                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Data selalu masuk ke batch yang sedang dipilih. Untuk tanggal lain, tutup dialog ini lalu pilih batch-nya dulu.
+                    </p>
                   </div>
 
                   <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
@@ -4064,33 +3976,14 @@ export function MbgProductionPage() {
 
                 return (
                   <div className="space-y-4 pt-1">
-                    {/* Target Batch Option */}
-                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    {/* Target batch: selalu batch yang sedang dipilih */}
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
                       <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block">
-                        🎯 Target Batch Tanggal:
+                        🎯 Import ke Batch: <span className="text-emerald-700">{importTargetBatch?.tanggal}</span>
                       </span>
-                      <div className="flex flex-col sm:flex-row gap-2 sm:gap-5">
-                        <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="importTargetOption"
-                            checked={importTargetOption === 'current_batch'}
-                            onChange={() => setImportTargetOption('current_batch')}
-                            className="text-emerald-600 focus:ring-emerald-500"
-                          />
-                          <span>Batch Aktif ({importTargetBatch?.tanggal || selectedBatch?.tanggal || 'Hari Ini'})</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="importTargetOption"
-                            checked={importTargetOption === 'sheet_date'}
-                            onChange={() => setImportTargetOption('sheet_date')}
-                            className="text-emerald-600 focus:ring-emerald-500"
-                          />
-                          <span>Sesuai Tanggal pada Sheet</span>
-                        </label>
-                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Data selalu masuk ke batch yang sedang dipilih. Untuk tanggal lain, tutup dialog ini lalu pilih batch-nya dulu.
+                      </p>
                     </div>
 
                     {/* Group 1: Penerima Manfaat */}
