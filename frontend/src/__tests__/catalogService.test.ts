@@ -97,6 +97,21 @@ describe("catalogService (Firestore direct)", () => {
       expect(categoryFilter?.val).toBe("Makanan");
     });
 
+    it("loads up to 1000 active products so new products past the 60th are not cut off", async () => {
+      mockGetDocs.mockResolvedValue({ docs: [] });
+
+      await listAvailableProducts();
+      await listAvailableProducts({ category: "Makanan" });
+
+      for (const call of mockGetDocs.mock.calls) {
+        const limitFilter = (call[0] as MockQuery).filters.find((f) => f.type === "limit") as
+          | { count?: number }
+          | undefined;
+        expect(limitFilter?.count).toBe(1000);
+      }
+      expect(mockGetDocs).toHaveBeenCalledTimes(2);
+    });
+
     it("ignores empty / whitespace-only category filter", async () => {
       mockGetDocs.mockResolvedValue({ docs: [] });
 

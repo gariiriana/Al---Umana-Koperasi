@@ -44,6 +44,9 @@ function formatUpdatedAt(val: unknown): string {
   return new Date().toISOString();
 }
 
+/** Max active products the storefront reads per load. */
+const CATALOG_FETCH_LIMIT = 1000;
+
 /**
  * Fetch all available products.
  * Filters by `available == true` and `quantity > 0` ordered by quantity asc.
@@ -67,9 +70,12 @@ export async function listAvailableProducts(
 
   try {
     const colRef = collection(db, "inventory");
-    let q = query(colRef, where("available", "==", true), limit(60));
+    // Results come back in random document-ID order, so a tight cap silently hides
+    // products (incl. newly added ones). Keep this above the real catalog size
+    // (~200 active products as of 2026-11).
+    let q = query(colRef, where("available", "==", true), limit(CATALOG_FETCH_LIMIT));
     if (opts.category && opts.category.trim() !== "") {
-      q = query(colRef, where("available", "==", true), where("category", "==", opts.category.trim()), limit(60));
+      q = query(colRef, where("available", "==", true), where("category", "==", opts.category.trim()), limit(CATALOG_FETCH_LIMIT));
     }
     const snap = await getDocs(q);
     const items = snap.docs.map((docSnap) => {
