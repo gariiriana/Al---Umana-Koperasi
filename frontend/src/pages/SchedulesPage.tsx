@@ -7,6 +7,7 @@ import { listAllSchedules, saveSchedule, deleteSchedule, type DistributionSchedu
 import type { ReverseGeoResult } from "@/components/MapLocationPicker";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { safeHttpUrl } from "@/lib/validators";
 
 // Helper to convert URL to Base64 image with downscaling
 const getBase64ImageFromUrl = async (url: string): Promise<string | null> => {
@@ -779,7 +780,7 @@ export function SchedulesPage() {
                 </button>
 
                 {/* Show selected maps URL if any */}
-                {fMapsUrl && (
+                {safeHttpUrl(fMapsUrl) && (
                   <div className="mt-1.5 flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2">
                     <MapPin className="h-3.5 w-3.5 text-green-600 shrink-0" />
                     <a

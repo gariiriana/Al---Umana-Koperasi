@@ -91,3 +91,21 @@ export function validateImageUpload(
 function isAllowedImageMime(mime: string): mime is AllowedImageMime {
   return (ALLOWED_IMAGE_MIME_TYPES as readonly string[]).includes(mime);
 }
+
+/**
+ * A link typed by someone else (for example the Maps link inside a customer's
+ * delivery address) is only safe to put in `href` when it is a plain web link.
+ * Returns the trimmed link for http/https, otherwise null, so `javascript:` or
+ * `data:` links can never run in a staff member's session.
+ */
+export function safeHttpUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+  try {
+    const { protocol } = new URL(trimmed);
+    return protocol === "http:" || protocol === "https:" ? trimmed : null;
+  } catch {
+    return null;
+  }
+}

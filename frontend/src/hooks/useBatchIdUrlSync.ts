@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 /**
  * Selaraskan batch terpilih dengan `?batchId=` tanpa saling menimpa.
  *
- * Router berjalan dengan `v7_startTransition`, jadi URL baru terlihat satu render
+ * Router (v7) memakai startTransition, jadi URL baru terlihat satu render
  * SETELAH state. Versi lama punya dua efek (URL→state dan state→URL) yang di render
  * itu saling mengembalikan nilai lama — pilihan bolak-balik antara batch lama & baru
  * dan halaman Admin MBG "geter" saat ganti tanggal / buat batch.

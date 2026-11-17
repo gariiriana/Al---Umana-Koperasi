@@ -97,6 +97,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('security boundaries', () 
     await assertFails(updateDoc(doc(db('buyer'), 'payment_proofs', 'proof'), { status: 'uploading' }));
     await assertFails(setDoc(doc(db('buyer'), 'payment_proofs', 'proof', 'chunks', '0'), { data: 'changed' }));
     await assertFails(setDoc(doc(db('buyer'), 'payment_proofs', 'instant'), { uploadedBy: 'buyer', orderId: 'pending', status: 'completed' }));
-    await assertSucceeds(setDoc(doc(db('buyer'), 'payment_proofs', 'fresh'), { uploadedBy: 'buyer', orderId: 'pending', status: 'uploading' }));
+    // The order already waits for approval, so no new proof is accepted for it.
+    await assertFails(setDoc(doc(db('buyer'), 'payment_proofs', 'fresh'), { uploadedBy: 'buyer', orderId: 'pending', status: 'uploading' }));
   });
 });

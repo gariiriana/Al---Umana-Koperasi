@@ -161,7 +161,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('unit usaha: Kepala Unit h
     await assertSucceeds(notify('boss', 'inas'));
     await assertSucceeds(notify('dev', 'mo_katering'));
     await assertSucceeds(notify('dok', 'admin_mbg'));
-    await assertSucceeds(notify('budi', 'admin'));
+    // Pelanggan ke admin hanya tentang pesanannya sendiri (lihat storageAbuseRules.test.ts).
+    await assertFails(notify('budi', 'admin'));
     await assertSucceeds(notify('budi', 'budi'));
     await assertSucceeds(notify('inas', 'inas'));
     await assertFails(notify('budi', 'mo_katering'));

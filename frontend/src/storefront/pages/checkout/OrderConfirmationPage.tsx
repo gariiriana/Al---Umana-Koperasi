@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 
 import { formatIDR } from "@/lib/format";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { safeHttpUrl } from "@/lib/validators";
 
 const DICTIONARY = {
   id: {
@@ -39,7 +40,8 @@ const renderFormattedAddress = (address: string) => {
   const parts = address.split(" | ");
 
   if (parts.length === 7) {
-    const [kabupaten, kecamatan, desa, rtRw, postalCode, mapsUrl, specDetails] = parts;
+    const [kabupaten, kecamatan, desa, rtRw, postalCode, rawMapsUrl, specDetails] = parts;
+    const mapsUrl = safeHttpUrl(rawMapsUrl);
     return (
       <div className="space-y-1 text-xs text-[#374151] font-['Hanken_Grotesk'] leading-relaxed">
         <p className="font-extrabold text-[#111827]">Desa/Kel. {desa}, RT/RW {rtRw}</p>
@@ -62,7 +64,8 @@ const renderFormattedAddress = (address: string) => {
   }
 
   if (parts.length === 3) {
-    const [fullAddr, mapsUrl, specAddr] = parts;
+    const [fullAddr, rawMapsUrl, specAddr] = parts;
+    const mapsUrl = safeHttpUrl(rawMapsUrl);
     return (
       <div className="space-y-1 text-xs text-[#374151] font-['Hanken_Grotesk'] leading-relaxed">
         <p className="font-semibold text-[#111827]">{fullAddr}</p>

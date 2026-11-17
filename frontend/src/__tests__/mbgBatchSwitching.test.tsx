@@ -24,7 +24,7 @@ describe("batch terpilih ↔ ?batchId (Admin MBG)", () => {
   it("ganti tanggal tidak bolak-balik ke batch lama (router v7_startTransition)", async () => {
     const seen: Array<string | null> = [];
     render(
-      <MemoryRouter initialEntries={["/mbg/admin?batchId=old"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter initialEntries={["/mbg/admin?batchId=old"]}>
         <Harness onRender={(id) => seen.push(id)} />
       </MemoryRouter>,
     );

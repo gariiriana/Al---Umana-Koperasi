@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/contexts/ToastContext";
 import type { ReverseGeoResult } from "@/components/MapLocationPicker";
+import { safeHttpUrl } from "@/lib/validators";
 
 const MapLocationPicker = lazy(() =>
   import("@/components/MapLocationPicker").then((m) => ({ default: m.MapLocationPicker }))
@@ -84,7 +85,7 @@ const DICTIONARY = {
     confirmNewPassword: "Konfirmasi Password Baru",
     passwordSuccess: "Password berhasil diperbarui!",
     passwordMismatch: "Konfirmasi password baru tidak cocok.",
-    passwordWeak: "Password minimal harus 6 karakter.",
+    passwordWeak: "Password minimal harus 8 karakter.",
     reauthRequired: "Silakan masukkan password saat ini untuk memverifikasi identitas Anda.",
     
     // Notification Tab
@@ -158,7 +159,7 @@ const DICTIONARY = {
     confirmNewPassword: "Confirm New Password",
     passwordSuccess: "Password updated successfully!",
     passwordMismatch: "New passwords do not match.",
-    passwordWeak: "Password must be at least 6 characters.",
+    passwordWeak: "Password must be at least 8 characters.",
     reauthRequired: "Please enter your current password to verify your identity.",
     
     // Notification Tab
@@ -501,7 +502,7 @@ export function ProfilePage() {
       return;
     }
 
-    if (newPwd.length < 6) {
+    if (newPwd.length < 8) {
       showToast({
         message: t.passwordWeak,
         variant: "error",
@@ -1283,7 +1284,7 @@ export function ProfilePage() {
                             </div>
 
                             <div className="pt-2 border-t border-neutral-100 flex items-center">
-                              {addr.mapsUrl && (
+                              {safeHttpUrl(addr.mapsUrl) && (
                                 <a
                                   href={addr.mapsUrl}
                                   target="_blank"

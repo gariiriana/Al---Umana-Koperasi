@@ -16,6 +16,7 @@ import type { ReverseGeoResult } from "@/components/MapLocationPicker";
 import { ProductImage } from "@/components/ProductImage";
 import { listPromos, type Promo } from "@/services/promoService";
 import { aggregateIngredients } from "@/lib/ingredientsParser";
+import { safeHttpUrl } from "@/lib/validators";
 
 const MapLocationPicker = lazy(() =>
   import("@/components/MapLocationPicker").then((m) => ({ default: m.MapLocationPicker }))
@@ -2012,7 +2013,7 @@ export function CheckoutWizard() {
                           <span className="font-bold text-[#374151] block text-[9px] uppercase tracking-wide mb-0.5">Detail Patokan</span>
                           {addrSpecificDetails}
                         </div>
-                        {addrMapsUrl && (
+                        {safeHttpUrl(addrMapsUrl) && (
                           <a href={addrMapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline cursor-pointer mt-1">
                             <Navigation className="h-3 w-3 text-blue-500 shrink-0" />
                             <span>{lang === "en" ? "Open Maps ↗" : "Buka Peta ↗"}</span>

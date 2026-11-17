@@ -957,12 +957,7 @@ export function AppRouter() {
   return (
     <>
     {!isOnline && <OfflineBanner />}
-    <BrowserRouter
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true,
-      }}
-    >
+    <BrowserRouter>
       <AuthProvider>
         <BrowserNotificationListener />
         <PushNotificationCenter />

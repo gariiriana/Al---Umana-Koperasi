@@ -15,6 +15,7 @@
 
 import { CheckoutError, handleCheckout, verifyIdToken } from "./checkout.js";
 import { decodeValue, encodeValue } from "./firestore-values.js";
+import { tooManyRequests, withinLimit } from "./rate-limit.js";
 
 const TOKEN_PATTERN =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_SIGNATURE_LENGTH = 700_000;
@@ -171,6 +172,7 @@ async function checkout(request, env, cors) {
       documents: `projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`,
       firestore: (path, body) => firestoreRequest(env, path, { method: "POST", body: JSON.stringify(body) }),
       verifyIdToken: (token) => verifyIdToken(token, env.FIREBASE_PROJECT_ID),
+      rateLimit: (uid) => withinLimit(env.CHECKOUT_LIMITER, uid),
     });
     return json(body, status, cors);
   } catch (error) {
@@ -202,12 +204,22 @@ export default {
       return json({ error: { code: "NOT_FOUND", message: "invoice not found" } }, 404, cors);
     }
 
+    // Every lookup costs a Firestore read and needs no login, so one address gets a per-minute cap.
+    if (!(await withinLimit(env.INVOICE_LIMITER, request.headers.get("cf-connecting-ip")))) {
+      return tooManyRequests(cors);
+    }
+
     try {
       const document = await findInvoice(env, token);
       if (!document) return json({ error: { code: "NOT_FOUND", message: "invoice not found" } }, 404, cors);
       if (request.method === "GET") return json(invoiceView(document), 200, cors);
 
-      const payload = await request.json();
+      // Size is checked before parsing, so an oversized body is never held as an object.
+      const raw = await request.text();
+      let payload = null;
+      if (raw.length <= MAX_SIGNATURE_LENGTH + 1_024) {
+        try { payload = JSON.parse(raw); } catch { /* rejected below as an invalid signature */ }
+      }
       const signature = payload?.signatureData;
       if (typeof signature !== "string" || !signature.startsWith("data:image/png;base64,") || signature.length > MAX_SIGNATURE_LENGTH) {
         return json({ error: { code: "VALIDATION_ERROR", message: "invalid signature" } }, 400, cors);

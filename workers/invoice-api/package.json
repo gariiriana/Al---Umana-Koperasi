@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test checkout.test.mjs",
+    "test": "node --test checkout.test.mjs rate-limit.test.mjs",
     "deploy": "npx wrangler@4 deploy"
   }
 }

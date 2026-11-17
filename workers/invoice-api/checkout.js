@@ -252,13 +252,18 @@ function orderView(id, fields) {
 /**
  * deps.firestore(path, body) POSTs to `projects/{p}/databases/(default)/{path}`;
  * deps.documents is `projects/{p}/databases/(default)/documents`;
- * deps.verifyIdToken(token) resolves to a uid or null.
+ * deps.verifyIdToken(token) resolves to a uid or null;
+ * deps.rateLimit(uid) (optional) resolves to false when the customer orders too fast.
  * Returns { status, body } or throws CheckoutError.
  */
 export async function handleCheckout(request, deps) {
   const auth = request.headers.get("authorization") || "";
   const uid = auth.startsWith("Bearer ") ? await deps.verifyIdToken(auth.slice(7)).catch(() => null) : null;
   if (!uid) throw new CheckoutError(401, "UNAUTHORIZED", "Sesi login sudah berakhir. Silakan masuk lagi.");
+  // Per account, not per IP: a whole pesantren can share one public address.
+  if (deps.rateLimit && !(await deps.rateLimit(uid))) {
+    throw new CheckoutError(429, "RATE_LIMITED", "Terlalu banyak percobaan pesanan. Coba lagi dalam satu menit.");
+  }
 
   const requestId = request.headers.get("idempotency-key") || "";
   if (!REQUEST_ID.test(requestId)) throw invalid([{ field: "Idempotency-Key", reason: "16 to 128 letters, digits or dashes" }]);

@@ -26,3 +26,16 @@ FIREBASE_APP_ID = "1:238836777828:web:29f9786375e2c7ad61f071"
 #   npx wrangler secret put FIREBASE_CLIENT_EMAIL
 #   npx wrangler secret put FIREBASE_PRIVATE_KEY
 #   npx wrangler secret put TURNSTILE_APPCHECK_SECRET   (secret of the Invisible Turnstile widget)
+
+# Request limits (rate-limit.js). Counted per Cloudflare location, 60-second window.
+# /api/push/kick, per signed-in account: each pass reads Firestore.
+[[ratelimits]]
+name = "KICK_LIMITER"
+namespace_id = "2003"
+simple = { limit = 30, period = 60 }
+
+# /api/security/csp-report, per visitor address.
+[[ratelimits]]
+name = "REPORT_LIMITER"
+namespace_id = "2004"
+simple = { limit = 60, period = 60 }

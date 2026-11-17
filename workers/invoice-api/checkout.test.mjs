@@ -76,6 +76,33 @@ describe("pricing", () => {
   });
 });
 
+describe("order rate limit", () => {
+  const request = (token) => new Request("https://koperasi-alumana.com/api/orders", {
+    method: "POST",
+    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), "idempotency-key": "req-limit-0000000001" },
+    body: JSON.stringify(body()),
+  });
+  const limited = (rateLimit) => ({
+    documents: "projects/p/databases/(default)/documents",
+    firestore: async () => { throw new Error("Firestore must not be reached"); },
+    verifyIdToken: async (token) => (token.startsWith("uid:") ? token.slice(4) : null),
+    rateLimit,
+  });
+  it("stops a customer who orders too fast, before any Firestore work", async () => {
+    const asked = [];
+    const deps = limited(async (uid) => { asked.push(uid); return false; });
+    await assert.rejects(handleCheckout(request("uid:pembeli-1"), deps),
+      (e) => e instanceof CheckoutError && e.status === 429 && e.code === "RATE_LIMITED");
+    assert.deepEqual(asked, ["pembeli-1"]);
+  });
+  it("does not count callers who are not signed in", async () => {
+    const asked = [];
+    const deps = limited(async (uid) => { asked.push(uid); return false; });
+    await assert.rejects(handleCheckout(request(""), deps), (e) => e instanceof CheckoutError && e.code === "UNAUTHORIZED");
+    assert.deepEqual(asked, []);
+  });
+});
+
 describe("idempotency keys", () => {
   it("derives the order id from the customer and the request id", async () => {
     assert.equal(await checkoutOrderId("u1", "req-0000000000000001"), await checkoutOrderId("u1", "req-0000000000000001"));

@@ -26,6 +26,7 @@ import {
   resolveRecipient, selectCandidates, toNotification, decodeValue,
 } from "./logic.js";
 import { handleAppCheckToken, handleCspReport } from "./security.js";
+import { tooManyRequests, withinLimit } from "./rate-limit.js";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SCOPES = "https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.messaging";
@@ -311,12 +312,18 @@ export default {
         now: () => Date.now(),
       }, cors);
     }
-    if (pathname === "/api/security/csp-report") return handleCspReport(request, console.warn, cors);
+    if (pathname === "/api/security/csp-report") {
+      // Reports need no login; cap them per address so they cannot flood the Worker logs.
+      if (!(await withinLimit(env.REPORT_LIMITER, request.headers.get("cf-connecting-ip")))) return tooManyRequests(cors);
+      return handleCspReport(request, console.warn, cors);
+    }
     if (pathname === "/api/push/kick" && request.method === "POST") {
       const auth = request.headers.get("authorization") || "";
       const idToken = auth.startsWith("Bearer ") ? auth.slice(7) : "";
       const uid = idToken ? await verifyIdToken(idToken, env.FIREBASE_PROJECT_ID).catch(() => null) : null;
       if (!uid) return json({ error: "unauthorized" }, 401, cors);
+      // Each pass reads Firestore. A limited kick loses nothing: the cron delivers within 5 minutes.
+      if (!(await withinLimit(env.KICK_LIMITER, uid))) return tooManyRequests(cors);
       ctx.waitUntil(processPending(env).catch((error) => console.error("push pass failed", error instanceof Error ? error.message : error)));
       return json({ queued: true }, 202, cors);
     }

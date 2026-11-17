@@ -38,14 +38,20 @@ describe("security headers (firebase.json)", () => {
     expect(permissions).toContain("microphone=()");
   });
 
-  it("ships CSP in exactly one mode (report-only first, then enforced)", () => {
-    const enforced = header("Content-Security-Policy");
-    const reportOnly = header("Content-Security-Policy-Report-Only");
-    expect(Boolean(enforced) !== Boolean(reportOnly)).toBe(true);
+  // Full policy runs report-only until its reports are clean; the directives that
+  // can never break the app are enforced already.
+  it("enforces the safe CSP baseline while the full policy is reported", () => {
+    const enforced = directives(header("Content-Security-Policy") ?? "");
+    expect(enforced["object-src"]).toEqual(["'none'"]);
+    expect(enforced["base-uri"]).toEqual(["'self'"]);
+    expect(enforced["frame-ancestors"]).toEqual(["'self'"]);
+    expect(enforced["form-action"]).toEqual(["'self'"]);
+    expect(enforced["script-src"]).toBeUndefined();
+    expect(header("Content-Security-Policy-Report-Only")).toBeTruthy();
   });
 
   it("CSP blocks the dangerous things", () => {
-    const csp = directives(header("Content-Security-Policy") ?? header("Content-Security-Policy-Report-Only") ?? "");
+    const csp = directives(header("Content-Security-Policy-Report-Only") ?? header("Content-Security-Policy") ?? "");
     expect(csp["default-src"]).toEqual(["'self'"]);
     expect(csp["object-src"]).toEqual(["'none'"]);
     expect(csp["base-uri"]).toEqual(["'self'"]);
@@ -58,7 +64,7 @@ describe("security headers (firebase.json)", () => {
   });
 
   it("CSP allows every service the app really uses", () => {
-    const csp = directives(header("Content-Security-Policy") ?? header("Content-Security-Policy-Report-Only") ?? "");
+    const csp = directives(header("Content-Security-Policy-Report-Only") ?? header("Content-Security-Policy") ?? "");
     expect(csp["script-src"]).toEqual(expect.arrayContaining([
       "'self'", "https://challenges.cloudflare.com", "https://unpkg.com/leaflet@1.9.4/", "https://www.googletagmanager.com",
     ]));
@@ -77,7 +83,7 @@ describe("security headers (firebase.json)", () => {
   });
 
   it("CSP violations are reported to the push Worker", () => {
-    const csp = directives(header("Content-Security-Policy") ?? header("Content-Security-Policy-Report-Only") ?? "");
+    const csp = directives(header("Content-Security-Policy-Report-Only") ?? header("Content-Security-Policy") ?? "");
     expect(csp["report-uri"]).toEqual(["https://koperasi-alumana.com/api/security/csp-report"]);
     expect(csp["report-to"]).toEqual(["csp"]);
     expect(header("Reporting-Endpoints")).toBe('csp="https://koperasi-alumana.com/api/security/csp-report"');
