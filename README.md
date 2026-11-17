@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD033 MD041 -- centered logo header and footer are intentional HTML -->
 <div align="center">
 
 <img src="frontend/public/logo.png" alt="Al-Umanaa logo" width="96" />
@@ -28,6 +29,7 @@
 - [Getting started](#getting-started)
 - [Testing](#testing)
 - [Deployment](#deployment)
+- [Security](#security)
 - [Design notes](#design-notes)
 
 ---
@@ -207,7 +209,9 @@ Nothing in this mode touches the live project.
 
 ### Environment variables
 
-The frontend reads `VITE_FIREBASE_*` (the Firebase web config), `VITE_TURNSTILE_SITE_KEY`, and the optional Worker base URLs (`VITE_PUSH_API_BASE_URL`, `VITE_INVOICE_API_BASE_URL`). Keep real values in untracked `.env.*` files. Worker secrets (service-account keys, FCM credentials) belong in `wrangler secret`, never in the repo.
+The frontend reads `VITE_FIREBASE_*` (the Firebase web config), `VITE_TURNSTILE_SITE_KEY` (login widget), `VITE_TURNSTILE_APPCHECK_SITE_KEY` (invisible widget for App Check, production only), and the optional Worker base URLs (`VITE_PUSH_API_BASE_URL`, `VITE_INVOICE_API_BASE_URL`).
+
+App Check is **enforced on Firestore**, so a local `npm run dev` pointed at the production project is rejected. Use the emulators, or register an App Check debug token in the Firebase console. Keep real values in untracked `.env.*` files. Worker secrets (service-account keys, FCM credentials) belong in `wrangler secret`, never in the repo.
 
 ---
 
@@ -218,11 +222,12 @@ The frontend reads `VITE_FIREBASE_*` (the Firebase web config), `VITE_TURNSTILE_
 cd frontend && npm test
 
 # Firestore security rules on the emulator (from the repo root)
-npm run test:courier-rules
+npx firebase-tools emulators:exec --only firestore --project demo-courier-fixes --config firebase.test.json "cd frontend && npm run test:rules"
 
 # Workers
 cd workers/absensi && npm test
 cd workers/push && npm test
+cd workers/invoice-api && npm test   # checkout tests also run on the Firestore emulator
 ```
 
 ---
@@ -236,11 +241,32 @@ cd frontend && npm run build
 npx firebase-tools deploy --only firestore:indexes --project al-umana-koperasi
 npx firebase-tools deploy --only firestore:rules,hosting --project al-umana-koperasi
 
-# Each Worker (absensi, push, invoice-api)
-cd workers/push && npm run deploy
+# Each Worker (absensi, push, invoice-api, toksan). Use Wrangler 4: rate-limit bindings need it.
+cd workers/push && npx --yes wrangler@4 deploy
 ```
 
 After a hosting deploy, open apps show the **Perbarui** prompt and switch to the new version once it is pressed.
+
+---
+
+## Security
+
+The app follows the OWASP Top 10 (2021). Status after the audit of 2026-11-17:
+
+| Area | What is in place |
+| --- | --- |
+| **Access control** (A01) | Default-deny Firestore rules keyed on `request.auth.uid` and the role in `users/{uid}`. Customer accounts cannot use the database as free storage: only staff upload delivery photos, payment proofs only for the customer's own order that waits for one, upload chunks capped at index 0–29 and ~512 KiB, cart fields capped, and customer→admin notifications must name the customer's own order. Covered by `frontend/src/__tests__/*Rules.test.ts`. |
+| **Injection / XSS** (A03) | D1 queries use `.bind()`. React escapes text; links typed by users (Maps links in addresses) render only as http/https through `safeHttpUrl()` in `frontend/src/lib/validators.ts`. |
+| **Insecure design** (A04) | Prices, stock and promos are decided by the checkout Worker inside one Firestore transaction. Workers limit requests with the Rate Limiting binding (`rate-limit.js`): public invoice 60/min per IP, checkout 6/min per account, push kick 30/min per account, CSP reports 60/min per IP. |
+| **Configuration** (A05) | Hosting sends nosniff, X-Frame-Options, Referrer-Policy, Permissions-Policy and HSTS. CSP baseline (`object-src`, `base-uri`, `frame-ancestors`, `form-action`) is enforced; the full policy runs report-only and reports go to `/api/security/csp-report`. Source maps are built but never published (`**/*.map` is ignored by hosting). |
+| **Components** (A06) | `npm audit` is clean for code that runs in the browser. SheetJS comes from `cdn.sheetjs.com` (the npm package is unmaintained); Leaflet from unpkg carries SRI hashes. |
+| **Authentication** (A07) | Firebase Auth with Turnstile on login and **App Check enforced on Firestore** (custom provider: invisible Turnstile exchanged by the push Worker). Password policy: at least 8 characters for new passwords. Self sign-up and self-delete are **disabled**: accounts are created by admins. Authorized domains: `koperasi-alumana.com`, `www`, the Firebase hosting domains and `localhost`. |
+| **Integrity** (A08) | Every Worker verifies Firebase ID tokens against Google's keys; only the server writes prices, stock and invoice signatures. |
+| **SSRF** (A10) | No server fetches a URL supplied by a user. |
+
+Still open: MFA for `super_admin` (needs Identity Platform), enforcing the full CSP after reviewing its reports, Auth request logging and alerts (A09), hiding customer profiles from courier and MBG roles, and a cap on open COD orders per customer.
+
+Secrets live in `wrangler secret` and untracked `.env.*` files; none are in the repository or its history.
 
 ---
 
