@@ -87,6 +87,8 @@ interface CellOpts {
   fill?: string;
   size?: number;
   color?: string;
+  /** Baris ini tidak boleh terpisah halaman dari baris sesudahnya (Word: keep with next). */
+  keep?: boolean;
 }
 
 function cell(text: string | Paragraph[], opts: CellOpts = {}) {
@@ -95,6 +97,7 @@ function cell(text: string | Paragraph[], opts: CellOpts = {}) {
         (line) =>
           new Paragraph({
             alignment: opts.center ? AlignmentType.CENTER : AlignmentType.LEFT,
+            keepNext: opts.keep,
             children: [run(line, { bold: opts.bold, size: opts.size ?? TABLE, color: opts.color })],
           }),
       )
@@ -112,7 +115,7 @@ function cell(text: string | Paragraph[], opts: CellOpts = {}) {
 }
 
 const head = (labels: string[]) =>
-  new TableRow({ tableHeader: true, cantSplit: true, children: labels.map((h) => cell(h, { bold: true, center: true })) });
+  new TableRow({ tableHeader: true, cantSplit: true, children: labels.map((h) => cell(h, { bold: true, center: true, keep: true })) });
 
 function table(rows: TableRow[], widthsMm: number[]) {
   const scale = CONTENT_MM / widthsMm.reduce((a, b) => a + b, 0);
@@ -137,19 +140,20 @@ function pesertaDidikTable(model: LaporanModel): Block {
     s.kelas.forEach((k, i) => {
       const span = s.kelas.length;
       const first = i === 0;
+      const keep = i < span - 1;
       const merged = (text: string, center = true) =>
-        cell(first ? text : '', { center, merge: span > 1 ? (first ? 'restart' : 'continue') : undefined });
+        cell(first ? text : '', { center, keep, merge: span > 1 ? (first ? 'restart' : 'continue') : undefined });
       rows.push(
         new TableRow({
           cantSplit: true,
           children: [
             merged(String(s.no)),
             merged(s.nama, false),
-            cell(k.kelas, { center: true }),
+            cell(k.kelas, { center: true, keep }),
             merged(s.alamat, false),
             merged(total(s.jumlah)),
-            cell(num(k.l), { center: true }),
-            cell(num(k.p), { center: true }),
+            cell(num(k.l), { center: true, keep }),
+            cell(num(k.p), { center: true, keep }),
             merged(total(s.jumlah)),
           ],
         }),
@@ -163,24 +167,26 @@ function ptkTable(model: LaporanModel): Block {
   const rows: TableRow[] = [
     head(['NO', 'Nama Satuan Pendidikan', 'Wilayah Kecamatan', 'Alamat Satuan Pendidikan (Lengkap)', 'Jumlah Pendidik dan Kependidikan yang mendapat MBG', 'Jumlah laki-laki', 'Jumlah perempuan', 'Total Jumlah']),
   ];
-  for (const r of model.penerima?.ptk ?? []) {
+  const ptk = model.penerima?.ptk ?? [];
+  ptk.forEach((r, i) => {
+    const keep = i < ptk.length - 1;
     rows.push(
       new TableRow({
         cantSplit: true,
         children: [
-          cell(String(r.no), { center: true }),
-          cell(r.nama),
-          cell(r.kecamatan),
-          cell(r.alamat),
-          cell(total(r.jumlah), { center: true }),
-          cell(num(r.l), { center: true }),
-          cell(num(r.p), { center: true }),
-          cell(total(r.jumlah), { center: true }),
+          cell(String(r.no), { center: true, keep }),
+          cell(r.nama, { keep }),
+          cell(r.kecamatan, { keep }),
+          cell(r.alamat, { keep }),
+          cell(total(r.jumlah), { center: true, keep }),
+          cell(num(r.l), { center: true, keep }),
+          cell(num(r.p), { center: true, keep }),
+          cell(total(r.jumlah), { center: true, keep }),
         ],
       }),
     );
-  }
-  return table(rows, [9, 27, 25, 29, 22, 15, 20, 15]);
+  });
+  return table(rows, [8, 24, 21, 40, 21, 14, 18, 14]);
 }
 
 function posyanduTable(model: LaporanModel): Block {
@@ -189,47 +195,49 @@ function posyanduTable(model: LaporanModel): Block {
       tableHeader: true,
       cantSplit: true,
       children: [
-        cell('NO', { bold: true, center: true, merge: 'restart' }),
-        cell('Nama Posyandu', { bold: true, center: true, merge: 'restart' }),
-        cell('Alamat Posyandu', { bold: true, center: true, merge: 'restart' }),
-        cell('Ibu Hamil', { bold: true, center: true, merge: 'restart' }),
-        cell('Ibu Menyusui', { bold: true, center: true, merge: 'restart' }),
-        cell('Anak di bawah 5 tahun mulai usia 6 bulan', { bold: true, center: true, columnSpan: 2 }),
-        cell('Total Jumlah', { bold: true, center: true, merge: 'restart' }),
+        cell('NO', { bold: true, center: true, merge: 'restart', keep: true }),
+        cell('Nama Posyandu', { bold: true, center: true, merge: 'restart', keep: true }),
+        cell('Alamat Posyandu', { bold: true, center: true, merge: 'restart', keep: true }),
+        cell('Ibu Hamil', { bold: true, center: true, merge: 'restart', keep: true }),
+        cell('Ibu Menyusui', { bold: true, center: true, merge: 'restart', keep: true }),
+        cell('Anak di bawah 5 tahun mulai usia 6 bulan', { bold: true, center: true, columnSpan: 2, keep: true }),
+        cell('Total Jumlah', { bold: true, center: true, merge: 'restart', keep: true }),
       ],
     }),
     new TableRow({
       tableHeader: true,
       cantSplit: true,
       children: [
-        cell('', { merge: 'continue' }),
-        cell('', { merge: 'continue' }),
-        cell('', { merge: 'continue' }),
-        cell('', { merge: 'continue' }),
-        cell('', { merge: 'continue' }),
-        cell('Laki-laki', { bold: true, center: true }),
-        cell('Perempuan', { bold: true, center: true }),
-        cell('', { merge: 'continue' }),
+        cell('', { merge: 'continue', keep: true }),
+        cell('', { merge: 'continue', keep: true }),
+        cell('', { merge: 'continue', keep: true }),
+        cell('', { merge: 'continue', keep: true }),
+        cell('', { merge: 'continue', keep: true }),
+        cell('Laki-laki', { bold: true, center: true, keep: true }),
+        cell('Perempuan', { bold: true, center: true, keep: true }),
+        cell('', { merge: 'continue', keep: true }),
       ],
     }),
   ];
-  for (const r of model.penerima?.posyandu ?? []) {
+  const pos = model.penerima?.posyandu ?? [];
+  pos.forEach((r, i) => {
+    const keep = i < pos.length - 1;
     rows.push(
       new TableRow({
         cantSplit: true,
         children: [
-          cell(String(r.no), { center: true }),
-          cell(r.nama),
-          cell(r.alamat),
-          cell(num(r.bumil), { center: true }),
-          cell(num(r.busui), { center: true }),
-          cell(num(r.l), { center: true }),
-          cell(num(r.p), { center: true }),
-          cell(total(r.total), { center: true }),
+          cell(String(r.no), { center: true, keep }),
+          cell(r.nama, { keep }),
+          cell(r.alamat, { keep }),
+          cell(num(r.bumil), { center: true, keep }),
+          cell(num(r.busui), { center: true, keep }),
+          cell(num(r.l), { center: true, keep }),
+          cell(num(r.p), { center: true, keep }),
+          cell(total(r.total), { center: true, keep }),
         ],
       }),
     );
-  }
+  });
   return table(rows, [9, 32, 34, 16, 18, 18, 18, 17]);
 }
 
@@ -310,20 +318,21 @@ function timTable(model: LaporanModel): Block {
     return len;
   };
   tim.forEach((m, i) => {
+    const keep = i + 1 < tim.length && tim[i + 1][0] === m[0];
     const mergedCell = (col: 0 | 4) => {
       const start = runStart(i, col);
-      if (start) return cell(m[col], { merge: runLength(i, col) > 1 ? 'restart' : undefined });
-      return cell('', { merge: 'continue' });
+      if (start) return cell(m[col], { keep, merge: runLength(i, col) > 1 ? 'restart' : undefined });
+      return cell('', { keep, merge: 'continue' });
     };
     rows.push(
       new TableRow({
         cantSplit: true,
         children: [
           mergedCell(0),
-          cell(m[1]),
-          cell(m[2] === 'L' ? 'L' : '', { center: true }),
-          cell(m[2] === 'P' ? 'P' : '', { center: true }),
-          cell(String(m[3]), { center: true }),
+          cell(m[1], { keep }),
+          cell(m[2] === 'L' ? 'L' : '', { center: true, keep }),
+          cell(m[2] === 'P' ? 'P' : '', { center: true, keep }),
+          cell(String(m[3]), { center: true, keep }),
           mergedCell(4),
         ],
       }),
@@ -467,7 +476,8 @@ export async function renderLaporanDocx(model: LaporanModel): Promise<Blob> {
     ...list(T.penanganan, 'number'),
     heading('c.   Rencana Tindak Lanjut', INDENT / 2),
     ...list(T.tindakLanjut, 'number'),
-    heading('BAB IV. PENUTUP', 0, 360),
+    pageBreak(),
+    heading('BAB IV. PENUTUP', 0, 0),
     para(T.penutup, 0),
   ];
 

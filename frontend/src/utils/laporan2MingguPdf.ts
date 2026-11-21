@@ -106,25 +106,60 @@ class Writer {
     this.y += 1;
   }
 
-  table(head: RowInput[], body: RowInput[], widths: number[], centerCols: number[] = [], opts: { pageBreak?: 'auto' | 'avoid' } = {}) {
-    const scale = CW / widths.reduce((a, b) => a + b, 0);
-    const columnStyles: Record<number, { cellWidth: number; halign?: 'center' }> = {};
-    widths.forEach((w, i) => {
-      columnStyles[i] = { cellWidth: w * scale, ...(centerCols.includes(i) ? { halign: 'center' } : {}) };
-    });
-    autoTable(this.doc, {
-      startY: this.y,
-      head,
-      body,
-      theme: 'grid',
-      margin: { left: M, right: M, top: M, bottom: M },
-      styles: TABLE_STYLES,
-      headStyles: HEAD_STYLES,
-      columnStyles,
-      rowPageBreak: opts.pageBreak ?? 'avoid',
-    });
-    this.y = (this.doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+  table(t: TableArgs) {
+    autoTable(this.doc, tableOptions(t, this.y));
+    this.y = lastY(this.doc) + 6;
   }
+
+  /**
+   * Judul bagian + tabelnya tanpa terpisah halaman: tabel yang muat satu halaman dipindah utuh
+   * ke halaman baru bila sisa halaman tidak cukup; tabel panjang minimal membawa kepala + beberapa baris.
+   */
+  section(title: string, x: number, t: TableArgs, note?: string) {
+    const headH = LH + 0.8 + (note ? LH : 0);
+    const { pages, height } = measureTable(t);
+    this.ensure(headH + (pages === 1 ? height : 45));
+    this.bold(title, x);
+    if (note) this.note(note);
+    this.table(t);
+  }
+}
+
+interface TableArgs {
+  head: RowInput[];
+  body: RowInput[];
+  widths: number[];
+  center?: number[];
+  /** 'avoid' = baris (dan kelompok sel gabung) tidak dipotong antarhalaman. */
+  pageBreak?: 'auto' | 'avoid';
+}
+
+function tableOptions(t: TableArgs, startY: number) {
+  const scale = CW / t.widths.reduce((a, b) => a + b, 0);
+  const columnStyles: Record<number, { cellWidth: number; halign?: 'center' }> = {};
+  t.widths.forEach((w, i) => {
+    columnStyles[i] = { cellWidth: w * scale, ...((t.center ?? []).includes(i) ? { halign: 'center' as const } : {}) };
+  });
+  return {
+    startY,
+    head: t.head,
+    body: t.body,
+    theme: 'grid' as const,
+    margin: { left: M, right: M, top: M, bottom: M },
+    styles: TABLE_STYLES,
+    headStyles: HEAD_STYLES,
+    columnStyles,
+    rowPageBreak: t.pageBreak ?? ('avoid' as const),
+  };
+}
+
+const lastY = (doc: jsPDF) => (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+
+/** Tinggi tabel bila digambar dari atas halaman kosong (dokumen percobaan, tidak ikut tersimpan). */
+function measureTable(t: TableArgs): { pages: number; height: number } {
+  const probe = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  autoTable(probe, tableOptions(t, M));
+  return { pages: probe.getNumberOfPages(), height: lastY(probe) - M };
 }
 
 function writePendahuluan(w: Writer, model: LaporanModel) {
@@ -151,9 +186,7 @@ function writePenerima(w: Writer, model: LaporanModel) {
   w.bold('b.   Pelaksanaan', SUB_X, { keep: LH * 2 });
   w.paragraph(withPeriod(T.pelaksanaan, model.periodRange.replace(' - ', ' – ')));
   w.gap(2);
-  w.bold('1). PENERIMA MANFAAT MBG', M, { keep: LH * 4 });
-  w.bold('a.   Peserta Didik', SUB_X, { keep: LH * 4 });
-  w.note(model.penerima ? `(Data ${formatHariTanggal(model.penerima.tanggal)})` : '(Belum ada data PM dari Admin MBG di periode ini.)');
+  w.bold('1). PENERIMA MANFAAT MBG', M, { keep: LH + 50 });
   const p = model.penerima;
 
   const pd: RowInput[] = [];
@@ -169,26 +202,28 @@ function writePenerima(w: Writer, model: LaporanModel) {
       pd.push(row);
     });
   }
-  w.table(
-    [['NO', 'Nama Satuan Pendidikan', 'Kelas', 'Alamat Satuan Pendidikan (Lengkap)', 'Jumlah siswa yang mendapat MBG', 'Jumlah siswa laki-laki', 'Jumlah siswa perempuan', 'Total Jumlah Peserta Didik']],
-    pd,
-    [9, 29, 11, 34, 18, 17, 18, 18],
-    [0],
-    { pageBreak: 'auto' },
+  w.section(
+    'a.   Peserta Didik',
+    SUB_X,
+    {
+      head: [['NO', 'Nama Satuan Pendidikan', 'Kelas', 'Alamat Satuan Pendidikan (Lengkap)', 'Jumlah siswa yang mendapat MBG', 'Jumlah siswa laki-laki', 'Jumlah siswa perempuan', 'Total Jumlah Peserta Didik']],
+      body: pd,
+      widths: [9, 29, 11, 34, 18, 17, 18, 18],
+      center: [0],
+    },
+    model.penerima ? `(Data ${formatHariTanggal(model.penerima.tanggal)})` : '(Belum ada data PM dari Admin MBG di periode ini.)',
   );
 
-  w.bold('b.   Pendidik dan Tenaga Kependidikan', SUB_X, { keep: LH * 4 });
-  w.table(
-    [['NO', 'Nama Satuan Pendidikan', 'Wilayah Kecamatan', 'Alamat Satuan Pendidikan (Lengkap)', 'Jumlah Pendidik dan Kependidikan yang mendapat MBG', 'Jumlah laki-laki', 'Jumlah perempuan', 'Total Jumlah']],
-    (p?.ptk ?? []).map((r) => [String(r.no), r.nama, r.kecamatan, r.alamat, total(r.jumlah), num(r.l), num(r.p), total(r.jumlah)]),
-    [9, 27, 25, 29, 22, 15, 20, 15],
-    [0, 4, 5, 6, 7],
-  );
+  w.section('b.   Pendidik dan Tenaga Kependidikan', SUB_X, {
+    head: [['NO', 'Nama Satuan Pendidikan', 'Wilayah Kecamatan', 'Alamat Satuan Pendidikan (Lengkap)', 'Jumlah Pendidik dan Kependidikan yang mendapat MBG', 'Jumlah laki-laki', 'Jumlah perempuan', 'Total Jumlah']],
+    body: (p?.ptk ?? []).map((r) => [String(r.no), r.nama, r.kecamatan, r.alamat, total(r.jumlah), num(r.l), num(r.p), total(r.jumlah)]),
+    widths: [8, 24, 21, 40, 21, 14, 18, 14],
+    center: [0, 4, 5, 6, 7],
+  });
 
-  w.bold('c.   Non Peserta Didik', SUB_X, { keep: LH * 4 });
   const center = { halign: 'center' as const };
-  w.table(
-    [
+  w.section('c.   Non Peserta Didik', SUB_X, {
+    head: [
       [
         { content: 'NO', rowSpan: 2 },
         { content: 'Nama Posyandu', rowSpan: 2 },
@@ -200,10 +235,10 @@ function writePenerima(w: Writer, model: LaporanModel) {
       ],
       [{ content: 'Laki-laki', styles: center }, { content: 'Perempuan', styles: center }],
     ],
-    (p?.posyandu ?? []).map((r) => [String(r.no), r.nama, r.alamat, num(r.bumil), num(r.busui), num(r.l), num(r.p), total(r.total)]),
-    [9, 32, 34, 16, 18, 18, 18, 17],
-    [0, 3, 4, 5, 6, 7],
-  );
+    body: (p?.posyandu ?? []).map((r) => [String(r.no), r.nama, r.alamat, num(r.bumil), num(r.busui), num(r.l), num(r.p), total(r.total)]),
+    widths: [9, 32, 34, 16, 18, 18, 18, 17],
+    center: [0, 3, 4, 5, 6, 7],
+  });
 }
 
 function menuContent(day: MenuDay): string {
@@ -242,13 +277,12 @@ function writeMenu(w: Writer, model: LaporanModel) {
       { content: rows.reduce((s, r) => s + r.jumlah, 0).toLocaleString('id-ID'), styles: { fontStyle: 'bold', halign: 'center' } },
       { content: '', styles: missing ? { fillColor: [254, 243, 199] } : {} },
     ]);
-    w.table(
-      [['Nama Satuan Pendidikan / Posyandu', 'Hari/Tanggal Pemberian', 'Kelompok Penerima Manfaat', 'Jumlah Penerima Manfaat', 'Jenis Menu MBG']],
+    w.table({
+      head: [['Nama Satuan Pendidikan / Posyandu', 'Hari/Tanggal Pemberian', 'Kelompok Penerima Manfaat', 'Jumlah Penerima Manfaat', 'Jenis Menu MBG']],
       body,
-      [24, 26, 34, 20, 56],
-      [],
-      { pageBreak: 'auto' },
-    );
+      widths: [24, 26, 34, 20, 56],
+      pageBreak: 'auto',
+    });
   });
 }
 
@@ -259,25 +293,26 @@ function writeTim(w: Writer, model: LaporanModel) {
   w.doc.text(T.timIntro, TEXT_X, w.y);
   w.y += LH + 1;
   const tim = model.tim;
+  // Sel kecamatan hanya digabung di dalam satu jabatan: gabungan sepanjang 48 baris tidak bisa
+  // dipotong antarhalaman dan membuat halaman pertama tabel nyaris kosong.
+  const sameGroup = (a: number, b: number, col: 0 | 4) => tim[a][col] === tim[b][col] && (col === 0 || tim[a][0] === tim[b][0]);
   const span = (i: number, col: 0 | 4) => {
     let len = 1;
-    while (i + len < tim.length && tim[i + len][col] === tim[i][col]) len++;
+    while (i + len < tim.length && sameGroup(i, i + len, col)) len++;
     return len;
   };
   const body: RowInput[] = tim.map((m, i) => {
     const cells: CellInput[] = [];
     if (i === 0 || tim[i - 1][0] !== m[0]) cells.push({ content: m[0], rowSpan: span(i, 0) });
     cells.push(m[1], { content: m[2] === 'L' ? 'L' : '', styles: { halign: 'center' } }, { content: m[2] === 'P' ? 'P' : '', styles: { halign: 'center' } }, { content: String(m[3]), styles: { halign: 'center' } });
-    if (i === 0 || tim[i - 1][4] !== m[4]) cells.push({ content: m[4], rowSpan: span(i, 4) });
+    if (i === 0 || !sameGroup(i - 1, i, 4)) cells.push({ content: m[4], rowSpan: span(i, 4) });
     return cells;
   });
-  w.table(
-    [['Jabatan Sebagai', 'Nama', 'Jenis Kelamin Laki-laki', 'Jenis Kelamin Perempuan', 'Umur', 'Kecamatan Tempat Tinggal']],
+  w.table({
+    head: [['Jabatan Sebagai', 'Nama', 'Jenis Kelamin Laki-laki', 'Jenis Kelamin Perempuan', 'Umur', 'Kecamatan Tempat Tinggal']],
     body,
-    [28, 50, 20, 20, 14, 30],
-    [],
-    { pageBreak: 'auto' },
-  );
+    widths: [28, 50, 20, 20, 14, 30],
+  });
 }
 
 async function writeDokumentasi(w: Writer, model: LaporanModel) {
@@ -375,7 +410,7 @@ function writePenutup(w: Writer) {
   w.list(T.penanganan, 'number');
   w.bold('c.   Rencana Tindak Lanjut', SUB_X);
   w.list(T.tindakLanjut, 'number');
-  w.gap(4);
+  w.newPage();
   w.bold('BAB IV. PENUTUP', M);
   w.paragraph(T.penutup, M, CW);
 }
