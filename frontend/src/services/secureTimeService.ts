@@ -37,8 +37,13 @@ export async function syncSecureTime(): Promise<number> {
     }
 
     const start = performance.now();
-    // Fetch from backend healthz endpoint using absolute URL
-    const res = await fetch(`${window.location.origin}/healthz`, { method: "HEAD" });
+    // HEAD a file the live host always serves, only to read its Date header.
+    // (/healthz exists only on the Go backend, which is not deployed live, so it 404'd.)
+    // no-store: a cached response would carry a stale Date.
+    const res = await fetch(`${window.location.origin}/index.html`, {
+      method: "HEAD",
+      cache: "no-store",
+    });
     const end = performance.now();
     const rtt = end - start;
 
