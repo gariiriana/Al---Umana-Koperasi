@@ -54,6 +54,7 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/mbg/production", label: "Produksi MBG", icon: UtensilsCrossed },
   { to: "/mbg/distribution", label: "Distribusi MBG", icon: ClipboardCheck },
   { to: "/mbg/persiapan", label: "Persiapan", icon: ClipboardCheck },
+  { to: "/mbg/laporan-2-minggu", label: "Laporan 2 Minggu", icon: FileText },
   { to: "/mbg/delivery", label: "Kurir MBG", icon: Truck },
   // --- Toko Santri (Toksan) ---
   { to: "/toksan/input", label: "Input Harian", icon: ClipboardList, shortLabel: "Input" },
@@ -115,6 +116,7 @@ export const MOBILE_SHORT_LABELS: Record<string, string> = {
   "/mbg/production": "Produksi",
   "/mbg/distribution": "Distribusi",
   "/mbg/persiapan": "Persiapan",
+  "/mbg/laporan-2-minggu": "Laporan",
   "/mbg/delivery": "Kurir",
   "/toksan/input": "Input",
   "/toksan/obral": "Obral",

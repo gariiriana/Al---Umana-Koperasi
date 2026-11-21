@@ -91,6 +91,7 @@ const MbgDistributionPage = safeLazy(() => import("@/pages/mbg/MbgDistributionPa
 const MbgDeliveryPage = safeLazy(() => import("@/pages/mbg/MbgDeliveryPage").then(module => ({ default: module.MbgDeliveryPage })));
 const MbgArchivePage = safeLazy(() => import("@/pages/mbg/MbgArchivePage").then(module => ({ default: module.MbgArchivePage })));
 const MbgPersiapanPage = safeLazy(() => import("@/pages/mbg/MbgPersiapanPage").then(module => ({ default: module.MbgPersiapanPage })));
+const MbgLaporan2MingguPage = safeLazy(() => import("@/pages/mbg/MbgLaporan2MingguPage").then(module => ({ default: module.MbgLaporan2MingguPage })));
 const TugasSayaPage = safeLazy(() => import("@/pages/kurir/TugasSayaPage").then(module => ({ default: module.TugasSayaPage })));
 const ToksanInputHarianPage = safeLazy(() => import("@/toksan/pages/InputHarianPage").then(module => ({ default: module.InputHarianPage })));
 const ToksanObralPage = safeLazy(() => import("@/toksan/pages/ObralPage").then(module => ({ default: module.ObralPage })));
@@ -829,6 +830,16 @@ function RoutesTree() {
         }
       />
       <Route path="/mbg/checklist-bahan" element={<Navigate to="/mbg/persiapan" replace />} />
+      <Route
+        path="/mbg/laporan-2-minggu"
+        element={
+          <Protected>
+            <ShelledRoute pageTitle="Laporan 2 Minggu" allowedRoles={["distribusi_mbg", "distribusi_mbg_2", "admin_mbg"]}>
+              <MbgLaporan2MingguPage />
+            </ShelledRoute>
+          </Protected>
+        }
+      />
       <Route path="/performance" element={<Protected><ShelledRoute pageTitle="Performa Saya" allowedRoles={["admin", "monitoring", "tim_produksi", "distribusi", "produksi_1", "distribusi_1", "mo_katering", "co_mo_katering", "admin_mbg", "produksi_mbg", "dokumentasi_produksiMBG", "distribusi_mbg", "MBG2", "mbg2", "produksi_mbg_2", "distribusi_mbg_2", "kepala_unit", "tim_unit"]}><PerformancePage /></ShelledRoute></Protected>} />
       <Route path="/super-admin/control-center" element={<Protected><ShelledRoute pageTitle="SDM Performance Control Center" allowedRoles={["super_admin", "developer"]}><SuperAdminControlCenterPage /></ShelledRoute></Protected>} />
       {/* Toko Santri (Toksan) */}

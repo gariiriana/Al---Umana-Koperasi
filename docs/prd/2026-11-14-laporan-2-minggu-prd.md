@@ -1,7 +1,26 @@
 # PRD: Laporan 2 Minggu (Distribusi MBG)
 
-Status: **ditunda** (14 November 2026). Belum dipasang di menu, belum di-deploy.
-Kode setengah jadi disimpan di branch lokal `archive/laporan-2-minggu` (commit `e19dfdb`).
+Status: **dibangun ulang 21 November 2026** dengan format baru ("Lampiran 2 minggu format baru.docx"). Sudah dipasang di menu; belum di-deploy.
+Isi PRD di bawah adalah versi lama (format Oktober) dan sebagian sudah tidak berlaku, lihat ringkasan berikut.
+
+## Pembaruan 21 November 2026 (format baru)
+
+- **Akses:** `/mbg/laporan-2-minggu`, menu "Laporan 2 Minggu" untuk `distribusi_mbg`, `distribusi_mbg_2`, dan `admin_mbg`.
+- **Data tetap** (`constants/mbgLaporanMaster.ts`, disalin dari Word): nama tampil, alamat, rincian kelas + L/P per kelas, alamat Posyandu Cempaka 1–13, Tim Pelaksana (49 orang), dan teks BAB I–IV.
+- **1). Penerima Manfaat:** hanya dari batch hari pertama periode (Senin). Kalau Senin kosong, dipakai hari pertama yang ada datanya, dengan peringatan.
+  - a. Peserta Didik: jumlah dari admin MBG, L/P per kelas dari Word.
+  - b. PTK: jumlah = `qtGuruKader`, L = guruL + tendikL, P = guruP + tendikP.
+  - c. Posyandu: bumil, busui, balita L/P (`qtPorsiKecilL/P`).
+- **2). Jenis Menu:** satu tabel per hari kerja yang ada data PM-nya.
+  - Jumlah per baris: siswa + guru untuk sekolah, balita + bumil + busui untuk posyandu.
+  - Menu diambil dari `mbg_daily_reports.porsi*.nutritionItems[].menuName`.
+  - Porsi dengan hidangan sama digabung, misalnya "Balita, TK, SD Kelas 1-3".
+  - Hari tanpa menu Produksi tetap masuk laporan, kolom menunya kuning dengan tulisan "MENU BELUM DIISI PRODUKSI MBG".
+- **4). Dokumentasi:** foto per hari per bagian (Persiapan, Pemorsian, Menu, Distribusi Serah Terima, Penerima Manfaat).
+  - Di laporan jadi tabel per tanggal, 2 foto per baris, foto tidak dipotong, dengan keterangan "Foto n – Bagian".
+  - Dokumen `mbg_laporan_photos`: `{ tanggal, section, url, order, createdBy, createdAt }`.
+  - Rules memvalidasi field, bagian, data URL gambar, dan ukuran maksimal 900.000 karakter.
+- **Export:** Word dan PDF.
 
 ## Masalah
 

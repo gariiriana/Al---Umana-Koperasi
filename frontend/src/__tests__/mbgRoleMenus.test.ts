@@ -6,8 +6,8 @@ const menu = (role: string) => navItemsForRole(role).map((item) => item.label);
 
 // Pembagian akun MBG per 2026-11-12 (grup WA): Wandi = adminmbg@, Hashifah = produksimbg@, Dwi = distribusimbg@.
 describe("menu akun MBG", () => {
-  it("adminmbg@ (Kang Wandi): data PM, Arsip PM, Distribusi MBG (penugasan kurir), Kurir MBG (monitoring dokumentasi), Job Desk Teklap, Performa Saya", () => {
-    expect(menu("admin_mbg")).toEqual(["Job Desk Teklap", "Admin MBG", "Arsip PM", "Distribusi MBG", "Kurir MBG", "Performa Saya"]);
+  it("adminmbg@ (Kang Wandi): data PM, Arsip PM, Distribusi MBG (penugasan kurir), Kurir MBG (monitoring dokumentasi), Laporan 2 Minggu, Job Desk Teklap, Performa Saya", () => {
+    expect(menu("admin_mbg")).toEqual(["Job Desk Teklap", "Admin MBG", "Arsip PM", "Distribusi MBG", "Laporan 2 Minggu", "Kurir MBG", "Performa Saya"]);
     expect(ROLE_DEFAULT_REDIRECT.admin_mbg).toBe("/mbg/admin");
   });
 
@@ -16,8 +16,8 @@ describe("menu akun MBG", () => {
     expect(ROLE_DEFAULT_REDIRECT.produksi_mbg).toBe("/mbg/production");
   });
 
-  it("distribusimbg@ (Ustadz Dwi): hanya Persiapan (Cek List & Dokumentasi Bahan), Job Desk Teklap, Performa Saya", () => {
-    expect(menu("distribusi_mbg")).toEqual(["Job Desk Teklap", "Persiapan", "Performa Saya"]);
+  it("distribusimbg@ (Ustadz Dwi): Persiapan (Cek List & Dokumentasi Bahan), Laporan 2 Minggu, Job Desk Teklap, Performa Saya", () => {
+    expect(menu("distribusi_mbg")).toEqual(["Job Desk Teklap", "Persiapan", "Laporan 2 Minggu", "Performa Saya"]);
     expect(ROLE_DEFAULT_REDIRECT.distribusi_mbg).toBe("/mbg/persiapan");
   });
 
