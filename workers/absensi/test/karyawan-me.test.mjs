@@ -37,19 +37,21 @@ describe("/me and /riwayat", () => {
     assert.equal(inactive.data.error.code, "AKUN_NONAKTIF");
   });
 
-  it("returns profile, active areas, today's shift and the descriptor only when face check is on", async () => {
+  it("returns profile, active areas, today's shift and whether face check is on, never the reference descriptor", async () => {
     const me = (await call(env, deps, "GET", "/me", { token: "u1" })).data;
     assert.equal(me.uid, "u1");
     assert.equal(me.role, "absen_karyawan");
     assert.equal(me.activated, true);
     assert.equal(me.faceRequired, true);
-    assert.deepEqual(me.faceDescriptor, [0.1, 0.2]);
+    assert.equal(me.faceCheck, true);
+    assert.equal("faceDescriptor" in me, false);
     assert.deepEqual(me.areas.map((a) => a.id), ["a1"]);
     assert.equal(me.status.today.id, "s-today");
     assert.equal(me.status.open.id, "s-today");
     const me2 = (await call(env, deps, "GET", "/me", { token: "u2" })).data;
     assert.equal(me2.faceRequired, false);
-    assert.equal(me2.faceDescriptor, null);
+    assert.equal(me2.faceCheck, false);
+    assert.equal("faceDescriptor" in me2, false);
   });
 
   it("riwayat filters by month and validates the month", async () => {

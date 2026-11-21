@@ -1,6 +1,7 @@
 // Klien Worker absensi (/api/absensi/*). Tidak memakai Firestore sama sekali.
 import type { RegistrationResponseJSON } from "@simplewebauthn/browser";
 import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
+import type { MessageDetails } from "@/absensi/messages";
 import type {
   AbsenKind, AbsenOptions, AbsenResult, AbsensiNotificationView, AbsensiRequestView, AbsensiRole,
   ActivateOptions, ApprovalList, AreaView, CoworkerView, EmployeeView, HariIniRow, LeaveType, LocationInput,
@@ -12,9 +13,9 @@ const BASE = `${import.meta.env.VITE_ABSENSI_API_BASE_URL ?? ""}/api/absensi`;
 export class AbsensiApiError extends Error {
   readonly code: string;
   readonly status: number;
-  readonly details?: { distanceM?: number | null };
+  readonly details?: MessageDetails;
 
-  constructor(code: string, status: number, details?: { distanceM?: number | null }) {
+  constructor(code: string, status: number, details?: MessageDetails) {
     super(code);
     this.name = "AbsensiApiError";
     this.code = code;
@@ -75,7 +76,8 @@ export interface AbsenBody {
   kind: AbsenKind;
   location: LocationInput;
   selfieBase64: string;
-  faceDistance: number | null;
+  /** Deskriptor wajah beberapa frame (akun dengan cek wajah); Worker yang menghitung jaraknya ke wajah acuan. */
+  faceDescriptors?: number[][];
   /** Wajib dari pop-up kalau clock in lewat 08:00 WIB. */
   lateReason?: string;
   /** Foto bukti alasan (JPEG base64, sudah dikecilkan di HP). */

@@ -28,7 +28,7 @@ const me = {
   uid: "u1",
   name: "Sari",
   faceRequired: true,
-  faceDescriptor: [0.1, 0.2],
+  faceCheck: true,
   areas: [{
     id: "sppg",
     name: "SPPG",
@@ -60,7 +60,7 @@ async function runToSelfie(onStatus = vi.fn()) {
   expect(hook.result.current.step).toBe("lokasi");
   await act(async () => hook.result.current.confirmLocation(mocks.position));
   await waitFor(() => expect(hook.result.current.step).toBe("selfie"));
-  await act(async () => hook.result.current.selfieDone({ jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: [0.1, 0.2], distance: 0.31 }));
+  await act(async () => hook.result.current.selfieDone({ jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: null, descriptors: [[0.1], [0.2], [0.3]] }));
   return hook;
 }
 
@@ -75,7 +75,7 @@ describe("useClockFlow", () => {
       challengeId: "ch-9",
       kind: "masuk",
       location: { lat: PIN.lat, lng: PIN.lng, accuracy: 8.25 },
-      faceDistance: 0.31,
+      faceDescriptors: [[0.1], [0.2], [0.3]],
     });
     expect(mocks.absen.mock.calls[0][0]).not.toHaveProperty("authentication");
     const sentBytes = Uint8Array.from(atob(mocks.absen.mock.calls[0][0].selfieBase64), (c) => c.charCodeAt(0));

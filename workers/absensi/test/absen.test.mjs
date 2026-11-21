@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { addEmployee, call, fakeDeps, fakeWebauthn, JPEG_BASE64, makeEnv, T0 } from "./helpers.mjs";
+import { addEmployee, call, faceFrames, fakeDeps, fakeWebauthn, JPEG_BASE64, makeEnv, REF_DESCRIPTOR, T0 } from "./helpers.mjs";
 import { activateEmployee, getPhoto, insertPasskey, recentShifts, replaceAreas, setSilah } from "../src/db.js";
 import { payloadChallenge, sha256Hex } from "../shared/binding.js";
 import { MAX_LATE_PHOTO_BYTES } from "../shared/constants.js";
@@ -38,7 +38,7 @@ describe("clock in / clock out", () => {
     const challenge = await payloadChallenge({ nonce: opts.data.nonce, kind, ...location, selfieSha256Hex });
     const clientDataJSON = Buffer.from(JSON.stringify({ type: "webauthn.get", challenge, origin: "http://localhost:5174" })).toString("base64url");
     return {
-      challengeId: opts.data.challengeId, kind, location, selfieBase64: JPEG_BASE64, faceDistance: 0.3,
+      challengeId: opts.data.challengeId, kind, location, selfieBase64: JPEG_BASE64, faceDescriptors: faceFrames(0.3),
       authentication: { id: `cred-${uid}`, rawId: `cred-${uid}`, type: "public-key", response: { clientDataJSON, authenticatorData: "", signature: "" } },
       ...over,
     };
@@ -48,10 +48,10 @@ describe("clock in / clock out", () => {
   before(async () => {
     ({ env, dispose } = await makeEnv());
     await replaceAreas(env.DB, [{ id: "a1", name: "SPPG", polygon: SQ, toleranceM: 15, active: true }], "admin", T0);
-    for (const uid of ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10", "u11", "u12", "u13", "u14", "u15", "u16"]) {
+    for (const uid of ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10", "u11", "u12", "u13", "u14", "u15", "u16", "u17", "u18", "u19", "u20", "u21"]) {
       await addEmployee(env, { uid, email: `${uid}@absen.test`, faceRequired: uid !== "u2" });
       if (uid === "u3") continue;
-      await activateEmployee(env.DB, uid, { faceDescriptor: [0.1], referencePhotoId: `r-${uid}`, consentAt: T0, activatedAt: T0 });
+      await activateEmployee(env.DB, uid, { faceDescriptor: REF_DESCRIPTOR, referencePhotoId: `r-${uid}`, consentAt: T0, activatedAt: T0 });
       await insertPasskey(env.DB, { credentialId: `cred-${uid}`, uid, publicKey: "pk", counter: 0, transports: ["internal"], createdAt: T0 });
     }
   });
@@ -123,13 +123,80 @@ describe("clock in / clock out", () => {
     assert.equal(out.data.status.last.status, "selesai");
   });
 
-  it("checks the face distance only when face check is on", async () => {
+  it("computes the face distance on the server from the frames; a phone-sent distance is ignored", async () => {
     now = T0;
-    const far = await absen("u5", await signedBody("u5", "masuk", { faceDistance: 0.6 }));
+    // HP bilang jaraknya 0, tapi frame-nya wajah lain (jarak 0.55 > ambang 0.50).
+    const far = await absen("u5", await signedBody("u5", "masuk", { faceDistance: 0, faceDescriptors: faceFrames(0.55) }));
     assert.equal(far.status, 422);
     assert.equal(far.data.error.code, "WAJAH_TIDAK_COCOK");
-    const exempt = await absen("u2", await signedBody("u2", "masuk", { faceDistance: null }));
+    assert.deepEqual(far.data.error.details, { attemptsLeft: 2 });
+    const exempt = await absen("u2", await signedBody("u2", "masuk", { faceDescriptors: undefined }));
     assert.equal(exempt.status, 200, JSON.stringify(exempt.data));
+    assert.equal((await recentShifts(env.DB, "u2"))[0].masuk_face_distance, null);
+  });
+
+  it("uses the median of the frames: two lucky frames are not enough, two blurry frames do not fail", async () => {
+    now = T0;
+    const close = faceFrames(0.3, 1)[0];
+    const away = faceFrames(0.7, 1)[0];
+    const lucky = await absen("u17", await signedBody("u17", "masuk", { faceDescriptors: [close, close, away, away, away] }));
+    assert.equal(lucky.data.error?.code, "WAJAH_TIDAK_COCOK", JSON.stringify(lucky.data));
+    const blurry = await absen("u18", await signedBody("u18", "masuk", { faceDescriptors: [away, close, away, close, close] }));
+    assert.equal(blurry.status, 200, JSON.stringify(blurry.data));
+    const [shift] = await recentShifts(env.DB, "u18");
+    assert.ok(Math.abs(shift.masuk_face_distance - 0.3) < 1e-9);
+  });
+
+  it("an old app that sends only faceDistance must update; bad frames are rejected before the challenge is used", async () => {
+    now = T0;
+    const old = await signedBody("u19", "masuk", { faceDistance: 0.1, faceDescriptors: undefined });
+    const res = await absen("u19", old);
+    assert.equal(res.status, 422);
+    assert.equal(res.data.error.code, "PERBARUI_APLIKASI");
+    for (const faceDescriptors of [faceFrames(0.3, 2), faceFrames(0.3, 6), [...faceFrames(0.3, 2), [1, 2, 3]], "x"]) {
+      const bad = await absen("u19", { ...old, faceDescriptors });
+      assert.equal(bad.status, 400);
+      assert.equal(bad.data.error.code, "DESKRIPTOR_TIDAK_VALID");
+    }
+    // Challenge yang sama masih berlaku karena semua penolakan di atas terjadi sebelum challenge terpakai.
+    const ok = await absen("u19", { ...old, faceDescriptors: faceFrames(0.3) });
+    assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  });
+
+  it("locks the face scan for 15 minutes after 3 failures, then unlocks", async () => {
+    now = T0;
+    const fail = async () => absen("u20", await signedBody("u20", "masuk", { faceDescriptors: faceFrames(0.6) }));
+    assert.deepEqual((await fail()).data.error.details, { attemptsLeft: 2 });
+    now = T0 + 60_000;
+    assert.deepEqual((await fail()).data.error.details, { attemptsLeft: 1 });
+    now = T0 + 120_000;
+    const third = await fail();
+    assert.equal(third.data.error.code, "WAJAH_TIDAK_COCOK");
+    assert.deepEqual(third.data.error.details, { attemptsLeft: 0, retryAt: T0 + 15 * 60_000 });
+
+    now = T0 + 5 * 60_000;
+    const locked = await options("u20", "masuk");
+    assert.equal(locked.status, 429);
+    assert.equal(locked.data.error.code, "WAJAH_TERKUNCI");
+    assert.deepEqual(locked.data.error.details, { retryAt: T0 + 15 * 60_000 });
+
+    // Sliding window: lewat 15 menit dari gagal pertama, tersisa 2 gagal = boleh coba lagi (sisa 1).
+    now = T0 + 15 * 60_000 + 1;
+    const ok = await absen("u20", await signedBody("u20", "masuk", { faceDescriptors: faceFrames(0.2) }));
+    assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  });
+
+  it("the lock is checked in /absen too, before the challenge is used, and only for face-checked accounts", async () => {
+    now = T0;
+    const body = await signedBody("u21", "masuk", { faceDescriptors: faceFrames(0.6) });
+    for (let i = 0; i < 3; i++) {
+      now = T0 + i * 1000;
+      await absen("u21", await signedBody("u21", "masuk", { faceDescriptors: faceFrames(0.6) }));
+    }
+    now = T0 + 10_000;
+    const locked = await absen("u21", { ...body, faceDescriptors: faceFrames(0.1) });
+    assert.equal(locked.status, 429);
+    assert.equal(locked.data.error.code, "WAJAH_TERKUNCI");
   });
 
   it("rejects requests from outside the enforced country", async () => {

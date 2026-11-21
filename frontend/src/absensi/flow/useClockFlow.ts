@@ -156,7 +156,7 @@ export function useClockFlow({
         kind: currentKind,
         location,
         selfieBase64,
-        faceDistance: selfie.distance,
+        ...(selfie.descriptors ? { faceDescriptors: selfie.descriptors } : {}),
         ...(lateReason ? { lateReason } : {}),
         ...(latePhotoBase64 ? { latePhotoBase64 } : {}),
         ...(outsideReasonRef.current ? { outsideReason: outsideReasonRef.current } : {}),

@@ -1,13 +1,17 @@
 // Endpoint untuk akun absensi sendiri: profil, aktivasi, clock in/out, riwayat, pengajuan, notifikasi.
-import { CHALLENGE_TTL_MS, FACE_MATCH_THRESHOLD, LATE_REASON_MAX, LATE_REASON_MIN, MAX_LATE_PHOTO_BYTES } from "../../shared/constants.js";
+import {
+  CHALLENGE_TTL_MS, FACE_FAIL_LIMIT, FACE_FAIL_WINDOW_MS, FACE_FRAMES_MAX, FACE_FRAMES_MIN, FACE_MATCH_THRESHOLD,
+  LATE_REASON_MAX, LATE_REASON_MIN, MAX_LATE_PHOTO_BYTES,
+} from "../../shared/constants.js";
+import { isDescriptor, medianFaceDistance } from "../../shared/face.js";
 import { checkLocation } from "../../shared/geo.js";
 import { groupSilahHistory, isSilahOn } from "../../shared/silah.js";
 import { isLateClockIn, isLateClockOut, workDateWIB } from "../../shared/time.js";
 import {
   activateEmployee, closeShift, consumeChallenge, countPendingApprovals, countUnreadNotifications, createChallenge,
-  deletePhoto, deleteShiftsForReset, getEmployee, getRequestById, getUnit, insertNotifications, insertPasskey, insertPhoto,
+  deletePhoto, deleteShiftsForReset, getEmployee, getRequestById, getUnit, insertFaceFailure, insertNotifications, insertPasskey, insertPhoto,
   insertLateOutException, insertRequest, insertShift, insertSilahException, insertZoneException, listActiveEmployeesByRole, listAreas, listEmployeeRequests, listSilahHistory,
-  listNotifications, listPasskeys, markAllNotificationsRead, markNotificationRead, recentShifts, requestsForMonth,
+  listNotifications, listPasskeys, markAllNotificationsRead, markNotificationRead, recentFaceFailures, recentShifts, requestsForMonth,
   resetShiftPulangForSimulasi, shiftsForMonth, unitsHeadedBy,
 } from "../db.js";
 import { approverRecipients, jamWIB, zoneKindLabel } from "../approval.js";
@@ -21,7 +25,6 @@ const REQUEST_KINDS = new Set(["cuti", "pergantian_shift"]);
 const LEAVE_TYPES = new Set(["cuti", "sakit", "izin"]);
 
 const BULAN = /^\d{4}-(0[1-9]|1[0-2])$/;
-const DESCRIPTOR_LENGTH = 128;
 const ABSEN_BODY_MAX_CHARS = 1_000_000;
 const MAX_LEAVE_DAYS = 120;
 
@@ -113,7 +116,8 @@ export async function meView(ctx, employee) {
     activated: employee.activated_at !== null,
     status: shiftStatus(shifts, now),
     areas,
-    faceDescriptor: faceRequired && employee.face_descriptor ? JSON.parse(employee.face_descriptor) : null,
+    // Deskriptor acuan tidak dikirim ke HP; HP hanya perlu tahu apakah scan wajah dicocokkan (server yang mencocokkan).
+    faceCheck: needsFaceCheck(employee),
     unreadNotifications,
     pendingRequests,
     unit: unit ? { id: unit.id, name: unit.name } : null,
@@ -121,6 +125,11 @@ export async function meView(ctx, employee) {
     teamPending,
     silahToday,
   };
+}
+
+/** Cek wajah aktif kalau admin mewajibkan dan karyawan sudah punya wajah acuan. */
+function needsFaceCheck(employee) {
+  return employee.face_required === 1 && Boolean(employee.face_descriptor);
 }
 
 export async function getMe(ctx) {
@@ -161,8 +170,7 @@ export async function activate(ctx) {
   let descriptor = null;
   if (employee.face_required === 1) {
     descriptor = body.reference?.descriptor;
-    const valid = Array.isArray(descriptor) && descriptor.length === DESCRIPTOR_LENGTH && descriptor.every(Number.isFinite);
-    if (!valid) throw new AbsensiError("DESKRIPTOR_TIDAK_VALID", 400);
+    if (!isDescriptor(descriptor)) throw new AbsensiError("DESKRIPTOR_TIDAK_VALID", 400);
   }
 
   const credential = await ctx.deps.webauthn.verifyRegistration({
@@ -238,6 +246,42 @@ function parseLatePhoto(body) {
   return decodeJpeg(body.latePhotoBase64, { maxBytes: MAX_LATE_PHOTO_BYTES, code: "FOTO_ALASAN_TIDAK_VALID" });
 }
 
+/**
+ * Deskriptor wajah dari beberapa frame berturut-turut (sesudah menoleh). Dicek sebelum challenge terpakai.
+ * Aplikasi versi lama hanya mengirim `faceDistance` hasil hitungan HP; itu tidak dipercaya lagi.
+ */
+function parseFaceFrames(body) {
+  const frames = body.faceDescriptors;
+  if (frames === undefined || frames === null) throw new AbsensiError("PERBARUI_APLIKASI", 422);
+  const valid = Array.isArray(frames) && frames.length >= FACE_FRAMES_MIN && frames.length <= FACE_FRAMES_MAX
+    && frames.every(isDescriptor);
+  if (!valid) throw new AbsensiError("DESKRIPTOR_TIDAK_VALID", 400);
+  return frames;
+}
+
+/** Sisa percobaan scan wajah; terkunci kalau sudah gagal FACE_FAIL_LIMIT kali dalam FACE_FAIL_WINDOW_MS. */
+async function faceAttempts(ctx, uid, now) {
+  const failures = await recentFaceFailures(ctx.env.DB, uid, now - FACE_FAIL_WINDOW_MS, FACE_FAIL_LIMIT);
+  if (failures.length < FACE_FAIL_LIMIT) return { locked: false, attemptsLeft: FACE_FAIL_LIMIT - failures.length };
+  return { locked: true, attemptsLeft: 0, retryAt: failures[FACE_FAIL_LIMIT - 1].at + FACE_FAIL_WINDOW_MS };
+}
+
+async function requireFaceUnlocked(ctx, uid, now) {
+  const attempts = await faceAttempts(ctx, uid, now);
+  if (attempts.locked) throw new AbsensiError("WAJAH_TERKUNCI", 429, { retryAt: attempts.retryAt });
+}
+
+/** Median jarak frame ke acuan harus di bawah ambang; gagal dicatat untuk batas percobaan. */
+async function verifyFace(ctx, employee, kind, frames, now) {
+  const distance = medianFaceDistance(frames, JSON.parse(employee.face_descriptor));
+  if (distance < FACE_MATCH_THRESHOLD) return distance;
+  await insertFaceFailure(ctx.env.DB, { id: crypto.randomUUID(), uid: employee.uid, kind, at: now, distance });
+  const attempts = await faceAttempts(ctx, employee.uid, now);
+  throw new AbsensiError("WAJAH_TIDAK_COCOK", 422, attempts.locked
+    ? { attemptsLeft: 0, retryAt: attempts.retryAt }
+    : { attemptsLeft: attempts.attemptsLeft });
+}
+
 async function currentDecision(ctx, employee, kind, now) {
   const decision = decideAbsen(kind, shiftStatus(await recentShifts(ctx.env.DB, employee.uid), now), now);
   if (!decision.ok) throw new AbsensiError(decision.code, 409);
@@ -250,6 +294,7 @@ export async function absenOptions(ctx) {
   const now = ctx.deps.now();
   // Hari Silah tidak ditolak di sini: alasannya baru dikirim bersama /absen.
   await currentDecision(ctx, employee, kind, now);
+  if (needsFaceCheck(employee)) await requireFaceUnlocked(ctx, employee.uid, now);
   const { nonce } = randomNonce();
   const challengeId = await createChallenge(ctx.env.DB, {
     uid: employee.uid, purpose: "absen", kind, nonce, expiresAt: now + CHALLENGE_TTL_MS,
@@ -268,6 +313,7 @@ export async function absenOptions(ctx) {
  * Clock in / clock out. Urutan cek mengikuti spec bagian 6; waktu selalu dari server.
  * Tanpa sidik jari/Face ID (passkey) sejak 2026-11-12: identitas = login + challenge sekali pakai + selfie/cek wajah
  * + lokasi. `authentication` dari aplikasi versi lama diabaikan.
+ * Sejak 2026-11-21 jarak wajah dihitung di server (median beberapa frame) dan dibatasi 3 gagal per 15 menit.
  */
 export async function absen(ctx) {
   const employee = await requireActivatedEmployee(ctx);
@@ -279,8 +325,11 @@ export async function absen(ctx) {
   const outsideReason = parseOutsideReason(body);
   const silahReason = kind === "masuk" ? parseSilahReason(body) : null;
   const lateOutReason = kind === "pulang" ? parseLateOutReason(body) : null;
+  const needFace = needsFaceCheck(employee);
+  const faceFrames = needFace ? parseFaceFrames(body) : null;
   const now = ctx.deps.now();
   const { env } = ctx;
+  if (needFace) await requireFaceUnlocked(ctx, employee.uid, now);
   const onSilah = await checkSilahClockIn(ctx, employee, kind, now, silahReason);
   const lateShift = await checkLateClockOut(ctx, employee, kind, now, lateOutReason);
 
@@ -294,11 +343,8 @@ export async function absen(ctx) {
   const country = ctx.deps.country(ctx.request);
   if (env.ENFORCE_COUNTRY && country && country !== env.ENFORCE_COUNTRY) throw new AbsensiError("NEGARA_TIDAK_VALID", 422);
 
-  const faceDistance = Number.isFinite(body.faceDistance) ? body.faceDistance : null;
-  const needFace = employee.face_required === 1 && Boolean(employee.face_descriptor);
-  if (needFace && !(faceDistance !== null && faceDistance >= 0 && faceDistance < FACE_MATCH_THRESHOLD)) {
-    throw new AbsensiError("WAJAH_TIDAK_COCOK", 422);
-  }
+  // Jarak wajah selalu dihitung di server dari deskriptor frame; angka `faceDistance` dari HP diabaikan.
+  const faceDistance = needFace ? await verifyFace(ctx, employee, kind, faceFrames, now) : null;
 
   const decision = await currentDecision(ctx, employee, kind, now);
   const photoId = crypto.randomUUID();

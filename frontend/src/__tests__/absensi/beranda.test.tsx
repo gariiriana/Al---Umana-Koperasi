@@ -11,7 +11,7 @@ vi.mock("@/absensi/AbsensiSession", () => ({
       name: "Sari",
       role: "absen_karyawan",
       faceRequired: false,
-      faceDescriptor: null,
+      faceCheck: false,
       activated: true,
       areas: [{ id: "site-tde", name: "SITE TDE", polygon: [], toleranceM: 15, active: true }],
       status: { today: null, open: null, last: null },

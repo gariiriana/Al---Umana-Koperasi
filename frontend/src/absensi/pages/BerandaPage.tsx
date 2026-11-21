@@ -17,6 +17,7 @@ import { checkLocation } from "../../../../workers/absensi/shared/geo.js";
 import { isLateClockOut, workDateWIB } from "../../../../workers/absensi/shared/time.js";
 import { getRiwayat, resetSimulasi } from "@/absensi/api";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
+import { HoneyHeaderPattern } from "@/absensi/components/HoneyHeaderPattern";
 import { CarryOverCard } from "@/absensi/components/CarryOverCard";
 import { ClockButtons } from "@/absensi/components/ClockButtons";
 import { EmployeeBottomNav } from "@/absensi/components/EmployeeBottomNav";
@@ -200,11 +201,10 @@ function Beranda({
   }, [ambientFix, me.areas]);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24 font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900">
+    <div className="min-h-screen bg-transparent pb-24 font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900">
       {/* Header Kuning Khas (menggantikan header biru di referensi SS 1) */}
       <div className="relative overflow-hidden rounded-b-[2.25rem] bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 px-4 pb-20 pt-7 shadow-xs">
-        <div className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/20" />
-        <div className="pointer-events-none absolute -bottom-16 -left-10 h-40 w-40 rounded-full bg-amber-300/40" />
+        <HoneyHeaderPattern />
 
         <header className="relative mx-auto flex w-full max-w-md items-center justify-between gap-3">
           <Link to="/absensi/profil" className="group flex min-w-0 items-center gap-3">
@@ -511,8 +511,7 @@ function Beranda({
 
             {flow.step === "selfie" && (
               <SelfieCapture
-                mode={me.faceRequired && me.faceDescriptor ? "match" : "photo"}
-                reference={me.faceDescriptor}
+                mode={me.faceCheck ? "match" : "photo"}
                 onDone={(selfie) => void flow.selfieDone(selfie)}
                 onCancel={cancel}
               />

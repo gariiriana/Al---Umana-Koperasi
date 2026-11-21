@@ -29,7 +29,7 @@ vi.mock("@/absensi/AbsensiSession", () => ({
       faceRequired: true,
       activated: true,
       areas: [{ id: "sppg", name: "SPPG Sukabumi Gunungguruh Kebonmanggu", polygon: [], toleranceM: 40, active: true }],
-      faceDescriptor: [0.1, 0.2],
+      faceCheck: true,
       unreadNotifications: sessionMocks.unreadNotifications,
       pendingRequests: 1,
     },

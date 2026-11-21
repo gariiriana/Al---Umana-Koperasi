@@ -1,3 +1,4 @@
+import { faceDistance, isDescriptor, medianFaceDistance } from "../shared/face.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { addDays, isLateClockIn, isLateClockOut, isShiftExpired, minuteOfDayWIB, workDateWIB } from "../shared/time.js";
@@ -103,5 +104,26 @@ describe("clock-out rules", () => {
   it("20:00 is the first night-shift minute", () => {
     assert.equal(isLateClockOut(wib(2026, 12, 1, 20, 0), wib(2026, 12, 2, 6, 0)), false);
     assert.equal(isLateClockOut(wib(2026, 12, 1, 19, 59), wib(2026, 12, 2, 6, 0)), true);
+  });
+});
+
+describe("face", () => {
+  it("validates 128-number descriptors and measures euclidean distance", () => {
+    const ref = Array.from({ length: 128 }, () => 0);
+    assert.equal(isDescriptor(ref), true);
+    assert.equal(isDescriptor(ref.slice(1)), false);
+    assert.equal(isDescriptor([...ref.slice(1), Number.NaN]), false);
+    assert.equal(isDescriptor("x"), false);
+    assert.equal(faceDistance([0, 0], [3, 4]), 5);
+    assert.equal(faceDistance([0], [0, 0]), Number.POSITIVE_INFINITY);
+    assert.equal(faceDistance([], []), Number.POSITIVE_INFINITY);
+  });
+
+  it("takes the median frame distance (odd and even counts)", () => {
+    const ref = [0];
+    assert.equal(medianFaceDistance([[0.9], [0.1], [0.3]], ref), 0.3);
+    assert.ok(Math.abs(medianFaceDistance([[0.1], [0.3], [0.5], [0.9]], ref) - 0.4) < 1e-12);
+    assert.equal(medianFaceDistance([], ref), Number.POSITIVE_INFINITY);
+    assert.equal(medianFaceDistance([[0.1, 0.1]], ref), Number.POSITIVE_INFINITY);
   });
 });

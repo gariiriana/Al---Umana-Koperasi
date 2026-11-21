@@ -52,7 +52,7 @@ const me = {
   uid: "risa",
   name: "Risa",
   faceRequired: true,
-  faceDescriptor: [0.1],
+  faceCheck: true,
   areas: [{
     id: "sppg", name: "SPPG", toleranceM: 15, active: true,
     polygon: [
@@ -79,7 +79,7 @@ describe("clock in di luar zona", () => {
     await act(async () => hook.result.current.retry());
     await act(async () => hook.result.current.confirmLocation(outside, "  Antar bahan  ke sekolah "));
     expect(hook.result.current.step).toBe("selfie");
-    await act(async () => hook.result.current.selfieDone({ jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: [0.1], distance: 0.3 }));
+    await act(async () => hook.result.current.selfieDone({ jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: null, descriptors: [[0.1], [0.2], [0.3]] }));
     await waitFor(() => expect(hook.result.current.step).toBe("sukses"));
     expect(mocks.absen.mock.calls[0][0]).toMatchObject({ outsideReason: "Antar bahan ke sekolah" });
   });
@@ -88,7 +88,7 @@ describe("clock in di luar zona", () => {
     const hook = renderHook(() => useClockFlow({ me, onStatus: vi.fn(), now: () => wib("07:30") }));
     await act(async () => hook.result.current.start("masuk"));
     await act(async () => hook.result.current.confirmLocation({ ...PIN, accuracy: 8 }, "iseng"));
-    await act(async () => hook.result.current.selfieDone({ jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: [0.1], distance: 0.3 }));
+    await act(async () => hook.result.current.selfieDone({ jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: null, descriptors: [[0.1], [0.2], [0.3]] }));
     await waitFor(() => expect(hook.result.current.step).toBe("sukses"));
     expect(mocks.absen.mock.calls[0][0]).not.toHaveProperty("outsideReason");
   });

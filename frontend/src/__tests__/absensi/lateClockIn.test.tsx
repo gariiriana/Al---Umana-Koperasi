@@ -48,7 +48,7 @@ const me = {
   uid: "u1",
   name: "Sari",
   faceRequired: true,
-  faceDescriptor: [0.1, 0.2],
+  faceCheck: true,
   areas: [{
     id: "sppg",
     name: "SPPG",
@@ -85,7 +85,7 @@ beforeEach(() => {
 async function finishClock(hook: { result: { current: ReturnType<typeof useClockFlow> } }) {
   await act(async () => hook.result.current.confirmLocation(inside));
   await waitFor(() => expect(hook.result.current.step).toBe("selfie"));
-  await act(async () => hook.result.current.selfieDone({ jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: [0.1, 0.2], distance: 0.3 }));
+  await act(async () => hook.result.current.selfieDone({ jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: null, descriptors: [[0.1], [0.2], [0.3]] }));
 }
 
 describe("clock in lewat jam 08:00", () => {

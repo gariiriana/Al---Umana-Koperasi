@@ -358,6 +358,25 @@ export const purgeSelfies = (photos, cutoffMs) =>
 export const purgeChallenges = (db, nowMs) => changes(db.prepare("DELETE FROM challenges WHERE expires_at < ?").bind(nowMs));
 
 // ---------------------------------------------------------------------------
+// Scan wajah gagal (batas percobaan)
+// ---------------------------------------------------------------------------
+
+export async function insertFaceFailure(db, { id, uid, kind, at, distance }) {
+  await db.prepare("INSERT INTO face_failures (id, uid, kind, at, distance) VALUES (?, ?, ?, ?, ?)")
+    .bind(id, uid, kind, at, Number.isFinite(distance) ? distance : null).run();
+}
+
+/** Waktu gagal terbaru dulu, sejak `sinceMs`, paling banyak `limit` baris. */
+export async function recentFaceFailures(db, uid, sinceMs, limit) {
+  const { results } = await db.prepare(
+    "SELECT at FROM face_failures WHERE uid = ? AND at > ? ORDER BY at DESC LIMIT ?",
+  ).bind(uid, sinceMs, limit).all();
+  return results;
+}
+
+export const purgeFaceFailures = (db, beforeMs) => changes(db.prepare("DELETE FROM face_failures WHERE at < ?").bind(beforeMs));
+
+// ---------------------------------------------------------------------------
 // Silah (hari libur mingguan tetap)
 // ---------------------------------------------------------------------------
 

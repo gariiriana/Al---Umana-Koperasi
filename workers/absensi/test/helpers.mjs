@@ -81,3 +81,8 @@ export const fakeWebauthn = {
   verifyRegistration: async ({ response }) =>
     response?.ok === true ? { credentialId: response.id, publicKey: "pk", counter: 0, transports: ["internal"] } : null,
 };
+
+// Wajah acuan 128 angka + frame scan. `faceFrames(d)` = 5 frame yang masing-masing berjarak tepat `d` dari acuan.
+export const REF_DESCRIPTOR = Array.from({ length: 128 }, (_, i) => ((i * 37) % 100) / 1000);
+export const faceFrames = (distance = 0.3, count = 5) =>
+  Array.from({ length: count }, () => REF_DESCRIPTOR.map((v, i) => (i === 0 ? v + distance : v)));

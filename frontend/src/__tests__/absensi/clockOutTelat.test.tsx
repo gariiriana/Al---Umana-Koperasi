@@ -37,7 +37,7 @@ const fixtures = vi.hoisted(() => {
 vi.mock("@/absensi/AbsensiSession", () => ({
   useAbsensiSession: () => ({
     me: {
-      uid: "joko", name: "Joko", role: "absen_karyawan", faceRequired: false, faceDescriptor: null, activated: true,
+      uid: "joko", name: "Joko", role: "absen_karyawan", faceRequired: false, faceCheck: false, activated: true,
       areas: fixtures.areas, status: { today: null, open: fixtures.open, last: null },
       unreadNotifications: 0, pendingRequests: 0, silahToday: false,
     },
@@ -52,7 +52,7 @@ import { BerandaPage } from "@/absensi/pages/BerandaPage";
 import type { Me } from "@/absensi/types";
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
-const selfie = { jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: [0.1], distance: 0.3 };
+const selfie = { jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: null, descriptors: [[0.1], [0.2], [0.3]] };
 
 beforeEach(() => {
   mocks.absen.mockReset();
@@ -91,7 +91,7 @@ describe("Beranda: lupa clock out kemarin", () => {
 });
 
 describe("useClockFlow: alasan clock out telat", () => {
-  const me = { uid: "joko", name: "Joko", faceRequired: true, faceDescriptor: [0.1], areas: fixtures.areas } as unknown as Me;
+  const me = { uid: "joko", name: "Joko", faceRequired: true, faceCheck: true, areas: fixtures.areas } as unknown as Me;
   const finish = async (hook: { result: { current: ReturnType<typeof useClockFlow> } }) => {
     await act(async () => hook.result.current.confirmLocation({ ...PIN, accuracy: 8 }));
     await act(async () => hook.result.current.selfieDone(selfie));

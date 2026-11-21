@@ -73,7 +73,8 @@ export interface Me {
   activated: boolean;
   status: ShiftStatus;
   areas: AreaView[];
-  faceDescriptor: number[] | null;
+  /** Scan wajah dicocokkan (cek wajah aktif + wajah acuan sudah ada). Deskriptor acuan tidak pernah dikirim ke HP. */
+  faceCheck: boolean;
   unreadNotifications?: number;
   pendingRequests?: number;
   /** Unit tempat karyawan bernaung (kepala unitnya ikut menyetujui pengajuan). */

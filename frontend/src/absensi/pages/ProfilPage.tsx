@@ -164,7 +164,7 @@ export function ProfilPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24 font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900">
+    <div className="min-h-screen bg-transparent pb-24 font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900">
       {/* Header Atas (Logo Kiri, Judul Profil Tengah, Lonceng Kanan — Referensi SS 4) */}
       <header className="sticky top-0 z-30 border-b border-neutral-200/80 bg-white/95 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-md items-center justify-between px-4">
@@ -426,7 +426,7 @@ export function ProfilPage() {
                   <p className="text-xs font-semibold text-neutral-500">Status Biometrik Wajah</p>
                   <p className="text-sm font-extrabold text-neutral-900">
                     {me.faceRequired
-                      ? me.faceDescriptor
+                      ? me.faceCheck
                         ? "Wajah Terdaftar & Aktif"
                         : "Wajib Pencocokan Wajah"
                       : "Selfie Kehadiran Aktif"}

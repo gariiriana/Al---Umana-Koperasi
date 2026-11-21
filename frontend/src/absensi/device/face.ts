@@ -2,6 +2,7 @@
 import type * as FaceApi from "@vladmandic/face-api";
 import type { Point } from "@/absensi/device/eyes";
 import { pickSingleFace } from "@/absensi/device/faceMatch";
+import { faceCoverFromSource, type CoverVerdict } from "@/absensi/device/occlusion";
 
 const MODEL_URI = "/models";
 
@@ -32,12 +33,12 @@ export async function loadFaceModels(): Promise<void> {
 }
 
 export type FaceDetection =
-  | { kind: "one"; descriptor: number[]; landmarks: Point[] }
+  | { kind: "one"; descriptor: number[]; landmarks: Point[]; cover: CoverVerdict }
   | { kind: "none" }
   | { kind: "many" };
 
 // Saat absen ambang deteksi dilonggarkan supaya wajah di ruangan redup / malam hari tetap terbaca;
-// cocok-tidaknya wajah tetap ditentukan jarak deskriptor (FACE_MATCH_THRESHOLD).
+// cocok-tidaknya wajah ditentukan Worker dari jarak deskriptor (FACE_MATCH_THRESHOLD).
 // Foto acuan aktivasi tetap memakai ambang default face-api (0.5) supaya acuannya jelas.
 export const DETECT_SCORE_ABSEN = 0.3;
 export const DETECT_SCORE_ACUAN = 0.5;
@@ -53,17 +54,15 @@ export async function detectSingleFace(
     .withFaceDescriptors();
   const face = pickSingleFace(results);
   if (face === "none" || face === "many") return { kind: face };
+  const landmarks = face.landmarks.positions.map((p) => ({ x: p.x, y: p.y }));
   return {
     kind: "one",
     descriptor: Array.from(face.descriptor),
-    landmarks: face.landmarks.positions.map((p) => ({ x: p.x, y: p.y })),
+    landmarks,
+    // Hidung & mulut tertutup (masker)? Landmark face-api memakai koordinat asli video.
+    cover: faceCoverFromSource(video, landmarks),
   };
 }
 
-/** Jarak euclidean dua deskriptor wajah; makin kecil makin mirip. */
-export function faceDistance(a: number[], b: number[]): number {
-  if (a.length !== b.length) return Number.POSITIVE_INFINITY;
-  let sum = 0;
-  for (let i = 0; i < a.length; i++) sum += (a[i] - b[i]) ** 2;
-  return Math.sqrt(sum);
-}
+/** Jarak euclidean dua deskriptor wajah (sama dengan hitungan Worker); makin kecil makin mirip. */
+export { faceDistance } from "../../../../workers/absensi/shared/face.js";

@@ -1,4 +1,14 @@
 // Pesan untuk karyawan/admin dari kode error Worker atau perangkat (spec bagian 10).
+import { formatJam } from "@/absensi/logic/format";
+
+/** Detail error dari Worker yang dipakai di teks pesan. */
+export interface MessageDetails {
+  distanceM?: number | null;
+  /** Scan wajah gagal: sisa percobaan sebelum dikunci sementara. */
+  attemptsLeft?: number | null;
+  /** Scan wajah dikunci sampai jam ini (ms). */
+  retryAt?: number | null;
+}
 
 const INVALID = "Konfirmasi tidak valid. Coba lagi.";
 const NOT_SENT = "Absen belum terkirim. Cek internet lalu coba lagi.";
@@ -12,6 +22,10 @@ const MESSAGES: Record<string, string> = {
   KAMERA_TIDAK_ADA: "Kamera depan tidak ditemukan di perangkat ini.",
   WAJAH_TIDAK_COCOK: "Wajah belum cocok. Cari cahaya terang dan lepas masker, lalu coba lagi.",
   MODEL_WAJAH_GAGAL: "Pengenal wajah gagal dimuat. Cek internet lalu coba lagi.",
+  SCAN_WAJAH_BELUM_SELESAI:
+    "Scan wajah belum selesai. Ikuti petunjuknya: hadap lurus, tengok ke samping, lalu hadap lurus lagi. Hidung dan mulut harus terlihat.",
+  WAJAH_TERKUNCI: "Scan wajah dikunci sementara karena 3 kali tidak cocok. Coba lagi nanti.",
+  PERBARUI_APLIKASI: "Aplikasi perlu diperbarui. Tutup lalu buka lagi aplikasinya, lalu tekan Perbarui.",
   PASSKEY_DIBATALKAN: "Konfirmasi sidik jari dibatalkan.",
   PASSKEY_TIDAK_DIDUKUNG: "Browser ini belum mendukung sidik jari/Face ID. Pakai Chrome atau Safari terbaru.",
   PASSKEY_TIDAK_DIKENAL: "HP ini belum terdaftar. Minta admin absensi reset HP kamu.",
@@ -37,16 +51,31 @@ const MESSAGES: Record<string, string> = {
   JARINGAN: NOT_SENT,
   LAYANAN_TIDAK_TERSEDIA: NOT_SENT,
   INTERNAL: NOT_SENT,
-  LOGIN_GAGAL: "Email atau password salah.",
+  LOGIN_GAGAL: "Email atau password belum benar. Periksa lagi, lalu coba masuk.",
+  LOGIN_TERLALU_SERING: "Terlalu banyak percobaan masuk. Tunggu beberapa menit, lalu coba lagi.",
+  LOGIN_OFFLINE: "Tidak ada koneksi internet. Periksa jaringan, lalu coba lagi.",
+  EMAIL_TIDAK_VALID: "Format email belum benar. Contoh: nama@absen.alumana.id",
   EMAIL_SUDAH_ADA: "Email ini sudah dipakai akun lain.",
   TIDAK_BISA_DIRI_SENDIRI: "Kamu tidak bisa menonaktifkan akunmu sendiri.",
   VALIDATION_ERROR: "Data belum lengkap atau tidak valid.",
 };
 
-export function messageFor(code: string | null | undefined, details?: { distanceM?: number | null }): string {
+export function messageFor(code: string | null | undefined, details?: MessageDetails): string {
   if (code === "DI_LUAR_AREA") {
     const distance = Math.round(details?.distanceM ?? 0);
     return `Kamu di luar area absen (sekitar ${distance} m dari gedung).`;
+  }
+  const retryAt = typeof details?.retryAt === "number" ? details.retryAt : null;
+  if (code === "WAJAH_TERKUNCI" && retryAt !== null) {
+    return `Scan wajah dikunci sementara karena 3 kali tidak cocok. Coba lagi jam ${formatJam(retryAt)} WIB.`;
+  }
+  if (code === "WAJAH_TIDAK_COCOK" && typeof details?.attemptsLeft === "number") {
+    if (details.attemptsLeft <= 0) {
+      return retryAt !== null
+        ? `Wajah tidak cocok 3 kali. Scan wajah dikunci, coba lagi jam ${formatJam(retryAt)} WIB.`
+        : "Wajah tidak cocok 3 kali. Scan wajah dikunci sementara.";
+    }
+    return `Wajah tidak cocok dengan wajah terdaftar. Pastikan wajah sendiri, tanpa masker, cahaya terang. Sisa ${details.attemptsLeft} kali percobaan.`;
   }
   return (code && MESSAGES[code]) || "Terjadi kesalahan. Coba lagi.";
 }

@@ -36,13 +36,13 @@ import type { Me, RekapRow, ShiftStatus, SilahExceptionView } from "@/absensi/ty
 const wib = (hhmm: string) => Date.parse(`2026-11-13T${hhmm}:00+07:00`);
 const STATUS: ShiftStatus = { today: null, open: null, last: null };
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
-const selfie = { jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: [0.1], distance: 0.3 };
+const selfie = { jpeg: new Blob([JPEG], { type: "image/jpeg" }), descriptor: null, descriptors: [[0.1], [0.2], [0.3]] };
 
 const me = {
   uid: "febri",
   name: "Febri",
   faceRequired: true,
-  faceDescriptor: [0.1],
+  faceCheck: true,
   silahToday: true,
   areas: [{
     id: "sppg", name: "SPPG", toleranceM: 15, active: true,

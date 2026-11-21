@@ -21,7 +21,16 @@ export const MAX_SELFIE_BYTES = 200_000;
 export const MIN_SELFIE_BYTES = 1_000;
 export const SELFIE_WIDTH_PX = 480;
 export const SELFIE_JPEG_QUALITY = 0.7;
-export const FACE_MATCH_THRESHOLD = 0.55;
+// Cek wajah dihitung di Worker: HP mengirim deskriptor beberapa frame berturut-turut (sesudah menoleh),
+// server mengambil median jaraknya ke wajah acuan. Median harus di bawah ambang ini.
+// 0.50 (bukan 0.45): data 30 hari (182 absen, 11 orang) menunjukkan frame TERBAIK karyawan asli
+// sampai 0.53, sedangkan median selalu lebih tinggi; wajah bermasker di kalibrasi rata-rata ±0.6.
+export const FACE_MATCH_THRESHOLD = 0.5;
+export const FACE_FRAMES_MIN = 3;
+export const FACE_FRAMES_MAX = 5;
+// Gagal cocok 3 kali dalam 15 menit = scan wajah dikunci sampai percobaan tertua lewat 15 menit.
+export const FACE_FAIL_LIMIT = 3;
+export const FACE_FAIL_WINDOW_MS = 15 * 60_000;
 
 export const REKAP_MAX_DAYS = 366;
 export const MIN_PASSWORD_LENGTH = 8;

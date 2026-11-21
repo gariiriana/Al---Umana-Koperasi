@@ -34,4 +34,19 @@ describe("messageFor", () => {
     for (const [code, text] of Object.entries(cases)) expect(messageFor(code)).toBe(text);
     expect(messageFor("APA_INI")).toBe("Terjadi kesalahan. Coba lagi.");
   });
+
+  it("scan wajah: sisa percobaan dan jam buka kunci (WIB) dari server", () => {
+    const jam0915 = Date.parse("2026-11-21T09:15:00+07:00");
+    expect(messageFor("WAJAH_TIDAK_COCOK", { attemptsLeft: 2 })).toBe(
+      "Wajah tidak cocok dengan wajah terdaftar. Pastikan wajah sendiri, tanpa masker, cahaya terang. Sisa 2 kali percobaan.",
+    );
+    expect(messageFor("WAJAH_TIDAK_COCOK", { attemptsLeft: 0, retryAt: jam0915 })).toBe(
+      "Wajah tidak cocok 3 kali. Scan wajah dikunci, coba lagi jam 09:15 WIB.",
+    );
+    expect(messageFor("WAJAH_TERKUNCI", { retryAt: jam0915 })).toBe(
+      "Scan wajah dikunci sementara karena 3 kali tidak cocok. Coba lagi jam 09:15 WIB.",
+    );
+    expect(messageFor("PERBARUI_APLIKASI")).toMatch(/Perbarui/);
+    expect(messageFor("SCAN_WAJAH_BELUM_SELESAI")).toMatch(/tengok ke samping/);
+  });
 });

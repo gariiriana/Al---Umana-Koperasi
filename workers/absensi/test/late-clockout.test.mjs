@@ -1,7 +1,7 @@
 // Clock out telat: lupa clock out, baru ditutup sesudah ganti hari → alasan + menunggu persetujuan.
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { addEmployee, call, fakeDeps, fakeWebauthn, JPEG_BASE64, makeEnv, T0 } from "./helpers.mjs";
+import { addEmployee, call, faceFrames, fakeDeps, fakeWebauthn, JPEG_BASE64, makeEnv, REF_DESCRIPTOR, T0 } from "./helpers.mjs";
 import { activateEmployee, insertPasskey, replaceAreas } from "../src/db.js";
 import { payloadChallenge, sha256Hex } from "../shared/binding.js";
 
@@ -36,7 +36,7 @@ describe("clock out telat (sesudah ganti hari)", () => {
     const challenge = await payloadChallenge({ nonce: opts.data.nonce, kind, ...location, selfieSha256Hex });
     const clientDataJSON = Buffer.from(JSON.stringify({ type: "webauthn.get", challenge, origin: "http://localhost:5174" })).toString("base64url");
     return {
-      challengeId: opts.data.challengeId, kind, location, selfieBase64: JPEG_BASE64, faceDistance: 0.3,
+      challengeId: opts.data.challengeId, kind, location, selfieBase64: JPEG_BASE64, faceDescriptors: faceFrames(0.3),
       authentication: { id: `cred-${uid}`, rawId: `cred-${uid}`, type: "public-key", response: { clientDataJSON, authenticatorData: "", signature: "" } },
       ...over,
     };
@@ -54,7 +54,7 @@ describe("clock out telat (sesudah ganti hari)", () => {
     await addEmployee(env, { uid: "adm", email: "adm@absen.test", name: "Admin", role: "admin_absensi" });
     for (const uid of ["kepala", "lain", "ani", "joko", "dedi", "malam", "malam2", "eka", "fajar", "gina", "hana", "malam3"]) {
       await addEmployee(env, { uid, email: `${uid}@absen.test`, name: uid[0].toUpperCase() + uid.slice(1) });
-      await activateEmployee(env.DB, uid, { faceDescriptor: [0.1], referencePhotoId: `r-${uid}`, consentAt: T0, activatedAt: T0 });
+      await activateEmployee(env.DB, uid, { faceDescriptor: REF_DESCRIPTOR, referencePhotoId: `r-${uid}`, consentAt: T0, activatedAt: T0 });
       await insertPasskey(env.DB, { credentialId: `cred-${uid}`, uid, publicKey: "pk", counter: 0, transports: ["internal"], createdAt: T0 });
     }
     const dapur = await send("adm", "POST", "/admin/unit", { name: "Dapur", headUid: "kepala" });
