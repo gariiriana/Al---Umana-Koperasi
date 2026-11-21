@@ -32,7 +32,20 @@ describe("messageFor", () => {
       EMAIL_SUDAH_ADA: "Email ini sudah dipakai akun lain.",
     };
     for (const [code, text] of Object.entries(cases)) expect(messageFor(code)).toBe(text);
-    expect(messageFor("APA_INI")).toBe("Terjadi kesalahan. Coba lagi.");
+  });
+
+  it("kode dari Worker yang dulu belum punya teks", () => {
+    expect(messageFor("UNAUTHENTICATED")).toBe("Sesi masuk kamu sudah habis. Keluar lalu masuk lagi.");
+    expect(messageFor("FORBIDDEN")).toBe("Akun kamu tidak punya akses ke fitur ini.");
+    expect(messageFor("NOT_FOUND")).toBe("Data tidak ditemukan. Muat ulang halaman lalu coba lagi.");
+    expect(messageFor("FOTO_TIDAK_ADA")).toBe("Foto tidak ditemukan atau sudah terhapus.");
+    expect(messageFor("UNIT_SUDAH_ADA")).toBe("Nama unit ini sudah ada.");
+  });
+
+  it("kode tak dikenal tetap ikut tampil supaya screenshot bisa dilacak", () => {
+    expect(messageFor("APA_INI")).toBe("Terjadi kesalahan (APA_INI). Coba lagi.");
+    expect(messageFor(null)).toBe("Terjadi kesalahan. Coba lagi.");
+    expect(messageFor("")).toBe("Terjadi kesalahan. Coba lagi.");
   });
 
   it("scan wajah: sisa percobaan dan jam buka kunci (WIB) dari server", () => {

@@ -58,6 +58,11 @@ const MESSAGES: Record<string, string> = {
   EMAIL_SUDAH_ADA: "Email ini sudah dipakai akun lain.",
   TIDAK_BISA_DIRI_SENDIRI: "Kamu tidak bisa menonaktifkan akunmu sendiri.",
   VALIDATION_ERROR: "Data belum lengkap atau tidak valid.",
+  UNAUTHENTICATED: "Sesi masuk kamu sudah habis. Keluar lalu masuk lagi.",
+  FORBIDDEN: "Akun kamu tidak punya akses ke fitur ini.",
+  NOT_FOUND: "Data tidak ditemukan. Muat ulang halaman lalu coba lagi.",
+  FOTO_TIDAK_ADA: "Foto tidak ditemukan atau sudah terhapus.",
+  UNIT_SUDAH_ADA: "Nama unit ini sudah ada.",
 };
 
 export function messageFor(code: string | null | undefined, details?: MessageDetails): string {
@@ -77,5 +82,8 @@ export function messageFor(code: string | null | undefined, details?: MessageDet
     }
     return `Wajah tidak cocok dengan wajah terdaftar. Pastikan wajah sendiri, tanpa masker, cahaya terang. Sisa ${details.attemptsLeft} kali percobaan.`;
   }
-  return (code && MESSAGES[code]) || "Terjadi kesalahan. Coba lagi.";
+  if (code && MESSAGES[code]) return MESSAGES[code];
+  // Kode baru dari Worker yang belum dikenal versi aplikasi ini (mis. HP belum Perbarui): tampilkan
+  // kodenya supaya dari screenshot langsung ketahuan penyebabnya.
+  return code ? `Terjadi kesalahan (${code}). Coba lagi.` : "Terjadi kesalahan. Coba lagi.";
 }
