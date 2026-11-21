@@ -6,6 +6,7 @@ import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
+import { HoneyHeaderPattern } from "@/absensi/components/HoneyHeaderPattern";
 import { AbsensiApiError } from "@/absensi/api";
 import { messageFor } from "@/absensi/messages";
 
@@ -47,10 +48,10 @@ export function AbsensiLoginPage() {
   const shownError = error ?? (session.error ? messageFor(session.error) : null);
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#F8FAFC] px-4 py-8">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 rounded-b-[3rem] bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 shadow-xs" />
-      <div className="pointer-events-none absolute -right-16 -top-16 h-60 w-60 rounded-full bg-white/25" />
-      <div className="pointer-events-none absolute left-8 top-28 h-44 w-44 rounded-full bg-amber-300/35" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-transparent px-4 py-8">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 overflow-hidden rounded-b-[3rem] bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 shadow-xs">
+        <HoneyHeaderPattern />
+      </div>
 
       <div className="relative z-10 w-full max-w-md">
         <div className="rounded-3xl border border-amber-200/80 bg-white p-6 shadow-[0_24px_50px_-14px_rgba(17,24,39,0.16)] sm:p-8">

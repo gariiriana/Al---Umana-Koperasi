@@ -3,6 +3,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut as firebaseSign
 import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
 import { AbsensiApiError, getMe } from "@/absensi/api";
 import type { Me, ShiftStatus } from "@/absensi/types";
+import { authErrorCode } from "@/services/authErrors";
 
 export interface AbsensiSessionValue {
   user: User | null;
@@ -63,7 +64,13 @@ export function AbsensiSessionProvider({ children }: { children: ReactNode }) {
     try {
       const cred = await signInWithEmailAndPassword(getAbsensiAuth(), email.trim(), password);
       nextUid = cred.user.uid;
-    } catch {
+    } catch (err) {
+      // Kode Firebase diterjemahkan ke kode pesan absensi; teks mentah Firebase tidak pernah tampil.
+      const code = authErrorCode(err);
+      if (code === "auth/too-many-requests") throw new AbsensiApiError("LOGIN_TERLALU_SERING", 429);
+      if (code === "auth/network-request-failed") throw new AbsensiApiError("LOGIN_OFFLINE", 0);
+      if (code === "auth/user-disabled") throw new AbsensiApiError("AKUN_NONAKTIF", 403);
+      if (code === "auth/invalid-email") throw new AbsensiApiError("EMAIL_TIDAK_VALID", 400);
       throw new AbsensiApiError("LOGIN_GAGAL", 401);
     }
 

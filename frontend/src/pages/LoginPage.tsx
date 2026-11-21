@@ -12,6 +12,7 @@ import { signOut as authSignOut } from "@/services/authService";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
 import { HoneycombBackdrop } from "@/components/layout/HoneycombBackdrop";
+import { signInErrorMessage } from "@/services/authErrors";
 
 const DICTIONARY = {
   id: {
@@ -116,7 +117,8 @@ export function LoginPage() {
         state: { selectedQty: preservedQty }
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign-in failed");
+      // Jangan tampilkan teks mentah Firebase ("Firebase: Error (auth/invalid-credential).").
+      setError(signInErrorMessage(err, lang));
       // Reset Turnstile on authentication error
       turnstileRef.current?.reset();
       setTurnstileToken(null);
@@ -217,7 +219,7 @@ export function LoginPage() {
             {(error ?? accountNotice) && (
               <p
                 role="alert"
-                className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-[#EF4444]"
+                className="rounded-xl border border-red-400/40 bg-red-500/15 px-3.5 py-2.5 font-['Hanken_Grotesk',system-ui,sans-serif] text-sm font-semibold text-red-100"
               >
                 {error ?? accountNotice}
               </p>

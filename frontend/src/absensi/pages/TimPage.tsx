@@ -15,7 +15,7 @@ export function TimPage() {
   if (me && units.length === 0) return <Navigate to="/absensi" replace />;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-28 font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900">
+    <div className="min-h-screen bg-transparent pb-28 font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900">
       <header className="sticky top-0 z-30 border-b border-neutral-200/80 bg-white/95 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-md items-center justify-between px-4">
           <button

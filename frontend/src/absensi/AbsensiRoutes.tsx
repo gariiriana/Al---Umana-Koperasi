@@ -12,12 +12,13 @@ import { RiwayatPage } from "@/absensi/pages/RiwayatPage";
 import { TimPage } from "@/absensi/pages/TimPage";
 import { messageFor } from "@/absensi/messages";
 import type { AbsensiRole } from "@/absensi/types";
+import { HoneycombBackdrop } from "@/components/layout/HoneycombBackdrop";
 import { Button } from "@/components/ui/Button";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 function AbsensiScreen({ title, message, children }: { title: string; message: string; children?: ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC] px-4">
+    <div className="flex min-h-screen items-center justify-center bg-transparent px-4">
       <div className="w-full max-w-md space-y-4 rounded-3xl border border-amber-200/80 bg-white p-6 text-center shadow-lg">
         <h1 className="font-['Manrope',system-ui,sans-serif] text-xl font-extrabold text-neutral-900">{title}</h1>
         <p className="font-['Hanken_Grotesk',system-ui,sans-serif] text-sm text-neutral-600">{message}</p>
@@ -64,36 +65,40 @@ function AbsensiHome() {
 export function AbsensiRoutes() {
   return (
     <AbsensiSessionProvider>
-      <Routes>
-        <Route path="login" element={<AbsensiLoginPage />} />
-        <Route index element={<RequireAbsensi><AbsensiHome /></RequireAbsensi>} />
-        <Route
-          path="aktivasi"
-          element={<RequireAbsensi role="absen_karyawan"><AktivasiPage /></RequireAbsensi>}
-        />
-        <Route
-          path="riwayat"
-          element={<RequireAbsensi role="absen_karyawan" requireActivated><RiwayatPage /></RequireAbsensi>}
-        />
-        <Route
-          path="persetujuan"
-          element={<RequireAbsensi role="absen_karyawan" requireActivated><PengajuanPage /></RequireAbsensi>}
-        />
-        <Route
-          path="tim"
-          element={<RequireAbsensi role="absen_karyawan" requireActivated><TimPage /></RequireAbsensi>}
-        />
-        <Route
-          path="profil"
-          element={<RequireAbsensi role="absen_karyawan" requireActivated><ProfilPage /></RequireAbsensi>}
-        />
-        <Route path="admin" element={<Navigate to="/absensi/admin/hari-ini" replace />} />
-        <Route
-          path="admin/:tab"
-          element={<RequireAbsensi role="admin_absensi"><AdminLayout /></RequireAbsensi>}
-        />
-        <Route path="*" element={<Navigate to="/absensi" replace />} />
-      </Routes>
+      {/* Khas Al-Umanaa: sarang lebah madu di pojok, di belakang semua halaman absensi (diam saat scroll). */}
+      <div className="relative isolate min-h-screen bg-[#F8FAFC]">
+        <HoneycombBackdrop variant="light" className="fixed inset-0 -z-10" />
+        <Routes>
+          <Route path="login" element={<AbsensiLoginPage />} />
+          <Route index element={<RequireAbsensi><AbsensiHome /></RequireAbsensi>} />
+          <Route
+            path="aktivasi"
+            element={<RequireAbsensi role="absen_karyawan"><AktivasiPage /></RequireAbsensi>}
+          />
+          <Route
+            path="riwayat"
+            element={<RequireAbsensi role="absen_karyawan" requireActivated><RiwayatPage /></RequireAbsensi>}
+          />
+          <Route
+            path="persetujuan"
+            element={<RequireAbsensi role="absen_karyawan" requireActivated><PengajuanPage /></RequireAbsensi>}
+          />
+          <Route
+            path="tim"
+            element={<RequireAbsensi role="absen_karyawan" requireActivated><TimPage /></RequireAbsensi>}
+          />
+          <Route
+            path="profil"
+            element={<RequireAbsensi role="absen_karyawan" requireActivated><ProfilPage /></RequireAbsensi>}
+          />
+          <Route path="admin" element={<Navigate to="/absensi/admin/hari-ini" replace />} />
+          <Route
+            path="admin/:tab"
+            element={<RequireAbsensi role="admin_absensi"><AdminLayout /></RequireAbsensi>}
+          />
+          <Route path="*" element={<Navigate to="/absensi" replace />} />
+        </Routes>
+      </div>
     </AbsensiSessionProvider>
   );
 }

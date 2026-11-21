@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { resetPasswordErrorMessage } from "@/services/authErrors";
 
 const DICTIONARY = {
   id: {
@@ -18,7 +19,6 @@ const DICTIONARY = {
     resetBtn: "Atur Ulang Kata Sandi",
     backToSignIn: "Kembali ke halaman masuk",
     successMsg: "Tautan atur ulang kata sandi telah dikirim ke email Anda.",
-    errorMsg: "Gagal mengirim email atur ulang kata sandi",
   },
   en: {
     brandSubtitle: "Order Fulfillment & Delivery Tracking",
@@ -29,7 +29,6 @@ const DICTIONARY = {
     resetBtn: "Reset Password",
     backToSignIn: "Back to sign in",
     successMsg: "Password reset link has been sent to your email.",
-    errorMsg: "Failed to send reset email",
   }
 } as const;
 
@@ -54,7 +53,7 @@ export function ForgotPasswordPage() {
       setSuccess(t.successMsg);
       setEmail("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.errorMsg);
+      setError(resetPasswordErrorMessage(err, lang));
     } finally {
       setSubmitting(false);
     }

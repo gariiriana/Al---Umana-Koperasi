@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Navigate, NavLink, useParams } from "react-router-dom";
 import { CalendarCheck, ChartColumn, ClipboardCheck, MapPin, Users } from "lucide-react";
 
+import { HoneyHeaderPattern } from "@/absensi/components/HoneyHeaderPattern";
 import { AreaTab } from "@/absensi/admin/AreaTab";
 import { HariIniTab } from "@/absensi/admin/HariIniTab";
 import { KaryawanTab } from "@/absensi/admin/KaryawanTab";
@@ -49,10 +50,10 @@ export function AdminLayout() {
   const pendingCount = me?.pendingRequests ?? 0;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-[calc(6rem+env(safe-area-inset-bottom))] font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900 sm:pb-12">
+    <div className="min-h-screen bg-transparent pb-[calc(6rem+env(safe-area-inset-bottom))] font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900 sm:pb-12">
       {/* Header Kuning Khas Seragam */}
       <div className="relative overflow-hidden rounded-b-[2.25rem] bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 px-4 pb-12 pt-7 shadow-xs sm:pb-16">
-        <div className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-white/20" />
+        <HoneyHeaderPattern />
         <header className="relative mx-auto flex w-full max-w-4xl items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-white/80 bg-white/95 font-['Manrope',system-ui,sans-serif] text-base font-extrabold text-amber-800 shadow-xs">

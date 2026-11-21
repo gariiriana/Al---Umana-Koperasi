@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { checkLocation } from "../../../../workers/absensi/shared/geo.js";
+import { HoneyHeaderPattern } from "@/absensi/components/HoneyHeaderPattern";
 import { activate, activateOptions } from "@/absensi/api";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
 import { LogoutConfirmModal } from "@/absensi/components/LogoutConfirmModal";
@@ -96,9 +97,10 @@ export function AktivasiPage() {
   if (!me) return null;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900">
-      <div className="rounded-b-[2rem] bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 px-4 pb-14 pt-8">
-        <div className="mx-auto flex w-full max-w-md items-start justify-between gap-3">
+    <div className="min-h-screen bg-transparent font-['Hanken_Grotesk',system-ui,sans-serif] text-neutral-900">
+      <div className="relative overflow-hidden rounded-b-[2rem] bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 px-4 pb-14 pt-8">
+        <HoneyHeaderPattern />
+        <div className="relative mx-auto flex w-full max-w-md items-start justify-between gap-3">
           <div className="min-w-0">
             <span className="inline-block rounded-full bg-white/80 px-2.5 py-0.5 text-xs font-extrabold text-amber-900">
               Langkah {STEP_NUMBER[step]} dari 4
