@@ -11,6 +11,7 @@ import {
   type FaceDetection,
 } from "@/absensi/device/face";
 import { frameBrightness } from "@/absensi/device/faceMatch";
+import { averageYaw, turnProgress, yawSample, type YawSample } from "@/absensi/device/headTurn";
 import { captureJpeg } from "@/absensi/device/selfie";
 import { messageFor } from "@/absensi/messages";
 import { Button } from "@/components/ui/Button";
@@ -47,10 +48,15 @@ const DARK_LUMA = 55;
 const NOTICE_MS = 1_500;
 /** Dari 3 frame lurus terakhir, sebanyak ini tertutup = dianggap pakai masker. */
 const COVERED_OF_LAST_3 = 2;
+/** Sesudah patokan lurus ada: menoleh kurang dari setengah ambang tengok = masih dianggap hadap lurus. */
+const STRAIGHT_PROGRESS_MAX = 0.5;
+/** Patokan lurus = rata-rata frame lurus terakhir sebanyak ini. */
+const BASELINE_FRAMES = 3;
 
 const HINT_DARK = "Terlalu gelap. Nyalakan lampu atau hadap ke sumber cahaya";
 const HINT_STRAIGHT = "Hadap lurus ke kamera";
-const HINT_TURN = "Sekarang tengok pelan ke kiri atau kanan";
+const HINT_TURN = "Tengok ke kiri atau kanan sampai garis penuh";
+const HINT_TURN_MORE = "Sedikit lagi, tengok lebih jauh";
 const HINT_BACK = "Hadap lurus lagi dan tahan sebentar";
 const HINT_ACUAN = "Hadap lurus ke kamera dan tahan sebentar";
 const HINT_COVERED = "Hidung dan mulut harus terlihat. Lepas masker atau penutup wajah";
@@ -66,14 +72,10 @@ function cameraErrorCode(err: unknown): string {
   return name === "NotAllowedError" || name === "SecurityError" ? "IZIN_KAMERA" : "KAMERA_TIDAK_ADA";
 }
 
+/** Hadap lurus menurut angka tetap; dipakai sebelum ada patokan lurus orang itu sendiri. */
 const isCentered = (face: OneFace) => {
   const yaw = getHeadYawRatio(face.landmarks);
   return yaw >= 0.42 && yaw <= 0.58;
-};
-
-const isTurned = (face: OneFace) => {
-  const yaw = getHeadYawRatio(face.landmarks);
-  return yaw < 0.34 || yaw > 0.66;
 };
 
 /**
@@ -88,6 +90,8 @@ export function SelfieCapture({ mode, onDone, onCancel }: SelfieCaptureProps) {
   const [error, setError] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [progress, setProgress] = useState<Step | null>(null);
+  // Langkah tengok: seberapa jauh sudah menoleh (0–1) untuk garis petunjuk.
+  const [turn, setTurn] = useState(0);
   // Naik setiap "Coba lagi" supaya pemindaian dimulai ulang.
   const [attempt, setAttempt] = useState(0);
   const [cameraReady, setCameraReady] = useState(false);
@@ -176,6 +180,9 @@ export function SelfieCapture({ mode, onDone, onCancel }: SelfieCaptureProps) {
     let step: Step = "lurus";
     let anchor: number[] | null = null;
     let frames: number[][] = [];
+    // Posisi lurus orang itu sendiri (dari frame lurus terakhir); tengok & lurus lagi diukur dari sini.
+    let straightSamples: YawSample[] = [];
+    let baseline: YawSample | null = null;
 
     // Petunjuk biasa (show) tidak menimpa pesan penting (notice) yang baru tampil; pindah langkah selalu tampil (say).
     let noticeUntil = 0;
@@ -193,11 +200,14 @@ export function SelfieCapture({ mode, onDone, onCancel }: SelfieCaptureProps) {
     const goTo = (next: Step) => {
       step = next;
       setProgress(next);
+      setTurn(0);
     };
     const restart = () => {
       anchor = null;
       frames = [];
       coverHistory = [];
+      straightSamples = [];
+      baseline = null;
       goTo("lurus");
     };
     const giveUp = () => {
@@ -217,7 +227,10 @@ export function SelfieCapture({ mode, onDone, onCancel }: SelfieCaptureProps) {
 
     /** Satu frame mode match; true kalau foto sudah diambil. */
     const matchFrame = async (face: OneFace, video: HTMLVideoElement): Promise<boolean> => {
-      const centered = isCentered(face);
+      const sample = yawSample(face.landmarks);
+      const turned = baseline ? turnProgress(sample, baseline) : 0;
+      // Sebelum ada patokan: angka tetap. Sesudahnya: dekat posisi lurus orang itu sendiri.
+      const centered = baseline ? turned < STRAIGHT_PROGRESS_MAX : isCentered(face);
       const covered = centered && coveredNow(face);
       if (covered) {
         // Pakai masker: kumpulan frame dibuang, tapi langkah menoleh tidak perlu diulang.
@@ -227,9 +240,11 @@ export function SelfieCapture({ mode, onDone, onCancel }: SelfieCaptureProps) {
         return false;
       }
       if (step === "lurus") {
+        if (centered) straightSamples = [...straightSamples, sample].slice(-BASELINE_FRAMES);
         // Minimal 2 frame lurus tanpa masker sebelum diminta menoleh.
         if (centered && coverHistory.length >= 2) {
           anchor = face.descriptor;
+          baseline = averageYaw(straightSamples);
           goTo("toleh");
           say(HINT_TURN);
         } else {
@@ -238,11 +253,12 @@ export function SelfieCapture({ mode, onDone, onCancel }: SelfieCaptureProps) {
         return false;
       }
       if (step === "toleh") {
-        if (isTurned(face)) {
+        if (turned >= 1) {
           goTo("kembali");
           say(HINT_BACK);
         } else {
-          show(HINT_TURN);
+          setTurn(turned);
+          show(turned >= STRAIGHT_PROGRESS_MAX ? HINT_TURN_MORE : HINT_TURN);
         }
         return false;
       }
@@ -372,6 +388,21 @@ export function SelfieCapture({ mode, onDone, onCancel }: SelfieCaptureProps) {
               );
             })}
           </ol>
+        )}
+        {mode === "match" && phase === "detecting" && progress === "toleh" && (
+          <div
+            role="progressbar"
+            aria-label="Seberapa jauh menoleh"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(Math.min(turn, 1) * 100)}
+            className="absolute inset-x-10 top-12 h-2.5 overflow-hidden rounded-full bg-black/50"
+          >
+            <div
+              className="h-full rounded-full bg-[#FBBF24] transition-[width] duration-200"
+              style={{ width: `${Math.round(Math.min(turn, 1) * 100)}%` }}
+            />
+          </div>
         )}
         {phase !== "error" && (
           <p
