@@ -23,7 +23,7 @@ const MESSAGES: Record<string, string> = {
   WAJAH_TIDAK_COCOK: "Wajah belum cocok. Cari cahaya terang dan lepas masker, lalu coba lagi.",
   MODEL_WAJAH_GAGAL: "Pengenal wajah gagal dimuat. Cek internet lalu coba lagi.",
   SCAN_WAJAH_BELUM_SELESAI:
-    "Scan wajah belum selesai. Ikuti petunjuknya: hadap lurus, tengok ke samping, lalu hadap lurus lagi. Hidung dan mulut harus terlihat.",
+    "Scan wajah belum selesai. Hadap lurus ke kamera dan tahan sebentar. Hidung dan mulut harus terlihat.",
   WAJAH_TERKUNCI: "Scan wajah dikunci sementara karena 3 kali tidak cocok. Coba lagi nanti.",
   PERBARUI_APLIKASI: "Aplikasi perlu diperbarui. Tutup lalu buka lagi aplikasinya, lalu tekan Perbarui.",
   PASSKEY_DIBATALKAN: "Konfirmasi sidik jari dibatalkan.",

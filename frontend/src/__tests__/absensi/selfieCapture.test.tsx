@@ -37,14 +37,8 @@ function landmarks({ jaw, eye }: Yaw) {
 const LURUS: Yaw = { jaw: 0.5, eye: 0.5 };
 const lurus = (d = 0.2, cover: "terbuka" | "tertutup" = "terbuka"): Frame => ({ yaw: LURUS, d, cover });
 const kanan = (d = 0.2): Frame => ({ yaw: { jaw: 0.8, eye: 0.75 }, d });
-/** Pakai kerudung: titik rahang ikut tepi kerudung jadi hampir tidak bergeser; hidung terhadap mata tetap bergeser. */
-const tengokBerkerudung = (d = 0.2): Frame => ({ yaw: { jaw: 0.54, eye: 0.6 }, d });
-/** Tengok setengah jalan. */
-const tengokSedikit = (d = 0.2): Frame => ({ yaw: { jaw: 0.53, eye: 0.55 }, d });
-/** Goyang kecil, mis. foto yang dipegang tangan. */
-const goyang = (d = 0.2): Frame => ({ yaw: { jaw: 0.52, eye: 0.52 }, d });
 const times = <T,>(n: number, item: T): T[] => Array.from({ length: n }, () => item);
-const HINT_TURN = "Tengok ke kiri atau kanan sampai garis penuh";
+const HINT_COVERED = "Hidung dan mulut harus terlihat. Lepas masker atau penutup wajah";
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
@@ -79,16 +73,18 @@ async function renderCapture(ui: React.ReactElement) {
   await run(10);
 }
 
-describe("SelfieCapture mode match (lurus → tengok → lurus, dicocokkan server)", () => {
-  it("menoleh lalu lurus lagi: 5 frame dikirim sebagai deskriptor, tanpa tombol ambil foto", async () => {
-    mocks.script = [...times(2, lurus(0.21)), "none", kanan(), ...times(5, lurus(0.22))];
+describe("SelfieCapture mode match (cukup hadap lurus, dicocokkan server)", () => {
+  it("hadap lurus sebentar: 5 frame dikirim tanpa langkah tengok dan tanpa tombol ambil foto", async () => {
+    mocks.script = [lurus(0.21), ...times(5, lurus(0.22))];
     const onDone = vi.fn();
     await renderCapture(<SelfieCapture mode="match" onDone={onDone} onCancel={vi.fn()} />);
 
     expect(screen.queryByRole("button", { name: /Ambil foto/i })).toBeNull();
-    await run(90);
-    expect(screen.getByLabelText("Langkah scan wajah")).toBeTruthy();
-    await run(3000);
+    await run(500);
+    expect(screen.queryByLabelText("Langkah scan wajah")).toBeNull();
+    expect(screen.queryByText(/tengok/i)).toBeNull();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    await run(1500);
     expect(onDone).toHaveBeenCalledTimes(1);
     const result = onDone.mock.calls[0][0];
     expect(result.descriptor).toBeNull();
@@ -96,13 +92,13 @@ describe("SelfieCapture mode match (lurus → tengok → lurus, dicocokkan serve
     expect(result).not.toHaveProperty("distance");
   });
 
-  it("wajah diam (foto) tidak pernah terambil; setelah 25 detik muncul Scan wajah belum selesai + Coba lagi", async () => {
-    mocks.script = [lurus()];
+  it("wajah tidak menghadap kamera tidak terambil; setelah 25 detik muncul Scan wajah belum selesai + Coba lagi", async () => {
+    mocks.script = [kanan()];
     const onDone = vi.fn();
     await renderCapture(<SelfieCapture mode="match" onDone={onDone} onCancel={vi.fn()} />);
 
     await run(1000);
-    expect(screen.getByText(HINT_TURN)).toBeTruthy();
+    expect(screen.getByText("Hadap lurus ke kamera")).toBeTruthy();
     await run(23_000);
     expect(screen.queryByText("Scan wajah belum selesai")).toBeNull();
 
@@ -113,81 +109,47 @@ describe("SelfieCapture mode match (lurus → tengok → lurus, dicocokkan serve
     expect(screen.queryByText("Scan wajah belum selesai")).toBeNull();
   });
 
-  it("pakai masker: minta hidung & mulut terlihat dan tidak pernah terambil, walau sudah menoleh", async () => {
-    mocks.script = [...times(2, lurus()), kanan(), lurus(0.2, "tertutup")];
+  it("masker sejak awal: minta hidung & mulut terlihat dan tidak pernah terambil", async () => {
+    mocks.script = [lurus(0.2, "tertutup")];
     const onDone = vi.fn();
     await renderCapture(<SelfieCapture mode="match" onDone={onDone} onCancel={vi.fn()} />);
-
     await run(4000);
-    expect(screen.getByText("Hidung dan mulut harus terlihat. Lepas masker atau penutup wajah")).toBeTruthy();
+    expect(screen.getByText(HINT_COVERED)).toBeTruthy();
     expect(onDone).not.toHaveBeenCalled();
   });
 
-  it("masker sejak awal: belum diminta menoleh", async () => {
-    mocks.script = [lurus(0.2, "tertutup")];
-    await renderCapture(<SelfieCapture mode="match" onDone={vi.fn()} onCancel={vi.fn()} />);
-    await run(2000);
-    expect(screen.getByText("Hidung dan mulut harus terlihat. Lepas masker atau penutup wajah")).toBeTruthy();
-    expect(screen.queryByText(HINT_TURN)).toBeNull();
+  it("masker dipasang di tengah scan: frame dibuang dan tidak pernah terambil", async () => {
+    mocks.script = [...times(3, lurus()), lurus(0.2, "tertutup")];
+    const onDone = vi.fn();
+    await renderCapture(<SelfieCapture mode="match" onDone={onDone} onCancel={vi.fn()} />);
+    await run(4000);
+    expect(screen.getByText(HINT_COVERED)).toBeTruthy();
+    expect(onDone).not.toHaveBeenCalled();
   });
 
-  it("wajah berganti sesudah menoleh (mis. foto orang lain disodorkan): scan diulang dari awal", async () => {
-    mocks.script = [...times(2, lurus(0)), kanan(0), lurus(0.9), lurus(0.9)];
+  it("wajah berganti di tengah scan (mis. foto orang lain disodorkan): scan diulang, frame wajah lama tidak ikut terkirim", async () => {
+    mocks.script = [...times(3, lurus(0)), lurus(0.9)];
     const onDone = vi.fn();
     await renderCapture(<SelfieCapture mode="match" onDone={onDone} onCancel={vi.fn()} />);
 
-    // Frame 4 (≈610 ms) wajah lain; pesannya bertahan sampai langkah berikutnya dimulai.
+    // Frame 4 (≈610 ms) wajah lain.
     await run(700);
     expect(screen.getByText("Wajah berganti. Ulangi: hadap lurus ke kamera")).toBeTruthy();
-    await run(600);
-    // Wajah baru harus menoleh lagi dari awal.
-    expect(screen.getByText(HINT_TURN)).toBeTruthy();
     expect(onDone).not.toHaveBeenCalled();
-  });
-
-  it("wajah hilang lama di tengah scan: mulai lagi dari langkah lurus", async () => {
-    mocks.script = [...times(2, lurus()), kanan(), ...times<Frame>(10, "none"), lurus()];
-    const onDone = vi.fn();
-    await renderCapture(<SelfieCapture mode="match" onDone={onDone} onCancel={vi.fn()} />);
-
-    await run(4000);
-    // Sesudah hilang > 1.5 detik, frame lurus berikutnya dianggap langkah 1 lagi → diminta menoleh lagi.
-    expect(screen.getByText(HINT_TURN)).toBeTruthy();
-    expect(onDone).not.toHaveBeenCalled();
-  });
-
-  it("pakai kerudung: rahang hampir tidak bergeser, tengok tetap terbaca dari hidung terhadap mata", async () => {
-    mocks.script = [...times(2, lurus(0.21)), tengokBerkerudung(), ...times(5, lurus(0.22))];
-    const onDone = vi.fn();
-    await renderCapture(<SelfieCapture mode="match" onDone={onDone} onCancel={vi.fn()} />);
-
     await run(3000);
     expect(onDone).toHaveBeenCalledTimes(1);
-    expect(onDone.mock.calls[0][0].descriptors).toEqual(times(5, [0.22]));
+    expect(onDone.mock.calls[0][0].descriptors).toEqual(times(5, [0.9]));
   });
 
-  it("tengok setengah jalan: garis tengok terisi sebagian dan diminta tengok lebih jauh", async () => {
-    mocks.script = [...times(2, lurus()), tengokSedikit()];
+  it("wajah hilang lama di tengah scan: mulai lagi dari awal", async () => {
+    mocks.script = [...times(3, lurus(0.2)), ...times<Frame>(10, "none"), lurus(0.5)];
     const onDone = vi.fn();
     await renderCapture(<SelfieCapture mode="match" onDone={onDone} onCancel={vi.fn()} />);
 
-    await run(1500);
-    expect(screen.getByText("Sedikit lagi, tengok lebih jauh")).toBeTruthy();
-    const bar = screen.getByRole("progressbar", { name: "Seberapa jauh menoleh" });
-    const value = Number(bar.getAttribute("aria-valuenow"));
-    expect(value).toBeGreaterThan(50);
-    expect(value).toBeLessThan(100);
-    expect(onDone).not.toHaveBeenCalled();
-  });
-
-  it("goyang sedikit (mis. foto dipegang tangan) tidak dihitung menoleh", async () => {
-    mocks.script = [...times(2, lurus()), goyang(), lurus(), goyang()];
-    const onDone = vi.fn();
-    await renderCapture(<SelfieCapture mode="match" onDone={onDone} onCancel={vi.fn()} />);
-
-    await run(5000);
-    expect(screen.getByText(HINT_TURN)).toBeTruthy();
-    expect(onDone).not.toHaveBeenCalled();
+    await run(6000);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    // Frame sebelum wajah hilang tidak ikut terkirim.
+    expect(onDone.mock.calls[0][0].descriptors).toEqual(times(5, [0.5]));
   });
 });
 
@@ -199,7 +161,7 @@ describe("SelfieCapture mode acuan & photo", () => {
 
     await run(1900);
     expect(onDone).not.toHaveBeenCalled();
-    expect(screen.getByText("Hidung dan mulut harus terlihat. Lepas masker atau penutup wajah")).toBeTruthy();
+    expect(screen.getByText(HINT_COVERED)).toBeTruthy();
     await run(2000);
     expect(onDone).toHaveBeenCalledTimes(1);
     expect(onDone.mock.calls[0][0]).toMatchObject({ descriptor: [0.3], descriptors: null });

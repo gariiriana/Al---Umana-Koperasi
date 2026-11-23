@@ -247,7 +247,7 @@ function parseLatePhoto(body) {
 }
 
 /**
- * Deskriptor wajah dari beberapa frame berturut-turut (sesudah menoleh). Dicek sebelum challenge terpakai.
+ * Deskriptor wajah dari beberapa frame wajah lurus berturut-turut. Dicek sebelum challenge terpakai.
  * Aplikasi versi lama hanya mengirim `faceDistance` hasil hitungan HP; itu tidak dipercaya lagi.
  */
 function parseFaceFrames(body) {

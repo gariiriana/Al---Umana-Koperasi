@@ -60,6 +60,7 @@ describe("messageFor", () => {
       "Scan wajah dikunci sementara karena 3 kali tidak cocok. Coba lagi jam 09:15 WIB.",
     );
     expect(messageFor("PERBARUI_APLIKASI")).toMatch(/Perbarui/);
-    expect(messageFor("SCAN_WAJAH_BELUM_SELESAI")).toMatch(/tengok ke samping/);
+    expect(messageFor("SCAN_WAJAH_BELUM_SELESAI")).toMatch(/Hadap lurus ke kamera dan tahan sebentar/);
+    expect(messageFor("SCAN_WAJAH_BELUM_SELESAI")).not.toMatch(/tengok/i);
   });
 });

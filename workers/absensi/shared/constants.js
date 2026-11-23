@@ -21,7 +21,7 @@ export const MAX_SELFIE_BYTES = 200_000;
 export const MIN_SELFIE_BYTES = 1_000;
 export const SELFIE_WIDTH_PX = 480;
 export const SELFIE_JPEG_QUALITY = 0.7;
-// Cek wajah dihitung di Worker: HP mengirim deskriptor beberapa frame berturut-turut (sesudah menoleh),
+// Cek wajah dihitung di Worker: HP mengirim deskriptor beberapa frame wajah lurus berturut-turut,
 // server mengambil median jaraknya ke wajah acuan. Median harus di bawah ambang ini.
 // 0.50 (bukan 0.45): data 30 hari (182 absen, 11 orang) menunjukkan frame TERBAIK karyawan asli
 // sampai 0.53, sedangkan median selalu lebih tinggi; wajah bermasker di kalibrasi rata-rata ±0.6.
