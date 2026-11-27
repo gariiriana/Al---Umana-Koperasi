@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { getReportNeraca, listUnits } from "@/keuangan/api";
-import { formatAngkaSen, formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
-import { exportReportCsv, exportReportExcel, exportReportPdf } from "@/keuangan/export/reportExport";
+import { formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
+import { exportReportCsv, exportReportExcel, exportReportPdf, senCell, type ExportCell } from "@/keuangan/export/reportExport";
 import type { NeracaResponse, ReportFilter, Unit } from "@/keuangan/types";
 import { INPUT_CLS, ReportFilterBar } from "@/keuangan/components/KeuanganUi";
 import { useToast } from "@/contexts/ToastContext";
@@ -40,22 +40,22 @@ export function ReportNeracaPage() {
   const buildExport = () => {
     if (!data) return null;
     const headers = ["Kode", "Akun / Keterangan", ...data.columns];
-    const rows: (string | number)[][] = [];
+    const rows: ExportCell[][] = [];
     rows.push(["", "ASET", ...data.columns.map(() => "")]);
     for (const grp of data.sections.aset) {
-      rows.push(["", `  ${grp.title}`, ...grp.totals.map((v) => formatAngkaSen(v))]);
-      for (const r of grp.rows) rows.push([r.kode, `    ${r.nama}`, ...r.values.map((v) => formatAngkaSen(v))]);
+      rows.push(["", `  ${grp.title}`, ...grp.totals.map((v) => senCell(v))]);
+      for (const r of grp.rows) rows.push([r.kode, `    ${r.nama}`, ...r.values.map((v) => senCell(v))]);
     }
-    rows.push(["", "Total Aset", ...data.sections.totalAset.map((v) => formatAngkaSen(v))]);
+    rows.push(["", "Total Aset", ...data.sections.totalAset.map((v) => senCell(v))]);
     rows.push(["", "LIABILITAS", ...data.columns.map(() => "")]);
     for (const grp of data.sections.liabilitas) {
-      rows.push(["", `  ${grp.title}`, ...grp.totals.map((v) => formatAngkaSen(v))]);
-      for (const r of grp.rows) rows.push([r.kode, `    ${r.nama}`, ...r.values.map((v) => formatAngkaSen(v))]);
+      rows.push(["", `  ${grp.title}`, ...grp.totals.map((v) => senCell(v))]);
+      for (const r of grp.rows) rows.push([r.kode, `    ${r.nama}`, ...r.values.map((v) => senCell(v))]);
     }
-    rows.push(["", "Total Liabilitas", ...data.sections.totalLiabilitas.map((v) => formatAngkaSen(v))]);
-    rows.push(["", data.sections.modal.title, ...data.sections.modal.totals.map((v) => formatAngkaSen(v))]);
-    for (const r of data.sections.modal.rows) rows.push([r.kode, `  ${r.nama}`, ...r.values.map((v) => formatAngkaSen(v))]);
-    rows.push(["", "Total Liabilitas dan Modal Pemilik", ...data.sections.totalLiabilitasModal.map((v) => formatAngkaSen(v))]);
+    rows.push(["", "Total Liabilitas", ...data.sections.totalLiabilitas.map((v) => senCell(v))]);
+    rows.push(["", data.sections.modal.title, ...data.sections.modal.totals.map((v) => senCell(v))]);
+    for (const r of data.sections.modal.rows) rows.push([r.kode, `  ${r.nama}`, ...r.values.map((v) => senCell(v))]);
+    rows.push(["", "Total Liabilitas dan Modal Pemilik", ...data.sections.totalLiabilitasModal.map((v) => senCell(v))]);
     return {
       laporan: "neraca",
       title: "Neraca",

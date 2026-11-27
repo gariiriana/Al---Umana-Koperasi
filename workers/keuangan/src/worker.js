@@ -82,6 +82,122 @@ import {
 } from "./handlers/reports.js";
 import { deleteAttachment, downloadAttachment, uploadAttachment } from "./handlers/attachments.js";
 import { createOrGetPublicLink, getPublicDocument, revokePublicLink } from "./handlers/publicLinks.js";
+import {
+  createProduct,
+  createProductConversion,
+  createStockAdjustment,
+  createWarehouse,
+  createWarehouseTransfer,
+  deletePriceRule,
+  deleteProduct,
+  deleteProductCategory,
+  deleteUnitOfMeasure,
+  deleteWarehouse,
+  getProduct,
+  getRecalcStatus,
+  importProducts,
+  listPriceRules,
+  listProductCategories,
+  listProducts,
+  listStockAdjustments,
+  listUnitsOfMeasure,
+  listWarehouseTransfers,
+  listWarehouses,
+  runRecalcNow,
+  savePriceRule,
+  saveProductCategory,
+  saveUnitOfMeasure,
+  updateProduct,
+  updateWarehouse,
+} from "./handlers/inventory.js";
+import {
+  createTransaction,
+  deleteTransactionEndpoint,
+  getTransaction,
+  importTransactionsBatch,
+  listTransactions,
+  updateTransaction,
+} from "./handlers/salesPurchase.js";
+import { deleteRecurring, listRecurring, saveRecurring } from "./handlers/recurring.js";
+import {
+  getBerandaSummary,
+  reportBiayaDaftar,
+  reportHutangVendor,
+  reportNilaiGudang,
+  reportPembelianDaftar,
+  reportPembelianPerProduk,
+  reportPembelianPerVendor,
+  reportPengiriman,
+  reportPenjualanDaftar,
+  reportPenjualanPerPelanggan,
+  reportPenjualanPerProduk,
+  reportPenyelesaianPesanan,
+  reportPergerakanStok,
+  reportPiutangPelanggan,
+  reportRingkasanPersediaan,
+  reportStokMinimum,
+  reportUmurHutang,
+  reportUmurPiutang,
+} from "./handlers/reportsR2.js";
+import { runScheduledTasks } from "./cron.js";
+import {
+  activatePendingAsset,
+  applyDepreciation,
+  createAsset,
+  disposeAsset,
+  getAsset,
+  listAssets,
+  reportAsetDaftar,
+  reportAsetPenyusutan,
+} from "./handlers/assets.js";
+import {
+  applyReconRules,
+  createTxFromStatement,
+  deleteBankStatement,
+  deleteReconRule,
+  importBankStatements,
+  listBankStatements,
+  listReconRules,
+  reconcileMatch,
+  reportBankRekonsiliasi,
+  saveReconRule,
+  unmatchReconciliation,
+} from "./handlers/banking.js";
+import {
+  decideApproval,
+  deleteApprovalRule,
+  deleteBudget,
+  getBudget,
+  listApprovalRules,
+  listBudgets,
+  listNotifications,
+  listPendingApprovals,
+  markNotificationRead,
+  reportAnggaranLabaRugi,
+  reportPajakPemotongan,
+  reportPajakPenjualan,
+  saveApprovalRule,
+  saveBudget,
+  saveDashboard,
+} from "./handlers/budgetsAndExtras.js";
+import {
+  createWorkOrder,
+  deleteBom,
+  listBoms,
+  listStandardCosts,
+  listWorkOrders,
+  reportProduksiDaftar,
+  saveBom,
+  saveStandardCost,
+} from "./handlers/production.js";
+import {
+  listCurrencies,
+  listExchangeRates,
+  reportKursBelumTerealisasi,
+  reportKursRealisasi,
+  saveCurrency,
+  saveExchangeRate,
+} from "./handlers/currencies.js";
 
 const PREFIX = "/api/keuangan";
 
@@ -181,6 +297,125 @@ const ROUTES = [
   ["POST", /^\/public-links$/, createOrGetPublicLink],
   ["DELETE", /^\/public-links\/([^/]+)$/, revokePublicLink],
   ["GET", /^\/public\/([^/]+)$/, getPublicDocument],
+
+  // Rilis 2: Produk, Satuan, Kategori, Gudang, Stok, Transfer, Konversi, Aturan Harga, Rekalkulasi
+  ["GET", /^\/uoms$/, listUnitsOfMeasure],
+  ["POST", /^\/uoms$/, saveUnitOfMeasure],
+  ["DELETE", /^\/uoms\/([^/]+)$/, deleteUnitOfMeasure],
+  ["GET", /^\/product-categories$/, listProductCategories],
+  ["POST", /^\/product-categories$/, saveProductCategory],
+  ["DELETE", /^\/product-categories\/([^/]+)$/, deleteProductCategory],
+  ["GET", /^\/warehouses$/, listWarehouses],
+  ["POST", /^\/warehouses$/, createWarehouse],
+  ["PUT", /^\/warehouses\/([^/]+)$/, updateWarehouse],
+  ["DELETE", /^\/warehouses\/([^/]+)$/, deleteWarehouse],
+  ["GET", /^\/products$/, listProducts],
+  ["POST", /^\/products$/, createProduct],
+  ["POST", /^\/products\/import$/, importProducts],
+  ["GET", /^\/products\/([^/]+)$/, getProduct],
+  ["PUT", /^\/products\/([^/]+)$/, updateProduct],
+  ["DELETE", /^\/products\/([^/]+)$/, deleteProduct],
+  ["GET", /^\/stock-adjustments$/, listStockAdjustments],
+  ["POST", /^\/stock-adjustments$/, createStockAdjustment],
+  ["GET", /^\/warehouse-transfers$/, listWarehouseTransfers],
+  ["POST", /^\/warehouse-transfers$/, createWarehouseTransfer],
+  ["POST", /^\/product-conversions$/, createProductConversion],
+  ["GET", /^\/price-rules$/, listPriceRules],
+  ["POST", /^\/price-rules$/, savePriceRule],
+  ["DELETE", /^\/price-rules\/([^/]+)$/, deletePriceRule],
+  ["GET", /^\/recalc-hpp$/, getRecalcStatus],
+  ["POST", /^\/recalc-hpp\/run$/, runRecalcNow],
+
+  // Rilis 2: Siklus Transaksi Penjualan, Pembelian, Biaya & Berulang
+  ["GET", /^\/transactions$/, listTransactions],
+  ["POST", /^\/transactions$/, createTransaction],
+  ["POST", /^\/transactions\/import$/, importTransactionsBatch],
+  ["GET", /^\/transactions\/([^/]+)$/, getTransaction],
+  ["PUT", /^\/transactions\/([^/]+)$/, updateTransaction],
+  ["DELETE", /^\/transactions\/([^/]+)$/, deleteTransactionEndpoint],
+  ["GET", /^\/recurring$/, listRecurring],
+  ["POST", /^\/recurring$/, saveRecurring],
+  ["DELETE", /^\/recurring\/([^/]+)$/, deleteRecurring],
+
+  // Rilis 2: Beranda & Laporan Penjualan / Pembelian / Produk
+  ["GET", /^\/beranda$/, getBerandaSummary],
+  ["GET", /^\/reports\/penjualan\/daftar$/, reportPenjualanDaftar],
+  ["GET", /^\/reports\/penjualan\/per-pelanggan$/, reportPenjualanPerPelanggan],
+  ["GET", /^\/reports\/penjualan\/per-produk$/, reportPenjualanPerProduk],
+  ["GET", /^\/reports\/penjualan\/piutang-pelanggan$/, reportPiutangPelanggan],
+  ["GET", /^\/reports\/penjualan\/umur-piutang$/, reportUmurPiutang],
+  ["GET", /^\/reports\/penjualan\/pengiriman$/, (ctx) => reportPengiriman(ctx, "sales_delivery")],
+  ["GET", /^\/reports\/penjualan\/penyelesaian-pesanan$/, (ctx) => reportPenyelesaianPesanan(ctx, "sales_order")],
+  ["GET", /^\/reports\/pembelian\/daftar$/, reportPembelianDaftar],
+  ["GET", /^\/reports\/pembelian\/per-vendor$/, reportPembelianPerVendor],
+  ["GET", /^\/reports\/pembelian\/per-produk$/, reportPembelianPerProduk],
+  ["GET", /^\/reports\/pembelian\/hutang-vendor$/, reportHutangVendor],
+  ["GET", /^\/reports\/pembelian\/umur-hutang$/, reportUmurHutang],
+  ["GET", /^\/reports\/pembelian\/pengiriman$/, (ctx) => reportPengiriman(ctx, "purchase_delivery")],
+  ["GET", /^\/reports\/pembelian\/penyelesaian-pesanan$/, (ctx) => reportPenyelesaianPesanan(ctx, "purchase_order")],
+  ["GET", /^\/reports\/biaya\/daftar$/, reportBiayaDaftar],
+  ["GET", /^\/reports\/produk\/ringkasan-persediaan$/, reportRingkasanPersediaan],
+  ["GET", /^\/reports\/produk\/pergerakan-stok$/, reportPergerakanStok],
+  ["GET", /^\/reports\/produk\/penilaian-persediaan$/, reportRingkasanPersediaan],
+  ["GET", /^\/reports\/produk\/nilai-gudang$/, reportNilaiGudang],
+  ["GET", /^\/reports\/produk\/stok-minimum$/, reportStokMinimum],
+
+  // Rilis 3: Aset Tetap, Rekonsiliasi Bank, Anggaran, Approval, Pajak
+  ["GET", /^\/assets$/, listAssets],
+  ["POST", /^\/assets$/, createAsset],
+  ["GET", /^\/assets\/([^/]+)$/, getAsset],
+  ["POST", /^\/assets\/([^/]+)\/activate$/, activatePendingAsset],
+  ["POST", /^\/assets\/depreciate$/, applyDepreciation],
+  ["POST", /^\/assets\/([^/]+)\/dispose$/, disposeAsset],
+  ["GET", /^\/reports\/aset\/daftar$/, reportAsetDaftar],
+  ["GET", /^\/reports\/aset\/penyusutan$/, reportAsetPenyusutan],
+
+  ["GET", /^\/bank-statements$/, listBankStatements],
+  ["POST", /^\/bank-statements\/import$/, importBankStatements],
+  ["DELETE", /^\/bank-statements\/([^/]+)$/, deleteBankStatement],
+  ["POST", /^\/reconciliation\/match$/, reconcileMatch],
+  ["POST", /^\/reconciliation\/unmatch$/, unmatchReconciliation],
+  ["POST", /^\/reconciliation\/create-tx$/, createTxFromStatement],
+  ["GET", /^\/recon-rules$/, listReconRules],
+  ["POST", /^\/recon-rules$/, saveReconRule],
+  ["DELETE", /^\/recon-rules\/([^/]+)$/, deleteReconRule],
+  ["POST", /^\/recon-rules\/apply$/, applyReconRules],
+  ["GET", /^\/reports\/bank\/rekonsiliasi$/, reportBankRekonsiliasi],
+
+  ["GET", /^\/budgets$/, listBudgets],
+  ["POST", /^\/budgets$/, saveBudget],
+  ["GET", /^\/budgets\/([^/]+)$/, getBudget],
+  ["DELETE", /^\/budgets\/([^/]+)$/, deleteBudget],
+  ["GET", /^\/reports\/anggaran-laba-rugi$/, reportAnggaranLabaRugi],
+
+  ["GET", /^\/approval-rules$/, listApprovalRules],
+  ["POST", /^\/approval-rules$/, saveApprovalRule],
+  ["DELETE", /^\/approval-rules\/([^/]+)$/, deleteApprovalRule],
+  ["GET", /^\/approvals\/pending$/, listPendingApprovals],
+  ["POST", /^\/approvals\/([^/]+)\/decide$/, decideApproval],
+
+  ["GET", /^\/reports\/pajak\/faktur$/, reportPajakPenjualan],
+  ["GET", /^\/reports\/pajak\/pemotongan$/, reportPajakPemotongan],
+  ["POST", /^\/dashboards$/, saveDashboard],
+  ["GET", /^\/notifications$/, listNotifications],
+  ["POST", /^\/notifications\/([^/]+)\/read$/, markNotificationRead],
+
+  // Rilis 4: Produksi (BoM & Work Orders) & Multi Mata Uang / Kurs
+  ["GET", /^\/boms$/, listBoms],
+  ["POST", /^\/boms$/, saveBom],
+  ["DELETE", /^\/boms\/([^/]+)$/, deleteBom],
+  ["GET", /^\/standard-costs$/, listStandardCosts],
+  ["POST", /^\/standard-costs$/, saveStandardCost],
+  ["GET", /^\/work-orders$/, listWorkOrders],
+  ["POST", /^\/work-orders$/, createWorkOrder],
+  ["GET", /^\/reports\/produksi\/daftar$/, reportProduksiDaftar],
+
+  ["GET", /^\/currencies$/, listCurrencies],
+  ["POST", /^\/currencies$/, saveCurrency],
+  ["GET", /^\/exchange-rates$/, listExchangeRates],
+  ["POST", /^\/exchange-rates$/, saveExchangeRate],
+  ["GET", /^\/reports\/kurs\/realisasi$/, reportKursRealisasi],
+  ["GET", /^\/reports\/kurs\/belum-terealisasi$/, reportKursBelumTerealisasi],
 ];
 
 export async function handleRequest(request, env, deps) {
@@ -221,7 +456,9 @@ export default {
   fetch(request, env) {
     return handleRequest(request, env, realDeps(env));
   },
-  async scheduled(_event, _env, _ctx) {
-    // Disiapkan untuk cron Rilis 2-4 (recalc_queue, transaksi berulang, jatuh tempo).
+  async scheduled(_event, env, ctx) {
+    const p = runScheduledTasks(env, { now: Date.now() });
+    if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(p);
+    else await p;
   },
 };

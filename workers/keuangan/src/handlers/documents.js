@@ -15,6 +15,7 @@ import {
 } from "../lib/ledger.js";
 import { cleanText, invalid, isInt, newId, requireIsoDate, requireUnitKode } from "../lib/validate.js";
 import { buildReversalsForDocumentChange } from "../lib/openingReversal.js";
+import { deleteTransactionDoc } from "./salesPurchase.js";
 
 const DOC_TYPES_R1 = new Set(["journal", "receive_money", "send_money", "transfer_money"]);
 
@@ -181,8 +182,11 @@ export async function deleteDocument(ctx) {
 
   const existing = await db.prepare("SELECT * FROM documents WHERE id = ? AND deleted_at IS NULL").bind(id).first();
   if (!existing) throw new KeuanganError("TIDAK_DITEMUKAN", 404, "Dokumen tidak ditemukan.");
-  if (existing.type === "closing" || existing.type === "opening_balance" || existing.type === "opening_balance_reversal") {
+  if (existing.type === "closing" || existing.type === "closing_tax" || existing.type === "opening_balance" || existing.type === "opening_balance_reversal") {
     throw new KeuanganError("TIDAK_BISA_HAPUS", 400, "Gunakan menu Tutup Buku atau Saldo Awal untuk menghapus atau membatalkan dokumen ini.");
+  }
+  if (!DOC_TYPES_R1.has(existing.type)) {
+    return deleteTransactionDoc(db, existing, actor, now);
   }
 
   await assertNotLocked(db, [existing.tanggal]);
@@ -266,7 +270,7 @@ export async function importJournalBatch(ctx) {
 
 // ─── Builder Inti per Jenis Dokumen ───────────────────────────────────────────
 
-async function upsertDocument(db, { body, existingDoc, actor, now }) {
+export async function upsertDocument(db, { body, existingDoc, actor, now }) {
   const type = body.type;
   if (!DOC_TYPES_R1.has(type)) throw invalid("type", `Tipe dokumen "${type}" tidak didukung.`);
 
@@ -377,10 +381,43 @@ async function upsertDocument(db, { body, existingDoc, actor, now }) {
     }
 
     const rawLines = Array.isArray(body.lines) ? body.lines : [];
-    if (rawLines.length === 0) throw invalid("lines", "Minimal harus ada 1 baris transaksi.");
+    const expAllocs = !isReceive && Array.isArray(body.expense_allocations) ? body.expense_allocations : [];
+    if (rawLines.length === 0 && expAllocs.length === 0) throw invalid("lines", "Minimal harus ada 1 baris transaksi.");
 
     let dppNilaiLainTotal = 0;
     const taxAgg = new Map();
+
+    // Mode Pengeluaran (Kirim Uang untuk melunasi Biaya Bayar Nanti)
+    for (const [i, ex] of expAllocs.entries()) {
+      const target = await db.prepare("SELECT * FROM documents WHERE id = ? AND deleted_at IS NULL").bind(ex.document_id).first();
+      if (!target || target.type !== "expense") throw invalid("expense_allocations", `Baris ${i + 1}: dokumen biaya tidak ditemukan.`, i);
+      const amt = Number(ex.amount);
+      if (!isInt(amt, { min: 1 }) || amt > target.sisa) {
+        throw invalid("expense_allocations", `Baris ${i + 1}: nominal pembayaran melebihi sisa biaya.`, i);
+      }
+      subtotal += amt;
+      docLines.push({
+        account_kode: "2-20300",
+        deskripsi: `Pembayaran biaya ${target.no}`,
+        qty_milli: 1000,
+        harga: amt,
+        jumlah: amt,
+        tax_id: null,
+        tax_amount: 0,
+        unit_kode: target.unit_kode || unitKode,
+        source_line_id: target.id,
+        _expenseTarget: target,
+      });
+      journalRaw.push({
+        tanggal,
+        unit_kode: target.unit_kode || unitKode,
+        account_kode: "2-20300",
+        debit: amt,
+        kredit: 0,
+        contact_id: target.contact_id || contactId,
+        keterangan: `Pelunasan biaya ${target.no}`,
+      });
+    }
 
     for (const [i, row] of rawLines.entries()) {
       const acc = assertAccountUsable(row.account_kode, "account_kode");
@@ -614,11 +651,22 @@ async function upsertDocument(db, { body, existingDoc, actor, now }) {
     stmts.push(
       db
         .prepare(
-          `INSERT INTO document_lines (id, document_id, seq, account_kode, deskripsi, qty_milli, harga, tax_id, jumlah, tax_amount, unit_kode)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO document_lines (id, document_id, seq, account_kode, deskripsi, qty_milli, harga, tax_id, jumlah, tax_amount, unit_kode, source_line_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(newId(), docId, idx + 1, l.account_kode, l.deskripsi, l.qty_milli, l.harga, l.tax_id, l.jumlah, l.tax_amount, l.unit_kode),
+        .bind(newId(), docId, idx + 1, l.account_kode, l.deskripsi, l.qty_milli, l.harga, l.tax_id, l.jumlah, l.tax_amount, l.unit_kode, l.source_line_id || null),
     );
+    if (l._expenseTarget) {
+      const newSisa = l._expenseTarget.sisa - l.jumlah;
+      stmts.push(
+        db
+          .prepare("UPDATE documents SET sisa = ?, status = ? WHERE id = ?")
+          .bind(newSisa, newSisa === 0 ? "lunas" : "sebagian", l._expenseTarget.id),
+        db
+          .prepare("INSERT OR REPLACE INTO document_links (from_id, to_id, amount, kind) VALUES (?, ?, ?, 'payment_to_invoice')")
+          .bind(docId, l._expenseTarget.id, l.jumlah),
+      );
+    }
   }
 
   for (const w of withholdingRows) {

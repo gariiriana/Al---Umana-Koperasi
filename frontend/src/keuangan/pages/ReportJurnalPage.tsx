@@ -1,8 +1,8 @@
 // Laporan Jurnal (PRD 07-laporan.md).
 import { useEffect, useState } from "react";
 import { getReportJurnal, listUnits } from "@/keuangan/api";
-import { DOC_TYPE_LABELS, firstDayOfMonthWib, formatAngkaSen, formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
-import { exportReportCsv, exportReportExcel, exportReportPdf } from "@/keuangan/export/reportExport";
+import { DOC_TYPE_LABELS, firstDayOfMonthWib, formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
+import { exportReportCsv, exportReportExcel, exportReportPdf, senCell, type ExportCell } from "@/keuangan/export/reportExport";
 import type { JurnalReportResponse, ReportFilter, Unit } from "@/keuangan/types";
 import { ReportFilterBar, UnitBadge } from "@/keuangan/components/KeuanganUi";
 import { useToast } from "@/contexts/ToastContext";
@@ -34,7 +34,7 @@ export function ReportJurnalPage() {
   const buildExport = () => {
     if (!data) return null;
     const headers = ["Tanggal", "Transaksi & Nomor", "Kode Akun", "Nama Akun", "Unit", "Keterangan", "Debit", "Kredit"];
-    const rows: (string | number)[][] = [];
+    const rows: ExportCell[][] = [];
     for (const e of data.entries) {
       for (const l of e.lines) {
         rows.push([
@@ -44,12 +44,12 @@ export function ReportJurnalPage() {
           l.account_nama,
           l.unit_kode,
           l.keterangan,
-          l.debit ? formatAngkaSen(l.debit) : "",
-          l.kredit ? formatAngkaSen(l.kredit) : "",
+          l.debit ? senCell(l.debit) : "",
+          l.kredit ? senCell(l.kredit) : "",
         ]);
       }
     }
-    rows.push(["", "TOTAL", "", "", "", "", formatAngkaSen(data.grandDebit), formatAngkaSen(data.grandKredit)]);
+    rows.push(["", "TOTAL", "", "", "", "", senCell(data.grandDebit), senCell(data.grandKredit)]);
     return {
       laporan: "jurnal",
       title: "Laporan Jurnal",

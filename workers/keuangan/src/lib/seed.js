@@ -5,8 +5,10 @@ import {
   DEFAULT_NUMBERING,
   DEFAULT_PAYMENT_METHODS,
   DEFAULT_PAYMENT_TERMS,
+  DEFAULT_PRODUCTS,
   DEFAULT_SETTINGS,
   DEFAULT_TAXES,
+  DEFAULT_UOMS,
   MAPPING_DEFINITIONS,
 } from "./seedData.js";
 
@@ -18,12 +20,14 @@ export function resetSeedCacheForTests() {
 
 export async function ensureSeeded(db, now = Date.now(), actor = "system") {
   if (seededInIsolate) return;
-  const row = await db.prepare("SELECT COUNT(*) AS cnt FROM accounts").first();
-  if ((row?.cnt ?? 0) > 0) {
-    seededInIsolate = true;
-    return;
+  const [accCnt, prodCnt, curCnt] = await Promise.all([
+    db.prepare("SELECT COUNT(*) AS cnt FROM accounts").first(),
+    db.prepare("SELECT COUNT(*) AS cnt FROM products WHERE id = 'prod_default_penjualan'").first(),
+    db.prepare("SELECT COUNT(*) AS cnt FROM currencies WHERE kode = 'IDR'").first().catch(() => ({ cnt: 0 })),
+  ]);
+  if ((accCnt?.cnt ?? 0) === 0 || (prodCnt?.cnt ?? 0) === 0 || (curCnt?.cnt ?? 0) === 0) {
+    await applyDefaultSeed(db, now, actor);
   }
-  await applyDefaultSeed(db, now, actor);
   seededInIsolate = true;
 }
 
@@ -71,6 +75,21 @@ export async function applyDefaultSeed(db, now = Date.now(), actor = "system") {
       JSON.stringify(Object.fromEntries(Object.entries(DEFAULT_SETTINGS).map(([k, v]) => [k, JSON.stringify(v)]))),
     ),
     db.prepare("INSERT OR IGNORE INTO lampiran_db (db_index, bytes, aktif) VALUES (1, 0, 1)"),
+    db.prepare(
+      `INSERT OR IGNORE INTO products (id, nama, sku, satuan, deskripsi, tipe, monitor_stok, dibeli, akun_beli, dijual, akun_jual, arsip, created_at, created_by, updated_at, updated_by)
+       SELECT json_extract(value, '$.id'), json_extract(value, '$.nama'), json_extract(value, '$.sku'), json_extract(value, '$.satuan'),
+              json_extract(value, '$.deskripsi'), 'single', json_extract(value, '$.monitor_stok'), json_extract(value, '$.dibeli'),
+              json_extract(value, '$.akun_beli'), json_extract(value, '$.dijual'), json_extract(value, '$.akun_jual'), 0, ?, ?, ?, ?
+       FROM json_each(?)`,
+    ).bind(now, actor, now, actor, JSON.stringify(DEFAULT_PRODUCTS)),
+    db.prepare(
+      `INSERT OR IGNORE INTO units_of_measure (id, nama, created_at, created_by, updated_at, updated_by)
+       SELECT 'uom_' || value, value, ?, ?, ?, ? FROM json_each(?)`,
+    ).bind(now, actor, now, actor, JSON.stringify(DEFAULT_UOMS)),
+    db.prepare(
+      `INSERT OR IGNORE INTO currencies (kode, nama, simbol, aktif, is_base, akun_piutang, akun_hutang, akun_realisasi, akun_belum_terealisasi, created_at, created_by, updated_at, updated_by)
+       VALUES ('IDR', 'Rupiah Indonesia', 'Rp', 1, 1, '1-10100', '2-20100', '8-80200', '8-80201', ?, ?, ?, ?)`,
+    ).bind(now, actor, now, actor),
   ];
   await db.batch(stmts);
 }

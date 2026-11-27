@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { getReportArusKas, listUnits } from "@/keuangan/api";
-import { firstDayOfMonthWib, formatAngkaSen, formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
-import { exportReportCsv, exportReportExcel, exportReportPdf } from "@/keuangan/export/reportExport";
+import { firstDayOfMonthWib, formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
+import { exportReportCsv, exportReportExcel, exportReportPdf, senCell, type ExportCell } from "@/keuangan/export/reportExport";
 import type { ArusKasResponse, ReportFilter, Unit } from "@/keuangan/types";
 import { INPUT_CLS, ReportFilterBar } from "@/keuangan/components/KeuanganUi";
 import { useToast } from "@/contexts/ToastContext";
@@ -42,24 +42,24 @@ export function ReportArusKasPage() {
   const buildExport = () => {
     if (!data) return null;
     const headers = ["Aktivitas / Pos Arus Kas", ...data.columns];
-    const rows: (string | number)[][] = [];
+    const rows: ExportCell[][] = [];
     const collectActivity = (title: string, getter: (b: ArusKasResponse["data"][number]) => ArusKasResponse["data"][number]["operasional"]) => {
-      rows.push([title, ...data.data.map((b) => formatAngkaSen(getter(b).total))]);
+      rows.push([title, ...data.data.map((b) => senCell(getter(b).total))]);
       const keys = new Map<string, string>();
       data.data.forEach((b) => getter(b).items.forEach((it) => keys.set(it.key, it.label)));
       for (const [k, label] of keys.entries()) {
         rows.push([
           `  ${label}`,
-          ...data.data.map((b) => formatAngkaSen(getter(b).items.find((x) => x.key === k)?.nilai || 0)),
+          ...data.data.map((b) => senCell(getter(b).items.find((x) => x.key === k)?.nilai || 0)),
         ]);
       }
     };
     collectActivity("Arus Kas dari Aktivitas Operasional", (b) => b.operasional);
     collectActivity("Arus Kas dari Aktivitas Investasi", (b) => b.investasi);
     collectActivity("Arus Kas dari Aktivitas Pendanaan", (b) => b.pendanaan);
-    rows.push(["Kenaikan (Penurunan) Bersih Kas", ...data.data.map((b) => formatAngkaSen(b.kenaikanKas))]);
-    rows.push(["Saldo Kas & Setara Kas Awal", ...data.data.map((b) => formatAngkaSen(b.saldoAwal))]);
-    rows.push(["Saldo Kas & Setara Kas Akhir", ...data.data.map((b) => formatAngkaSen(b.saldoAkhir))]);
+    rows.push(["Kenaikan (Penurunan) Bersih Kas", ...data.data.map((b) => senCell(b.kenaikanKas))]);
+    rows.push(["Saldo Kas & Setara Kas Awal", ...data.data.map((b) => senCell(b.saldoAwal))]);
+    rows.push(["Saldo Kas & Setara Kas Akhir", ...data.data.map((b) => senCell(b.saldoAkhir))]);
 
     return {
       laporan: "arus-kas",

@@ -936,7 +936,7 @@ export async function updateSettings(ctx) {
   const now = ctx.deps.now();
   const body = await readJson(ctx.request);
   const stmts = [];
-  for (const key of ["perusahaan", "penjualan", "pembelian"]) {
+  for (const key of ["perusahaan", "penjualan", "pembelian", "produk", "custom_fields", "print_templates"]) {
     if (body[key] && typeof body[key] === "object") {
       stmts.push(
         db

@@ -1,8 +1,8 @@
 // Laporan Buku Besar (PRD 07-laporan.md).
 import { useEffect, useState } from "react";
 import { getReportBukuBesar, listAccounts, listUnits } from "@/keuangan/api";
-import { DOC_TYPE_LABELS, firstDayOfMonthWib, formatAngkaSen, formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
-import { exportReportCsv, exportReportExcel, exportReportPdf } from "@/keuangan/export/reportExport";
+import { DOC_TYPE_LABELS, firstDayOfMonthWib, formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
+import { exportReportCsv, exportReportExcel, exportReportPdf, senCell, type ExportCell } from "@/keuangan/export/reportExport";
 import type { Account, BukuBesarResponse, ReportFilter, Unit } from "@/keuangan/types";
 import { INPUT_CLS, ReportFilterBar, UnitBadge } from "@/keuangan/components/KeuanganUi";
 import { useToast } from "@/contexts/ToastContext";
@@ -41,9 +41,9 @@ export function ReportBukuBesarPage() {
   const buildExport = () => {
     if (!data) return null;
     const headers = ["Akun", "Tanggal", "Transaksi", "Nomor", "Unit", "Keterangan", "Debit", "Kredit", "Saldo"];
-    const rows: (string | number)[][] = [];
+    const rows: ExportCell[][] = [];
     for (const g of data.groups) {
-      rows.push([`${g.kode} ${g.nama}`, "", "Saldo Awal", "", "", "", "", "", formatAngkaSen(g.saldo_awal)]);
+      rows.push([`${g.kode} ${g.nama}`, "", "Saldo Awal", "", "", "", "", "", senCell(g.saldo_awal)]);
       for (const r of g.rows) {
         rows.push([
           `${g.kode}`,
@@ -52,12 +52,12 @@ export function ReportBukuBesarPage() {
           r.nomor,
           r.unit_kode,
           r.keterangan,
-          r.debit ? formatAngkaSen(r.debit) : "",
-          r.kredit ? formatAngkaSen(r.kredit) : "",
-          formatAngkaSen(r.saldo),
+          r.debit ? senCell(r.debit) : "",
+          r.kredit ? senCell(r.kredit) : "",
+          senCell(r.saldo),
         ]);
       }
-      rows.push([`${g.kode} ${g.nama}`, "", "Saldo Akhir", "", "", "", formatAngkaSen(g.total_debit), formatAngkaSen(g.total_kredit), formatAngkaSen(g.saldo_akhir)]);
+      rows.push([`${g.kode} ${g.nama}`, "", "Saldo Akhir", "", "", "", senCell(g.total_debit), senCell(g.total_kredit), senCell(g.saldo_akhir)]);
     }
     return {
       laporan: "buku-besar",

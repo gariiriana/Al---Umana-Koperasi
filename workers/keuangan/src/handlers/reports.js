@@ -464,6 +464,11 @@ export async function reportLabaRugi(ctx) {
     if (slices.length > 1) {
       slices.push({ label: "Gabungan", dari, sampai, unitKodes: activeUnits.map((u) => u.kode), tagIds, tagMode });
     }
+  } else if (bandingDengan === "tag") {
+    const { results: allTags } = await db.prepare("SELECT * FROM tags ORDER BY nama").all();
+    const chosenTags = tagIds.length > 0 ? allTags.filter((t) => tagIds.includes(t.id)) : allTags;
+    slices = chosenTags.map((t) => ({ label: `#${t.nama}`, dari, sampai, unitKodes, tagIds: [t.id], tagMode: "any" }));
+    slices.push({ label: "Total / Semua", dari, sampai, unitKodes, tagIds, tagMode });
   } else {
     const ps = buildComparePeriods(dari, sampai, bandingDengan === "periode" || bandingPeriode !== "none" ? (bandingPeriode === "none" ? "bulanan" : bandingPeriode) : "none", bandingJumlah);
     slices = ps.map((p) => ({ label: p.label, dari: p.dari, sampai: p.sampai, unitKodes, tagIds, tagMode }));
@@ -512,6 +517,42 @@ export async function reportLabaRugi(ctx) {
     return { title, rows, totals };
   };
 
+  let customSections = null;
+  if (customTemplate && Array.isArray(customTemplate.sections) && customTemplate.sections.length > 0) {
+    const bySecId = new Map();
+    customSections = [];
+    for (const secDef of customTemplate.sections) {
+      if (secDef.tipe === "rumus") {
+        const totals = Array(slices.length).fill(0);
+        for (const id of secDef.add || []) {
+          const t = bySecId.get(id) || totals;
+          t.forEach((v, i) => { totals[i] += v; });
+        }
+        for (const id of secDef.sub || []) {
+          const t = bySecId.get(id) || [];
+          t.forEach((v, i) => { totals[i] -= v; });
+        }
+        bySecId.set(secDef.id, totals);
+        customSections.push({ id: secDef.id, nama: secDef.nama, tipe: "rumus", rows: [], totals });
+      } else {
+        const kodeSet = new Set(secDef.accountKodes || []);
+        const katSet = new Set(secDef.kategoriIds || []);
+        const accs = pnlAccs.filter((a) => kodeSet.has(a.kode) || (kodeSet.size === 0 && katSet.has(a.kategori)));
+        const rows = [];
+        const totals = Array(slices.length).fill(0);
+        for (const acc of accs) {
+          const values = sliceSums.map((sums) => valueOf(sums, acc));
+          if (values.some((x) => x !== 0)) {
+            values.forEach((x, idx) => { totals[idx] += x; });
+            if (tampilkanAkun) rows.push({ kode: acc.kode, nama: acc.nama, values });
+          }
+        }
+        bySecId.set(secDef.id, totals);
+        customSections.push({ id: secDef.id, nama: secDef.nama, tipe: "kategori", rows, totals });
+      }
+    }
+  }
+
   const pendapatan = buildCat("Pendapatan dari Penjualan", 13);
   const hpp = buildCat("Beban Pokok Pendapatan", 15);
   const labaKotor = pendapatan.totals.map((p, i) => p - hpp.totals[i]);
@@ -529,6 +570,7 @@ export async function reportLabaRugi(ctx) {
     lastUpdatedAt,
     columns: slices.map((s) => s.label),
     customTemplate,
+    customSections,
     sections: {
       pendapatan,
       hpp,
@@ -581,6 +623,24 @@ export async function reportArusKas(ctx) {
   const bandingPeriode = ctx.url.searchParams.get("banding_periode") || "none";
   const bandingJumlah = Number(ctx.url.searchParams.get("banding_jumlah") || 0);
   const tampilkanAkun = ctx.url.searchParams.get("tampilkan_akun") === "1";
+  const templateId = ctx.url.searchParams.get("template_id") || "";
+
+  let customBuckets = null;
+  if (templateId) {
+    const tplRow = await db.prepare("SELECT * FROM report_templates WHERE id = ? AND laporan = 'arus_kas'").bind(templateId).first();
+    if (tplRow) {
+      const cfg = JSON.parse(tplRow.config_json || "{}");
+      if (Array.isArray(cfg.categories) && cfg.categories.length > 0) {
+        customBuckets = cfg.categories.map((c, idx) => ({
+          activity: c.activity || "operasional",
+          key: c.key || `custom_${idx}`,
+          label: c.label || c.nama || "Kategori",
+          accountKodes: c.accountKodes || [],
+          categories: c.categories || [],
+        }));
+      }
+    }
+  }
 
   const periods = buildComparePeriods(dari, sampai, bandingPeriode, bandingJumlah);
   const { accByKode, lastUpdatedAt } = await loadMeta(db);
@@ -588,7 +648,7 @@ export async function reportArusKas(ctx) {
   const colData = await Promise.all(
     periods.map((p) =>
       metode === "langsung"
-        ? computeDirectCashFlow(db, { dari: p.dari, sampai: p.sampai, unitKodes, eliminateInterUnit, accByKode, tampilkanAkun })
+        ? computeDirectCashFlow(db, { dari: p.dari, sampai: p.sampai, unitKodes, eliminateInterUnit, accByKode, tampilkanAkun, customBuckets })
         : computeIndirectCashFlow(db, { dari: p.dari, sampai: p.sampai, unitKodes, eliminateInterUnit, accByKode }),
     ),
   );
@@ -623,7 +683,7 @@ async function sumCashBalance(db, asOfDate, unitKodes, inclusive = true) {
   return row?.bal ?? 0;
 }
 
-async function computeDirectCashFlow(db, { dari, sampai, unitKodes, eliminateInterUnit, accByKode, tampilkanAkun }) {
+async function computeDirectCashFlow(db, { dari, sampai, unitKodes, eliminateInterUnit, accByKode, tampilkanAkun, customBuckets = null }) {
   const [saldoAwal, saldoAkhir] = await Promise.all([
     sumCashBalance(db, dari, unitKodes, false),
     sumCashBalance(db, sampai, unitKodes, true),
@@ -684,18 +744,23 @@ async function computeDirectCashFlow(db, { dari, sampai, unitKodes, eliminateInt
       }
     }
     if (netCash === 0 && nonCash.length === 0) continue; // Transfer antar akun Kas & Bank dalam cakupan
+    const bucketDefs = customBuckets && customBuckets.length > 0 ? customBuckets : DIRECT_BUCKETS;
     for (const nc of nonCash) {
       if (!eliminateInterUnit && isInterUnitAccount(nc.acc.kode)) {
         addBucket("fin_antar_unit", nc.acc.kode, "Transfer antar unit", nc.amount);
         continue;
       }
-      const bucket = DIRECT_BUCKETS.find((b) => b.categories.includes(nc.acc.kategori));
+      const bucket =
+        bucketDefs.find((b) => Array.isArray(b.accountKodes) && b.accountKodes.includes(nc.acc.kode)) ||
+        bucketDefs.find((b) => Array.isArray(b.categories) && b.categories.includes(nc.acc.kategori));
       if (bucket) addBucket(bucket.key, nc.acc.kode, nc.acc.nama, nc.amount);
+      else addBucket("op_beban", nc.acc.kode, nc.acc.nama, nc.amount);
     }
   }
 
+  const bucketDefs = customBuckets && customBuckets.length > 0 ? customBuckets : DIRECT_BUCKETS;
   const buildActivity = (act, extraItems = []) => {
-    const defs = [...DIRECT_BUCKETS.filter((b) => b.activity === act), ...extraItems];
+    const defs = [...bucketDefs.filter((b) => b.activity === act), ...extraItems];
     const items = [];
     let total = 0;
     for (const d of defs) {
@@ -1200,6 +1265,11 @@ export async function reportRingkasanBisnis(ctx) {
 
   const pct = (num, den) => (den ? Number(((num / den) * 100).toFixed(2)) : null);
   const ratio = (num, den) => (den ? Number((num / den).toFixed(2)) : null);
+  const piutangSaldo = nr.sections.aset[0]?.rows?.filter((r) => r.kode.startsWith("1-101") && r.kode !== "1-10150").reduce((s, r) => s + (r.values[0] || 0), 0) || 0;
+  const hutangSaldo = nr.sections.liabilitas[0]?.rows?.filter((r) => r.kode.startsWith("2-201") && r.kode !== "2-20109" && r.kode !== "2-20150").reduce((s, r) => s + (r.values[0] || 0), 0) || 0;
+  const daysPeriod = Math.max(1, Math.round((new Date(`${lr.sampai}T00:00:00Z`) - new Date(`${lr.dari}T00:00:00Z`)) / 86_400_000) + 1);
+  const dso = sLr.pendapatan > 0 ? Number(((piutangSaldo / sLr.pendapatan) * daysPeriod).toFixed(1)) : null;
+  const dpo = sLr.hpp > 0 ? Number(((hutangSaldo / sLr.hpp) * daysPeriod).toFixed(1)) : null;
 
   return {
     laporan: "ringkasan-bisnis",
@@ -1229,6 +1299,8 @@ export async function reportRingkasanBisnis(ctx) {
       { key: "rasio_hutang_ekuitas", label: "Rasio Hutang terhadap Ekuitas", nilai: ratio(sNr.totalLiabilitas, sNr.totalModal), unit: "x", penjelasan: "Total liabilitas ÷ Total modal" },
       { key: "roa", label: "Tingkat Pengembalian Aset (ROA)", nilai: pct(sLr.pendapatanBersih, sNr.totalAset), unit: "%", penjelasan: "Laba bersih ÷ Total aset" },
       { key: "roe", label: "Tingkat Pengembalian Ekuitas (ROE)", nilai: pct(sLr.pendapatanBersih, sNr.totalModal), unit: "%", penjelasan: "Laba bersih ÷ Total modal" },
+      { key: "konversi_piutang", label: "Rata-rata Lama Konversi Piutang", nilai: dso, unit: "hari", penjelasan: "Rata-rata piutang ÷ Penjualan × jumlah hari periode" },
+      { key: "konversi_hutang", label: "Rata-rata Lama Konversi Hutang", nilai: dpo, unit: "hari", penjelasan: "Rata-rata hutang ÷ HPP/pembelian × jumlah hari periode" },
     ],
   };
 }

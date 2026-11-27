@@ -6,13 +6,21 @@ import type {
   AccountMappingItem,
   ArusKasResponse,
   AuditLogRow,
+  ApprovalRule,
+  BankStatement,
+  BerandaSummaryResponse,
   BkuResponse,
+  BomItem,
+  Budget,
   BukuBesarResponse,
   Contact,
   ContactGroup,
+  CurrencyItem,
   DocumentDetailResponse,
   DocumentLine,
   DocumentSummary,
+  ExchangeRateItem,
+  FixedAsset,
   JurnalReportResponse,
   KasBankListResponse,
   KeuanganMe,
@@ -24,13 +32,18 @@ import type {
   PaymentTerm,
   PeriodClosing,
   PerubahanModalResponse,
+  Product,
+  ProductDetailResponse,
   ReportFilter,
   ReportTemplate,
   RingkasanBisnisResponse,
   Tag,
   TagCategory,
   Tax,
+  TransactionDetailResponse,
+  TransactionDocument,
   Unit,
+  Warehouse,
 } from "@/keuangan/types";
 
 const BASE = `${import.meta.env.VITE_KEUANGAN_API_BASE_URL ?? ""}/api/keuangan`;
@@ -412,3 +425,127 @@ async function compressImageToMax80Kb(file: File): Promise<{ base64: string; mim
     URL.revokeObjectURL(url);
   }
 }
+
+// ─── Rilis 2: Produk, Gudang, Transaksi Penjualan/Pembelian/Biaya, Berulang, Laporan, Beranda ───
+
+export const listUoms = async () => (await keuanganFetch<{ units: { id: string; nama: string }[] }>("/uoms")).units;
+export const saveUom = (body: { id?: string; nama: string }) => send<{ unit: { id: string; nama: string } }>("POST", "/uoms", body);
+export const deleteUom = (id: string) => send<{ ok: boolean }>("DELETE", `/uoms/${encodeURIComponent(id)}`);
+
+export const listProductCategories = async () =>
+  (await keuanganFetch<{ categories: { id: string; nama: string }[] }>("/product-categories")).categories;
+export const saveProductCategory = (body: { id?: string; nama: string }) =>
+  send<{ category: { id: string; nama: string } }>("POST", "/product-categories", body);
+
+export const listWarehouses = async (params: { unit_kode?: string } = {}) =>
+  (await keuanganFetch<{ warehouses: Warehouse[] }>(`/warehouses${qs(params)}`)).warehouses;
+export const createWarehouse = (body: Partial<Warehouse> & { nama: string; unit_kode: string }) =>
+  send<{ warehouse: Warehouse }>("POST", "/warehouses", body);
+export const updateWarehouse = (id: string, body: Partial<Warehouse>) =>
+  send<{ warehouse: Warehouse }>("PUT", `/warehouses/${encodeURIComponent(id)}`, body);
+export const deleteWarehouse = (id: string) => send<{ ok: boolean }>("DELETE", `/warehouses/${encodeURIComponent(id)}`);
+
+export const listProducts = async (params: { q?: string; dijual?: boolean; dibeli?: boolean; arsip?: boolean } = {}) =>
+  (await keuanganFetch<{ products: Product[] }>(`/products${qs(params)}`)).products;
+export const getProduct = (id: string) => keuanganFetch<ProductDetailResponse>(`/products/${encodeURIComponent(id)}`);
+export const createProduct = (body: Record<string, unknown>) => send<{ product: Product }>("POST", "/products", body);
+export const updateProduct = (id: string, body: Record<string, unknown>) =>
+  send<{ product: Product }>("PUT", `/products/${encodeURIComponent(id)}`, body);
+export const deleteProduct = (id: string) => send<{ ok: boolean }>("DELETE", `/products/${encodeURIComponent(id)}`);
+
+export const listStockAdjustments = async () =>
+  (await keuanganFetch<{ adjustments: TransactionDocument[] }>("/stock-adjustments")).adjustments;
+export const createStockAdjustment = (body: Record<string, unknown>) =>
+  send<{ adjustment: TransactionDocument }>("POST", "/stock-adjustments", body);
+export const listWarehouseTransfers = async () =>
+  (await keuanganFetch<{ transfers: TransactionDocument[] }>("/warehouse-transfers")).transfers;
+export const createWarehouseTransfer = (body: Record<string, unknown>) =>
+  send<{ transfer: TransactionDocument }>("POST", "/warehouse-transfers", body);
+
+export const listTransactions = async (params: {
+  family?: "sales" | "purchase" | "expense" | "all";
+  type?: string;
+  status?: string;
+  contact_id?: string;
+  unit_kode?: string;
+  dari?: string;
+  sampai?: string;
+  q?: string;
+} = {}) => (await keuanganFetch<{ documents: TransactionDocument[] }>(`/transactions${qs(params)}`)).documents;
+
+export const getTransaction = (id: string) => keuanganFetch<TransactionDetailResponse>(`/transactions/${encodeURIComponent(id)}`);
+export const createTransaction = (body: Record<string, unknown>) => send<TransactionDetailResponse>("POST", "/transactions", body);
+export const updateTransaction = (id: string, body: Record<string, unknown>) =>
+  send<TransactionDetailResponse>("PUT", `/transactions/${encodeURIComponent(id)}`, body);
+export const deleteTransaction = (id: string) => send<{ ok: boolean }>("DELETE", `/transactions/${encodeURIComponent(id)}`);
+
+export const listRecurring = async () =>
+  (await keuanganFetch<{ recurring: Record<string, unknown>[] }>("/recurring")).recurring;
+export const saveRecurring = (body: Record<string, unknown>) => send("POST", "/recurring", body);
+export const deleteRecurring = (id: string) => send<{ ok: boolean }>("DELETE", `/recurring/${encodeURIComponent(id)}`);
+
+export const getBerandaSummary = (unit_kode?: string) =>
+  keuanganFetch<BerandaSummaryResponse>(`/beranda${qs({ unit_kode })}`);
+
+export const getExtendedReport = (endpoint: string, filter: ReportFilter | Record<string, string | number | undefined> = {}) =>
+  keuanganFetch<Record<string, unknown>>(`/reports/${endpoint}${qs(filter as Record<string, string | number | boolean | undefined>)}`);
+
+// ─── Rilis 3: Aset Tetap, Bank & Rekonsiliasi, Anggaran, Approval ───
+
+export const listAssets = async (params: { status?: string; unit_kode?: string } = {}) =>
+  (await keuanganFetch<{ assets: FixedAsset[] }>(`/assets${qs(params)}`)).assets;
+export const getAsset = (id: string) =>
+  keuanganFetch<{ asset: FixedAsset; schedule: { asset_id: string; bulan: string; nilai: number; document_id: string | null }[] }>(`/assets/${encodeURIComponent(id)}`);
+export const createAsset = (body: Record<string, unknown>) => send<{ asset: FixedAsset }>("POST", "/assets", body);
+export const activatePendingAsset = (id: string, body: Record<string, unknown>) =>
+  send<{ asset: FixedAsset }>("POST", `/assets/${encodeURIComponent(id)}/activate`, body);
+export const applyDepreciation = (body: { sampai_bulan: string; asset_id?: string }) =>
+  send<{ appliedCount: number }>("POST", "/assets/depreciate", body);
+export const disposeAsset = (id: string, body: Record<string, unknown>) =>
+  send<{ ok: boolean; nilai_buku: number; laba_rugi: number }>("POST", `/assets/${encodeURIComponent(id)}/dispose`, body);
+
+export const listBankStatements = async (params: { account_kode?: string; matched?: string } = {}) =>
+  (await keuanganFetch<{ statements: BankStatement[] }>(`/bank-statements${qs(params)}`)).statements;
+export const importBankStatements = (body: { account_kode: string; preset: string; csv: string }) =>
+  send<{ inserted: number; skippedDuplicate: number }>("POST", "/bank-statements/import", body);
+export const reconcileMatch = (body: { statement_id: string; document_id: string }) => send("POST", "/reconciliation/match", body);
+export const unmatchReconciliation = (body: { statement_id: string }) => send("POST", "/reconciliation/unmatch", body);
+export const createTxFromStatement = (body: { statement_id: string; unit_kode: string; account_kode: string; memo?: string }) =>
+  send("POST", "/reconciliation/create-tx", body);
+export const listReconRules = async () =>
+  (await keuanganFetch<{ rules: { id: string; nama: string; account_kode: string | null; arah: string; kondisi: Record<string, unknown>; aksi: Record<string, unknown>; aktif: number }[] }>("/recon-rules")).rules;
+export const saveReconRule = (body: Record<string, unknown>) => send("POST", "/recon-rules", body);
+export const deleteReconRule = (id: string) => send("DELETE", `/recon-rules/${encodeURIComponent(id)}`);
+export const applyReconRules = () => send<{ matchedCount: number }>("POST", "/recon-rules/apply", {});
+
+export const listBudgets = async () => (await keuanganFetch<{ budgets: Budget[] }>("/budgets")).budgets;
+export const getBudget = (id: string) =>
+  keuanganFetch<{ budget: Budget; lines: { account_kode: string; account_nama: string; bulan: string; nilai: number }[] }>(`/budgets/${encodeURIComponent(id)}`);
+export const saveBudget = (body: Record<string, unknown>) => send<{ budget: Budget }>("POST", "/budgets", body);
+export const deleteBudget = (id: string) => send("DELETE", `/budgets/${encodeURIComponent(id)}`);
+export const getBudgetReport = (budget_id?: string) =>
+  keuanganFetch<{ budget: Budget | null; months: string[]; rows: { kode: string; nama: string; kategori: number; anggaran: number; aktual: number; selisih: number; persen: number | null }[] }>(
+    `/reports/anggaran-laba-rugi${qs({ budget_id })}`,
+  );
+
+export const listApprovalRules = async () => (await keuanganFetch<{ rules: ApprovalRule[] }>("/approval-rules")).rules;
+export const saveApprovalRule = (body: Record<string, unknown>) => send("POST", "/approval-rules", body);
+export const deleteApprovalRule = (id: string) => send("DELETE", `/approval-rules/${encodeURIComponent(id)}`);
+export const listPendingApprovals = async () => (await keuanganFetch<{ pending: TransactionDocument[] }>("/approvals/pending")).pending;
+export const decideApproval = (docId: string, body: { keputusan: "approve" | "reject"; alasan?: string }) =>
+  send("POST", `/approvals/${encodeURIComponent(docId)}/decide`, body);
+
+// ─── Rilis 4: Produksi & Multi Mata Uang ───
+
+export const listBoms = async () => (await keuanganFetch<{ boms: BomItem[] }>("/boms")).boms;
+export const saveBom = (body: Record<string, unknown>) => send("POST", "/boms", body);
+export const deleteBom = (id: string) => send("DELETE", `/boms/${encodeURIComponent(id)}`);
+export const listWorkOrders = async () => (await keuanganFetch<{ work_orders: TransactionDocument[] }>("/work-orders")).work_orders;
+export const createWorkOrder = (body: Record<string, unknown>) => send("POST", "/work-orders", body);
+
+export const listCurrencies = async () => (await keuanganFetch<{ currencies: CurrencyItem[] }>("/currencies")).currencies;
+export const saveCurrency = (body: Partial<CurrencyItem> & { kode: string; nama: string }) => send("POST", "/currencies", body);
+export const listExchangeRates = async (currency_kode?: string) =>
+  (await keuanganFetch<{ rates: ExchangeRateItem[] }>(`/exchange-rates${qs({ currency_kode })}`)).rates;
+export const saveExchangeRate = (body: { currency_kode: string; tanggal: string; kurs: number }) => send("POST", "/exchange-rates", body);
+

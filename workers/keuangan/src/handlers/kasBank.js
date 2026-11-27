@@ -41,6 +41,15 @@ export async function listKasBank(ctx) {
   const { results: balRows } = await balQuery.all();
   const balMap = new Map(balRows.map((r) => [r.account_kode, (r.d || 0) - (r.k || 0)]));
 
+  const { results: stmtRows } = await db
+    .prepare(
+      `SELECT account_kode, COUNT(*) AS total_cnt, SUM(CASE WHEN matched = 0 THEN 1 ELSE 0 END) AS unmatched_cnt,
+              SUM(masuk - keluar) AS net_bank
+       FROM bank_statements GROUP BY account_kode`,
+    )
+    .all();
+  const bankMap = new Map(stmtRows.map((s) => [s.account_kode, s]));
+
   let totalKasBank = 0;
   let totalKartuKredit = 0;
   const enriched = accounts
@@ -50,22 +59,49 @@ export async function listKasBank(ctx) {
       const saldoJurnal = a.kategori === 9 ? -rawSaldo : rawSaldo;
       if (a.kategori === 3) totalKasBank += saldoJurnal;
       else totalKartuKredit += saldoJurnal;
+      const bk = bankMap.get(a.kode);
       return {
         ...a,
         unit_label: a.unit_kode ? `${a.unit_kode}${a.unit_nama ? ` — ${a.unit_nama}` : ""}` : "Bersama",
         saldo_jurnal: saldoJurnal,
-        saldo_bank: null,
-        rekonsiliasi_status: null,
+        saldo_bank: bk ? bk.net_bank : null,
+        rekonsiliasi_status: bk ? (bk.unmatched_cnt > 0 ? `${bk.unmatched_cnt} belum cocok` : "Cocok") : null,
       };
     });
 
+  const today = todayWib(ctx.deps.now());
+  const next30 = (() => {
+    const dt = new Date(`${today}T00:00:00Z`);
+    dt.setUTCDate(dt.getUTCDate() + 30);
+    return dt.toISOString().slice(0, 10);
+  })();
+  const unitFilterSql = unitKode ? "AND unit_kode = ?" : "";
+  const unitFilterParam = unitKode ? [unitKode] : [];
+
+  const [inRow, outRow] = await Promise.all([
+    db
+      .prepare(
+        `SELECT COUNT(*) AS cnt, IFNULL(SUM(sisa), 0) AS total
+         FROM documents WHERE deleted_at IS NULL AND type = 'sales_invoice' AND sisa > 0 AND (jatuh_tempo IS NULL OR jatuh_tempo <= ?) ${unitFilterSql}`,
+      )
+      .bind(next30, ...unitFilterParam)
+      .first(),
+    db
+      .prepare(
+        `SELECT COUNT(*) AS cnt, IFNULL(SUM(sisa), 0) AS total
+         FROM documents WHERE deleted_at IS NULL AND type IN ('purchase_invoice', 'expense') AND sisa > 0 AND (jatuh_tempo IS NULL OR jatuh_tempo <= ?) ${unitFilterSql}`,
+      )
+      .bind(next30, ...unitFilterParam)
+      .first(),
+  ]);
+
   return {
-    asOf: todayWib(ctx.deps.now()),
+    asOf: today,
     summary: {
-      pemasukan30Hari: 0,
-      pemasukanCount: 0,
-      pengeluaran30Hari: 0,
-      pengeluaranCount: 0,
+      pemasukan30Hari: inRow?.total || 0,
+      pemasukanCount: inRow?.cnt || 0,
+      pengeluaran30Hari: outRow?.total || 0,
+      pengeluaranCount: outRow?.cnt || 0,
       saldoKasBank: totalKasBank,
       saldoKartuKredit: totalKartuKredit,
     },

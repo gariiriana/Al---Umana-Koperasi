@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { getReportRingkasanBisnis, listUnits } from "@/keuangan/api";
 import { firstDayOfMonthWib, formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
-import { exportReportCsv, exportReportExcel, exportReportPdf } from "@/keuangan/export/reportExport";
+import { exportReportCsv, exportReportExcel, exportReportPdf, senCell, type ExportCell } from "@/keuangan/export/reportExport";
 import type { ReportFilter, RingkasanBisnisResponse, Unit } from "@/keuangan/types";
 import { ReportFilterBar } from "@/keuangan/components/KeuanganUi";
 import { useToast } from "@/contexts/ToastContext";
@@ -34,18 +34,18 @@ export function ReportRingkasanBisnisPage() {
   const buildExport = () => {
     if (!data) return null;
     const headers = ["Bagian", "Indikator", "Nilai"];
-    const rows: (string | number)[][] = [
-      ["Laba Rugi", "Pendapatan", formatSen(data.labaRugi.pendapatan)],
-      ["Laba Rugi", "Laba Kotor", formatSen(data.labaRugi.labaKotor)],
-      ["Laba Rugi", "Biaya Operasional", formatSen(data.labaRugi.biayaOperasional)],
-      ["Laba Rugi", "Pendapatan Bersih", formatSen(data.labaRugi.pendapatanBersih)],
-      ["Neraca", "Total Aset", formatSen(data.neraca.totalAset)],
-      ["Neraca", "Total Liabilitas", formatSen(data.neraca.totalLiabilitas)],
-      ["Neraca", "Total Modal", formatSen(data.neraca.totalModal)],
-      ["Arus Kas", "Operasional", formatSen(data.arusKas.operasional)],
-      ["Arus Kas", "Investasi", formatSen(data.arusKas.investasi)],
-      ["Arus Kas", "Pendanaan", formatSen(data.arusKas.pendanaan)],
-      ["Arus Kas", "Saldo Kas Akhir", formatSen(data.arusKas.saldoAkhir)],
+    const rows: ExportCell[][] = [
+      ["Laba Rugi", "Pendapatan", senCell(data.labaRugi.pendapatan)],
+      ["Laba Rugi", "Laba Kotor", senCell(data.labaRugi.labaKotor)],
+      ["Laba Rugi", "Biaya Operasional", senCell(data.labaRugi.biayaOperasional)],
+      ["Laba Rugi", "Pendapatan Bersih", senCell(data.labaRugi.pendapatanBersih)],
+      ["Neraca", "Total Aset", senCell(data.neraca.totalAset)],
+      ["Neraca", "Total Liabilitas", senCell(data.neraca.totalLiabilitas)],
+      ["Neraca", "Total Modal", senCell(data.neraca.totalModal)],
+      ["Arus Kas", "Operasional", senCell(data.arusKas.operasional)],
+      ["Arus Kas", "Investasi", senCell(data.arusKas.investasi)],
+      ["Arus Kas", "Pendanaan", senCell(data.arusKas.pendanaan)],
+      ["Arus Kas", "Saldo Kas Akhir", senCell(data.arusKas.saldoAkhir)],
       ...data.wawasan.map((w) => ["Wawasan", w.label, w.nilai === null ? "-" : `${w.nilai}${w.unit}`]),
     ];
     return {

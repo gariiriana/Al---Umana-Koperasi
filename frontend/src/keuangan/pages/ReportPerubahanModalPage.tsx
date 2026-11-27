@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import { Info } from "lucide-react";
 import { getReportPerubahanModal, listUnits } from "@/keuangan/api";
-import { firstDayOfMonthWib, formatAngkaSen, formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
-import { exportReportCsv, exportReportExcel, exportReportPdf } from "@/keuangan/export/reportExport";
+import { firstDayOfMonthWib, formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
+import { exportReportCsv, exportReportExcel, exportReportPdf, senCell, type ExportCell } from "@/keuangan/export/reportExport";
 import type { PerubahanModalResponse, ReportFilter, Unit } from "@/keuangan/types";
 import { ReportFilterBar } from "@/keuangan/components/KeuanganUi";
 import { useToast } from "@/contexts/ToastContext";
@@ -40,13 +40,13 @@ export function ReportPerubahanModalPage() {
   const buildExport = () => {
     if (!data) return null;
     const headers = ["Periode", "Kode Akun", "Nama Akun", "Permulaan", "Debit", "Kredit", "Saldo Akhir"];
-    const rows: (string | number)[][] = [];
+    const rows: ExportCell[][] = [];
     for (const blk of data.blocks) {
       for (const r of blk.rows) {
-        rows.push([blk.label, r.kode_akun, r.nama_akun, formatAngkaSen(r.permulaan), formatAngkaSen(r.debit), formatAngkaSen(r.kredit), formatAngkaSen(r.saldo_akhir)]);
+        rows.push([blk.label, r.kode_akun, r.nama_akun, senCell(r.permulaan), senCell(r.debit), senCell(r.kredit), senCell(r.saldo_akhir)]);
       }
-      rows.push([blk.label, "", "Total", formatAngkaSen(blk.total.permulaan), formatAngkaSen(blk.total.debit), formatAngkaSen(blk.total.kredit), formatAngkaSen(blk.total.saldo_akhir)]);
-      rows.push([blk.label, "", "Pergerakan", "", "", "", formatAngkaSen(blk.pergerakan)]);
+      rows.push([blk.label, "", "Total", senCell(blk.total.permulaan), senCell(blk.total.debit), senCell(blk.total.kredit), senCell(blk.total.saldo_akhir)]);
+      rows.push([blk.label, "", "Pergerakan", "", "", "", senCell(blk.pergerakan)]);
     }
     return {
       laporan: "perubahan-modal",

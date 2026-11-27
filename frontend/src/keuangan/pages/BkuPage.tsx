@@ -1,10 +1,10 @@
 // Halaman BKU (Buku Kas Umum / Rincian Akun Kas & Bank) sesuai PRD 02-kas-bank.md.
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowDownLeft, ArrowLeft, ArrowRightLeft, ArrowUpRight, Download, FileSpreadsheet, FileText, Paperclip, Search } from "lucide-react";
+import { ArrowDownLeft, ArrowLeft, ArrowRightLeft, ArrowUpRight, Download, FileSpreadsheet, FileText, Lock, Paperclip, Search } from "lucide-react";
 import { getBku, listAccounts, listContacts, listTaxes, listUnits } from "@/keuangan/api";
 import { firstDayOfMonthWib, formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
-import { exportReportCsv, exportReportExcel, exportReportPdf } from "@/keuangan/export/reportExport";
+import { exportBkuPdf, exportReportCsv, exportReportExcel, senCell } from "@/keuangan/export/reportExport";
 import type { Account, BkuResponse, Contact, Tax, Unit } from "@/keuangan/types";
 import { CashTxModal, type CashTxMode } from "@/keuangan/components/CashTxModal";
 import { BTN_PRIMARY, BTN_SECONDARY, INPUT_CLS, UnitBadge } from "@/keuangan/components/KeuanganUi";
@@ -54,37 +54,44 @@ export function BkuPage() {
 
   const buildExport = () => {
     if (!bku) return null;
-    const headers = ["Tanggal", "Transaksi", "Nomor", "Unit", "Kontak / Akun Lawan", "Deskripsi", "Penerimaan", "Pengeluaran", "Saldo"];
+    const activeUnit = units.find((u) => u.kode === (unitKode || bku.account.unit_kode));
+    const headers = ["Tanggal", "No. Bukti", "Tipe", "Unit", "Kontak", "Kode Akun", "Nama Akun", "Uraian", "Penerimaan", "Pengeluaran", "Saldo"];
     const rows = [
-      ["", "Saldo Awal", "", "", "", `Saldo sebelum ${formatTanggal(bku.dari)}`, "", "", formatSen(bku.saldoAwal)],
+      ["", "Saldo Awal", "", "", "", "", "", `Saldo sebelum ${formatTanggal(bku.periode.dari)}`, "", "", senCell(bku.ringkasan.saldoAwal, false)],
       ...bku.rows.map((r) => [
         formatTanggal(r.tanggal),
-        r.transaksi_label,
-        r.doc_no,
+        r.no_bukti,
+        r.tipe_label,
         r.unit_kode,
-        r.contact_nama || `${r.account_lawan_kode} ${r.account_lawan_nama}`.trim(),
-        r.deskripsi,
-        r.penerimaan ? formatSen(r.penerimaan) : "-",
-        r.pengeluaran ? formatSen(r.pengeluaran) : "-",
-        formatSen(r.saldo),
+        r.contact_nama || "-",
+        r.kode_akun,
+        r.nama_akun,
+        r.uraian,
+        r.penerimaan ? senCell(r.penerimaan, false) : "",
+        r.pengeluaran ? senCell(r.pengeluaran, false) : "",
+        senCell(r.saldo, false),
       ]),
-      ["", "Saldo Akhir", "", "", "", "", formatSen(bku.totalPenerimaan), formatSen(bku.totalPengeluaran), formatSen(bku.saldoAkhir)],
+      ["", "Saldo Akhir", "", "", "", "", "", "", senCell(bku.ringkasan.totalPenerimaan, false), senCell(bku.ringkasan.totalPengeluaran, false), senCell(bku.ringkasan.saldoAkhir, false)],
     ];
     return {
       laporan: "bku",
       title: `Buku Kas Umum — ${bku.account.kode} ${bku.account.nama}`,
-      subtitle: `Periode ${formatTanggal(bku.dari)} s.d. ${formatTanggal(bku.sampai)}`,
+      subtitle: `Periode ${formatTanggal(bku.periode.dari)} s.d. ${formatTanggal(bku.periode.sampai)}`,
       unitLabel: unitKode || bku.account.unit_kode || "Gabungan",
+      accountName: `${bku.account.kode} ${bku.account.nama}`,
+      bankInfo: bku.account.bank_nama ? `${bku.account.bank_nama} ${bku.account.no_rekening || ""}`.trim() : "",
+      pjNama: activeUnit?.pj_nama || "",
+      pjJabatan: activeUnit?.pj_jabatan || "",
       headers,
       rows,
-      filenameBase: `bku-${bku.account.kode}-${bku.dari}-${bku.sampai}`,
+      filenameBase: `bku-${bku.account.kode}-${bku.periode.dari}-${bku.periode.sampai}`,
       filter: { kode: decodedKode, dari, sampai, unit_kode: unitKode },
     };
   };
 
   const openRow = (row: BkuResponse["rows"][number]) => {
-    if (row.doc_type === "receive_money" || row.doc_type === "send_money" || row.doc_type === "transfer_money") {
-      setModal({ mode: row.doc_type, editDocId: row.document_id });
+    if (row.tipe === "receive_money" || row.tipe === "send_money" || row.tipe === "transfer_money") {
+      setModal({ mode: row.tipe, editDocId: row.document_id });
     }
   };
 
@@ -146,6 +153,9 @@ export function BkuPage() {
             <option value="receive_money">Terima Uang</option>
             <option value="send_money">Kirim Uang</option>
             <option value="transfer_money">Transfer Uang</option>
+            <option value="sales_payment">Terima Pembayaran</option>
+            <option value="purchase_payment">Kirim Pembayaran</option>
+            <option value="expense">Biaya</option>
             <option value="journal">Jurnal Umum</option>
             <option value="opening_balance">Saldo Awal</option>
           </select>
@@ -159,7 +169,7 @@ export function BkuPage() {
         </div>
         <div className="flex items-center gap-2 ml-auto">
           <button type="button" onClick={load} className={BTN_PRIMARY}>Tampilkan</button>
-          <button type="button" onClick={() => { const ex = buildExport(); if (ex) exportReportPdf(ex); }} className={BTN_SECONDARY}>
+          <button type="button" onClick={() => { const ex = buildExport(); if (ex) exportBkuPdf(ex); }} className={BTN_SECONDARY}>
             <FileText className="h-4 w-4 text-red-600" /> PDF
           </button>
           <button type="button" onClick={() => { const ex = buildExport(); if (ex) exportReportExcel(ex); }} className={BTN_SECONDARY}>
@@ -176,19 +186,19 @@ export function BkuPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="rounded-xl bg-white border border-[#E5E7EB] p-3">
             <div className="text-xs font-bold text-[#6B7280]">Saldo Awal</div>
-            <div className="text-base font-extrabold text-[#111827] font-mono">{formatSen(bku.saldoAwal)}</div>
+            <div className="text-base font-extrabold text-[#111827] font-mono">{formatSen(bku.ringkasan.saldoAwal)}</div>
           </div>
           <div className="rounded-xl bg-white border border-emerald-200 p-3">
             <div className="text-xs font-bold text-[#6B7280]">Total Penerimaan</div>
-            <div className="text-base font-extrabold text-emerald-700 font-mono">{formatSen(bku.totalPenerimaan)}</div>
+            <div className="text-base font-extrabold text-emerald-700 font-mono">{formatSen(bku.ringkasan.totalPenerimaan)}</div>
           </div>
           <div className="rounded-xl bg-white border border-red-200 p-3">
             <div className="text-xs font-bold text-[#6B7280]">Total Pengeluaran</div>
-            <div className="text-base font-extrabold text-red-700 font-mono">{formatSen(bku.totalPengeluaran)}</div>
+            <div className="text-base font-extrabold text-red-700 font-mono">{formatSen(bku.ringkasan.totalPengeluaran)}</div>
           </div>
           <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
             <div className="text-xs font-bold text-amber-800">Saldo Akhir</div>
-            <div className="text-base font-extrabold text-amber-950 font-mono">{formatSen(bku.saldoAkhir)}</div>
+            <div className="text-base font-extrabold text-amber-950 font-mono">{formatSen(bku.ringkasan.saldoAkhir)}</div>
           </div>
         </div>
       )}
@@ -199,40 +209,43 @@ export function BkuPage() {
           <thead className="bg-[#F9FAFB] text-xs font-bold text-[#6B7280] border-b border-[#E5E7EB]">
             <tr>
               <th className="px-3 py-3 text-left">Tanggal</th>
-              <th className="px-3 py-3 text-left">Transaksi & Nomor</th>
+              <th className="px-3 py-3 text-left">No. Bukti & Tipe</th>
               <th className="px-3 py-3 text-left">Unit</th>
               <th className="px-3 py-3 text-left">Kontak / Akun Lawan</th>
-              <th className="px-3 py-3 text-left">Deskripsi</th>
-              <th className="px-3 py-3 text-right">Terima</th>
-              <th className="px-3 py-3 text-right">Kirim</th>
+              <th className="px-3 py-3 text-left">Uraian</th>
+              <th className="px-3 py-3 text-right">Penerimaan</th>
+              <th className="px-3 py-3 text-right">Pengeluaran</th>
               <th className="px-3 py-3 text-right">Saldo</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#E5E7EB]">
             {bku && (
               <tr className="bg-slate-50 font-semibold text-xs text-[#4B5563]">
-                <td colSpan={7} className="px-3 py-2">Saldo Awal (sebelum {formatTanggal(bku.dari)})</td>
-                <td className="px-3 py-2 text-right font-mono">{formatSen(bku.saldoAwal)}</td>
+                <td colSpan={7} className="px-3 py-2">Saldo Awal (sebelum {formatTanggal(bku.periode.dari)})</td>
+                <td className="px-3 py-2 text-right font-mono">{formatSen(bku.ringkasan.saldoAwal)}</td>
               </tr>
             )}
             {bku?.rows.map((r) => (
               <tr
                 key={r.id}
                 onClick={() => openRow(r)}
-                className={r.doc_type === "receive_money" || r.doc_type === "send_money" || r.doc_type === "transfer_money" ? "hover:bg-amber-50/50 cursor-pointer" : ""}
+                className={r.tipe === "receive_money" || r.tipe === "send_money" || r.tipe === "transfer_money" ? "hover:bg-amber-50/50 cursor-pointer" : ""}
               >
-                <td className="px-3 py-2.5 whitespace-nowrap text-xs">{formatTanggal(r.tanggal)}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap text-xs">
+                  {r.locked && <Lock className="inline h-3 w-3 mr-1 text-amber-600" />}
+                  {formatTanggal(r.tanggal)}
+                </td>
                 <td className="px-3 py-2.5 whitespace-nowrap">
-                  <div className="text-xs font-bold text-[#111827]">{r.transaksi_label}</div>
-                  <div className="font-mono text-[11px] text-amber-700">{r.doc_no}</div>
+                  <div className="text-xs font-bold text-[#111827]">{r.tipe_label}</div>
+                  <div className="font-mono text-[11px] text-amber-700">{r.no_bukti}</div>
                 </td>
                 <td className="px-3 py-2.5"><UnitBadge kode={r.unit_kode} /></td>
                 <td className="px-3 py-2.5 text-xs">
                   {r.contact_nama && <div className="font-semibold text-[#111827]">{r.contact_nama}</div>}
-                  <div className="text-[#4B5563]">{r.account_lawan_kode ? `${r.account_lawan_kode} ${r.account_lawan_nama}` : "—"}</div>
+                  <div className="text-[#4B5563]">{r.kode_akun} {r.nama_akun}</div>
                 </td>
                 <td className="px-3 py-2.5 text-xs text-[#4B5563]">
-                  <span>{r.deskripsi}</span>
+                  <span>{r.uraian}</span>
                   {r.attachment_count > 0 && <Paperclip className="inline h-3.5 w-3.5 ml-1.5 text-amber-600" />}
                 </td>
                 <td className="px-3 py-2.5 text-right font-mono text-emerald-700 whitespace-nowrap">

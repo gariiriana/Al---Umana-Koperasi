@@ -1,5 +1,5 @@
 // Komponen UI bersama Modul Keuangan Al-Umanaa (gaya Al-Umanaa amber/abu tua).
-import { useState, type ReactNode } from "react";
+import { useState, type ComponentType, type ReactNode } from "react";
 import { Check, Copy, Download, ExternalLink, FileSpreadsheet, FileText, Loader2, Paperclip, Share2, Trash2, Upload, X } from "lucide-react";
 import { attachmentUrl, createOrGetPublicLink, deleteAttachment, uploadAttachmentFile } from "@/keuangan/api";
 import { formatSen, keuanganErrorMessage, parseRupiahToSen, senToInputString } from "@/keuangan/format";
@@ -395,6 +395,31 @@ export function AttachmentSection({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+export function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl bg-white border border-dashed border-[#D1D5DB] p-8 text-center flex flex-col items-center gap-3">
+      <div className="rounded-2xl bg-amber-50 p-3 text-amber-600">
+        <Icon className="h-6 w-6" />
+      </div>
+      <div>
+        <h3 className="font-bold text-base text-[#111827]">{title}</h3>
+        <p className="text-xs text-[#6B7280] mt-1 max-w-md">{description}</p>
+      </div>
+      {action}
     </div>
   );
 }

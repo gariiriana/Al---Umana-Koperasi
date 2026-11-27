@@ -118,6 +118,15 @@ const KeuanganBukuBesarPage = safeLazy(() => import("@/keuangan/pages/ReportBuku
 const KeuanganJurnalPage = safeLazy(() => import("@/keuangan/pages/ReportJurnalPage").then(module => ({ default: module.ReportJurnalPage })));
 const KeuanganNeracaSaldoPage = safeLazy(() => import("@/keuangan/pages/ReportNeracaSaldoPage").then(module => ({ default: module.ReportNeracaSaldoPage })));
 const KeuanganRingkasanBisnisPage = safeLazy(() => import("@/keuangan/pages/ReportRingkasanBisnisPage").then(module => ({ default: module.ReportRingkasanBisnisPage })));
+const KeuanganExtendedReportPage = safeLazy(() => import("@/keuangan/pages/ReportExtendedPage").then(module => ({ default: module.ReportExtendedPage })));
+const KeuanganPenjualanPage = safeLazy(() => import("@/keuangan/pages/PenjualanPage").then(module => ({ default: module.PenjualanPage })));
+const KeuanganPembelianPage = safeLazy(() => import("@/keuangan/pages/PembelianPage").then(module => ({ default: module.PembelianPage })));
+const KeuanganBiayaPage = safeLazy(() => import("@/keuangan/pages/BiayaPage").then(module => ({ default: module.BiayaPage })));
+const KeuanganProdukPage = safeLazy(() => import("@/keuangan/pages/ProdukPage").then(module => ({ default: module.ProdukPage })));
+const KeuanganProduksiPage = safeLazy(() => import("@/keuangan/pages/ProduksiPage").then(module => ({ default: module.ProduksiPage })));
+const KeuanganAsetPage = safeLazy(() => import("@/keuangan/pages/AsetPage").then(module => ({ default: module.AsetPage })));
+const KeuanganRekonsiliasiPage = safeLazy(() => import("@/keuangan/pages/RekonsiliasiPage").then(module => ({ default: module.RekonsiliasiPage })));
+const KeuanganAnggaranPage = safeLazy(() => import("@/keuangan/pages/AnggaranPage").then(module => ({ default: module.AnggaranPage })));
 const KeuanganPublicDocPage = safeLazy(() => import("@/keuangan/pages/PublicDocumentPage").then(module => ({ default: module.PublicDocumentPage })));
 const PerformancePage = safeLazy(() => import("@/pages/PerformancePage").then(module => ({ default: module.PerformancePage })));
 const SuperAdminControlCenterPage = safeLazy(() => import("@/pages/SuperAdminControlCenterPage").then(module => ({ default: module.SuperAdminControlCenterPage })));
@@ -884,9 +893,18 @@ function RoutesTree() {
       <Route path="/keuangan/laporan/jurnal" element={<Protected><ShelledRoute pageTitle="Laporan Jurnal" allowedRoles={KEUANGAN_ROLES}><KeuanganJurnalPage /></ShelledRoute></Protected>} />
       <Route path="/keuangan/laporan/neraca-saldo" element={<Protected><ShelledRoute pageTitle="Neraca Saldo" allowedRoles={KEUANGAN_ROLES}><KeuanganNeracaSaldoPage /></ShelledRoute></Protected>} />
       <Route path="/keuangan/laporan/ringkasan-bisnis" element={<Protected><ShelledRoute pageTitle="Ringkasan Bisnis" allowedRoles={KEUANGAN_ROLES}><KeuanganRingkasanBisnisPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/detail/:slug" element={<Protected><ShelledRoute pageTitle="Laporan Keuangan" allowedRoles={KEUANGAN_ROLES}><KeuanganExtendedReportPage /></ShelledRoute></Protected>} />
       <Route path="/keuangan/kas-bank" element={<Protected><ShelledRoute pageTitle="Kas & Bank" allowedRoles={KEUANGAN_ROLES}><KeuanganKasBankPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/kas-bank/rekonsiliasi" element={<Protected><ShelledRoute pageTitle="Rekonsiliasi Bank" allowedRoles={KEUANGAN_ROLES}><KeuanganRekonsiliasiPage /></ShelledRoute></Protected>} />
       <Route path="/keuangan/kas-bank/:kode/bku" element={<Protected><ShelledRoute pageTitle="Buku Kas Umum" allowedRoles={KEUANGAN_ROLES}><KeuanganBkuPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/penjualan" element={<Protected><ShelledRoute pageTitle="Penjualan" allowedRoles={KEUANGAN_ROLES}><KeuanganPenjualanPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/pembelian" element={<Protected><ShelledRoute pageTitle="Pembelian" allowedRoles={KEUANGAN_ROLES}><KeuanganPembelianPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/biaya" element={<Protected><ShelledRoute pageTitle="Biaya" allowedRoles={KEUANGAN_ROLES}><KeuanganBiayaPage /></ShelledRoute></Protected>} />
       <Route path="/keuangan/kontak" element={<Protected><ShelledRoute pageTitle="Kontak" allowedRoles={KEUANGAN_ROLES}><KeuanganKontakPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/produk" element={<Protected><ShelledRoute pageTitle="Produk & Gudang" allowedRoles={KEUANGAN_ROLES}><KeuanganProdukPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/produksi" element={<Protected><ShelledRoute pageTitle="Produksi & Manufaktur" allowedRoles={KEUANGAN_ROLES}><KeuanganProduksiPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/aset" element={<Protected><ShelledRoute pageTitle="Aset Tetap" allowedRoles={KEUANGAN_ROLES}><KeuanganAsetPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/anggaran" element={<Protected><ShelledRoute pageTitle="Manajemen Anggaran" allowedRoles={KEUANGAN_ROLES}><KeuanganAnggaranPage /></ShelledRoute></Protected>} />
       <Route path="/keuangan/akun" element={<Protected><ShelledRoute pageTitle="Daftar Akun" allowedRoles={KEUANGAN_ROLES}><KeuanganDaftarAkunPage /></ShelledRoute></Protected>} />
       <Route path="/keuangan/akun/saldo-awal" element={<Protected><ShelledRoute pageTitle="Atur Saldo Awal" allowedRoles={KEUANGAN_ROLES}><KeuanganSaldoAwalPage /></ShelledRoute></Protected>} />
       <Route path="/keuangan/jurnal-umum" element={<Protected><ShelledRoute pageTitle="Jurnal Umum" allowedRoles={KEUANGAN_ROLES}><KeuanganJurnalUmumPage /></ShelledRoute></Protected>} />

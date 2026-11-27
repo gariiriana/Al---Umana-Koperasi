@@ -191,12 +191,23 @@ export async function createPeriodClosing(ctx) {
 
     let akunBebanPajak = body.akun_beban_pajak || "9-90000";
     let akunHutangPajak = body.akun_hutang_pajak || "2-20503";
+    let taxDocId = null;
+    const taxJournalRaw = [];
     if (jumlahPajak > 0) {
-      const bp = await db.prepare("SELECT kode, is_header FROM accounts WHERE kode = ?").bind(akunBebanPajak).first();
+      const bp = await db.prepare("SELECT kode, is_header, kategori FROM accounts WHERE kode = ?").bind(akunBebanPajak).first();
       const hp = await db.prepare("SELECT kode, is_header FROM accounts WHERE kode = ?").bind(akunHutangPajak).first();
-      if (!bp || bp.is_header) throw invalid("akun_beban_pajak", "Akun beban pajak tidak valid.");
+      if (!bp || bp.is_header || bp.kategori < 15 || bp.kategori > 17) {
+        throw invalid("akun_beban_pajak", "Akun beban pajak tidak valid (harus akun beban/HPP).");
+      }
       if (!hp || hp.is_header) throw invalid("akun_hutang_pajak", "Akun hutang pajak tidak valid.");
-      pajakJson = JSON.stringify({ jumlah_pajak: jumlahPajak, akun_beban_pajak: akunBebanPajak, akun_hutang_pajak: akunHutangPajak, akun_laba_ditahan: akunLabaDitahan });
+      taxDocId = newId();
+      pajakJson = JSON.stringify({
+        jumlah_pajak: jumlahPajak,
+        akun_beban_pajak: akunBebanPajak,
+        akun_hutang_pajak: akunHutangPajak,
+        akun_laba_ditahan: akunLabaDitahan,
+        tax_document_id: taxDocId,
+      });
     } else {
       pajakJson = JSON.stringify({ jumlah_pajak: 0, akun_laba_ditahan: akunLabaDitahan });
     }
@@ -230,20 +241,39 @@ export async function createPeriodClosing(ctx) {
         });
       }
 
-      // Pajak penutupan (jika ada), dibagi proporsional ke unit berlaba
+      // Pajak penutupan (jika ada):
+      // 1) Jurnal Beban Pajak: Debit akun_beban_pajak, Kredit akun_hutang_pajak (dokumen closing_tax -> tampil di Laba Rugi)
+      // 2) Di jurnal penutup: Kredit akun_beban_pajak agar saldo akun beban pajak ikut dinolkan, mengurangi Laba Ditahan
       if (jumlahPajak > 0 && u.profit > 0 && positiveProfitSum > 0) {
         const isLastPositive = unitProfits.slice(idx + 1).every((x) => x.profit <= 0);
         const unitTax = isLastPositive ? jumlahPajak - taxAllocated : Math.round((jumlahPajak * u.profit) / positiveProfitSum);
         taxAllocated += unitTax;
         if (unitTax > 0) {
-          // Catat hutang pajak; beban pajak langsung mengurangi laba ke Laba Ditahan
+          taxJournalRaw.push(
+            {
+              tanggal: sampai,
+              unit_kode: u.uKode,
+              account_kode: akunBebanPajak,
+              debit: unitTax,
+              kredit: 0,
+              keterangan: "Beban pajak penghasilan tutup buku",
+            },
+            {
+              tanggal: sampai,
+              unit_kode: u.uKode,
+              account_kode: akunHutangPajak,
+              debit: 0,
+              kredit: unitTax,
+              keterangan: "Hutang pajak penghasilan tutup buku",
+            },
+          );
           journalRaw.push({
             tanggal: sampai,
             unit_kode: u.uKode,
-            account_kode: akunHutangPajak,
+            account_kode: akunBebanPajak,
             debit: 0,
             kredit: unitTax,
-            keterangan: "Hutang pajak penghasilan tutup buku",
+            keterangan: `Penutupan beban pajak ${dari} s.d. ${sampai}`,
           });
           netUnit -= unitTax;
         }
@@ -261,6 +291,21 @@ export async function createPeriodClosing(ctx) {
       }
     }
 
+    if (taxDocId && taxJournalRaw.length > 0) {
+      const balancedTax = normalizeAndCheckBalance(taxJournalRaw);
+      const allocTax = await allocateDocNumber(db, "closing_tax", primaryUnit || "", sampai, now, actor);
+      stmts.push(allocTax.updateStmt);
+      stmts.push(
+        db
+          .prepare(
+            `INSERT INTO documents (id, type, no, tanggal, unit_kode, status, total, memo, created_at, created_by, updated_at, updated_by)
+             VALUES (?, 'closing_tax', ?, ?, ?, 'selesai', ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(taxDocId, allocTax.no, sampai, primaryUnit, jumlahPajak, memo || `Pajak Tutup Buku ${dari} - ${sampai}`, now, actor.uid, now, actor.uid),
+      );
+      stmts.push(...(await buildJournalAndMonthlyStatements(db, taxDocId, balancedTax)));
+    }
+
     if (journalRaw.length > 0) {
       const balanced = normalizeAndCheckBalance(journalRaw);
       closingDocId = newId();
@@ -272,7 +317,7 @@ export async function createPeriodClosing(ctx) {
             `INSERT INTO documents (id, type, no, tanggal, unit_kode, status, total, memo, created_at, created_by, updated_at, updated_by)
              VALUES (?, 'closing', ?, ?, ?, 'selesai', ?, ?, ?, ?, ?, ?)`,
           )
-          .bind(closingDocId, alloc.no, sampai, primaryUnit, Math.abs(netProfitTotal), memo || `Tutup Buku ${dari} - ${sampai}`, now, actor.uid, now, actor.uid),
+          .bind(closingDocId, alloc.no, sampai, primaryUnit, Math.abs(netProfitTotal - jumlahPajak), memo || `Tutup Buku ${dari} - ${sampai}`, now, actor.uid, now, actor.uid),
       );
       stmts.push(...(await buildJournalAndMonthlyStatements(db, closingDocId, balanced)));
     }
@@ -327,9 +372,21 @@ export async function cancelPeriodClosing(ctx) {
       .prepare("UPDATE period_closings SET status = 'batal', alasan_batal = ?, document_id = NULL, updated_at = ?, updated_by = ? WHERE id = ?")
       .bind(alasan, now, actor.uid, id),
   ];
+  let taxDocId = null;
+  if (target.pajak_json) {
+    try {
+      taxDocId = JSON.parse(target.pajak_json)?.tax_document_id || null;
+    } catch {
+      taxDocId = null;
+    }
+  }
   if (target.document_id) {
     stmts.push(...(await buildJournalAndMonthlyStatements(db, target.document_id, [])));
     stmts.push(db.prepare("DELETE FROM documents WHERE id = ?").bind(target.document_id));
+  }
+  if (taxDocId) {
+    stmts.push(...(await buildJournalAndMonthlyStatements(db, taxDocId, [])));
+    stmts.push(db.prepare("DELETE FROM documents WHERE id = ?").bind(taxDocId));
   }
 
   stmts.push(

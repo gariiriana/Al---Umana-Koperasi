@@ -1,8 +1,8 @@
 // Laporan Neraca Saldo (Trial Balance — PRD 07-laporan.md).
 import { useEffect, useState } from "react";
 import { getReportNeracaSaldo, listUnits } from "@/keuangan/api";
-import { firstDayOfMonthWib, formatAngkaSen, formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
-import { exportReportCsv, exportReportExcel, exportReportPdf } from "@/keuangan/export/reportExport";
+import { firstDayOfMonthWib, formatSen, formatTanggal, keuanganErrorMessage, todayWib } from "@/keuangan/format";
+import { exportReportCsv, exportReportExcel, exportReportPdf, senCell, type ExportCell } from "@/keuangan/export/reportExport";
 import type { NeracaSaldoResponse, ReportFilter, Unit } from "@/keuangan/types";
 import { ReportFilterBar } from "@/keuangan/components/KeuanganUi";
 import { useToast } from "@/contexts/ToastContext";
@@ -34,26 +34,26 @@ export function ReportNeracaSaldoPage() {
   const buildExport = () => {
     if (!data) return null;
     const headers = ["Kode", "Nama Akun", "Awal Debit", "Awal Kredit", "Pergerakan Debit", "Pergerakan Kredit", "Akhir Debit", "Akhir Kredit"];
-    const rows = [
+    const rows: ExportCell[][] = [
       ...data.rows.map((r) => [
         r.kode,
         r.nama,
-        formatAngkaSen(r.awal_debit),
-        formatAngkaSen(r.awal_kredit),
-        formatAngkaSen(r.gerak_debit),
-        formatAngkaSen(r.gerak_kredit),
-        formatAngkaSen(r.akhir_debit),
-        formatAngkaSen(r.akhir_kredit),
+        senCell(r.awal_debit),
+        senCell(r.awal_kredit),
+        senCell(r.gerak_debit),
+        senCell(r.gerak_kredit),
+        senCell(r.akhir_debit),
+        senCell(r.akhir_kredit),
       ]),
       [
         "",
         "TOTAL",
-        formatAngkaSen(data.totals.awal_debit),
-        formatAngkaSen(data.totals.awal_kredit),
-        formatAngkaSen(data.totals.gerak_debit),
-        formatAngkaSen(data.totals.gerak_kredit),
-        formatAngkaSen(data.totals.akhir_debit),
-        formatAngkaSen(data.totals.akhir_kredit),
+        senCell(data.totals.awal_debit),
+        senCell(data.totals.awal_kredit),
+        senCell(data.totals.gerak_debit),
+        senCell(data.totals.gerak_kredit),
+        senCell(data.totals.akhir_debit),
+        senCell(data.totals.akhir_kredit),
       ],
     ];
     return {

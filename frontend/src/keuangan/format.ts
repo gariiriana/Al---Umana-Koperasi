@@ -81,6 +81,14 @@ export function firstDayOfMonthWib(): string {
   return `${todayWib().slice(0, 8)}01`;
 }
 
+export function formatQtyMilli(milli: number, satuan = ""): string {
+  const num = (Number(milli) || 0) / 1000;
+  const formatted = Number.isInteger(num)
+    ? String(num)
+    : num.toLocaleString("id-ID", { maximumFractionDigits: 3 });
+  return satuan ? `${formatted} ${satuan}` : formatted;
+}
+
 export const DOC_TYPE_LABELS: Record<string, string> = {
   opening_balance: "Saldo Awal",
   opening_balance_reversal: "Pembalik Saldo Awal",
@@ -89,6 +97,37 @@ export const DOC_TYPE_LABELS: Record<string, string> = {
   send_money: "Kirim Uang",
   transfer_money: "Transfer Uang",
   closing: "Tutup Buku",
+  closing_tax: "Pajak Tutup Buku",
+  sales_quote: "Penawaran Penjualan",
+  sales_order: "Pemesanan Penjualan",
+  order_deposit: "Uang Muka Penjualan",
+  sales_delivery: "Pengiriman Penjualan",
+  sales_invoice: "Faktur Penjualan",
+  sales_payment: "Pembayaran Penjualan",
+  sales_return: "Retur Penjualan",
+  credit_memo: "Kredit Memo",
+  credit_memo_refund: "Pengembalian Kredit Memo",
+  sales_join: "Tukar Faktur Penjualan",
+  proforma: "Faktur Proforma",
+  purchase_request: "Permintaan Pembelian",
+  purchase_quote: "Penawaran Pembelian",
+  purchase_order: "Pemesanan Pembelian",
+  purchase_deposit: "Uang Muka Pembelian",
+  purchase_delivery: "Penerimaan Barang",
+  purchase_invoice: "Tagihan Pembelian",
+  purchase_payment: "Pembayaran Pembelian",
+  purchase_return: "Retur Pembelian",
+  debit_memo: "Debit Memo",
+  debit_memo_refund: "Pengembalian Debit Memo",
+  purchase_join: "Tukar Faktur Pembelian",
+  expense: "Biaya",
+  stock_adjustment: "Penyesuaian Stok",
+  warehouse_transfer: "Transfer Gudang",
+  product_conversion: "Konversi Produk",
+  asset_acquire: "Perolehan Aset",
+  depreciation: "Penyusutan Aset",
+  asset_disposal: "Pelepasan Aset",
+  work_order: "Perintah Kerja Produksi",
 };
 
 const ERROR_MESSAGES: Record<string, string> = {
