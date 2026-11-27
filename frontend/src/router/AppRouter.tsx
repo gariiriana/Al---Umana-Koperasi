@@ -882,35 +882,35 @@ function RoutesTree() {
       <Route path="/toksan/trafik" element={<Protected><ShelledRoute pageTitle="Trafik Produk" allowedRoles={TOKSAN_ROLES}><ToksanTrafikPage /></ShelledRoute></Protected>} />
       <Route path="/toksan/produk" element={<Protected><ShelledRoute pageTitle="Produk Toksan" allowedRoles={TOKSAN_ROLES}><ToksanProdukPage /></ShelledRoute></Protected>} />
       {/* Modul Keuangan (Hanya role keuangan) */}
-      <Route path="/keuangan/beranda" element={<Protected><ShelledRoute pageTitle="Beranda Keuangan" allowedRoles={KEUANGAN_ROLES}><KeuanganBerandaPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/dasbor" element={<Protected><ShelledRoute pageTitle="Ringkasan Bisnis" allowedRoles={KEUANGAN_ROLES}><KeuanganRingkasanBisnisPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/laporan" element={<Protected><ShelledRoute pageTitle="Laporan Keuangan" allowedRoles={KEUANGAN_ROLES}><KeuanganLaporanHubPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/laporan/neraca" element={<Protected><ShelledRoute pageTitle="Neraca" allowedRoles={KEUANGAN_ROLES}><KeuanganNeracaPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/laporan/laba-rugi" element={<Protected><ShelledRoute pageTitle="Laba Rugi" allowedRoles={KEUANGAN_ROLES}><KeuanganLabaRugiPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/laporan/arus-kas" element={<Protected><ShelledRoute pageTitle="Arus Kas" allowedRoles={KEUANGAN_ROLES}><KeuanganArusKasPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/laporan/perubahan-modal" element={<Protected><ShelledRoute pageTitle="Perubahan Modal" allowedRoles={KEUANGAN_ROLES}><KeuanganPerubahanModalPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/laporan/buku-besar" element={<Protected><ShelledRoute pageTitle="Buku Besar" allowedRoles={KEUANGAN_ROLES}><KeuanganBukuBesarPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/laporan/jurnal" element={<Protected><ShelledRoute pageTitle="Laporan Jurnal" allowedRoles={KEUANGAN_ROLES}><KeuanganJurnalPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/laporan/neraca-saldo" element={<Protected><ShelledRoute pageTitle="Neraca Saldo" allowedRoles={KEUANGAN_ROLES}><KeuanganNeracaSaldoPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/laporan/ringkasan-bisnis" element={<Protected><ShelledRoute pageTitle="Ringkasan Bisnis" allowedRoles={KEUANGAN_ROLES}><KeuanganRingkasanBisnisPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/laporan/detail/:slug" element={<Protected><ShelledRoute pageTitle="Laporan Keuangan" allowedRoles={KEUANGAN_ROLES}><KeuanganExtendedReportPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/kas-bank" element={<Protected><ShelledRoute pageTitle="Kas & Bank" allowedRoles={KEUANGAN_ROLES}><KeuanganKasBankPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/kas-bank/rekonsiliasi" element={<Protected><ShelledRoute pageTitle="Rekonsiliasi Bank" allowedRoles={KEUANGAN_ROLES}><KeuanganRekonsiliasiPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/kas-bank/:kode/bku" element={<Protected><ShelledRoute pageTitle="Buku Kas Umum" allowedRoles={KEUANGAN_ROLES}><KeuanganBkuPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/penjualan" element={<Protected><ShelledRoute pageTitle="Penjualan" allowedRoles={KEUANGAN_ROLES}><KeuanganPenjualanPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/pembelian" element={<Protected><ShelledRoute pageTitle="Pembelian" allowedRoles={KEUANGAN_ROLES}><KeuanganPembelianPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/biaya" element={<Protected><ShelledRoute pageTitle="Biaya" allowedRoles={KEUANGAN_ROLES}><KeuanganBiayaPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/kontak" element={<Protected><ShelledRoute pageTitle="Kontak" allowedRoles={KEUANGAN_ROLES}><KeuanganKontakPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/produk" element={<Protected><ShelledRoute pageTitle="Produk & Gudang" allowedRoles={KEUANGAN_ROLES}><KeuanganProdukPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/produksi" element={<Protected><ShelledRoute pageTitle="Produksi & Manufaktur" allowedRoles={KEUANGAN_ROLES}><KeuanganProduksiPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/aset" element={<Protected><ShelledRoute pageTitle="Aset Tetap" allowedRoles={KEUANGAN_ROLES}><KeuanganAsetPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/anggaran" element={<Protected><ShelledRoute pageTitle="Manajemen Anggaran" allowedRoles={KEUANGAN_ROLES}><KeuanganAnggaranPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/akun" element={<Protected><ShelledRoute pageTitle="Daftar Akun" allowedRoles={KEUANGAN_ROLES}><KeuanganDaftarAkunPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/akun/saldo-awal" element={<Protected><ShelledRoute pageTitle="Atur Saldo Awal" allowedRoles={KEUANGAN_ROLES}><KeuanganSaldoAwalPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/jurnal-umum" element={<Protected><ShelledRoute pageTitle="Jurnal Umum" allowedRoles={KEUANGAN_ROLES}><KeuanganJurnalUmumPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/daftar-lainnya" element={<Protected><ShelledRoute pageTitle="Daftar Lainnya" allowedRoles={KEUANGAN_ROLES}><KeuanganDaftarLainnyaPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/daftar-lainnya/tutup-buku" element={<Protected><ShelledRoute pageTitle="Kunci Periode & Tutup Buku" allowedRoles={KEUANGAN_ROLES}><KeuanganKunciTutupBukuPage /></ShelledRoute></Protected>} />
-      <Route path="/keuangan/pengaturan" element={<Protected><ShelledRoute pageTitle="Pengaturan Keuangan" allowedRoles={KEUANGAN_ROLES}><KeuanganPengaturanPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/beranda" element={<Protected><ShelledRoute pageTitle="Beranda Keuangan" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganBerandaPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/dasbor" element={<Protected><ShelledRoute pageTitle="Ringkasan Bisnis" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganRingkasanBisnisPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan" element={<Protected><ShelledRoute pageTitle="Laporan Keuangan" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganLaporanHubPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/neraca" element={<Protected><ShelledRoute pageTitle="Neraca" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganNeracaPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/laba-rugi" element={<Protected><ShelledRoute pageTitle="Laba Rugi" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganLabaRugiPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/arus-kas" element={<Protected><ShelledRoute pageTitle="Arus Kas" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganArusKasPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/perubahan-modal" element={<Protected><ShelledRoute pageTitle="Perubahan Modal" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganPerubahanModalPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/buku-besar" element={<Protected><ShelledRoute pageTitle="Buku Besar" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganBukuBesarPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/jurnal" element={<Protected><ShelledRoute pageTitle="Laporan Jurnal" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganJurnalPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/neraca-saldo" element={<Protected><ShelledRoute pageTitle="Neraca Saldo" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganNeracaSaldoPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/ringkasan-bisnis" element={<Protected><ShelledRoute pageTitle="Ringkasan Bisnis" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganRingkasanBisnisPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/detail/:slug" element={<Protected><ShelledRoute pageTitle="Laporan Keuangan" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganExtendedReportPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/kas-bank" element={<Protected><ShelledRoute pageTitle="Kas & Bank" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganKasBankPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/kas-bank/rekonsiliasi" element={<Protected><ShelledRoute pageTitle="Rekonsiliasi Bank" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganRekonsiliasiPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/kas-bank/:kode/bku" element={<Protected><ShelledRoute pageTitle="Buku Kas Umum" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganBkuPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/penjualan" element={<Protected><ShelledRoute pageTitle="Penjualan" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganPenjualanPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/pembelian" element={<Protected><ShelledRoute pageTitle="Pembelian" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganPembelianPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/biaya" element={<Protected><ShelledRoute pageTitle="Biaya" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganBiayaPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/kontak" element={<Protected><ShelledRoute pageTitle="Kontak" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganKontakPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/produk" element={<Protected><ShelledRoute pageTitle="Produk & Gudang" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganProdukPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/produksi" element={<Protected><ShelledRoute pageTitle="Produksi & Manufaktur" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganProduksiPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/aset" element={<Protected><ShelledRoute pageTitle="Aset Tetap" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganAsetPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/anggaran" element={<Protected><ShelledRoute pageTitle="Manajemen Anggaran" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganAnggaranPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/akun" element={<Protected><ShelledRoute pageTitle="Daftar Akun" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganDaftarAkunPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/akun/saldo-awal" element={<Protected><ShelledRoute pageTitle="Atur Saldo Awal" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganSaldoAwalPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/jurnal-umum" element={<Protected><ShelledRoute pageTitle="Jurnal Umum" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganJurnalUmumPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/daftar-lainnya" element={<Protected><ShelledRoute pageTitle="Daftar Lainnya" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganDaftarLainnyaPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/daftar-lainnya/tutup-buku" element={<Protected><ShelledRoute pageTitle="Kunci Periode & Tutup Buku" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganKunciTutupBukuPage /></div></ShelledRoute></Protected>} />
+      <Route path="/keuangan/pengaturan" element={<Protected><ShelledRoute pageTitle="Pengaturan Keuangan" allowedRoles={KEUANGAN_ROLES}><div className="keu-scope"><KeuanganPengaturanPage /></div></ShelledRoute></Protected>} />
       <Route path="/unit/control-center" element={<Protected><ShelledRoute pageTitle="KPI & Task Unit" allowedRoles={["kepala_unit"]}><UnitControlCenterPage /></ShelledRoute></Protected>} />
       <Route path="/developer/control-center" element={<Protected><ShelledRoute pageTitle="Developer Control Center" allowedRoles={["developer"]}><DeveloperControlCenterPage /></ShelledRoute></Protected>} />
 

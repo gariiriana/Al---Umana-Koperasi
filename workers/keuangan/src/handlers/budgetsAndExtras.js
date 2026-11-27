@@ -131,6 +131,13 @@ export async function reportAnggaranLabaRugi(ctx) {
 
 // ─── Persetujuan (Approval Rules & Decision Flow) ────────────────────────────
 
+// Akun role keuangan yang bisa dipilih sebagai penyetuju (pemilih nama di Pengaturan → Persetujuan).
+export async function listApprovers(ctx) {
+  await requireKeuangan(ctx);
+  const users = ctx.deps.listKeuanganUsers ? await ctx.deps.listKeuanganUsers() : [];
+  return { approvers: users.map((u) => ({ uid: u.uid, nama: u.nama, email: u.email || "" })) };
+}
+
 export async function listApprovalRules(ctx) {
   await requireKeuangan(ctx);
   const { results } = await ctx.env.DB.prepare("SELECT * FROM approval_rules ORDER BY tipe").all();

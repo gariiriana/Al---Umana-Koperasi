@@ -192,3 +192,26 @@ h6 {
   direction: rtl;
 }
 
+
+/* Modul Keuangan di HP: tabel lebar lebih rapat, kolom pertama menempel saat digeser ke samping. */
+@media (max-width: 639px) {
+  .keu-scope table th,
+  .keu-scope table td {
+    padding: 0.45rem 0.6rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+  .keu-scope table td:first-child,
+  .keu-scope table th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: #fff;
+    white-space: normal;
+    min-width: 7.5rem;
+    max-width: 10rem;
+    box-shadow: 1px 0 0 #e5e7eb;
+  }
+  .keu-scope table thead th:first-child { background: #f9fafb; }
+  .keu-scope .overflow-x-auto { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+}

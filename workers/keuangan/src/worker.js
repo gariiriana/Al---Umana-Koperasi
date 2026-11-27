@@ -5,7 +5,7 @@
  */
 import { verifyIdToken } from "./auth.js";
 import { KeuanganError, corsHeaders, errorResponse, json } from "./http.js";
-import { getUserProfile } from "./profile.js";
+import { getUserProfile, listKeuanganUsers } from "./profile.js";
 import { getMe } from "./handlers/me.js";
 import {
   createAccount,
@@ -169,6 +169,7 @@ import {
   deleteBudget,
   getBudget,
   listApprovalRules,
+  listApprovers,
   listBudgets,
   listNotifications,
   listPendingApprovals,
@@ -389,6 +390,7 @@ const ROUTES = [
   ["GET", /^\/reports\/anggaran-laba-rugi$/, reportAnggaranLabaRugi],
 
   ["GET", /^\/approval-rules$/, listApprovalRules],
+  ["GET", /^\/approvers$/, listApprovers],
   ["POST", /^\/approval-rules$/, saveApprovalRule],
   ["DELETE", /^\/approval-rules\/([^/]+)$/, deleteApprovalRule],
   ["GET", /^\/approvals\/pending$/, listPendingApprovals],
@@ -448,6 +450,7 @@ export function realDeps(env) {
   return {
     verifyToken: (token) => verifyIdToken(token, env),
     getUserProfile: (uid) => getUserProfile(env, uid),
+    listKeuanganUsers: () => listKeuanganUsers(env),
     now: () => Date.now(),
   };
 }

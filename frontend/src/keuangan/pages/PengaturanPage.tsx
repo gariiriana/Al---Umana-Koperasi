@@ -9,6 +9,7 @@ import {
   getSettings,
   listAccounts,
   listApprovalRules,
+  listApprovers,
   listAudit,
   listCurrencies,
   listExchangeRates,
@@ -20,6 +21,7 @@ import {
   updateNumbering,
   updateSettings,
 } from "@/keuangan/api";
+import type { ApproverOption } from "@/keuangan/api";
 import { DOC_TYPE_LABELS, formatSen, keuanganErrorMessage, todayWib } from "@/keuangan/format";
 import type { Account, AccountMappingItem, ApprovalRule, AuditLogRow, CurrencyItem, ExchangeRateItem, NumberingRule, TransactionDocument } from "@/keuangan/types";
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, INPUT_CLS } from "@/keuangan/components/KeuanganUi";
@@ -42,9 +44,11 @@ export function PengaturanPage() {
   const [rates, setRates] = useState<ExchangeRateItem[]>([]);
   const [newRuleTipe, setNewRuleTipe] = useState("sales_invoice");
   const [newRuleMin, setNewRuleMin] = useState(0);
-  const [newRuleStages, setNewRuleStages] = useState<{ nama: string; tipe: "semua" | "satu"; approversText: string }[]>([
-    { nama: "Tahap 1", tipe: "satu", approversText: "" },
+  const [newRuleStages, setNewRuleStages] = useState<{ nama: string; tipe: "semua" | "satu"; approvers: string[] }[]>([
+    { nama: "Tahap 1", tipe: "satu", approvers: [] },
   ]);
+  const [approverOptions, setApproverOptions] = useState<ApproverOption[]>([]);
+  const approverName = (uid: string) => approverOptions.find((a) => a.uid === uid)?.nama || uid;
   const [curKode, setCurKode] = useState("USD");
   const [curNama, setCurNama] = useState("US Dollar");
   const [rateKursRp, setRateKursRp] = useState(15500);
@@ -76,6 +80,7 @@ export function PengaturanPage() {
     } catch (e) {
       showToast({ message: keuanganErrorMessage(e), variant: "error" });
     }
+    listApprovers().then(setApproverOptions).catch(() => setApproverOptions([]));
   };
 
   useEffect(() => {
@@ -306,7 +311,7 @@ export function PengaturanPage() {
               {newRuleStages.length < 4 && (
                 <button
                   type="button"
-                  onClick={() => setNewRuleStages([...newRuleStages, { nama: `Tahap ${newRuleStages.length + 1}`, tipe: "satu", approversText: "" }])}
+                  onClick={() => setNewRuleStages([...newRuleStages, { nama: `Tahap ${newRuleStages.length + 1}`, tipe: "satu", approvers: [] }])}
                   className={BTN_SECONDARY}
                 >
                   + Tambah Tahap
@@ -319,8 +324,12 @@ export function PengaturanPage() {
                     const tahap = newRuleStages.map((s) => ({
                       nama: s.nama,
                       tipe: s.tipe,
-                      approver_uids: s.approversText.split(",").map((x) => x.trim()).filter(Boolean),
+                      approver_uids: s.approvers,
                     }));
+                    if (tahap.some((t) => t.approver_uids.length === 0)) {
+                      showToast({ message: "Pilih minimal satu penyetuju di setiap tahap.", variant: "error" });
+                      return;
+                    }
                     await saveApprovalRule({ tipe: newRuleTipe, kriteria: { min_total: newRuleMin * 100 }, tahap });
                     showToast({ message: "Aturan persetujuan disimpan.", variant: "success" });
                     await load();
@@ -352,13 +361,26 @@ export function PengaturanPage() {
                     <option value="satu">Cukup salah satu setuju</option>
                     <option value="semua">Semua penyetuju harus setuju</option>
                   </select>
-                  <input
-                    type="text"
-                    placeholder="UID penyetuju (pisahkan koma, mis. uid1, uid2)"
-                    value={st.approversText}
-                    onChange={(e) => setNewRuleStages(newRuleStages.map((x, i) => (i === idx ? { ...x, approversText: e.target.value } : x)))}
-                    className={`${INPUT_CLS} sm:col-span-5`}
-                  />
+                  <div className="sm:col-span-5 flex flex-wrap gap-1.5">
+                    {approverOptions.length === 0 && <span className="text-xs text-[#6B7280]">Belum ada akun keuangan lain yang bisa dipilih.</span>}
+                    {approverOptions.map((a) => {
+                      const on = st.approvers.includes(a.uid);
+                      return (
+                        <button
+                          key={a.uid}
+                          type="button"
+                          title={a.email}
+                          aria-pressed={on}
+                          onClick={() =>
+                            setNewRuleStages(newRuleStages.map((x, i) => (i === idx ? { ...x, approvers: on ? x.approvers.filter((u) => u !== a.uid) : [...x.approvers, a.uid] } : x)))
+                          }
+                          className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${on ? "border-amber-600 bg-amber-50 text-amber-800" : "border-[#E5E7EB] bg-white text-[#374151]"}`}
+                        >
+                          {on ? "✓ " : ""}{a.nama}
+                        </button>
+                      );
+                    })}
+                  </div>
                   {newRuleStages.length > 1 && (
                     <button type="button" onClick={() => setNewRuleStages(newRuleStages.filter((_, i) => i !== idx))} className="text-red-600 p-1 justify-self-end sm:col-span-1">
                       <Trash2 className="h-4 w-4" />
@@ -374,7 +396,7 @@ export function PengaturanPage() {
                   <div>
                     <b>{DOC_TYPE_LABELS[r.tipe] || r.tipe}</b> · Minimal: {formatSen(r.kriteria.min_total || 0)} · {r.tahap.length} tahap
                     <div className="text-[#6B7280]">
-                      {r.tahap.map((t, ti) => `T${ti + 1} (${t.tipe === "semua" ? "Semua" : "Salah satu"}: ${(t.approver_uids || []).join(", ")})`).join(" → ")}
+                      {r.tahap.map((t, ti) => `T${ti + 1} (${t.tipe === "semua" ? "Semua" : "Salah satu"}: ${(t.approver_uids || []).map(approverName).join(", ")})`).join(" → ")}
                     </div>
                   </div>
                   <button type="button" onClick={async () => { await deleteApprovalRule(r.id); await load(); }} className={BTN_DANGER}>

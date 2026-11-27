@@ -328,7 +328,68 @@ export function TradeCyclePage({ family }: { family: "sales" | "purchase" }) {
           description="Klik tombol buat transaksi baru di kanan atas untuk memulai."
         />
       ) : (
-        <div className="rounded-2xl bg-white border border-[#E5E7EB] overflow-x-auto shadow-xs">
+        <>
+        {/* HP: kartu per transaksi, tidak perlu geser ke samping */}
+        <div className="sm:hidden space-y-2">
+          {docs.map((d) => (
+            <div key={d.id} className="rounded-2xl bg-white border border-[#E5E7EB] p-3 shadow-xs">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-bold text-[#111827] truncate">{d.no}</div>
+                  <div className="text-xs text-[#6B7280]">
+                    {formatTanggalShort(d.tanggal)} · {DOC_TYPE_LABELS[d.type] || d.type}
+                  </div>
+                  <div className="text-xs text-[#374151] truncate">{d.contact_nama || "-"}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-mono font-bold text-sm">{formatSen(d.total)}</div>
+                  {d.sisa > 0 && <div className="font-mono text-xs text-amber-700">Sisa {formatSen(d.sisa)}</div>}
+                </div>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <UnitBadge kode={d.unit_kode} />
+                  <span
+                    className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                      d.status === "lunas" || d.status === "selesai"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : d.status === "menunggu_persetujuan"
+                          ? "bg-purple-100 text-purple-800"
+                          : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {d.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={async () => setDetail(await getTransaction(d.id))} className="rounded-lg p-2 bg-gray-50 text-[#374151]" title="Detail & Jurnal">
+                    <Eye className="h-4 w-4" />
+                  </button>
+                  {d.sisa > 0 && (d.type === "sales_invoice" || d.type === "purchase_invoice") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPayDoc(d);
+                        setPayAmount(d.sisa);
+                        setPayWithholdingAmt(0);
+                        setPayTanggal(todayWib());
+                      }}
+                      className="rounded-lg px-3 py-1.5 text-xs font-bold bg-emerald-50 text-emerald-700"
+                    >
+                      Bayar
+                    </button>
+                  )}
+                  {isSales && d.type === "sales_invoice" && (
+                    <button type="button" onClick={() => handleShareWa(d)} className="rounded-lg p-2 bg-emerald-50 text-emerald-700" title="Bagikan WhatsApp + Tautan Publik">
+                      <Share2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="hidden sm:block rounded-2xl bg-white border border-[#E5E7EB] overflow-x-auto shadow-xs">
           <table className="min-w-full text-sm">
             <thead className="bg-[#F9FAFB] text-xs uppercase text-[#6B7280]">
               <tr>
@@ -406,6 +467,7 @@ export function TradeCyclePage({ family }: { family: "sales" | "purchase" }) {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {/* Modal Detail Transaksi */}

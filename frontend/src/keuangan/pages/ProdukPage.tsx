@@ -343,7 +343,38 @@ export function ProdukPage() {
               }
             />
           ) : (
-            <div className="rounded-2xl bg-white border border-[#E5E7EB] overflow-x-auto shadow-xs">
+            <>
+            {/* HP: kartu per produk */}
+            <div className="sm:hidden space-y-2">
+              {products.map((p) => (
+                <div key={p.id} className="rounded-2xl bg-white border border-[#E5E7EB] p-3 shadow-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-[#111827] truncate">{p.nama}</div>
+                      <div className="text-xs text-[#6B7280]">{p.sku || "-"} · {p.tipe === "bundle" ? "Bundle" : p.monitor_stok ? "Stok" : "Jasa"}</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-mono font-bold text-sm">{formatSen(p.harga_jual)}</div>
+                      <div className="text-[11px] text-[#6B7280]">harga jual</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-1 text-[11px]">
+                    <div className="rounded-lg bg-[#F9FAFB] px-2 py-1"><div className="text-[#6B7280]">Stok</div><div className="font-mono font-semibold">{p.monitor_stok ? formatQtyMilli(p.stok_milli || 0, p.satuan) : "-"}</div></div>
+                    <div className="rounded-lg bg-[#F9FAFB] px-2 py-1"><div className="text-[#6B7280]">HPP rata2</div><div className="font-mono font-semibold">{p.monitor_stok ? formatSen(p.harga_rata_rata || 0) : "-"}</div></div>
+                    <div className="rounded-lg bg-[#F9FAFB] px-2 py-1"><div className="text-[#6B7280]">Harga beli</div><div className="font-mono font-semibold">{formatSen(p.harga_beli)}</div></div>
+                  </div>
+                  <div className="mt-2 flex justify-end gap-1">
+                    <button type="button" onClick={async () => setDetail(await getProduct(p.id))} className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-gray-50 text-[#374151] inline-flex items-center gap-1">
+                      <Eye className="h-3.5 w-3.5" /> Kartu Stok
+                    </button>
+                    <button type="button" onClick={() => openEditProduct(p)} className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-amber-50 text-amber-700">
+                      Ubah
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden sm:block rounded-2xl bg-white border border-[#E5E7EB] overflow-x-auto shadow-xs">
               <table className="min-w-full text-sm">
                 <thead className="bg-[#F9FAFB] text-[#6B7280] text-xs uppercase">
                   <tr>
@@ -388,6 +419,7 @@ export function ProdukPage() {
                         <button
                           type="button"
                           onClick={async () => {
+                            if (!window.confirm(`Hapus/arsipkan produk "${p.nama}"?`)) return;
                             try {
                               await deleteProduct(p.id);
                               showToast({ message: "Produk dihapus/diarsipkan.", variant: "success" });
@@ -407,6 +439,7 @@ export function ProdukPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
       )}

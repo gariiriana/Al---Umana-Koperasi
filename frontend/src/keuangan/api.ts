@@ -529,7 +529,9 @@ export const getBudgetReport = (budget_id?: string) =>
   );
 
 export const listApprovalRules = async () => (await keuanganFetch<{ rules: ApprovalRule[] }>("/approval-rules")).rules;
-export const saveApprovalRule = (body: Record<string, unknown>) => send("POST", "/approval-rules", body);
+export type ApproverOption = { uid: string; nama: string; email: string };
+export const listApprovers = async () => (await keuanganFetch<{ approvers: ApproverOption[] }>("/approvers")).approvers;
+export const saveApprovalRule =(body: Record<string, unknown>) => send("POST", "/approval-rules", body);
 export const deleteApprovalRule = (id: string) => send("DELETE", `/approval-rules/${encodeURIComponent(id)}`);
 export const listPendingApprovals = async () => (await keuanganFetch<{ pending: TransactionDocument[] }>("/approvals/pending")).pending;
 export const decideApproval = (docId: string, body: { keputusan: "approve" | "reject"; alasan?: string }) =>
