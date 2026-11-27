@@ -76,3 +76,7 @@ frontend/public/models/
 
 # Hasil browser otomatis Playwright MCP (screenshot, snapshot halaman)
 .playwright-mcp/
+
+# PRD Modul Keuangan (tiruan Mekari Jurnal): disimpan lokal saja, tidak masuk repo
+docs/prd/2026-11-27-keuangan-bku-laporan-prd.md
+docs/prd/keuangan/

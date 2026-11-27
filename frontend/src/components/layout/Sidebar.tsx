@@ -51,6 +51,14 @@ const LABELS_DICT = {
     "/toksan/rekap": "Rekap",
     "/toksan/trafik": "Trafik Produk",
     "/toksan/produk": "Produk Toksan",
+    "/keuangan/beranda": "Beranda",
+    "/keuangan/laporan/ringkasan-bisnis": "Ringkasan Bisnis",
+    "/keuangan/laporan": "Laporan",
+    "/keuangan/kas-bank": "Kas & Bank",
+    "/keuangan/kontak": "Kontak",
+    "/keuangan/akun": "Daftar Akun",
+    "/keuangan/daftar-lainnya": "Daftar Lainnya",
+    "/keuangan/pengaturan": "Pengaturan",
     "/unit/control-center": "KPI & Task Unit",
     "/performance": "Performa Saya",
     "/super-admin/control-center": "Control Center SDM",
@@ -84,6 +92,14 @@ const LABELS_DICT = {
     "/toksan/rekap": "Recap",
     "/toksan/trafik": "Product Traffic",
     "/toksan/produk": "Toksan Products",
+    "/keuangan/beranda": "Home",
+    "/keuangan/laporan/ringkasan-bisnis": "Business Overview",
+    "/keuangan/laporan": "Reports",
+    "/keuangan/kas-bank": "Cash & Bank",
+    "/keuangan/kontak": "Contacts",
+    "/keuangan/akun": "Chart of Accounts",
+    "/keuangan/daftar-lainnya": "Other Lists",
+    "/keuangan/pengaturan": "Settings",
     "/unit/control-center": "Unit KPI & Tasks",
     "/performance": "My Performance",
     "/super-admin/control-center": "SDM Control Center",
@@ -143,6 +159,7 @@ const roleBadge: Record<string, string> = {
   kepala_unit: "Kepala Unit",
   tim_unit: "Tim Unit",
   toksan: "Admin Toksan",
+  keuangan: "Keuangan",
 };
 
 export function Sidebar({
@@ -350,7 +367,7 @@ export function Sidebar({
                   {userEmail && <p className="text-xs text-[#6B7280] truncate">{userEmail}</p>}
                 </div>
                 <Link
-                  to="/admin/settings"
+                  to={userRole === "keuangan" ? "/keuangan/pengaturan" : "/admin/settings"}
                   onClick={() => setIsDropdownOpen(false)}
                   className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-[#374151] hover:bg-[#F3F4F6] hover:text-[#111827] transition-colors border-b border-[#F3F4F6]"
                 >

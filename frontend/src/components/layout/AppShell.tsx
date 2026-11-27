@@ -75,6 +75,8 @@ export function AppShell({
     kurir: "Kurir",
     kepala_unit: "Kepala Unit",
     tim_unit: "Tim Unit",
+    toksan: "Admin Toksan",
+    keuangan: "Keuangan",
   };
 
   return (
@@ -268,7 +270,7 @@ export function AppShell({
                     </div>
 
                     <Link
-                      to="/admin/settings"
+                      to={userRole === "keuangan" ? "/keuangan/pengaturan" : "/admin/settings"}
                       onClick={() => setIsDropdownOpen(false)}
                       className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-[#374151] hover:bg-[#F3F4F6] hover:text-[#111827] transition-colors border-b border-[#F3F4F6]"
                     >

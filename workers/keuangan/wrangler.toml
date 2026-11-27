@@ -1,0 +1,40 @@
+name = "al-umana-keuangan"
+account_id = "42957b053de047bdb5d17c57be5bda9b"
+main = "src/worker.js"
+compatibility_date = "2026-09-22"
+compatibility_flags = ["nodejs_compat"]
+routes = [
+  { pattern = "koperasi-alumana.com/api/keuangan/*", zone_name = "koperasi-alumana.com" }
+]
+
+[observability]
+enabled = true
+
+[vars]
+FIREBASE_PROJECT_ID = "al-umana-koperasi"
+ALLOWED_ORIGIN = "https://koperasi-alumana.com"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "keuangan"
+database_id = "82a47f5d-1c3d-4ac1-a539-908fbbcb1f08"
+migrations_dir = "migrations"
+
+[[d1_databases]]
+binding = "ATTACH_DB_1"
+database_name = "keuangan_lampiran_1"
+database_id = "ddbdbcb2-4776-4cb7-8562-740b8b9b84ed"
+migrations_dir = "migrations_lampiran"
+
+[[d1_databases]]
+binding = "ATTACH_DB_2"
+database_name = "keuangan_lampiran_2"
+database_id = "384b21bd-52b5-4006-bfa6-fea77707209b"
+migrations_dir = "migrations_lampiran"
+
+# Encrypted secrets (never in this file or the repository), same service account as toksan/absensi:
+#   npx wrangler secret put FIREBASE_CLIENT_EMAIL
+#   npx wrangler secret put FIREBASE_PRIVATE_KEY

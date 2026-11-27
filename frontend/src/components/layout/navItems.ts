@@ -1,14 +1,20 @@
 import {
+  BarChart3,
+  BookOpen,
   Calendar,
   ClipboardCheck,
   ClipboardList,
   Factory,
   FileText,
   History,
+  Home,
+  Landmark,
+  Layers,
   LayoutDashboard,
   ListChecks,
   Package,
   Package2,
+  Settings,
   ShieldCheck,
   ShoppingCart,
   Tag,
@@ -19,7 +25,7 @@ import {
   UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
-import { ROLE_DEFAULT_REDIRECT, ROLE_PERMISSIONS, TOKSAN_PATHS, isCourierRole } from "@/constants/roles";
+import { KEUANGAN_PATHS, ROLE_DEFAULT_REDIRECT, ROLE_PERMISSIONS, TOKSAN_PATHS, isCourierRole } from "@/constants/roles";
 
 export interface NavItem {
   to: string;
@@ -62,6 +68,15 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
   { to: "/toksan/rekap", label: "Rekap", icon: FileText },
   { to: "/toksan/trafik", label: "Trafik Produk", icon: TrendingUp, shortLabel: "Trafik" },
   { to: "/toksan/produk", label: "Produk Toksan", icon: Package2, shortLabel: "Produk" },
+  // --- Modul Keuangan (Hanya role keuangan) ---
+  { to: "/keuangan/beranda", label: "Beranda", icon: Home, shortLabel: "Beranda" },
+  { to: "/keuangan/laporan/ringkasan-bisnis", label: "Ringkasan Bisnis", icon: TrendingUp, shortLabel: "Ringkasan" },
+  { to: "/keuangan/laporan", label: "Laporan", icon: BarChart3, shortLabel: "Laporan" },
+  { to: "/keuangan/kas-bank", label: "Kas & Bank", icon: Landmark, shortLabel: "Kas & Bank" },
+  { to: "/keuangan/kontak", label: "Kontak", icon: Users, shortLabel: "Kontak" },
+  { to: "/keuangan/akun", label: "Daftar Akun", icon: BookOpen, shortLabel: "Akun" },
+  { to: "/keuangan/daftar-lainnya", label: "Daftar Lainnya", icon: Layers, shortLabel: "Lainnya" },
+  { to: "/keuangan/pengaturan", label: "Pengaturan", icon: Settings, shortLabel: "Atur" },
   // --- Unit usaha ---
   { to: "/unit/control-center", label: "KPI & Task Unit", icon: Users },
   { to: "/performance", label: "Performa Saya", icon: Trophy },
@@ -88,6 +103,8 @@ export function navItemsForRole(role: string | undefined): NavItem[] {
     if (item.to === "/kurir/tugas") return allowed.includes(item.to);
     // Toksan hanya untuk admin Toksan (dan super_admin/developer), bukan admin katering.
     if (TOKSAN_PATHS.includes(item.to)) return allowed.includes(item.to);
+    // Modul Keuangan hanya untuk role `keuangan` — tidak untuk role lain termasuk admin/super_admin/developer.
+    if (KEUANGAN_PATHS.includes(item.to)) return role === "keuangan" && allowed.includes(item.to);
     if (role === "admin") return true;
     return allowed.includes(item.to);
   });
@@ -123,6 +140,14 @@ export const MOBILE_SHORT_LABELS: Record<string, string> = {
   "/toksan/rekap": "Rekap",
   "/toksan/trafik": "Trafik",
   "/toksan/produk": "Produk",
+  "/keuangan/beranda": "Beranda",
+  "/keuangan/laporan/ringkasan-bisnis": "Ringkasan",
+  "/keuangan/laporan": "Laporan",
+  "/keuangan/kas-bank": "Kas/Bank",
+  "/keuangan/kontak": "Kontak",
+  "/keuangan/akun": "Akun",
+  "/keuangan/daftar-lainnya": "Lainnya",
+  "/keuangan/pengaturan": "Atur",
   "/unit/control-center": "KPI Unit",
   "/performance": "Performa",
   "/super-admin/control-center": "KPI",

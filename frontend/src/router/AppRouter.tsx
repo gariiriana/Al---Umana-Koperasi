@@ -98,6 +98,27 @@ const ToksanObralPage = safeLazy(() => import("@/toksan/pages/ObralPage").then(m
 const ToksanRekapPage = safeLazy(() => import("@/toksan/pages/RekapPage").then(module => ({ default: module.RekapPage })));
 const ToksanTrafikPage = safeLazy(() => import("@/toksan/pages/TrafikPage").then(module => ({ default: module.TrafikPage })));
 const ToksanProdukPage = safeLazy(() => import("@/toksan/pages/ProdukPage").then(module => ({ default: module.ProdukPage })));
+// --- Modul Keuangan (Rilis 1, hanya role keuangan) ---
+const KeuanganBerandaPage = safeLazy(() => import("@/keuangan/pages/BerandaPage").then(module => ({ default: module.BerandaPage })));
+const KeuanganKasBankPage = safeLazy(() => import("@/keuangan/pages/KasBankPage").then(module => ({ default: module.KasBankPage })));
+const KeuanganBkuPage = safeLazy(() => import("@/keuangan/pages/BkuPage").then(module => ({ default: module.BkuPage })));
+const KeuanganDaftarAkunPage = safeLazy(() => import("@/keuangan/pages/DaftarAkunPage").then(module => ({ default: module.DaftarAkunPage })));
+const KeuanganSaldoAwalPage = safeLazy(() => import("@/keuangan/pages/SaldoAwalPage").then(module => ({ default: module.SaldoAwalPage })));
+const KeuanganJurnalUmumPage = safeLazy(() => import("@/keuangan/pages/JurnalUmumPage").then(module => ({ default: module.JurnalUmumPage })));
+const KeuanganKontakPage = safeLazy(() => import("@/keuangan/pages/KontakPage").then(module => ({ default: module.KontakPage })));
+const KeuanganDaftarLainnyaPage = safeLazy(() => import("@/keuangan/pages/DaftarLainnyaPage").then(module => ({ default: module.DaftarLainnyaPage })));
+const KeuanganKunciTutupBukuPage = safeLazy(() => import("@/keuangan/pages/KunciTutupBukuPage").then(module => ({ default: module.KunciTutupBukuPage })));
+const KeuanganPengaturanPage = safeLazy(() => import("@/keuangan/pages/PengaturanPage").then(module => ({ default: module.PengaturanPage })));
+const KeuanganLaporanHubPage = safeLazy(() => import("@/keuangan/pages/LaporanHubPage").then(module => ({ default: module.LaporanHubPage })));
+const KeuanganNeracaPage = safeLazy(() => import("@/keuangan/pages/ReportNeracaPage").then(module => ({ default: module.ReportNeracaPage })));
+const KeuanganLabaRugiPage = safeLazy(() => import("@/keuangan/pages/ReportLabaRugiPage").then(module => ({ default: module.ReportLabaRugiPage })));
+const KeuanganArusKasPage = safeLazy(() => import("@/keuangan/pages/ReportArusKasPage").then(module => ({ default: module.ReportArusKasPage })));
+const KeuanganPerubahanModalPage = safeLazy(() => import("@/keuangan/pages/ReportPerubahanModalPage").then(module => ({ default: module.ReportPerubahanModalPage })));
+const KeuanganBukuBesarPage = safeLazy(() => import("@/keuangan/pages/ReportBukuBesarPage").then(module => ({ default: module.ReportBukuBesarPage })));
+const KeuanganJurnalPage = safeLazy(() => import("@/keuangan/pages/ReportJurnalPage").then(module => ({ default: module.ReportJurnalPage })));
+const KeuanganNeracaSaldoPage = safeLazy(() => import("@/keuangan/pages/ReportNeracaSaldoPage").then(module => ({ default: module.ReportNeracaSaldoPage })));
+const KeuanganRingkasanBisnisPage = safeLazy(() => import("@/keuangan/pages/ReportRingkasanBisnisPage").then(module => ({ default: module.ReportRingkasanBisnisPage })));
+const KeuanganPublicDocPage = safeLazy(() => import("@/keuangan/pages/PublicDocumentPage").then(module => ({ default: module.PublicDocumentPage })));
 const PerformancePage = safeLazy(() => import("@/pages/PerformancePage").then(module => ({ default: module.PerformancePage })));
 const SuperAdminControlCenterPage = safeLazy(() => import("@/pages/SuperAdminControlCenterPage").then(module => ({ default: module.SuperAdminControlCenterPage })));
 const UnitControlCenterPage = safeLazy(() => import("@/pages/SuperAdminControlCenterPage").then(module => ({ default: module.UnitControlCenterPage })));
@@ -167,6 +188,8 @@ function RootRoute() {
 
 /** Toksan: admin Toko Santri, plus super_admin/developer untuk mengecek. */
 const TOKSAN_ROLES = ["toksan", "super_admin", "developer"];
+/** Modul Keuangan: hanya role `keuangan` (tidak ada akses untuk super_admin/developer). */
+const KEUANGAN_ROLES = ["keuangan"];
 
 function ShelledRoute({
   pageTitle,
@@ -336,6 +359,7 @@ function RoutesTree() {
 
       {/* Public Invoice Page (No authentication required) */}
       <Route path="/invoice/:token" element={<InvoicePage />} />
+      <Route path="/f/:token" element={<KeuanganPublicDocPage />} />
 
       {/* Storefront (public catalog browsing only) */}
       <Route path="/" element={<RootRoute />} />
@@ -848,6 +872,27 @@ function RoutesTree() {
       <Route path="/toksan/rekap" element={<Protected><ShelledRoute pageTitle="Rekap" allowedRoles={TOKSAN_ROLES}><ToksanRekapPage /></ShelledRoute></Protected>} />
       <Route path="/toksan/trafik" element={<Protected><ShelledRoute pageTitle="Trafik Produk" allowedRoles={TOKSAN_ROLES}><ToksanTrafikPage /></ShelledRoute></Protected>} />
       <Route path="/toksan/produk" element={<Protected><ShelledRoute pageTitle="Produk Toksan" allowedRoles={TOKSAN_ROLES}><ToksanProdukPage /></ShelledRoute></Protected>} />
+      {/* Modul Keuangan (Hanya role keuangan) */}
+      <Route path="/keuangan/beranda" element={<Protected><ShelledRoute pageTitle="Beranda Keuangan" allowedRoles={KEUANGAN_ROLES}><KeuanganBerandaPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/dasbor" element={<Protected><ShelledRoute pageTitle="Ringkasan Bisnis" allowedRoles={KEUANGAN_ROLES}><KeuanganRingkasanBisnisPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan" element={<Protected><ShelledRoute pageTitle="Laporan Keuangan" allowedRoles={KEUANGAN_ROLES}><KeuanganLaporanHubPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/neraca" element={<Protected><ShelledRoute pageTitle="Neraca" allowedRoles={KEUANGAN_ROLES}><KeuanganNeracaPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/laba-rugi" element={<Protected><ShelledRoute pageTitle="Laba Rugi" allowedRoles={KEUANGAN_ROLES}><KeuanganLabaRugiPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/arus-kas" element={<Protected><ShelledRoute pageTitle="Arus Kas" allowedRoles={KEUANGAN_ROLES}><KeuanganArusKasPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/perubahan-modal" element={<Protected><ShelledRoute pageTitle="Perubahan Modal" allowedRoles={KEUANGAN_ROLES}><KeuanganPerubahanModalPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/buku-besar" element={<Protected><ShelledRoute pageTitle="Buku Besar" allowedRoles={KEUANGAN_ROLES}><KeuanganBukuBesarPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/jurnal" element={<Protected><ShelledRoute pageTitle="Laporan Jurnal" allowedRoles={KEUANGAN_ROLES}><KeuanganJurnalPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/neraca-saldo" element={<Protected><ShelledRoute pageTitle="Neraca Saldo" allowedRoles={KEUANGAN_ROLES}><KeuanganNeracaSaldoPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/laporan/ringkasan-bisnis" element={<Protected><ShelledRoute pageTitle="Ringkasan Bisnis" allowedRoles={KEUANGAN_ROLES}><KeuanganRingkasanBisnisPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/kas-bank" element={<Protected><ShelledRoute pageTitle="Kas & Bank" allowedRoles={KEUANGAN_ROLES}><KeuanganKasBankPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/kas-bank/:kode/bku" element={<Protected><ShelledRoute pageTitle="Buku Kas Umum" allowedRoles={KEUANGAN_ROLES}><KeuanganBkuPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/kontak" element={<Protected><ShelledRoute pageTitle="Kontak" allowedRoles={KEUANGAN_ROLES}><KeuanganKontakPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/akun" element={<Protected><ShelledRoute pageTitle="Daftar Akun" allowedRoles={KEUANGAN_ROLES}><KeuanganDaftarAkunPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/akun/saldo-awal" element={<Protected><ShelledRoute pageTitle="Atur Saldo Awal" allowedRoles={KEUANGAN_ROLES}><KeuanganSaldoAwalPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/jurnal-umum" element={<Protected><ShelledRoute pageTitle="Jurnal Umum" allowedRoles={KEUANGAN_ROLES}><KeuanganJurnalUmumPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/daftar-lainnya" element={<Protected><ShelledRoute pageTitle="Daftar Lainnya" allowedRoles={KEUANGAN_ROLES}><KeuanganDaftarLainnyaPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/daftar-lainnya/tutup-buku" element={<Protected><ShelledRoute pageTitle="Kunci Periode & Tutup Buku" allowedRoles={KEUANGAN_ROLES}><KeuanganKunciTutupBukuPage /></ShelledRoute></Protected>} />
+      <Route path="/keuangan/pengaturan" element={<Protected><ShelledRoute pageTitle="Pengaturan Keuangan" allowedRoles={KEUANGAN_ROLES}><KeuanganPengaturanPage /></ShelledRoute></Protected>} />
       <Route path="/unit/control-center" element={<Protected><ShelledRoute pageTitle="KPI & Task Unit" allowedRoles={["kepala_unit"]}><UnitControlCenterPage /></ShelledRoute></Protected>} />
       <Route path="/developer/control-center" element={<Protected><ShelledRoute pageTitle="Developer Control Center" allowedRoles={["developer"]}><DeveloperControlCenterPage /></ShelledRoute></Protected>} />
 

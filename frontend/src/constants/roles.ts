@@ -8,6 +8,29 @@
 /** Halaman Toko Santri (Toksan): hanya admin Toksan, plus super_admin/developer untuk mengecek. */
 export const TOKSAN_PATHS: readonly string[] = ["/toksan/input", "/toksan/obral", "/toksan/rekap", "/toksan/trafik", "/toksan/produk"];
 
+/** Halaman Modul Keuangan: HANYA untuk role `keuangan` (tidak termasuk super_admin/developer). */
+export const KEUANGAN_PATHS: readonly string[] = [
+  "/keuangan/beranda",
+  "/keuangan/dasbor",
+  "/keuangan/laporan",
+  "/keuangan/laporan/neraca",
+  "/keuangan/laporan/laba-rugi",
+  "/keuangan/laporan/arus-kas",
+  "/keuangan/laporan/perubahan-modal",
+  "/keuangan/laporan/buku-besar",
+  "/keuangan/laporan/jurnal",
+  "/keuangan/laporan/neraca-saldo",
+  "/keuangan/laporan/ringkasan-bisnis",
+  "/keuangan/kas-bank",
+  "/keuangan/kontak",
+  "/keuangan/akun",
+  "/keuangan/akun/saldo-awal",
+  "/keuangan/jurnal-umum",
+  "/keuangan/daftar-lainnya",
+  "/keuangan/daftar-lainnya/tutup-buku",
+  "/keuangan/pengaturan",
+];
+
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   developer: ["/developer/control-center", "/super-admin/control-center", ...TOKSAN_PATHS],
   super_admin: ["/super-admin/control-center", ...TOKSAN_PATHS],
@@ -226,6 +249,9 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
 
   /** Admin Toko Santri: input penjualan harian, obral, rekap, trafik produk, master produk. */
   toksan: TOKSAN_PATHS,
+
+  /** Staf Keuangan Al-Umanaa: akuntansi, BKU, laporan keuangan (terpisah total dari role lain). */
+  keuangan: KEUANGAN_PATHS,
 };
 
 /**
@@ -239,7 +265,7 @@ export const UNIT_ROLES: readonly string[] = ["kepala_unit", "tim_unit"];
  * Role yang tidak pernah diberi task oleh Super Admin, jadi tidak punya KPI:
  * kurir katering & MBG, serta akun Produksi 2 dan Distribusi 2.
  */
-export const NO_TASK_ROLES: readonly string[] = ["kurir", "kurir_mbg", "produksi_2", "distribusi_2", "toksan"];
+export const NO_TASK_ROLES: readonly string[] = ["kurir", "kurir_mbg", "produksi_2", "distribusi_2", "toksan", "keuangan"];
 
 /** Akun kurir (katering & MBG): satu pool, menu dan halaman utama sama. */
 export const COURIER_ROLES: readonly string[] = ["kurir", "kurir_mbg"];
@@ -285,6 +311,7 @@ export const ADMIN_SHELL_ROLES = [
   "kepala_unit",
   "tim_unit",
   "toksan",
+  "keuangan",
 ] as const;
 
 export const ALL_ROLES = [
@@ -312,6 +339,7 @@ export const ALL_ROLES = [
   "produksi_mbg_2",
   "distribusi_mbg_2",
   "toksan",
+  "keuangan",
 ] as const;
 
 /**
@@ -348,4 +376,6 @@ export const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
   tim_unit: "/performance",
   // Toko Santri
   toksan: "/toksan/input",
+  // Keuangan
+  keuangan: "/keuangan/beranda",
 };
