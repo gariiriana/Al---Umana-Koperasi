@@ -64,6 +64,7 @@ const MESSAGES: Record<string, string> = {
   NOT_FOUND: "Data tidak ditemukan. Muat ulang halaman lalu coba lagi.",
   FOTO_TIDAK_ADA: "Foto tidak ditemukan atau sudah terhapus.",
   UNIT_SUDAH_ADA: "Nama unit ini sudah ada.",
+  SILAH_DIRI_SENDIRI: "Jadwal Silah kamu sendiri diatur oleh admin absensi.",
 };
 
 export function messageFor(code: string | null | undefined, details?: MessageDetails): string {

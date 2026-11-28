@@ -38,6 +38,8 @@ import {
   formatLogWaktu,
   geserBulan,
 } from "@/absensi/logic/format";
+import { PengingatCard } from "@/absensi/components/PengingatCard";
+import { hasTeamAccess } from "@/absensi/teamAccess";
 import type { Me, ShiftStatus, ShiftView } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
 
@@ -361,8 +363,8 @@ function Beranda({
           )}
         </section>
 
-        {/* Kepala unit: pintu ke persetujuan anggota tim */}
-        {(me.headOf?.length ?? 0) > 0 && (
+        {/* Kepala unit (atau izin lihat semua unit): pintu ke halaman Tim */}
+        {hasTeamAccess(me) && (
           <Link
             to="/absensi/tim"
             className="flex items-center gap-3 rounded-3xl border border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 p-4 shadow-xs transition hover:border-amber-400"
@@ -371,9 +373,9 @@ function Beranda({
               <UsersRound className="h-5 w-5" aria-hidden="true" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-neutral-900">Persetujuan Tim</p>
+              <p className="font-['Manrope',system-ui,sans-serif] text-sm font-extrabold text-neutral-900">Tim Saya</p>
               <p className="truncate text-xs font-semibold text-amber-900/80">
-                Kepala unit {me.headOf?.map((u) => u.name).join(", ")}
+                {me.viewAllUnits ? "Lihat absensi semua unit" : `Kepala unit ${me.headOf?.map((u) => u.name).join(", ")}`}
               </p>
             </div>
             {(me.teamPending ?? 0) > 0 && (
@@ -384,6 +386,9 @@ function Beranda({
             <ChevronRight className="h-5 w-5 shrink-0 text-amber-700" aria-hidden="true" />
           </Link>
         )}
+
+        {/* Pengingat clock in 07:30 / clock out 16:30 ke HP (hilang setelah aktif) */}
+        <PengingatCard uid={me.uid} />
 
         {/* Grid Menu Layanan */}
         <section className="rounded-3xl border border-neutral-200/80 bg-white p-5 shadow-xs">

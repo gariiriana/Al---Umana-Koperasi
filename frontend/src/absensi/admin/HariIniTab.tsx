@@ -3,11 +3,14 @@ import { Camera } from "lucide-react";
 
 import { LatePhotoDialog } from "@/absensi/admin/ShiftPhoto";
 import { getHariIni } from "@/absensi/api";
+import { useAbsensiScope } from "@/absensi/admin/scope";
+import { UnitFilter } from "@/absensi/admin/UnitFilter";
+import { matchesUnit } from "@/absensi/admin/unitFilterLogic";
 import { errorMessage } from "@/absensi/errorMessage";
 import {
   LEAVE_TYPE_LABEL, formatJam, formatTanggalPanjang, formatTerlambat, rejectedLabel, worstZoneStatus, zoneNotes,
 } from "@/absensi/logic/format";
-import type { HariIniRow } from "@/absensi/types";
+import type { HariIniRow, UnitRef } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
 
 const STATE_STYLE: Record<HariIniRow["state"], string> = {
@@ -37,8 +40,11 @@ function stateLabel(row: HariIniRow): string {
 
 /** Ringkasan kehadiran hari ini (termasuk karyawan yang sedang cuti/sakit/pergantian shift). */
 export function HariIniTab() {
+  const scope = useAbsensiScope();
   const [date, setDate] = useState<string | null>(null);
-  const [rows, setRows] = useState<HariIniRow[] | null>(null);
+  const [allRows, setRows] = useState<HariIniRow[] | null>(null);
+  const [units, setUnits] = useState<UnitRef[]>([]);
+  const [unit, setUnit] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [photoRow, setPhotoRow] = useState<HariIniRow | null>(null);
@@ -47,20 +53,22 @@ export function HariIniTab() {
     setLoading(true);
     setError(null);
     try {
-      const res = await getHariIni();
+      const res = await getHariIni(scope);
       setDate(res.date);
       setRows(res.rows);
+      setUnits(res.units ?? []);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scope]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const rows = allRows?.filter((row) => matchesUnit(unit, row.unitId)) ?? null;
   const count = (state: HariIniRow["state"]) => rows?.filter((row) => row.state === state).length ?? 0;
   const silahToday = rows?.filter(isOnSilah).length ?? 0;
   // "Belum absen" tidak menghitung yang sedang Silah atau cuti/sakit/izin.
@@ -76,9 +84,18 @@ export function HariIniTab() {
           </h2>
           {date && <p className="text-xs font-semibold text-amber-700">{formatTanggalPanjang(date)}</p>}
         </div>
-        <Button variant="outlined" size="sm" loading={loading} onClick={() => void load()}>
-          Muat ulang
-        </Button>
+        <div className="flex flex-wrap items-end gap-2">
+          <UnitFilter
+            units={units}
+            value={unit}
+            onChange={setUnit}
+            showNoUnit={allRows?.some((row) => !row.unitId) ?? false}
+            className="flex items-center gap-2 text-xs font-bold text-neutral-700"
+          />
+          <Button variant="outlined" size="sm" loading={loading} onClick={() => void load()}>
+            Muat ulang
+          </Button>
+        </div>
       </div>
 
       {rows && (
@@ -124,7 +141,7 @@ export function HariIniTab() {
 
       {rows && rows.length === 0 && (
         <div className="rounded-3xl border border-neutral-200/80 bg-white p-8 text-center text-sm text-neutral-500">
-          Belum ada karyawan aktif.
+          {unit ? "Tidak ada karyawan aktif di unit ini." : "Belum ada karyawan aktif."}
         </div>
       )}
 

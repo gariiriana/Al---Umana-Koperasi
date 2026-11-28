@@ -36,12 +36,12 @@ export function buildRekapWorkbook(
   detailSheet["!cols"] = columnWidths(detail);
 
   const workbook = XLSX.utils.book_new();
-  workbook.Props = { Title: `Rekap Absensi ${meta.from} – ${meta.to}`, Author: meta.printedBy };
+  workbook.Props = { Title: `Rekap Absensi${meta.unitName ? ` ${meta.unitName}` : ""} ${meta.from} – ${meta.to}`, Author: meta.printedBy };
   XLSX.utils.book_append_sheet(workbook, summarySheet, "Ringkasan");
   XLSX.utils.book_append_sheet(workbook, detailSheet, "Detail");
   return workbook;
 }
 
 export function downloadRekapExcel(rows: RekapRow[], meta: RekapMeta, requests: AbsensiRequestView[] = []): void {
-  XLSX.writeFile(buildRekapWorkbook(rows, meta, requests), rekapFileName(meta.from, meta.to, "xlsx"));
+  XLSX.writeFile(buildRekapWorkbook(rows, meta, requests), rekapFileName(meta.from, meta.to, "xlsx", meta.unitName));
 }

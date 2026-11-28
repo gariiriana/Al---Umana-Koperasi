@@ -4,9 +4,10 @@
 const SECURETOKEN_JWKS = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const IDENTITY_SCOPE = "https://www.googleapis.com/auth/identitytoolkit";
+export const MESSAGING_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 
 let cachedJwks = null;
-let cachedAccessToken = null;
+const cachedAccessTokens = new Map();
 
 function base64UrlDecode(value) {
   const padded = value.replaceAll("-", "+").replaceAll("_", "/") + "===".slice((value.length + 3) % 4);
@@ -79,12 +80,13 @@ export async function verifyIdToken(token, env, { jwksFetch = fetch } = {}) {
   return valid ? { uid: payload.sub, claims: payload } : null;
 }
 
-/** OAuth token for Identity Toolkit, signed with the Firebase service account secrets. */
-export async function getAccessToken(env, fetchImpl = fetch) {
-  if (cachedAccessToken && cachedAccessToken.expiresAt > Date.now() + 60_000) return cachedAccessToken.token;
+/** OAuth token (Identity Toolkit by default, or FCM), signed with the Firebase service account secrets. */
+export async function getAccessToken(env, fetchImpl = fetch, scope = IDENTITY_SCOPE) {
+  const cached = cachedAccessTokens.get(scope);
+  if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
   const now = Math.floor(Date.now() / 1000);
   const header = base64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const claims = base64Url(JSON.stringify({ iss: env.FIREBASE_CLIENT_EMAIL, scope: IDENTITY_SCOPE, aud: GOOGLE_TOKEN_URL, iat: now, exp: now + 3_600 }));
+  const claims = base64Url(JSON.stringify({ iss: env.FIREBASE_CLIENT_EMAIL, scope, aud: GOOGLE_TOKEN_URL, iat: now, exp: now + 3_600 }));
   const privateKey = await crypto.subtle.importKey("pkcs8", pemToBytes(env.FIREBASE_PRIVATE_KEY),
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", privateKey, new TextEncoder().encode(`${header}.${claims}`));
@@ -98,6 +100,7 @@ export async function getAccessToken(env, fetchImpl = fetch) {
   });
   if (!response.ok) throw new Error("Google OAuth request failed");
   const payload = await response.json();
-  cachedAccessToken = { token: payload.access_token, expiresAt: Date.now() + Number(payload.expires_in || 3_000) * 1_000 };
-  return cachedAccessToken.token;
+  const entry = { token: payload.access_token, expiresAt: Date.now() + Number(payload.expires_in || 3_000) * 1_000 };
+  cachedAccessTokens.set(scope, entry);
+  return entry.token;
 }

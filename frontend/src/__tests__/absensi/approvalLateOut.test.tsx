@@ -47,6 +47,7 @@ describe("Persetujuan admin: clock out terlambat", () => {
     expect(await screen.findByAltText("Selfie Joko")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Setujui" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Ya, Setujui" }));
     await waitFor(() => expect(api.reviewAdminLateOut).toHaveBeenCalledWith("lx1", { action: "approve" }));
   });
 });

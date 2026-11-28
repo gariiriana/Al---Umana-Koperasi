@@ -147,6 +147,13 @@ describe("kepala unit: halaman Persetujuan Tim", () => {
 
     fireEvent.change(screen.getByLabelText("Catatan untuk Risa"), { target: { value: "Oke" } });
     fireEvent.click(screen.getByRole("button", { name: "Setujui" }));
+    // Pop-up konfirmasi dulu: belum ada yang dikirim, Batal menutup tanpa mengirim.
+    expect(await screen.findByText(/Setujui absen di luar zona Risa\? Catatan: "Oke"\. Keputusan ini tidak bisa diubah lagi\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Batal" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Ya, Setujui" })).toBeNull());
+    expect(mocks.reviewTeamZone).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Setujui" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Ya, Setujui" }));
     await waitFor(() => expect(mocks.reviewTeamZone).toHaveBeenCalledWith("z1", { action: "approve", note: "Oke" }));
   });
 });

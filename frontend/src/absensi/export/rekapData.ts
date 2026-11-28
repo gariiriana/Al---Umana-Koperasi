@@ -33,6 +33,8 @@ export interface RekapMeta {
   printedAt: number;
   silah?: SilahEntry[];
   today?: string;
+  /** Rekap difilter ke satu unit (tidak ada = semua unit). */
+  unitName?: string;
 }
 
 export interface RekapSummary {
@@ -339,6 +341,7 @@ export function rekapTables(
   };
 }
 
-export function rekapFileName(from: string, to: string, ext: "xlsx" | "docx"): string {
-  return `Rekap-Absensi_${from}_${to}.${ext}`;
+export function rekapFileName(from: string, to: string, ext: "xlsx" | "docx", unitName?: string): string {
+  const unit = unitName ? `_${unitName.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "")}` : "";
+  return `Rekap-Absensi${unit}_${from}_${to}.${ext}`;
 }

@@ -93,7 +93,11 @@ export function AbsensiSessionProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AbsensiSessionValue>(() => ({
     user, me, loading, error, signIn,
-    signOut: () => firebaseSignOut(getAbsensiAuth()),
+    // Lepas HP ini dari pengingat akun yang keluar (perlu token login, jadi sebelum sign out).
+    signOut: async () => {
+      await (await import("@/absensi/pengingat")).lepasPengingat().catch(() => {});
+      await firebaseSignOut(getAbsensiAuth());
+    },
     setStatus: (status) => setMe((current) => (current ? { ...current, status } : current)),
     reloadMe,
   }), [user, me, loading, error, signIn, reloadMe]);

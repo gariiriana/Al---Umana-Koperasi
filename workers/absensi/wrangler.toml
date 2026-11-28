@@ -7,9 +7,11 @@ routes = [
   { pattern = "koperasi-alumana.com/api/absensi/*", zone_name = "koperasi-alumana.com" }
 ]
 
-# Tutup shift yang lupa clock out, hapus selfie > 90 hari, buang challenge kedaluwarsa.
+# Satu cron tiap 5 menit (src/worker.js scheduled):
+# - tiap tick: pengingat clock in / clock out ke HP (src/reminders.js),
+# - menit :00: tutup shift yang lupa clock out, hapus selfie > 90 hari, buang challenge kedaluwarsa.
 [triggers]
-crons = ["0 * * * *"]
+crons = ["*/5 * * * *"]
 
 [observability]
 enabled = true

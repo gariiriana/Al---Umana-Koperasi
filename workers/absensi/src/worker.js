@@ -3,17 +3,21 @@
  * Semua data di D1 (DB = "absensi", PHOTOS = "absensi_foto"); tidak pernah menyentuh Firestore.
  * Lihat docs/superpowers/specs/2026-10-27-absensi-design.md.
  */
-import { verifyIdToken } from "./auth.js";
+import { usesAuthEmulator, verifyIdToken } from "./auth.js";
 import { AbsensiError, corsHeaders, errorResponse, json } from "./http.js";
 import { createAuthUser, setAuthDisabled, setClaims } from "./identity.js";
 import { runCron } from "./cron.js";
+import { sendFcm } from "./fcm.js";
+import { runReminders } from "./reminders.js";
 import {
   createKaryawan, createUnit, getArea, getFoto, getHariIni, getRekap, getUnits, listKaryawan,
   listPengajuanAdmin, patchKaryawan, patchUnit, putArea, reviewLateOutAdmin, reviewLuarZonaAdmin, reviewPengajuanAdmin, reviewSilahAdmin,
 } from "./handlers/admin.js";
 import {
-  getTimFoto, getTimPersetujuan, reviewTimLateOut, reviewTimLuarZona, reviewTimPengajuan, reviewTimSilah,
+  getTimFoto, getTimHariIni, getTimPersetujuan, getTimRekap, listTimKaryawan, patchTimKaryawan,
+  reviewTimLateOut, reviewTimLuarZona, reviewTimPengajuan, reviewTimSilah,
 } from "./handlers/tim.js";
+import { daftarPerangkat, hapusPerangkat } from "./handlers/pengingat.js";
 import {
   absen, absenOptions, activate, activateOptions, bacaNotifikasi,
   createPengajuan, getMe, getNotifikasi, getRekan, getRiwayat, listPengajuan, resetSimulasi,
@@ -35,12 +39,18 @@ const ROUTES = [
   ["POST", /^\/absen\/options$/, absenOptions],
   ["POST", /^\/absen$/, absen],
   ["POST", /^\/reset-simulasi$/, resetSimulasi],
+  ["POST", /^\/pengingat\/perangkat$/, daftarPerangkat],
+  ["POST", /^\/pengingat\/perangkat\/hapus$/, hapusPerangkat],
   ["GET", /^\/tim\/persetujuan$/, getTimPersetujuan],
   ["PATCH", /^\/tim\/pengajuan\/([\w-]{1,64})$/, reviewTimPengajuan],
   ["PATCH", /^\/tim\/luar-zona\/([\w-]{1,64})$/, reviewTimLuarZona],
   ["PATCH", /^\/tim\/silah\/([\w-]{1,64})$/, reviewTimSilah],
   ["PATCH", /^\/tim\/clockout-telat\/([\w-]{1,64})$/, reviewTimLateOut],
   ["GET", /^\/tim\/foto\/([\w-]{1,64})$/, getTimFoto],
+  ["GET", /^\/tim\/hari-ini$/, getTimHariIni],
+  ["GET", /^\/tim\/rekap$/, getTimRekap],
+  ["GET", /^\/tim\/karyawan$/, listTimKaryawan],
+  ["PATCH", /^\/tim\/karyawan\/([\w-]{1,128})$/, patchTimKaryawan],
   ["GET", /^\/admin\/hari-ini$/, getHariIni],
   ["GET", /^\/admin\/rekap$/, getRekap],
   ["GET", /^\/admin\/pengajuan$/, listPengajuanAdmin],
@@ -93,14 +103,30 @@ export function realDeps(env) {
       setAuthDisabled: (uid, disabled) => setAuthDisabled(env, uid, disabled),
     },
     country: (request) => request.cf?.country ?? null,
+    // Lokal (emulator) tidak mengirim FCM sungguhan.
+    push: {
+      send: (token, data) => (usesAuthEmulator(env)
+        ? (console.log("absensi push (emulator)", data.title), Promise.resolve("ok"))
+        : sendFcm(env, token, data)),
+    },
   };
 }
+
+/**
+ * Satu cron tiap 5 menit (wrangler.toml), supaya jumlah cron akun Cloudflare tidak bertambah:
+ * pengingat clock in / clock out tiap tick, bersih-bersih hanya di tick menit :00 (per jam).
+ */
+export const isHourlyTick = (scheduledTime) => new Date(scheduledTime).getUTCMinutes() === 0;
 
 export default {
   fetch(request, env) {
     return handleRequest(request, env, realDeps(env));
   },
-  scheduled(_event, env, ctx) {
-    ctx.waitUntil(runCron(env, Date.now()).then((result) => console.log("absensi cron", JSON.stringify(result))));
+  scheduled(event, env, ctx) {
+    if (isHourlyTick(event.scheduledTime)) {
+      ctx.waitUntil(runCron(env, Date.now()).then((result) => console.log("absensi cron", JSON.stringify(result))));
+    }
+    const { push } = realDeps(env);
+    ctx.waitUntil(runReminders(env, Date.now(), push.send).then((result) => console.log("absensi pengingat", JSON.stringify(result))));
   },
 };

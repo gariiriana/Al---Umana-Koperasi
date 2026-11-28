@@ -213,7 +213,7 @@ describe("admin melihat alasan terlambat", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Lihat foto bukti Budi" }));
     expect(await screen.findByRole("dialog", { name: "Foto bukti Budi" })).toBeTruthy();
-    await waitFor(() => expect(mocks.fetchPhotoUrl).toHaveBeenCalledWith("lp-1"));
+    await waitFor(() => expect(mocks.fetchPhotoUrl).toHaveBeenCalledWith("lp-1", "admin"));
     expect(await screen.findByAltText("Foto bukti alasan terlambat")).toBeTruthy();
   });
 

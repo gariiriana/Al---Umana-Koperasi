@@ -3,6 +3,9 @@ import { FileSpreadsheet, FileText } from "lucide-react";
 
 import { workDateWIB } from "../../../../workers/absensi/shared/time.js";
 import { getRekap, listEmployees } from "@/absensi/api";
+import { useAbsensiScope } from "@/absensi/admin/scope";
+import { UnitFilter } from "@/absensi/admin/UnitFilter";
+import { matchesUnit, unitLabel } from "@/absensi/admin/unitFilterLogic";
 import { ShiftPhoto } from "@/absensi/admin/ShiftPhoto";
 import { useAbsensiSession } from "@/absensi/AbsensiSession";
 import { errorMessage } from "@/absensi/errorMessage";
@@ -20,7 +23,7 @@ import {
   formatTanggalPendek,
   formatTerlambat,
 } from "@/absensi/logic/format";
-import type { AbsensiRequestView, EmployeeView, RekapRow, SilahEntry } from "@/absensi/types";
+import type { AbsensiRequestView, EmployeeView, RekapRow, SilahEntry, UnitRef } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
 
 const field =
@@ -58,12 +61,16 @@ function defaultFilter(): Filter {
 /** Rekap terpadu kehadiran, cuti/sakit/izin, dan pergantian shift beserta export Excel & Word. */
 export function RekapTab() {
   const { me } = useAbsensiSession();
+  const scope = useAbsensiScope();
   const [filter, setFilter] = useState<Filter>(defaultFilter);
   const [applied, setApplied] = useState<Filter | null>(null);
   const [employees, setEmployees] = useState<EmployeeView[]>([]);
-  const [rows, setRows] = useState<RekapRow[] | null>(null);
-  const [requests, setRequests] = useState<AbsensiRequestView[]>([]);
-  const [silah, setSilah] = useState<{ entries: SilahEntry[]; today?: string }>({ entries: [] });
+  const [allRows, setRows] = useState<RekapRow[] | null>(null);
+  const [allRequests, setRequests] = useState<AbsensiRequestView[]>([]);
+  const [allSilah, setSilah] = useState<{ entries: SilahEntry[]; today?: string }>({ entries: [] });
+  const [units, setUnits] = useState<UnitRef[]>([]);
+  // Filter unit langsung berlaku di layar dan export (tidak perlu "Tampilkan" ulang).
+  const [unit, setUnit] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState<"xlsx" | "docx" | null>(null);
@@ -73,22 +80,36 @@ export function RekapTab() {
     setLoading(true);
     setError(null);
     try {
-      const res = await getRekap({ from: next.from, to: next.to, uid: next.uid || undefined });
+      const res = await getRekap({ from: next.from, to: next.to, uid: next.uid || undefined }, scope);
       setRows(res.rows);
       setRequests(res.requests ?? []);
       setSilah({ entries: res.silah ?? [], today: res.today });
+      setUnits(res.units ?? []);
       setApplied(next);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scope]);
 
   useEffect(() => {
     void load(defaultFilter());
-    listEmployees().then((res) => setEmployees(res.employees.filter((e) => e.role === "absen_karyawan")), () => {});
-  }, [load]);
+    listEmployees(scope).then((res) => setEmployees(res.employees.filter((e) => e.role === "absen_karyawan")), () => {});
+  }, [load, scope]);
+
+  // Unit tiap karyawan: dari baris rekap, lalu daftar karyawan (untuk pengajuan / Silah tanpa shift).
+  const unitOf = useMemo(() => {
+    const map = new Map<string, string | null>(employees.map((e) => [e.uid, e.unitId ?? null]));
+    for (const row of allRows ?? []) if (row.unitId !== undefined) map.set(row.uid, row.unitId);
+    return map;
+  }, [employees, allRows]);
+  const inUnit = useCallback((uid: string) => matchesUnit(unit, unitOf.get(uid)), [unit, unitOf]);
+  const rows = useMemo(() => allRows?.filter((row) => inUnit(row.uid)) ?? null, [allRows, inUnit]);
+  const requests = useMemo(() => allRequests.filter((req) => inUnit(req.uid)), [allRequests, inUnit]);
+  const silah = useMemo(() => ({ ...allSilah, entries: allSilah.entries.filter((s) => inUnit(s.uid)) }), [allSilah, inUnit]);
+  const showUnitFilter = units.length + (employees.some((e) => !e.unitId) ? 1 : 0) >= 2;
+  const unitEmployees = useMemo(() => employees.filter((e) => matchesUnit(unit, e.unitId)), [employees, unit]);
 
   const unifiedItems = useMemo(() => {
     if (!rows || !applied) return [];
@@ -125,6 +146,7 @@ export function RekapTab() {
       printedAt: Date.now(),
       silah: silah.entries,
       today: silah.today,
+      unitName: unitLabel(unit, units),
     };
   };
 
@@ -189,7 +211,7 @@ export function RekapTab() {
         </div>
 
         <form
-          className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:items-end"
+          className={`mt-4 grid grid-cols-2 gap-3 sm:items-end ${showUnitFilter ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}
           onSubmit={(e) => {
             e.preventDefault();
             if (!invalidRange) void load(filter);
@@ -203,11 +225,23 @@ export function RekapTab() {
             <span>Sampai</span>
             <input type="date" className={field} required value={filter.to} onChange={(e) => setFilter({ ...filter, to: e.target.value })} />
           </label>
+          <UnitFilter
+            units={units}
+            value={unit}
+            onChange={(next) => {
+              setUnit(next);
+              // Karyawan yang dipilih di luar unit baru: kembali ke semua karyawan.
+              if (filter.uid && !matchesUnit(next, unitOf.get(filter.uid))) setFilter({ ...filter, uid: "" });
+            }}
+            showNoUnit={employees.some((e) => !e.unitId)}
+            className={`${fieldLabel} col-span-2 sm:col-span-1`}
+            selectClassName={field}
+          />
           <label className={`${fieldLabel} col-span-2 sm:col-span-1`}>
             <span>Karyawan</span>
             <select className={field} value={filter.uid} onChange={(e) => setFilter({ ...filter, uid: e.target.value })}>
               <option value="">Semua karyawan</option>
-              {employees.map((employee) => (
+              {unitEmployees.map((employee) => (
                 <option key={employee.uid} value={employee.uid}>{employee.name}</option>
               ))}
             </select>

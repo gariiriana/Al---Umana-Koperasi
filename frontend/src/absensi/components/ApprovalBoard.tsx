@@ -15,6 +15,7 @@ import type {
   AbsensiRequestView, ApprovalList, LateOutExceptionView, RequestStatus, SilahExceptionView, ZoneExceptionView,
 } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 const STATUS_BADGE: Record<RequestStatus, string> = {
   pending: "bg-amber-100 text-amber-900 border border-amber-300",
@@ -63,9 +64,21 @@ function mergeItems(list: ApprovalList): Item[] {
     Number(b.status === "pending") - Number(a.status === "pending") || b.createdAt - a.createdAt);
 }
 
+/** Nama jenis item untuk pop-up konfirmasi. */
+function itemLabel(item: Item): string {
+  if (item.type === "request") {
+    if (item.data.kind === "pergantian_shift") return "pergantian shift";
+    return `permohonan ${item.data.leaveType ?? "cuti"}`;
+  }
+  if (item.type === "zone") return "absen di luar zona";
+  if (item.type === "silah") return "masuk di hari Silah";
+  return "clock out terlambat";
+}
+
 /**
  * Daftar pengajuan cuti/pergantian shift + absen luar zona + masuk di hari Silah + clock out telat
- * yang bisa disetujui atau ditolak.
+ * yang bisa disetujui atau ditolak. Setujui / Tolak selalu lewat pop-up konfirmasi dulu, karena keputusan
+ * tidak bisa diubah lagi (server menolak item yang sudah diproses).
  */
 export function ApprovalBoard({
   title, subtitle, load, reviewRequest, reviewZone, reviewSilah, reviewLateOut, photoScope, onChanged,
@@ -77,6 +90,7 @@ export function ApprovalBoard({
   const [error, setError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [confirming, setConfirming] = useState<{ item: Item; action: "approve" | "reject" } | null>(null);
 
   const refresh = useCallback(async (next: Filter) => {
     setLoading(true);
@@ -185,7 +199,7 @@ export function ApprovalBoard({
                       size="sm"
                       loading={busyKey === item.key}
                       leftIcon={<Check className="h-3.5 w-3.5" />}
-                      onClick={() => void handleReview(item, "approve")}
+                      onClick={() => setConfirming({ item, action: "approve" })}
                     >
                       Setujui
                     </Button>
@@ -194,7 +208,7 @@ export function ApprovalBoard({
                       size="sm"
                       disabled={busyKey === item.key}
                       leftIcon={<X className="h-3.5 w-3.5" />}
-                      onClick={() => void handleReview(item, "reject")}
+                      onClick={() => setConfirming({ item, action: "reject" })}
                     >
                       Tolak
                     </Button>
@@ -213,6 +227,25 @@ export function ApprovalBoard({
           ))}
         </ul>
       )}
+
+      <ConfirmModal
+        isOpen={confirming !== null}
+        onClose={() => setConfirming(null)}
+        onConfirm={() => {
+          const target = confirming;
+          setConfirming(null);
+          if (target) void handleReview(target.item, target.action);
+        }}
+        title={confirming?.action === "approve" ? "Setujui pengajuan ini?" : "Tolak pengajuan ini?"}
+        message={confirming
+          ? `${confirming.action === "approve" ? "Setujui" : "Tolak"} ${itemLabel(confirming.item)} ${confirming.item.data.employeeName}?${
+            notes[confirming.item.key]?.trim() ? ` Catatan: "${notes[confirming.item.key].trim()}".` : ""
+          } Keputusan ini tidak bisa diubah lagi.`
+          : ""}
+        confirmText={confirming?.action === "approve" ? "Ya, Setujui" : "Ya, Tolak"}
+        cancelText="Batal"
+        confirmVariant={confirming?.action === "approve" ? "primary" : "danger"}
+      />
     </section>
   );
 }

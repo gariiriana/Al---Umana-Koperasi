@@ -151,7 +151,7 @@ describe("Silah", () => {
     const wandi = screen.getByRole("group", { name: "Hari Silah Wandi" });
     fireEvent.click(within(wandi).getByRole("button", { name: "Minggu" }));
     fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
-    await waitFor(() => expect(api.patchEmployee).toHaveBeenCalledWith("u2", { action: "set_silah", silahDays: [6, 0] }));
+    await waitFor(() => expect(api.patchEmployee).toHaveBeenCalledWith("u2", { action: "set_silah", silahDays: [6, 0] }, "admin"));
     await waitFor(() => expect(api.listEmployees).toHaveBeenCalledTimes(2));
   });
 });

@@ -270,7 +270,23 @@ export function KaryawanTab() {
                   >
                     {employee.faceRequired ? "Matikan cek wajah" : "Nyalakan cek wajah"}
                   </Button>
+                  {employee.role === "absen_karyawan" && (
+                    <Button
+                      variant="outlined"
+                      size="sm"
+                      disabled={busy}
+                      title="Boleh melihat Hari Ini, Rekap, foto, dan Silah semua unit di halaman Tim (persetujuan tetap unit yang dikepalai)"
+                      onClick={() => void patch(employee, { action: "set_view_all_units", viewAllUnits: !employee.viewAllUnits })}
+                    >
+                      {employee.viewAllUnits ? "Cabut lihat semua unit" : "Izinkan lihat semua unit"}
+                    </Button>
+                  )}
                 </div>
+                {employee.viewAllUnits && (
+                  <p className="text-[11px] font-semibold text-amber-800">
+                    Bisa melihat absensi semua unit di halaman Tim.
+                  </p>
+                )}
               </li>
             );
           })}

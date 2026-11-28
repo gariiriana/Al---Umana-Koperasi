@@ -271,6 +271,7 @@ describe("PersetujuanTab (Admin Absensi)", () => {
       target: { value: "Selamat berlibur, jadwal aman" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Setujui" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Ya, Setujui" }));
 
     await waitFor(() =>
       expect(api.reviewAdminRequest).toHaveBeenCalledWith("req-99", {

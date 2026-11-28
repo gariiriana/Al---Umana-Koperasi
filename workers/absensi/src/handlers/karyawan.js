@@ -122,6 +122,8 @@ export async function meView(ctx, employee) {
     pendingRequests,
     unit: unit ? { id: unit.id, name: unit.name } : null,
     headOf: headOf.map((u) => ({ id: u.id, name: u.name })),
+    // Boleh melihat absensi semua unit di halaman Tim (diatur admin), tanpa ikut menyetujui.
+    viewAllUnits: employee.view_all_units === 1,
     teamPending,
     silahToday,
   };

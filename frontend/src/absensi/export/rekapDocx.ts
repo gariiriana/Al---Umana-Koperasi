@@ -69,6 +69,7 @@ export function buildRekapDocument(
       },
       children: [
         new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun("Rekap Absensi")] }),
+        ...(meta.unitName ? [line(`Unit: ${meta.unitName}`)] : []),
         line(`Area: ${meta.areaNames.length > 0 ? meta.areaNames.join(", ") : "-"}`),
         line(`Periode: ${formatTanggalPanjang(meta.from)} – ${formatTanggalPanjang(meta.to)}`),
         line(`Dicetak oleh: ${meta.printedBy} · ${printedAt}`),
@@ -93,7 +94,7 @@ export async function downloadRekapDocx(
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = rekapFileName(meta.from, meta.to, "docx");
+  a.download = rekapFileName(meta.from, meta.to, "docx", meta.unitName);
   a.click();
   window.URL.revokeObjectURL(url);
 }

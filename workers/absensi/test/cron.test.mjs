@@ -27,7 +27,7 @@ describe("runCron", () => {
     await insertFaceFailure(env.DB, { id: "ff-old", uid: "u1", kind: "masuk", at: T0 - 31 * DAY, distance: 0.6 });
     await insertFaceFailure(env.DB, { id: "ff-new", uid: "u1", kind: "masuk", at: T0 - DAY, distance: Infinity });
 
-    assert.deepEqual(await runCron(env, T0), { stale: 1, selfies: 1, challenges: 1, faceFailures: 1 });
+    assert.deepEqual(await runCron(env, T0), { stale: 1, selfies: 1, challenges: 1, faceFailures: 1, reminderLog: 0 });
     const rows = [...await recentShifts(env.DB, "u1"), ...await recentShifts(env.DB, "u2")];
     const status = Object.fromEntries(rows.map((s) => [s.id, s.status]));
     assert.deepEqual(status, { old: "lupa_pulang", fresh: "terbuka", yesterday: "terbuka" });

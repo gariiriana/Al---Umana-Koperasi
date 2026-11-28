@@ -146,6 +146,7 @@ describe("kepala unit: Persetujuan Tim", () => {
     expect(await screen.findByAltText("Selfie Febri")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Tolak" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Ya, Tolak" }));
     await waitFor(() => expect(mocks.reviewTeamSilah).toHaveBeenCalledWith("x1", { action: "reject" }));
   });
 });

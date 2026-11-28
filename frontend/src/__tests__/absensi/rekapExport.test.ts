@@ -214,6 +214,8 @@ describe("export", () => {
   it("nama file", () => {
     expect(rekapFileName("2026-10-01", "2026-10-31", "docx")).toBe("Rekap-Absensi_2026-10-01_2026-10-31.docx");
     expect(rekapFileName("2026-10-01", "2026-10-31", "xlsx")).toBe("Rekap-Absensi_2026-10-01_2026-10-31.xlsx");
+    expect(rekapFileName("2026-10-01", "2026-10-31", "xlsx", "Kasma Katering")).toBe("Rekap-Absensi_Kasma-Katering_2026-10-01_2026-10-31.xlsx");
+    expect(rekapFileName("2026-10-01", "2026-10-31", "docx", "Fish n Kids")).toBe("Rekap-Absensi_Fish-n-Kids_2026-10-01_2026-10-31.docx");
   });
 });
 

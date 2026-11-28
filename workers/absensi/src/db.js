@@ -200,7 +200,7 @@ export function rekapShifts(db, { from, to, uid }) {
   const filter = uid ? " AND s.uid = ?" : "";
   const values = uid ? [from, to, uid] : [from, to];
   return all(db.prepare(
-    `SELECT s.*, e.name AS name, a.name AS area_name, ${ZONE_COLUMNS} FROM shifts s
+    `SELECT s.*, e.name AS name, e.unit_id AS unit_id, a.name AS area_name, ${ZONE_COLUMNS} FROM shifts s
      JOIN employees e ON e.uid = s.uid
      LEFT JOIN areas a ON a.id = s.masuk_area_id
      ${ZONE_JOINS}
@@ -430,6 +430,9 @@ export const updateUnit = (db, id, { name, headUid, nowMs, byUid }) => changes(d
 export const setEmployeeUnit = (db, uid, unitId) =>
   changes(db.prepare("UPDATE employees SET unit_id = ? WHERE uid = ?").bind(unitId ?? null, uid));
 
+export const setViewAllUnits = (db, uid, on) =>
+  changes(db.prepare("UPDATE employees SET view_all_units = ? WHERE uid = ?").bind(on ? 1 : 0, uid));
+
 /** Unit yang dikepalai `uid`. */
 export const unitsHeadedBy = (db, uid) =>
   all(db.prepare("SELECT id, name FROM units WHERE head_uid = ? ORDER BY name COLLATE NOCASE").bind(uid));
@@ -601,3 +604,54 @@ export async function countPendingApprovals(db, { teamOf } = {}) {
     first(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE status = 'pending'${team}`).bind(...values))));
   return counts.reduce((sum, row) => sum + Number(row?.n ?? 0), 0);
 }
+
+// ---------------------------------------------------------------------------
+// Pengingat clock in / clock out ke HP (migration 0012)
+// ---------------------------------------------------------------------------
+
+/** Simpan / pindahkan token FCM HP ini ke akun `uid` (HP yang sama dipakai akun lain = pindah pemilik). */
+export const upsertPushDevice = (db, { tokenHash, token, uid, platform, nowMs }) => changes(db.prepare(
+  `INSERT INTO push_devices (token_hash, token, uid, platform, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+   ON CONFLICT(token_hash) DO UPDATE SET token = excluded.token, uid = excluded.uid, platform = excluded.platform,
+     updated_at = excluded.updated_at`,
+).bind(tokenHash, token, uid, platform ?? null, nowMs, nowMs));
+
+export const deletePushDevice = (db, tokenHash, uid) =>
+  changes(db.prepare("DELETE FROM push_devices WHERE token_hash = ? AND uid = ?").bind(tokenHash, uid));
+
+export const deletePushDeviceByHash = (db, tokenHash) =>
+  changes(db.prepare("DELETE FROM push_devices WHERE token_hash = ?").bind(tokenHash));
+
+export const listPushDevices = (db, uid) =>
+  all(db.prepare("SELECT token_hash, token FROM push_devices WHERE uid = ? ORDER BY updated_at DESC").bind(uid));
+
+export const countPushDevices = async (db, uid) =>
+  Number((await first(db.prepare("SELECT COUNT(*) AS n FROM push_devices WHERE uid = ?").bind(uid)))?.n ?? 0);
+
+/**
+ * Karyawan aktif yang punya HP terdaftar, beserta status hari `workDate`: sudah clock in hari itu atau masih di
+ * shift malam yang dimulai sejak `nightFromMs`, jam clock in shift yang masih terbuka hari itu, dan jenis
+ * pengingat yang sudah terkirim.
+ */
+export const reminderCandidates = (db, workDate, nightFromMs) => all(db.prepare(
+  `SELECT e.uid, e.name,
+     EXISTS (SELECT 1 FROM shifts s WHERE s.uid = e.uid
+       AND (s.work_date = ?1 OR (s.status = 'terbuka' AND s.masuk_at >= ?2))) AS has_shift,
+     (SELECT s.masuk_at FROM shifts s WHERE s.uid = e.uid AND s.work_date = ?1 AND s.status = 'terbuka'
+       ORDER BY s.masuk_at DESC LIMIT 1) AS open_masuk_at,
+     (SELECT GROUP_CONCAT(l.kind) FROM reminder_log l WHERE l.uid = e.uid AND l.work_date = ?1) AS sent_kinds
+   FROM employees e
+   WHERE e.role = 'absen_karyawan' AND e.status = 'aktif' AND e.activated_at IS NOT NULL
+     AND EXISTS (SELECT 1 FROM push_devices d WHERE d.uid = e.uid)`,
+).bind(workDate, nightFromMs));
+
+/** Tandai pengingat dikirim. 0 = sudah ditandai tick lain (jangan kirim dua kali). */
+export const claimReminder = (db, { uid, workDate, kind, nowMs }) => changes(db.prepare(
+  "INSERT OR IGNORE INTO reminder_log (uid, work_date, kind, sent_at) VALUES (?, ?, ?, ?)",
+).bind(uid, workDate, kind, nowMs));
+
+export const releaseReminder = (db, { uid, workDate, kind }) =>
+  changes(db.prepare("DELETE FROM reminder_log WHERE uid = ? AND work_date = ? AND kind = ?").bind(uid, workDate, kind));
+
+export const purgeReminderLog = (db, beforeDate) =>
+  changes(db.prepare("DELETE FROM reminder_log WHERE work_date < ?").bind(beforeDate));

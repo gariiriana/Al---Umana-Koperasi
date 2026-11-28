@@ -150,13 +150,15 @@ export const reviewTeamLateOut = (id: string, body: ReviewBody) =>
 
 // --- Admin ------------------------------------------------------------------
 
-export const getHariIni = () => absensiFetch<{ date: string; rows: HariIniRow[] }>("/admin/hari-ini");
+/** `scope` "tim" = halaman Tim kepala unit (Worker hanya mengembalikan anggota timnya). */
+export const getHariIni = (scope: "admin" | "tim" = "admin") =>
+  absensiFetch<{ date: string; rows: HariIniRow[]; units?: UnitRef[] }>(`/${scope}/hari-ini`);
 
-export function getRekap(q: { from: string; to: string; uid?: string }) {
+export function getRekap(q: { from: string; to: string; uid?: string }, scope: "admin" | "tim" = "admin") {
   const params = new URLSearchParams({ from: q.from, to: q.to });
   if (q.uid) params.set("uid", q.uid);
-  return absensiFetch<{ rows: RekapRow[]; requests?: AbsensiRequestView[]; silah?: SilahEntry[]; today?: string }>(
-    `/admin/rekap?${params}`,
+  return absensiFetch<{ rows: RekapRow[]; requests?: AbsensiRequestView[]; silah?: SilahEntry[]; today?: string; units?: UnitRef[] }>(
+    `/${scope}/rekap?${params}`,
   );
 }
 
@@ -183,7 +185,13 @@ export async function fetchPhotoUrl(id: string, scope: "admin" | "tim" = "admin"
   return URL.createObjectURL(await response.blob());
 }
 
-export const listEmployees = () => absensiFetch<{ employees: EmployeeView[] }>("/admin/karyawan");
+/** Pengingat clock in 07:30 / clock out 16:30 WIB: daftarkan / lepas token FCM HP ini. */
+export const registerReminderDevice = (body: { token: string; platform: string }) =>
+  post<{ ok: true }>("/pengingat/perangkat", body);
+export const removeReminderDevice = (token: string) => post<{ ok: true }>("/pengingat/perangkat/hapus", { token });
+
+export const listEmployees = (scope: "admin" | "tim" = "admin") =>
+  absensiFetch<{ employees: EmployeeView[] }>(`/${scope}/karyawan`);
 
 export interface CreateEmployeeInput {
   name: string;
@@ -198,9 +206,11 @@ export type PatchEmployeeBody =
   | { action: "nonaktifkan" | "aktifkan" | "reset_perangkat" }
   | { action: "set_face_required"; faceRequired: boolean }
   | { action: "set_unit"; unitId: string | null }
-  | { action: "set_silah"; silahDays: number[] };
-export const patchEmployee = (uid: string, body: PatchEmployeeBody) =>
-  post<EmployeeView>(`/admin/karyawan/${encodeURIComponent(uid)}`, body, "PATCH");
+  | { action: "set_silah"; silahDays: number[] }
+  | { action: "set_view_all_units"; viewAllUnits: boolean };
+/** Kepala unit (`scope` "tim") hanya boleh `set_silah` anggota timnya. */
+export const patchEmployee = (uid: string, body: PatchEmployeeBody, scope: "admin" | "tim" = "admin") =>
+  post<EmployeeView>(`/${scope}/karyawan/${encodeURIComponent(uid)}`, body, "PATCH");
 
 export const getAreas = () => absensiFetch<{ areas: AreaView[] }>("/admin/area");
 

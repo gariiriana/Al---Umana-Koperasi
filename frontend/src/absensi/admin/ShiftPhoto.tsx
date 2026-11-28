@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { fetchPhotoUrl } from "@/absensi/api";
+import { useAbsensiScope } from "@/absensi/admin/scope";
 import { formatTerlambat } from "@/absensi/logic/format";
 import { Button } from "@/components/ui/Button";
 
@@ -13,6 +14,7 @@ export interface ShiftPhotoProps {
 
 /** Satu foto absen dari Worker; dimuat hanya saat komponen tampil. */
 export function ShiftPhoto({ label, photoId, variant = "selfie" }: ShiftPhotoProps) {
+  const scope = useAbsensiScope();
   const [state, setState] = useState<{ url: string | null; loading: boolean }>({ url: null, loading: photoId !== null });
 
   useEffect(() => {
@@ -23,7 +25,7 @@ export function ShiftPhoto({ label, photoId, variant = "selfie" }: ShiftPhotoPro
     let url: string | null = null;
     let cancelled = false;
     setState({ url: null, loading: true });
-    fetchPhotoUrl(photoId).then(
+    fetchPhotoUrl(photoId, scope).then(
       (result) => {
         url = result;
         if (!cancelled) setState({ url: result, loading: false });
@@ -36,7 +38,7 @@ export function ShiftPhoto({ label, photoId, variant = "selfie" }: ShiftPhotoPro
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [photoId]);
+  }, [photoId, scope]);
 
   const isBukti = variant === "bukti";
   let content: React.ReactNode;

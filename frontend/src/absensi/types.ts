@@ -83,6 +83,8 @@ export interface Me {
   headOf?: UnitRef[];
   /** Pengajuan + absen luar zona anggota tim yang menunggu persetujuan kepala unit ini. */
   teamPending?: number;
+  /** Diatur admin: boleh melihat absensi SEMUA unit di halaman Tim (persetujuan tetap unit yang dikepalai). */
+  viewAllUnits?: boolean;
   /** Hari ini jadwal Silah (libur mingguan) akun ini; clock in perlu alasan + persetujuan. */
   silahToday?: boolean;
 }
@@ -108,6 +110,8 @@ export interface RekapRow {
   shiftId: string;
   uid: string;
   name: string;
+  /** Unit kerja karyawan saat ini (untuk filter unit). */
+  unitId?: string | null;
   workDate: string;
   masukAt: number;
   pulangAt: number | null;
@@ -136,6 +140,8 @@ export interface EmployeeView {
   unitId?: string | null;
   /** Hari Silah (libur mingguan) yang berlaku sekarang; 0 = Minggu … 6 = Sabtu. */
   silahDays?: number[];
+  /** Boleh melihat absensi semua unit di halaman Tim. */
+  viewAllUnits?: boolean;
   createdAt: number;
 }
 
@@ -167,6 +173,8 @@ export interface HariIniRow {
   } | null;
   /** Hari ini jadwal Silah (libur mingguan) orang ini. */
   silah?: boolean;
+  /** Unit kerja orang ini (untuk filter unit). */
+  unitId?: string | null;
 }
 
 /** Satu versi jadwal Silah karyawan (berlaku mulai effectiveFrom). */

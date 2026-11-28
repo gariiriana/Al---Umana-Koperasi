@@ -7,6 +7,7 @@ import {
   approvedRequestsInRange, countPendingApprovals, deletePhoto, getEmployee, getPhoto, getUnit,
   insertEmployee, insertUnit, listAdminRequests, listAreas, listEmployees, listLateOutExceptions, listUnits, listSilahExceptions, listZoneExceptions,
   listSilahHistory, rekapShifts, replaceAreas, resetEmployeeDevice, setEmployeeStatus, setEmployeeUnit, setFaceRequired, setSilah,
+  setViewAllUnits,
   todayOverview, updateUnit,
 } from "../db.js";
 import { AbsensiError, readJson } from "../http.js";
@@ -33,9 +34,20 @@ const employeeView = (row, silahDays = []) => ({
   activated: row.activated_at !== null,
   referencePhotoId: row.reference_photo_id,
   unitId: row.unit_id ?? null,
+  viewAllUnits: row.view_all_units === 1,
   silahDays,
   createdAt: row.created_at,
 });
+
+/** `allows(uid)` = boleh dilihat. Admin absensi melihat semua, kepala unit lihat teamScope di handlers/tim.js. */
+const everyone = () => true;
+
+/** Unit yang punya anggota yang `allows(uid)`, untuk filter unit di Hari Ini / Rekap. */
+async function visibleUnits(ctx, allows) {
+  const [units, employees] = await Promise.all([listUnits(ctx.env.DB), listEmployees(ctx.env.DB)]);
+  const used = new Set(employees.filter((e) => allows(e.uid) && e.unit_id).map((e) => e.unit_id));
+  return units.filter((u) => used.has(u.id)).map((u) => ({ id: u.id, name: u.name }));
+}
 
 /** Map uid → hari Silah yang berlaku hari ini (WIB). */
 async function currentSilahByUid(ctx, uid) {
@@ -61,12 +73,18 @@ const STATE = { terbuka: "masuk", selesai: "pulang", lupa_pulang: "tidak_clock_o
 
 export async function getHariIni(ctx) {
   await requireAdmin(ctx);
+  return hariIniFor(ctx, everyone);
+}
+
+/** Kehadiran hari ini, hanya karyawan yang `allows(uid)`. */
+export async function hariIniFor(ctx, allows) {
   const now = ctx.deps.now();
   const date = workDateWIB(now);
-  const [overviewRows, approvedToday, silahRows] = await Promise.all([
+  const [overviewRows, approvedToday, silahRows, units] = await Promise.all([
     todayOverview(ctx.env.DB, date),
     approvedRequestsInRange(ctx.env.DB, { from: date, to: date }),
     listSilahHistory(ctx.env.DB, { to: date }),
+    visibleUnits(ctx, allows),
   ]);
   const silahHistory = groupSilahHistory(silahRows);
 
@@ -86,13 +104,14 @@ export async function getHariIni(ctx) {
 
   const people = new Map();
   for (const row of overviewRows) {
-    if (!people.has(row.uid)) people.set(row.uid, { uid: row.uid, name: row.name, views: [] });
+    if (!allows(row.uid)) continue;
+    if (!people.has(row.uid)) people.set(row.uid, { uid: row.uid, name: row.name, unitId: row.unit_id ?? null, views: [] });
     if (row.shift_id) {
       people.get(row.uid).views.push(toShiftView({ ...row, id: row.shift_id }, now));
     }
   }
 
-  const rows = [...people.values()].map(({ uid, name, views }) => {
+  const rows = [...people.values()].map(({ uid, name, unitId, views }) => {
     // Shift hari ini menang; shift malam dari kemarin yang masih berjalan dihitung "masuk". Shift kemarin yang
     // lupa di-clock out (sudah ganti hari) bukan kehadiran hari ini, jadi orangnya tetap "belum".
     const shown = views.find((v) => v.workDate === date)
@@ -101,6 +120,7 @@ export async function getHariIni(ctx) {
     return {
       uid,
       name,
+      unitId,
       masukAt: shown?.masukAt ?? null,
       pulangAt: shown?.pulangAt ?? null,
       state: shown ? STATE[shown.status] : "belum",
@@ -115,28 +135,38 @@ export async function getHariIni(ctx) {
       silah: isSilahOn(silahHistory.get(uid) ?? [], date),
     };
   });
-  return { date, rows };
+  return { date, rows, units };
 }
 
 export async function getRekap(ctx) {
   await requireAdmin(ctx);
+  return rekapFor(ctx, everyone);
+}
+
+/** Rekap periode, hanya karyawan yang `allows(uid)`. Meminta `uid` di luar cakupan = FORBIDDEN. */
+export async function rekapFor(ctx, allows) {
   const params = ctx.url.searchParams;
   const from = parseIsoDate(params.get("from"));
   const to = parseIsoDate(params.get("to"));
   const days = (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS + 1;
   if (days < 1 || days > REKAP_MAX_DAYS) throw invalid();
   const uid = params.get("uid") || undefined;
+  if (uid && !allows(uid)) throw new AbsensiError("FORBIDDEN", 403);
   const now = ctx.deps.now();
-  const [rows, requests, silahRows] = await Promise.all([
+  const [allRows, allRequests, allSilahRows, units] = await Promise.all([
     rekapShifts(ctx.env.DB, { from, to, uid }),
     approvedRequestsInRange(ctx.env.DB, { from, to, uid }),
     listSilahHistory(ctx.env.DB, { to, uid }),
+    visibleUnits(ctx, allows),
   ]);
+  const rows = allRows.filter((row) => allows(row.uid));
+  const requests = allRequests.filter((row) => allows(row.uid));
+  const silahRows = allSilahRows.filter((row) => allows(row.uid));
   return {
     rows: rows.map((row) => {
       const view = toShiftView(row, now);
       return {
-        shiftId: row.id, uid: row.uid, name: row.name, workDate: row.work_date, masukAt: row.masuk_at,
+        shiftId: row.id, uid: row.uid, name: row.name, unitId: row.unit_id ?? null, workDate: row.work_date, masukAt: row.masuk_at,
         pulangAt: view.pulangAt, durationMin: view.durationMin, status: view.status, areaName: row.area_name ?? null,
         masukPhotoId: row.masuk_photo_id, pulangPhotoId: row.pulang_photo_id ?? null,
         lateReason: view.lateReason, latePhotoId: view.latePhotoId,
@@ -147,6 +177,8 @@ export async function getRekap(ctx) {
     // Riwayat jadwal Silah; layar & export menurunkan hari Silah per tanggal darinya.
     silah: silahRows.map((row) => ({ uid: row.uid, name: row.name, effectiveFrom: row.effective_from, days: parseSilahDays(row.days) })),
     today: workDateWIB(now),
+    // Untuk filter unit di layar (anggota per unit diambil dari daftar karyawan).
+    units,
   };
 }
 
@@ -199,8 +231,21 @@ export async function getFoto(ctx) {
 
 export async function listKaryawan(ctx) {
   await requireAdmin(ctx);
+  return karyawanFor(ctx, everyone);
+}
+
+/** Daftar karyawan yang `allows(uid)`, dengan hari Silah yang berlaku hari ini. */
+export async function karyawanFor(ctx, allows) {
   const [rows, silah] = await Promise.all([listEmployees(ctx.env.DB), currentSilahByUid(ctx)]);
-  return { employees: rows.map((row) => employeeView(row, silah.get(row.uid) ?? [])) };
+  return { employees: rows.filter((row) => allows(row.uid)).map((row) => employeeView(row, silah.get(row.uid) ?? [])) };
+}
+
+/** Ganti jadwal Silah `target`, berlaku mulai hari ini (WIB). Hari-hari sebelumnya tetap memakai jadwal lama di rekap. */
+export async function applySilah(ctx, target, silahDays, byUid) {
+  const days = normalizeSilahDays(silahDays);
+  if (!days || target.role !== "absen_karyawan") throw invalid();
+  await setSilah(ctx.env.DB, { uid: target.uid, days, effectiveFrom: workDateWIB(ctx.deps.now()), nowMs: ctx.deps.now(), byUid });
+  return employeeViewByUid(ctx, target.uid);
 }
 
 export async function createKaryawan(ctx) {
@@ -256,13 +301,13 @@ export async function patchKaryawan(ctx) {
       await setEmployeeUnit(ctx.env.DB, uid, unitId);
       break;
     }
-    case "set_silah": {
-      // Berlaku mulai hari ini (WIB); hari-hari sebelumnya tetap memakai jadwal lama di rekap.
-      const days = normalizeSilahDays(body.silahDays);
-      if (!days || target.role !== "absen_karyawan") throw invalid();
-      await setSilah(ctx.env.DB, { uid, days, effectiveFrom: workDateWIB(ctx.deps.now()), nowMs: ctx.deps.now(), byUid: admin.uid });
+    case "set_silah":
+      return applySilah(ctx, target, body.silahDays, admin.uid);
+    case "set_view_all_units":
+      // Boleh melihat absensi semua unit dari halaman Tim (bukan admin, tidak ikut menyetujui).
+      if (typeof body.viewAllUnits !== "boolean" || target.role !== "absen_karyawan") throw invalid();
+      await setViewAllUnits(ctx.env.DB, uid, body.viewAllUnits);
       break;
-    }
     case "set_face_required":
       if (typeof body.faceRequired !== "boolean") throw invalid();
       await setFaceRequired(ctx.env.DB, uid, body.faceRequired);

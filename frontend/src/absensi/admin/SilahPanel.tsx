@@ -3,6 +3,7 @@ import { CalendarOff } from "lucide-react";
 
 import { MAX_SILAH_DAYS, SILAH_DAY_NAMES, SILAH_DAY_ORDER } from "../../../../workers/absensi/shared/silah.js";
 import { patchEmployee } from "@/absensi/api";
+import { useAbsensiScope } from "@/absensi/admin/scope";
 import { errorMessage } from "@/absensi/errorMessage";
 import type { EmployeeView } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +11,8 @@ import { Button } from "@/components/ui/Button";
 export interface SilahPanelProps {
   employees: EmployeeView[];
   onChanged: () => Promise<void>;
+  /** Karyawan yang jadwalnya tidak boleh diubah di sini (kepala unit: dirinya sendiri, diatur admin). */
+  lockedUid?: string;
 }
 
 const sameDays = (a: number[], b: number[]) => a.length === b.length && a.every((d) => b.includes(d));
@@ -20,6 +23,7 @@ function SilahRow({ employee, onChanged }: { employee: EmployeeView; onChanged: 
   const [days, setDays] = useState<number[]>(saved);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const scope = useAbsensiScope();
   const dirty = !sameDays(days, saved);
 
   const toggle = (day: number) => {
@@ -35,7 +39,7 @@ function SilahRow({ employee, onChanged }: { employee: EmployeeView; onChanged: 
     setSaving(true);
     setError(null);
     try {
-      await patchEmployee(employee.uid, { action: "set_silah", silahDays: days });
+      await patchEmployee(employee.uid, { action: "set_silah", silahDays: days }, scope);
       await onChanged();
     } catch (err) {
       setError(errorMessage(err));
@@ -86,8 +90,8 @@ function SilahRow({ employee, onChanged }: { employee: EmployeeView; onChanged: 
   );
 }
 
-/** Admin: jadwal Silah (libur mingguan tetap) per karyawan, ringkas per hari + bisa diubah. */
-export function SilahPanel({ employees, onChanged }: SilahPanelProps) {
+/** Admin / kepala unit: jadwal Silah (libur mingguan tetap) per karyawan, ringkas per hari + bisa diubah. */
+export function SilahPanel({ employees, onChanged, lockedUid }: SilahPanelProps) {
   const [editing, setEditing] = useState(false);
   const staff = employees.filter((e) => e.role === "absen_karyawan" && e.status === "aktif");
   const byDay = SILAH_DAY_ORDER
@@ -143,10 +147,13 @@ export function SilahPanel({ employees, onChanged }: SilahPanelProps) {
           </p>
           <ul className="divide-y divide-neutral-100">
             {/* key ikut jadwal tersimpan: setelah Simpan baris dimuat ulang dari data server. */}
-            {staff.map((employee) => (
+            {staff.filter((employee) => employee.uid !== lockedUid).map((employee) => (
               <SilahRow key={`${employee.uid}:${(employee.silahDays ?? []).join(",")}`} employee={employee} onChanged={onChanged} />
             ))}
           </ul>
+          {lockedUid && staff.some((e) => e.uid === lockedUid) && (
+            <p className="text-xs text-neutral-500">Jadwal Silah kamu sendiri diatur oleh admin absensi.</p>
+          )}
         </div>
       )}
     </section>
