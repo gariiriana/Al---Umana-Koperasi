@@ -86,7 +86,8 @@ export function ChangePasswordCard() {
           <div>
             <h3 className="font-['Manrope',system-ui,sans-serif] text-lg font-bold text-[#111827]">Ubah Password</h3>
             <p className="mt-0.5 text-xs text-[#6B7280] font-['Hanken_Grotesk']">
-              Masukkan password lama, lalu buat password baru (minimal {MIN_NEW_PASSWORD_LENGTH} karakter). Perangkat lain
+              Masukkan password lama, lalu buat password baru (minimal {MIN_NEW_PASSWORD_LENGTH} karakter, ada huruf besar,
+              huruf kecil, dan angka). Perangkat lain
               yang memakai akun ini akan diminta login ulang.
             </p>
           </div>

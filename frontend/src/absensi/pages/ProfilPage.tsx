@@ -10,6 +10,8 @@ import { NotificationBellButton } from "@/absensi/components/NotificationSheet";
 import { hasDeviceMarker } from "@/absensi/deviceMarker";
 import { getAbsensiAuth } from "@/absensi/firebaseAbsensi";
 import { Button } from "@/components/ui/Button";
+import { changePasswordErrorMessage } from "@/components/settings/changePassword";
+import { passwordPolicyProblem } from "@/lib/passwordPolicy";
 
 interface ProfileCustomMeta {
   name: string;
@@ -127,8 +129,9 @@ export function ProfilPage() {
     setPasswordError(null);
     setPasswordSuccess(null);
 
-    if (newPassword.length < 8) {
-      setPasswordError("Kata sandi baru minimal 8 karakter.");
+    const weak = passwordPolicyProblem(newPassword);
+    if (weak) {
+      setPasswordError(weak);
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -149,8 +152,8 @@ export function ProfilPage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch {
-      setPasswordError("Gagal mengubah kata sandi. Pastikan kata sandi saat ini benar.");
+    } catch (err) {
+      setPasswordError(changePasswordErrorMessage(err));
     } finally {
       setPasswordLoading(false);
     }
@@ -507,7 +510,7 @@ export function ProfilPage() {
             </label>
 
             <label className="block space-y-1 text-xs font-bold text-neutral-700">
-              <span>Kata Sandi Baru (Min. 8 Karakter)</span>
+              <span>Kata Sandi Baru (Min. 8 karakter, ada huruf besar, huruf kecil, dan angka)</span>
               <input
                 type={showPass ? "text" : "password"}
                 required

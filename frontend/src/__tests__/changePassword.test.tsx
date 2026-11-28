@@ -26,6 +26,15 @@ describe("validateNewPassword", () => {
     expect(validateNewPassword("lama123456", "BaruSekali9", "BaruSekali9")).toBeNull();
   });
 
+  it("mengikuti password policy Firebase: huruf besar, huruf kecil, angka", () => {
+    expect(validateNewPassword("lama", "123456789", "123456789")).toBe("Password harus ada huruf besar dan huruf kecil. Contoh: Absen12345");
+    expect(validateNewPassword("lama", "absen12345", "absen12345")).toMatch(/huruf besar/);
+    expect(validateNewPassword("lama", "AbsenSaja", "AbsenSaja")).toMatch(/angka/);
+    expect(validateNewPassword("lama", "Abc1", "Abc1")).toBe("Password minimal 8 karakter.");
+    expect(validateNewPassword("lama", "Absen12345", "Absen12345")).toBeNull();
+    expect(changePasswordErrorMessage({ code: "auth/password-does-not-meet-requirements" })).toMatch(/huruf besar, huruf kecil, dan angka/);
+  });
+
   it("memetakan error Firebase ke pesan yang jelas", () => {
     expect(changePasswordErrorMessage({ code: "auth/invalid-credential" })).toMatch(/Password lama salah/);
     expect(changePasswordErrorMessage({ code: "auth/wrong-password" })).toMatch(/Password lama salah/);

@@ -5,6 +5,7 @@ import { createEmployee, fetchPhotoUrl, getUnits, listEmployees, patchEmployee, 
 import { SilahPanel } from "@/absensi/admin/SilahPanel";
 import { UnitsPanel } from "@/absensi/admin/UnitsPanel";
 import { errorMessage } from "@/absensi/errorMessage";
+import { PASSWORD_RULE_TEXT, passwordPolicyProblem } from "@/lib/passwordPolicy";
 import type { AbsensiRole, EmployeeView, UnitView } from "@/absensi/types";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -82,6 +83,11 @@ export function KaryawanTab() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const weak = passwordPolicyProblem(password);
+    if (weak) {
+      setFormError(weak);
+      return;
+    }
     setFormError(null);
     setSubmitting(true);
     try {
@@ -136,18 +142,22 @@ export function KaryawanTab() {
             <span>Email</span>
             <input className={field} type="email" required autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
-          <label className={fieldLabel}>
-            <span>Password awal</span>
-            <input
-              className={field}
-              type="text"
-              required
-              minLength={MIN_PASSWORD_LENGTH}
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
+          <div className="space-y-1">
+            <label className={fieldLabel}>
+              <span>Password awal</span>
+              <input
+                className={field}
+                type="text"
+                required
+                minLength={MIN_PASSWORD_LENGTH}
+                autoComplete="new-password"
+                aria-describedby="password-awal-aturan"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </label>
+            <p id="password-awal-aturan" className="text-xs text-neutral-500">{PASSWORD_RULE_TEXT}</p>
+          </div>
           <label className={fieldLabel}>
             <span>Role</span>
             <select className={field} value={role} onChange={(e) => setRole(e.target.value as AbsensiRole)}>

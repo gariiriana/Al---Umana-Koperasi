@@ -79,6 +79,13 @@ describe("identity", () => {
       (e) => e instanceof AbsensiError && e.code === "EMAIL_SUDAH_ADA" && e.status === 409);
   });
 
+  it("maps the Firebase password policy rejection to PASSWORD_LEMAH", async () => {
+    const message = "PASSWORD_DOES_NOT_MEET_REQUIREMENTS : Missing password requirements: [Password must contain a lower case character]";
+    const { fetchImpl } = recorder(() => ({ error: { message } }));
+    await assert.rejects(createAuthUser(EMU, { email: "a@absen.test", password: "123456789", displayName: "A" }, fetchImpl),
+      (e) => e instanceof AbsensiError && e.code === "PASSWORD_LEMAH" && e.status === 400);
+  });
+
   it("sends custom claims as a JSON string and can disable accounts", async () => {
     const { calls, fetchImpl } = recorder(() => ({ localId: "u" }));
     await setClaims(EMU, "u", { absensi_role: "admin_absensi" }, fetchImpl);

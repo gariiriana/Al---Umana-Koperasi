@@ -53,7 +53,7 @@ describe("KaryawanTab", () => {
   function fillForm() {
     fireEvent.change(screen.getByLabelText("Nama"), { target: { value: "Sari Dewi" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "sari@absen.alumana.id" } });
-    fireEvent.change(screen.getByLabelText("Password awal"), { target: { value: "rahasia123" } });
+    fireEvent.change(screen.getByLabelText("Password awal"), { target: { value: "Rahasia123" } });
   }
 
   it("Tanpa cek wajah dicentang → createEmployee dengan faceRequired false", async () => {
@@ -67,7 +67,7 @@ describe("KaryawanTab", () => {
     await waitFor(() => expect(api.createEmployee).toHaveBeenCalledWith({
       name: "Sari Dewi",
       email: "sari@absen.alumana.id",
-      password: "rahasia123",
+      password: "Rahasia123",
       role: "absen_karyawan",
       faceRequired: false,
     }));
@@ -81,6 +81,25 @@ describe("KaryawanTab", () => {
     fillForm();
     fireEvent.click(screen.getByRole("button", { name: "Tambah karyawan" }));
     expect(await screen.findByText("Email ini sudah dipakai akun lain.")).toBeTruthy();
+  });
+
+  it("password tanpa huruf → ditolak di form, tidak dikirim ke server", async () => {
+    render(<KaryawanTab />);
+    await waitFor(() => expect(api.listEmployees).toHaveBeenCalled());
+    fillForm();
+    fireEvent.change(screen.getByLabelText("Password awal"), { target: { value: "123456789" } });
+    fireEvent.click(screen.getByRole("button", { name: "Tambah karyawan" }));
+    expect(await screen.findByText("Password harus ada huruf besar dan huruf kecil. Contoh: Absen12345")).toBeTruthy();
+    expect(api.createEmployee).not.toHaveBeenCalled();
+  });
+
+  it("password ditolak Firebase → pesan aturan password", async () => {
+    api.createEmployee.mockRejectedValue(new AbsensiApiError("PASSWORD_LEMAH", 400));
+    render(<KaryawanTab />);
+    await waitFor(() => expect(api.listEmployees).toHaveBeenCalled());
+    fillForm();
+    fireEvent.click(screen.getByRole("button", { name: "Tambah karyawan" }));
+    expect(await screen.findByText(/Password ditolak\. Minimal 8 karakter, ada huruf besar/)).toBeTruthy();
   });
 
   it("baris karyawan: foto acuan yang sudah dihapus", async () => {

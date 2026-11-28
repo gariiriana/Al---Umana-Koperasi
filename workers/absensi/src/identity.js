@@ -19,6 +19,10 @@ async function identityRequest(env, path, body, fetchImpl) {
   if (!response.ok) {
     const message = String(payload?.error?.message || "");
     if (message.startsWith("EMAIL_EXISTS")) throw new AbsensiError("EMAIL_SUDAH_ADA", 409);
+    // Password policy Firebase Auth (Console, ENFORCE sejak 2026-11-17): huruf besar + kecil + angka, min 8.
+    if (message.startsWith("PASSWORD_DOES_NOT_MEET_REQUIREMENTS") || message.startsWith("WEAK_PASSWORD")) {
+      throw new AbsensiError("PASSWORD_LEMAH", 400);
+    }
     throw new Error(`Identity Toolkit ${path} failed (${response.status}): ${message}`);
   }
   return payload;

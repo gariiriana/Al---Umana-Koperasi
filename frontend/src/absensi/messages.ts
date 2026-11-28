@@ -56,6 +56,7 @@ const MESSAGES: Record<string, string> = {
   LOGIN_OFFLINE: "Tidak ada koneksi internet. Periksa jaringan, lalu coba lagi.",
   EMAIL_TIDAK_VALID: "Format email belum benar. Contoh: nama@absen.alumana.id",
   EMAIL_SUDAH_ADA: "Email ini sudah dipakai akun lain.",
+  PASSWORD_LEMAH: "Password ditolak. Minimal 8 karakter, ada huruf besar, huruf kecil, dan angka. Contoh: Absen12345",
   TIDAK_BISA_DIRI_SENDIRI: "Kamu tidak bisa menonaktifkan akunmu sendiri.",
   VALIDATION_ERROR: "Data belum lengkap atau tidak valid.",
   UNAUTHENTICATED: "Sesi masuk kamu sudah habis. Keluar lalu masuk lagi.",
