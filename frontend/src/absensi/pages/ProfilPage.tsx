@@ -65,10 +65,13 @@ export function ProfilPage() {
   const { me, signOut, reloadMe } = useAbsensiSession();
   if (!me) return null;
 
-  const defaultCompany = me.areas[0]?.name ?? "Koperasi Pondok Pesantren Al Umanaa";
-  const [meta, setMeta] = useState<ProfileCustomMeta>(() =>
-    loadProfileMeta(me.uid, me.name, defaultCompany),
+  // Unit kerja dari admin absensi (tab Karyawan), bukan nama area absen, dan tidak bisa diubah karyawan.
+  // Nilai "company" lama yang tersimpan di HP diabaikan.
+  const unitName = me.unit?.name ?? "Koperasi Pondok Pesantren Al Umanaa";
+  const [storedMeta, setMeta] = useState<ProfileCustomMeta>(() =>
+    loadProfileMeta(me.uid, me.name, unitName),
   );
+  const meta: ProfileCustomMeta = { ...storedMeta, company: unitName };
 
   const [activeSheet, setActiveSheet] = useState<"edit" | "face" | "password" | "language" | null>(null);
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -76,7 +79,6 @@ export function ProfilPage() {
   // State Edit Profil
   const [editName, setEditName] = useState(meta.name);
   const [editPosition, setEditPosition] = useState(meta.position);
-  const [editCompany, setEditCompany] = useState(meta.company);
   const [editNotice, setEditNotice] = useState<string | null>(null);
 
   // State Ubah Kata Sandi
@@ -93,7 +95,6 @@ export function ProfilPage() {
   const openEditProfile = () => {
     setEditName(meta.name);
     setEditPosition(meta.position);
-    setEditCompany(meta.company);
     setEditNotice(null);
     setActiveSheet("edit");
   };
@@ -104,7 +105,7 @@ export function ProfilPage() {
       ...meta,
       name: editName.trim() || me.name,
       position: editPosition.trim() || "QC Maintenance - Managed Service",
-      company: editCompany.trim() || defaultCompany,
+      company: unitName,
     };
     setMeta(next);
     saveProfileMeta(me.uid, next);
@@ -369,11 +370,13 @@ export function ProfilPage() {
               <span>Unit / Perusahaan</span>
               <input
                 type="text"
-                required
-                className={inputClass}
-                value={editCompany}
-                onChange={(e) => setEditCompany(e.target.value)}
+                disabled
+                className={`${inputClass} bg-neutral-100 text-neutral-500`}
+                value={unitName}
               />
+              <span className="block text-[11px] font-semibold text-neutral-500">
+                Diatur oleh admin absensi sesuai unit kerja kamu.
+              </span>
             </label>
 
             {editNotice && (

@@ -29,6 +29,7 @@ vi.mock("@/absensi/AbsensiSession", () => ({
       faceRequired: true,
       activated: true,
       areas: [{ id: "sppg", name: "SPPG Sukabumi Gunungguruh Kebonmanggu", polygon: [], toleranceM: 40, active: true }],
+      unit: { id: "kasma-katering", name: "Kasma Katering" },
       faceCheck: true,
       unreadNotifications: sessionMocks.unreadNotifications,
       pendingRequests: 1,
@@ -204,6 +205,26 @@ describe("ProfilPage (Karyawan - SS 4)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Keluar" }));
     fireEvent.click(screen.getByRole("button", { name: "Ya, Keluar" }));
     expect(sessionMocks.signOut).toHaveBeenCalled();
+  });
+
+  it("Unit / Perusahaan mengikuti unit kerja dari admin, bukan nama area, dan tidak bisa diedit", async () => {
+    // Nilai lama yang dulu bisa diketik karyawan (atau terisi nama area) diabaikan.
+    localStorage.setItem("absensi_profile_meta_u1", JSON.stringify({ company: "Rumah gari" }));
+    render(
+      <MemoryRouter initialEntries={["/absensi/profil"]}>
+        <ProfilPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Kasma Katering")).toBeTruthy();
+    expect(screen.queryByText("Rumah gari")).toBeNull();
+    expect(screen.queryByText("SPPG Sukabumi Gunungguruh Kebonmanggu")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Edit Profil/ }));
+    const unitInput = screen.getByLabelText("Unit / Perusahaan", { exact: false }) as HTMLInputElement;
+    expect(unitInput.value).toBe("Kasma Katering");
+    expect(unitInput.disabled).toBe(true);
+    localStorage.removeItem("absensi_profile_meta_u1");
   });
 });
 
